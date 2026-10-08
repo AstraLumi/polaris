@@ -53,7 +53,7 @@ your network. **Do not forward its port directly to the internet.**
 Requirements: Docker with the Compose plugin.
 
 ```bash
-git clone <repository-url> polaris
+git clone https://github.com/AstraLumi/polaris.git
 cd polaris
 docker compose up -d --build
 ```
