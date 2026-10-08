@@ -1,0 +1,10 @@
+frontend/node_modules
+frontend/dist
+backend/polaris
+backend/static
+.git
+.github
+*.md
+.env
+data
+uploads

@@ -1,0 +1,27 @@
+# Dependencies and build output
+node_modules/
+frontend/dist/
+backend/static/*
+!backend/static/.gitkeep
+backend/polaris
+backend/polaris.exe
+*.test
+
+# Your local configuration and data. Never commit these.
+.env
+.env.*
+!.env.example
+docker-compose.override.yml
+data/
+uploads/
+*.db
+*.db-shm
+*.db-wal
+*.zip
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log

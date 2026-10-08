@@ -1,0 +1,27 @@
+# Polaris: one container, two named volumes.
+#
+# By default the app is reachable only from this machine
+# (http://localhost:8091). Polaris has NO login of its own, so before you
+# expose it to anything else, put your own authentication in front of it (a
+# reverse proxy with auth, a VPN, a tunnel with access control, ...).
+# Copy .env.example to .env to change the address or port.
+name: polaris
+
+services:
+  polaris:
+    build: .
+    container_name: polaris
+    restart: unless-stopped
+    environment:
+      - PORT=8091
+      - DATA_DIR=/data
+      - UPLOADS_DIR=/app/uploads
+    volumes:
+      - polaris_data:/data
+      - polaris_uploads:/app/uploads
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${HOST_PORT:-8091}:8091"
+
+volumes:
+  polaris_data:
+  polaris_uploads:

@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Tidy modules if go.sum is missing
+        working-directory: backend
+        run: if [ ! -f go.sum ]; then go mod tidy; fi
+      - name: Vet and test
+        working-directory: backend
+        run: go vet ./... && go test -count=1 ./...
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install and build
+        working-directory: frontend
+        run: npm ci && npm run build
+      - name: Translation coverage and layout tests
+        working-directory: frontend
+        run: |
+          node tests/i18n.check.mjs
+          node tests/timelineLayout.test.mjs

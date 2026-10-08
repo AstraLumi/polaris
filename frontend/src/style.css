@@ -1,0 +1,619 @@
+/* ==========================================================================
+   Polaris — global styles
+   1. Themes (colour variables)   2. Base   3. Page layout
+   4. Buttons   5. Form controls  6. Shared bits (tabs, empty states…)
+   Every colour in the app comes from the variables below, so a theme is
+   just a block of them. Add one by copying a block and giving it an id
+   that is also listed in src/theme.js.
+   ========================================================================== */
+
+/* ---- 1. Themes ---------------------------------------------------------- */
+
+/* Polaris (default): the logo's night-sky navy, star cream and gold. */
+:root,
+[data-theme='polaris'] {
+  --bg: #050e26;
+  --bg-glow-a: rgba(223, 196, 126, 0.07);
+  --bg-glow-b: rgba(90, 130, 220, 0.1);
+  --tint: #9db4e8; /* the glass panels' faint colour wash */
+  --glass: rgba(157, 180, 232, 0.06);
+  --glass-border: rgba(157, 180, 232, 0.17);
+  --surface: #0a1636; /* opaque panels, menus, modals */
+  --accent: #dfc47e;
+  --accent-soft: rgba(223, 196, 126, 0.14);
+  --accent-text: #1b1604; /* text on top of --accent */
+  --logo-star: #f7f0bd;
+  --kind-birth: #a9b8ff;
+  --kind-founding: #6cc3b0;
+  --line: #7fa6e0; /* the timeline's line */
+  --danger: #d0605a;
+  --danger-text: #f4aaa3;
+  --text-primary: #eef1f8;
+  --text-muted: #a5aec6;
+  --text-faint: #7480a0;
+  --backdrop: rgba(2, 6, 16, 0.66);
+  color-scheme: dark;
+}
+
+/* Obsidian: the original violet-black with an ember accent. */
+[data-theme='obsidian'] {
+  --bg: #0f0d14;
+  --bg-glow-a: rgba(224, 137, 74, 0.08);
+  --bg-glow-b: rgba(139, 127, 209, 0.07);
+  --tint: #c4b5fd;
+  --glass: rgba(196, 181, 253, 0.055);
+  --glass-border: rgba(196, 181, 253, 0.14);
+  --surface: #17131f;
+  --accent: #e0894a;
+  --accent-soft: rgba(224, 137, 74, 0.14);
+  --accent-text: #1a1108;
+  --logo-star: #f7e6d2;
+  --kind-birth: #a99bf0;
+  --kind-founding: #5fb3a1;
+  --line: #7fb8e6;
+  --danger: #c9584f;
+  --danger-text: #f2a89f;
+  --text-primary: #ede9f7;
+  --text-muted: #a7a1ba;
+  --text-faint: #7a748e;
+  --backdrop: rgba(5, 4, 8, 0.62);
+}
+
+/* Verdant: deep forest, mint accent. */
+[data-theme='verdant'] {
+  --bg: #07120e;
+  --bg-glow-a: rgba(127, 207, 154, 0.07);
+  --bg-glow-b: rgba(230, 196, 122, 0.06);
+  --tint: #a4dcc0;
+  --glass: rgba(164, 220, 192, 0.055);
+  --glass-border: rgba(164, 220, 192, 0.15);
+  --surface: #0d1c16;
+  --accent: #7fcf9a;
+  --accent-soft: rgba(127, 207, 154, 0.14);
+  --accent-text: #06150c;
+  --logo-star: #e8f7ee;
+  --kind-birth: #e6c47a;
+  --kind-founding: #7fb8e6;
+  --line: #6fc4a0;
+  --danger: #c9584f;
+  --danger-text: #f2a89f;
+  --text-primary: #e9f4ee;
+  --text-muted: #a3b8ac;
+  --text-faint: #71877b;
+  --backdrop: rgba(2, 8, 5, 0.64);
+}
+
+/* Crimson: wine-dark with a rose accent. */
+[data-theme='crimson'] {
+  --bg: #130a0f;
+  --bg-glow-a: rgba(232, 111, 138, 0.08);
+  --bg-glow-b: rgba(240, 179, 106, 0.05);
+  --tint: #f0a6bd;
+  --glass: rgba(240, 166, 189, 0.055);
+  --glass-border: rgba(240, 166, 189, 0.15);
+  --surface: #1c1018;
+  --accent: #e86f8a;
+  --accent-soft: rgba(232, 111, 138, 0.15);
+  --accent-text: #1d0509;
+  --logo-star: #fbe4eb;
+  --kind-birth: #f0b36a;
+  --kind-founding: #8fb4e6;
+  --line: #e48aa0;
+  --danger: #d5574f;
+  --danger-text: #f6aaa3;
+  --text-primary: #f6e9ee;
+  --text-muted: #bfa5b0;
+  --text-faint: #8a6f7d;
+  --backdrop: rgba(8, 3, 5, 0.64);
+}
+
+/* Ashen: neutral graphite with a teal accent. */
+[data-theme='ashen'] {
+  --bg: #0e0f12;
+  --bg-glow-a: rgba(94, 194, 201, 0.06);
+  --bg-glow-b: rgba(200, 204, 212, 0.05);
+  --tint: #c8ccd4;
+  --glass: rgba(200, 204, 212, 0.055);
+  --glass-border: rgba(200, 204, 212, 0.15);
+  --surface: #17191e;
+  --accent: #5ec2c9;
+  --accent-soft: rgba(94, 194, 201, 0.14);
+  --accent-text: #04191b;
+  --logo-star: #e9f6f7;
+  --kind-birth: #b8a9f0;
+  --kind-founding: #e6c47a;
+  --line: #8aa0b8;
+  --danger: #c9584f;
+  --danger-text: #f2a89f;
+  --text-primary: #eceef2;
+  --text-muted: #a6abb6;
+  --text-faint: #767c8a;
+  --backdrop: rgba(4, 4, 6, 0.64);
+}
+
+:root {
+  --page-max: 1080px;
+  --page-narrow: 760px;
+  --control-h: 2.5rem; /* every input, select and button */
+  --radius-control: 10px;
+}
+
+/* ---- 2. Base ------------------------------------------------------------ */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+/* Keep the scrollbar's space reserved so it appearing never changes the
+   page width (the timeline lays itself out from that width). */
+html {
+  scrollbar-gutter: stable;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 12% 18%, var(--bg-glow-a), transparent 42%),
+    radial-gradient(circle at 88% 82%, var(--bg-glow-b), transparent 45%),
+    var(--bg);
+  background-attachment: fixed;
+  color: var(--text-primary);
+  font-family: 'Manrope', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+}
+
+h1,
+h2,
+h3 {
+  font-family: 'Fraunces', serif;
+  font-weight: 500;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+.glass-panel {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+/* Panels that float over busy content (the map's bright kingdom colors)
+   need to stay readable: nearly opaque, with only a light blur. */
+.glass-panel.panel-solid {
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.error-banner {
+  background: color-mix(in srgb, var(--danger) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 32%, transparent);
+  color: var(--danger-text);
+  padding: 0.6rem 0.9rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  margin: 0 0 1rem;
+}
+
+.loading-hint {
+  color: var(--text-faint);
+  font-size: 0.9rem;
+}
+
+/* ---- 3. Page layout ----------------------------------------------------- */
+/* Every page's root is `.page`: left-aligned against the sidebar, with the
+   same padding and the same heading. `.is-narrow` is for forms. */
+
+.page {
+  width: 100%;
+  max-width: var(--page-max);
+  padding: 1rem 1rem 3rem;
+}
+
+.page.is-narrow {
+  max-width: var(--page-narrow);
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.page-header h1 {
+  font-size: 1.8rem;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.page-sub {
+  margin: 0.3rem 0 0;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.back-link {
+  display: inline-block;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  color: var(--text-faint);
+  text-decoration: none;
+}
+
+.back-link:hover {
+  color: var(--text-primary);
+}
+
+/* ---- 4. Buttons --------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: var(--control-h);
+  padding: 0 1.1rem;
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+  border-radius: var(--radius-control);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+.btn.small {
+  min-height: 2rem;
+  padding: 0 0.85rem;
+  font-size: 0.78rem;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: var(--glass-border);
+  color: var(--text-primary);
+}
+
+.btn-ghost:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.btn-danger {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 42%, transparent);
+  color: var(--danger-text);
+}
+
+/* ---- 5. Form controls --------------------------------------------------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.field-row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.field-row .field {
+  flex: 1;
+  min-width: 0;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.75rem 1rem;
+}
+
+:where(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color'])),
+textarea,
+select {
+  width: 100%;
+  min-height: var(--control-h);
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  color: var(--text-primary);
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-faint);
+}
+
+:where(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color'])):focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+input:disabled,
+textarea:disabled,
+select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Number inputs: no cramped spinner buttons, they fight the layout. */
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type='file'] {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+input[type='file']::file-selector-button {
+  margin-right: 0.6rem;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 5rem;
+}
+
+/* One look for every dropdown, and a readable open list: without the
+   explicit option colours the browser draws light text on a white popup. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2.2rem;
+  cursor: pointer;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
+    linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 1.15rem) 52%,
+    calc(100% - 0.8rem) 52%;
+  background-size: 0.36rem 0.36rem;
+  background-repeat: no-repeat;
+}
+
+select option,
+select optgroup {
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+select optgroup {
+  color: var(--text-muted);
+  font-weight: 700;
+  font-style: normal;
+}
+
+select option:disabled {
+  color: var(--text-faint);
+}
+
+input[type='checkbox'],
+input[type='radio'],
+input[type='range'] {
+  accent-color: var(--accent);
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  cursor: pointer;
+}
+
+.read-value {
+  padding: 0.4rem 0;
+  color: var(--text-primary);
+  font-size: 0.92rem;
+  min-height: 1.4rem;
+}
+
+.read-value.is-empty {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+/* ---- 6. Shared bits ----------------------------------------------------- */
+
+.tab-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--glass-border);
+  margin-bottom: 1.5rem;
+}
+
+.tab-button {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0.65rem 0.25rem;
+  margin-right: 1.25rem;
+  margin-bottom: -1px;
+  cursor: pointer;
+}
+
+.tab-button:hover {
+  color: var(--text-primary);
+}
+
+.tab-button.is-active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent);
+}
+
+/* Empty states — one look everywhere (a list with nothing in it yet). */
+.empty-state {
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.empty-title {
+  font-family: 'Fraunces', serif;
+  font-size: 1.15rem;
+  margin: 0 0 0.4rem;
+  color: var(--text-primary);
+}
+
+.empty-hint {
+  margin: 0 auto;
+  max-width: 46ch;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+/* Modals: one backdrop, one panel, one heading, one button row. Width is
+   the default 600px; `.is-small` for confirmations, `.is-wide` for the
+   bigger forms. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: var(--backdrop);
+}
+
+.modal {
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 1.75rem 2rem;
+  background: color-mix(in srgb, var(--surface) 97%, transparent);
+}
+
+.modal.is-small {
+  max-width: 420px;
+}
+
+.modal.is-wide {
+  max-width: 680px;
+}
+
+.modal h2 {
+  margin: 0 0 1.25rem;
+  font-size: 1.35rem;
+  color: var(--text-primary);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+/* A grid cell that needs room (dates, long selects). */
+.field-grid > .span-2 {
+  grid-column: span 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+.page.is-wide {
+  max-width: none;
+}
+
+/* A class's icon, small, beside its name (character card and sheet). */
+.class-line {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.class-icon {
+  width: 1.4rem;
+  height: 1.4rem;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  font-size: 0.7rem;
+}
