@@ -1,5 +1,5 @@
 # --- Stage 1: build the frontend ---
-FROM node:20-alpine AS frontend-build
+FROM node:24-alpine AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
@@ -7,7 +7,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # --- Stage 2: build the Go binary, embedding the compiled frontend ---
-FROM golang:1.22-alpine AS backend-build
+FROM golang:1.27-alpine AS backend-build
 WORKDIR /app/backend
 COPY backend/ ./
 COPY --from=frontend-build /app/frontend/dist ./static
@@ -16,7 +16,7 @@ RUN if [ ! -f go.sum ]; then go mod tidy; fi \
     && CGO_ENABLED=0 go build -o polaris .
 
 # --- Stage 3: minimal runtime image ---
-FROM alpine:3.19
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates
 WORKDIR /app
 COPY --from=backend-build /app/backend/polaris .

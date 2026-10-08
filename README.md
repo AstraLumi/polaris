@@ -86,7 +86,7 @@ has been upgraded cannot be opened by an older version, so back up first.
 
 ## Running without Docker
 
-You need Go 1.22+ and Node 20+.
+You need Go 1.26+ and Node 24+.
 
     cd frontend && npm ci && npm run build
     cp -r dist/. ../backend/static/

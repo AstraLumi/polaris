@@ -5,7 +5,7 @@ Notes for working on the code. For installing and running it, see the
 
 ## Layout
 
-- `backend/` Go 1.22, standard library `net/http` plus SQLite
+- `backend/` Go 1.26+, standard library `net/http` plus SQLite
   (`modernc.org/sqlite`, pure Go, no cgo). It embeds the compiled frontend
   (`backend/static`, produced by the frontend build) and serves both the API
   and the pages.

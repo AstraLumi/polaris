@@ -1,6 +1,6 @@
 # Polaris: notes for Claude Code
 
-Self-hosted campaign/character tracker. Go 1.22 backend (standard library
+Self-hosted campaign/character tracker. Go 1.26+ backend (standard library
 `net/http`, SQLite via `modernc.org/sqlite`) that embeds the built Vue 3 + Vite
 frontend. One SQLite database and one uploads folder per story. See
 `README.md` for running it and `docs/DEVELOPMENT.md` for architecture notes.
