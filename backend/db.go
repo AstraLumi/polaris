@@ -12,7 +12,7 @@ import (
 // oldest migration (or a brand new one) gets wiped and recreated from
 // freshSchema — so every schema change from here on should ship with a
 // migration instead of relying on that reset.
-const currentSchemaVersion = "14"
+const currentSchemaVersion = "15"
 
 const freshSchema = `
 CREATE TABLE classes (
@@ -108,7 +108,10 @@ CREATE TABLE character_story (
 	deaths            INTEGER NOT NULL DEFAULT 0,
 	description       TEXT,
 	bio               TEXT,
-	speech_mannerisms TEXT
+	speech_mannerisms TEXT,
+	-- Alive, missing or dead at this point in the story. Separate from
+	-- deaths, which counts lives lost (a character can die and come back).
+	status            TEXT NOT NULL DEFAULT 'alive' CHECK (status IN ('alive', 'missing', 'dead'))
 );
 
 -- The only editable combat data: the 8 primary stats. Everything else
@@ -388,6 +391,13 @@ var migrations = map[string]migration{
 			// changes how the map draws them.
 			`ALTER TABLE locations ADD COLUMN is_city INTEGER NOT NULL DEFAULT 0`,
 			`ALTER TABLE locations ADD COLUMN is_capital INTEGER NOT NULL DEFAULT 0`,
+		},
+	},
+	"14": {
+		to: "15",
+		statements: []string{
+			// Each version says whether the character is alive, missing or dead.
+			`ALTER TABLE character_story ADD COLUMN status TEXT NOT NULL DEFAULT 'alive' CHECK (status IN ('alive', 'missing', 'dead'))`,
 		},
 	},
 }

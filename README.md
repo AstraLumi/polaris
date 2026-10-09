@@ -162,6 +162,54 @@ DATA_DIR=./data UPLOADS_DIR=./data/uploads ./polaris
 The server listens on port 8091 on **all interfaces**. If the machine is on a
 shared network, restrict access as described under [Security](#security).
 
+## Stat formulas
+
+> [!NOTE]
+> Polaris calculates stats (HP, Attack, Carry Limit, Luck, and the rest) with
+> formulas tuned for the author's own setting and rules. They are not meant
+> to be a general system, and there is no screen for changing them. If you
+> use Polaris for your own world, you will probably want different numbers.
+
+Stats are calculated every time a character is shown and are never stored,
+so changing a formula updates every character at once. It needs no database
+change and puts no data at risk.
+
+The calculation runs in two steps:
+
+1. **Primary stats.** The 8 points spent on a character (VIT, DEF, RES, STR,
+   DEX, INT, WIS, AGL) plus any bonuses from class, race, gear and so on.
+2. **Everything else** (Base Stats, Special Stats, Special Defenses and
+   Lifeskills) is calculated from those by the formulas in
+   [`backend/stats_formulas.go`](backend/stats_formulas.go). Class, race and
+   gear bonuses are added on top afterwards.
+
+### Using your own formulas
+
+Don't edit `stats_formulas.go`: updates change it. Put your formulas in a
+file of your own instead, which updates never touch:
+
+1. Copy `backend/stats_custom.go.example` to `backend/stats_custom.go`. Git
+   ignores that file, so `git pull` and `scripts/update.sh` leave it alone.
+2. In it, list only the stats you want to change. Every stat you leave out
+   keeps its default. For example, 15 HP per point of VIT instead of 10:
+
+   ```go
+   "hp": 10 + in.VIT*15 + in.Level*2,
+   ```
+
+   The example file lists everything a formula can read (`in.STR`,
+   `in.Level`, `in.WeightKG`, numbers typed on the sheet with
+   `in.Base("sanity")`, …) and the name of every stat you can set.
+3. Rebuild: `docker compose up -d --build`. If you have Go installed, run
+   `cd backend && go test ./...` first; it catches typos before they reach
+   the server.
+
+To go back to the defaults, delete `stats_custom.go` and rebuild.
+
+If an update ever changes what formulas can read, your file stops compiling
+and the build error names it. Compare it with `stats_formulas.go`, adjust,
+and rebuild. Your numbers never change silently.
+
 ## Privacy
 
 The interface loads its fonts from Google Fonts, so your browser contacts

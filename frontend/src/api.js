@@ -406,7 +406,7 @@ export function buildVersionFormData(form, specialBases, pictureFile, spellIds, 
     'class', 'subclass', 'specialization',
     'gender', 'race', 'height', 'weight', 'body_type', 'age', 'human_birth_date',
     'blood_type', 'born_in', 'nation', 'born_in_location_id', 'nation_location_id', 'birth_date', 'deaths',
-    'description', 'bio', 'speech_mannerisms',
+    'description', 'bio', 'speech_mannerisms', 'status',
     'vit', 'def', 'res', 'str', 'dex', 'intel', 'wis', 'agl',
   ]
   for (const field of fields) {

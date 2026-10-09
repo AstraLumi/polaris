@@ -72,7 +72,7 @@ func TestMigrationAddsSettlementColumns(t *testing.T) {
 	for _, q := range []string{
 		`ALTER TABLE locations DROP COLUMN is_city`,
 		`ALTER TABLE locations DROP COLUMN is_capital`,
-		`UPDATE schema_meta SET value = '13' WHERE key = 'schema_version'`,
+		`ALTER TABLE character_story DROP COLUMN status`, `UPDATE schema_meta SET value = '13' WHERE key = 'schema_version'`,
 	} {
 		if _, err := app.db.Exec(q); err != nil {
 			t.Fatal(err)

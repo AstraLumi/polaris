@@ -202,7 +202,7 @@ func TestMigrationAddsWikiTables(t *testing.T) {
 		drops = append(drops, `DROP TRIGGER wiki_cleanup_`+wt.Table)
 	}
 	drops = append(drops, `ALTER TABLE locations DROP COLUMN is_city`, `ALTER TABLE locations DROP COLUMN is_capital`)
-	drops = append(drops, `UPDATE schema_meta SET value = '12' WHERE key = 'schema_version'`)
+	drops = append(drops, `ALTER TABLE character_story DROP COLUMN status`, `UPDATE schema_meta SET value = '12' WHERE key = 'schema_version'`)
 	for _, q := range drops {
 		if _, err := app.db.Exec(q); err != nil {
 			t.Fatal(err)

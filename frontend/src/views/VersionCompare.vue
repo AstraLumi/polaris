@@ -72,6 +72,7 @@ import { t, tr } from '../i18n'
 import { fetchVersions, fetchVersion } from '../api'
 import { EQUIP_SLOTS } from '../gear'
 import BackLink from '../components/BackLink.vue'
+import { statusLabel } from '../characterStatus'
 import { pageTitle } from '../navigation'
 
 const props = defineProps({ id: { type: String, required: true } })
@@ -170,6 +171,7 @@ const groups = computed(() => {
         row(t('Nation'), s(x).nation_name || s(x).nation, s(y).nation_name || s(y).nation),
         row(t('Birth date (in-story)'), s(x).birth_date, s(y).birth_date),
         row(t('Human birth date'), s(x).human_birth_date, s(y).human_birth_date),
+        row(t('Status'), statusLabel(s(x).status), statusLabel(s(y).status)),
         row(t('Deaths'), s(x).deaths, s(y).deaths),
         row(t('Description'), s(x).description, s(y).description, { long: true }),
         row(t('Bio'), s(x).bio, s(y).bio, { long: true }),
@@ -179,7 +181,8 @@ const groups = computed(() => {
     { title: t('Primary Stats'), rows: PRIMARY.map(([k, l]) => row(l, x.build?.[k] ?? 0, y.build?.[k] ?? 0)) },
     { title: t('Base Stats'), rows: BASE.map(([k, l]) => row(t(l), c(x, 'base', k), c(y, 'base', k))) },
     { title: t('Special Stats'), rows: SPECIAL.map(([k, l, d]) => row(t(l), c(x, 'special', k, d), c(y, 'special', k, d))) },
-    { title: t('Special Defenses'), rows: ELEMENTS.map(([k, l]) => row(t(l), c(x, 'elemental', k), c(y, 'elemental', k))) },
+    // Multipliers (1.25x), so two decimals.
+    { title: t('Special Defenses'), rows: ELEMENTS.map(([k, l]) => row(t(l), c(x, 'elemental', k, 2), c(y, 'elemental', k, 2))) },
     { title: t('Lifeskill'), rows: LIFESKILLS.map(([k, l]) => row(t(l), c(x, 'lifeskills', k), c(y, 'lifeskills', k))) },
     { title: t('Gear'), rows: EQUIP_SLOTS.map((sl) => row(t(sl.label), x.gear?.[sl.key]?.name, y.gear?.[sl.key]?.name)) },
     {

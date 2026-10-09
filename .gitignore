@@ -8,6 +8,7 @@ backend/polaris.exe
 *.test
 
 # Your local configuration and data. Never commit these.
+backend/stats_custom.go
 .env
 .env.*
 !.env.example

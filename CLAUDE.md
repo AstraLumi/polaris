@@ -36,7 +36,12 @@ Run all of these before committing. `backend/static/` is build output (only
   `frontend/src/builtinIcons.js` and the allowlists in `backend/icons.go`.
 - **Stats:** `stat_modifiers` has source types class, subclass, specialization,
   race, body_type and item (gear). Gear is always flat. `computeStats` is a
-  two-phase pipeline (primary, then derived).
+  two-phase pipeline (primary, then derived). The derived formulas live in
+  `backend/stats_formulas.go`; a user's own go in the git-ignored
+  `backend/stats_custom.go` (template: `stats_custom.go.example`). Changing
+  `StatInputs` or the stat keys breaks those files, so keep the example and
+  the README's "Stat formulas" section in step. Never commit
+  `stats_custom.go`.
 - **Uploads:** handlers emit `/uploads/<file>`; a rewriter turns that into
   `/uploads/s/<story-id>/<file>`. Uploaded files are served sandboxed with
   `nosniff`. Do not weaken that.

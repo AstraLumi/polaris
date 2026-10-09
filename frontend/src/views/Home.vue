@@ -93,6 +93,7 @@ import { ref, computed, onMounted } from 'vue'
 import { fetchHome } from '../api'
 import { t, tn, tr } from '../i18n'
 import { fullDate } from '../calendar'
+import { timeAgo } from '../timeAgo'
 
 // The "loose ends" labels come from the backend (home.go); listing them here
 // lets the language checker see them and keep every catalog complete.
@@ -122,18 +123,7 @@ function initials(name) {
     .toUpperCase()
 }
 
-// SQLite's datetime('now') is UTC without a zone marker.
-function ago(stamp) {
-  const ts = new Date(String(stamp).replace(' ', 'T') + 'Z').getTime()
-  if (Number.isNaN(ts)) return ''
-  const mins = Math.max(0, Math.round((Date.now() - ts) / 60000))
-  if (mins < 1) return t('just now')
-  if (mins < 60) return t('{n}m ago', { n: mins })
-  const hrs = Math.round(mins / 60)
-  if (hrs < 24) return t('{n}h ago', { n: hrs })
-  const days = Math.round(hrs / 24)
-  return days < 30 ? t('{n}d ago', { n: days }) : new Date(ts).toLocaleDateString()
-}
+const ago = timeAgo
 
 onMounted(async () => {
   try {

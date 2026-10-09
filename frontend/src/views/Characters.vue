@@ -39,6 +39,10 @@
         <option value="">{{ $t('All races') }}</option>
         <option v-for="r in raceOptions" :key="r" :value="r">{{ r }}</option>
       </select>
+      <select :value="statusFilter" :aria-label="$t('Status')" @change="setQuery('status', $event.target.value)">
+        <option value="">{{ $t('Any status') }}</option>
+        <option v-for="s in STATUSES" :key="s.key" :value="s.key">{{ $t(s.label) }}</option>
+      </select>
       <select :value="sort" :aria-label="$t('Sort by')" @change="setQuery('sort', $event.target.value === 'name' ? '' : $event.target.value)">
         <option v-for="o in SORTS" :key="o.key" :value="o.key">{{ $t(o.label) }}</option>
       </select>
@@ -84,6 +88,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { t, tr } from '../i18n'
+import { STATUSES } from '../characterStatus'
 import CharacterCard from '../components/CharacterCard.vue'
 import AddCharacterModal from '../components/AddCharacterModal.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
@@ -110,8 +115,9 @@ const queryText = (k) => (typeof route.query[k] === 'string' ? route.query[k] : 
 const search = ref(queryText('q'))
 const classFilter = computed(() => queryText('class'))
 const raceFilter = computed(() => queryText('race'))
+const statusFilter = computed(() => queryText('status'))
 const sort = computed(() => (SORTS.some((o) => o.key === queryText('sort')) ? queryText('sort') : 'name'))
-const filtering = computed(() => !!(search.value.trim() || classFilter.value || raceFilter.value))
+const filtering = computed(() => !!(search.value.trim() || classFilter.value || raceFilter.value || statusFilter.value))
 
 function setQuery(key, value) {
   const query = { ...route.query }
@@ -141,6 +147,7 @@ const shown = computed(() => {
   const list = characters.value.filter((c) => {
     if (classFilter.value && c.class_name !== classFilter.value) return false
     if (raceFilter.value && c.race_name !== raceFilter.value) return false
+    if (statusFilter.value && (c.status || 'alive') !== statusFilter.value) return false
     const text = [c.name, c.nickname, c.class_name, c.subclass_name, c.race_name].join(' ').toLowerCase()
     return words.every((w) => text.includes(w))
   })

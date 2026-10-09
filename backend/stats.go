@@ -141,34 +141,6 @@ func resolveOrDefault(v sql.NullFloat64, fallback float64) float64 {
 	return fallback
 }
 
-// luckAgeBreakpoints are (age, factor) pairs Luck's InitialFactor is
-// linearly interpolated between. Flat before 0 and after 200.
-var luckAgeBreakpoints = [][2]float64{
-	{0, 0.75},
-	{18, 0},
-	{100, -0.75},
-	{200, -1},
-}
-
-func luckInitialFactor(age float64) float64 {
-	if age <= luckAgeBreakpoints[0][0] {
-		return luckAgeBreakpoints[0][1]
-	}
-	last := len(luckAgeBreakpoints) - 1
-	if age >= luckAgeBreakpoints[last][0] {
-		return luckAgeBreakpoints[last][1]
-	}
-	for i := 0; i < last; i++ {
-		x0, y0 := luckAgeBreakpoints[i][0], luckAgeBreakpoints[i][1]
-		x1, y1 := luckAgeBreakpoints[i+1][0], luckAgeBreakpoints[i+1][1]
-		if age >= x0 && age <= x1 {
-			t := (age - x0) / (x1 - x0)
-			return roundTo2(y0 + t*(y1-y0))
-		}
-	}
-	return 0 // unreachable given the clamps above
-}
-
 func roundTo2(v float64) float64 {
 	return math.Round(v*100) / 100
 }
@@ -300,65 +272,14 @@ func computeStats(db *sql.DB, level int, age, heightCM, weightKG float64, build 
 	applyModifiers(rows, sources, lvl, primaryAdditive, primaryMultiplier)
 	primary := resolveFinal(primaryAdditive, primaryMultiplier)
 
-	// Phase 2: everything derived from the effective primaries.
-	derivedAdditive := map[string]float64{
-		"hp":         10 + primary["vit"]*10 + lvl*2,
-		"mp":         10 + primary["wis"]*5 + primary["intel"] + lvl*2,
-		"attack":     1 + primary["str"]*2 + primary["dex"],
-		"potency":    1 + primary["intel"]*2 + primary["wis"],
-		"defense":    1 + primary["def"]*3,
-		"resistance": 1 + primary["res"]*3,
-		"speed":      1 + primary["agl"]*2,
-		"luck":       1 + luckInitialFactor(age),
-
-		// Weight-led baseline with a small height nudge (clamped so short
-		// characters don't get a negative contribution) — STR's effect is
-		// applied separately below as a quadratic multiplier, not baked
-		// in here.
-		"carry_limit": weightKG*0.13 + math.Max(0, heightM-1)*2,
-
-		// Taller/lighter characters have more give on landing; heavier
-		// ones take more damage from the same fall.
-		"fall_damage_threshold": 2.0 + (heightM-1.7)*1.0 - (weightKG-defaultWeightKG)*0.02,
-
-		// Sanity has no formula at all — it's exactly the typed base,
-		// modified only by whatever ends up matching 'sanity'.
-		"sanity": bases["sanity"],
-
-		// More body mass = harder to shed heat, but better insulated
-		// against cold. Both start from their own typed base.
-		"heat_threshold": bases["heat_threshold"] - (weightKG-defaultWeightKG)*0.05,
-		"cold_threshold": bases["cold_threshold"] - (weightKG-defaultWeightKG)*0.05,
-
-		// Special Defenses: 1.00x baseline plus whatever's been typed in.
-		"resist_water":   1 + bases["resist_water"],
-		"resist_fire":    1 + bases["resist_fire"],
-		"resist_wind":    1 + bases["resist_wind"],
-		"resist_earth":   1 + bases["resist_earth"],
-		"resist_ice":     1 + bases["resist_ice"],
-		"resist_thunder": 1 + bases["resist_thunder"],
-		"resist_impact":  1 + bases["resist_impact"],
-
-		// Lifeskills: no baseline, just the typed level plus modifiers.
-		"cooking":    bases["cooking"],
-		"crafting":   bases["crafting"],
-		"alchemy":    bases["alchemy"],
-		"hunting":    bases["hunting"],
-		"gathering":  bases["gathering"],
-		"farming":    bases["farming"],
-		"blessing":   bases["blessing"],
-		"enchanting": bases["enchanting"],
-		"smithing":   bases["smithing"],
-	}
-
-	// STR's carry-limit contribution is a quadratic multiplier, not flat
-	// or linear — (STR/10)^2 means it barely moves the needle below 10
-	// STR (a realistic range) and gets dramatically stronger above it
-	// (the "superhuman" range): STR 5 → +25%, STR 10 → +100% (2x),
-	// STR 20 → +400% (5x).
-	derivedMultiplier := map[string]float64{
-		"carry_limit": math.Pow(primary["str"]/10, 2),
-	}
+	// Phase 2: everything derived from the effective primaries, by the
+	// formulas in stats_formulas.go (or stats_custom.go).
+	derivedAdditive, derivedMultiplier := derivedFormulas(StatInputs{
+		VIT: primary["vit"], DEF: primary["def"], RES: primary["res"], STR: primary["str"],
+		DEX: primary["dex"], INT: primary["intel"], WIS: primary["wis"], AGL: primary["agl"],
+		Level: lvl, Age: age, HeightM: heightM, WeightKG: weightKG,
+		Bases: bases,
+	})
 
 	applyModifiers(rows, sources, lvl, derivedAdditive, derivedMultiplier)
 	final := resolveFinal(derivedAdditive, derivedMultiplier)

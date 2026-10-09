@@ -18,6 +18,9 @@ jobs:
       - name: Vet and test
         working-directory: backend
         run: go vet ./... && go test -count=1 ./...
+      - name: The custom formulas example still compiles and passes
+        working-directory: backend
+        run: cp stats_custom.go.example stats_custom.go && go vet ./... && go test -count=1 ./... && rm stats_custom.go
 
   frontend:
     runs-on: ubuntu-latest

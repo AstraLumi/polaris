@@ -95,6 +95,23 @@
         </div>
       </template>
     </section>
+
+    <section class="glass-panel card about">
+      <h2>{{ $t('About Polaris') }}</h2>
+      <dl class="about-list">
+        <dt>{{ $t('Version') }}</dt>
+        <dd>{{ appVersion }}</dd>
+        <dt>{{ $t('Made by') }}</dt>
+        <dd><a :href="REPO_OWNER_URL" target="_blank" rel="noopener noreferrer">AstraLumi</a></dd>
+        <dt>{{ $t('License') }}</dt>
+        <dd>
+          <a :href="`${REPO_URL}/blob/main/LICENSE`" target="_blank" rel="noopener noreferrer">MIT</a>
+          · {{ $t('free to use, change and share; provided as is, without warranty') }}
+        </dd>
+        <dt>{{ $t('Source code') }}</dt>
+        <dd><a :href="REPO_URL" target="_blank" rel="noopener noreferrer">github.com/AstraLumi/polaris</a></dd>
+      </dl>
+    </section>
   </div>
 </template>
 
@@ -104,6 +121,13 @@ import { fetchSettings, saveSettings } from '../api'
 import { loadCalendar, calendar } from '../calendar'
 import { THEMES, currentTheme, saveTheme } from '../theme'
 import { t, LOCALES, locale, saveLocale } from '../i18n'
+import pkg from '../../package.json'
+
+// The version comes from package.json at build time, so it is always the
+// one that was built.
+const appVersion = `v${pkg.version}`
+const REPO_URL = 'https://github.com/AstraLumi/polaris'
+const REPO_OWNER_URL = 'https://github.com/AstraLumi'
 
 const months = ref(calendar.months_per_year)
 const days = ref(calendar.days_per_month)
@@ -174,6 +198,37 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.about-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.45rem 1.25rem;
+  margin: 0.75rem 0 0;
+  font-size: 0.88rem;
+}
+
+.about-list dt {
+  color: var(--text-muted);
+}
+
+.about-list dd {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.about-list a {
+  color: var(--accent);
+}
+
+@media (max-width: 720px) {
+  .about-list {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+  .about-list dd {
+    margin-bottom: 0.5rem;
+  }
+}
+
 .card {
   padding: 1.75rem;
   margin-bottom: 1.25rem;

@@ -12,7 +12,12 @@
           <span v-else class="portrait-fallback">{{ initials }}</span>
         </div>
         <div class="identity-text">
-          <h1>{{ data.name }} <span class="level">{{ $t('Lv.') }} {{ String(data.level).padStart(2, '0') }}</span></h1>
+          <h1>
+            {{ data.name }} <span class="level">{{ $t('Lv.') }} {{ String(data.level).padStart(2, '0') }}</span>
+            <span v-if="data.story.status && data.story.status !== 'alive'" class="status-badge" :class="'is-' + data.story.status">
+              {{ statusLabel(data.story.status) }}
+            </span>
+          </h1>
           <p v-if="data.nickname" class="nickname">"{{ data.nickname }}"</p>
           <p class="class-line">
             <span v-if="data.class_icon" class="class-icon"><IconImage :src="data.class_icon" :name="data.class_name" /></span>
@@ -26,6 +31,9 @@
           <RouterLink :to="`/characters/${data.character_id}/versions`" class="btn btn-ghost">
             {{ $t('Edit') }}
           </RouterLink>
+          <button type="button" class="btn btn-ghost" :title="$t('Print the whole sheet, or save it as a PDF')" @click="print">
+            {{ $t('Print') }}
+          </button>
         </div>
       </header>
 
@@ -44,7 +52,8 @@
         </button>
       </div>
 
-      <section v-if="tab === 'story'" class="story-tab glass-panel">
+      <section v-show="tab === 'story'" class="story-tab glass-panel sheet-part">
+        <h2 class="print-only">{{ $t('Story') }}</h2>
         <div class="field-grid">
           <ReadField :label="$t('Gender')" :value="data.story.gender" />
           <ReadField :label="$t('Race')" :value="data.story.race_name" />
@@ -57,6 +66,7 @@
           <ReadField :label="$t('Nation')" :value="data.story.nation_name || data.story.nation" />
           <ReadField :label="$t('Birth date (in-story)')" :value="data.story.birth_date" />
           <ReadField :label="$t('Human birth date')" :value="data.story.human_birth_date" />
+          <ReadField :label="$t('Status')" :value="statusLabel(data.story.status)" />
           <ReadField :label="$t('Deaths')" :value="data.story.deaths" />
         </div>
         <div class="long-fields">
@@ -66,7 +76,8 @@
         </div>
       </section>
 
-      <section v-if="tab === 'build'" class="build-tab glass-panel">
+      <section v-show="tab === 'build'" class="build-tab glass-panel sheet-part">
+        <h2 class="print-only">{{ $t('Build') }}</h2>
         <BuildStatsPanel
           :model-value="data.build"
           :computed="data.computed"
@@ -76,11 +87,13 @@
         />
       </section>
 
-      <section v-else-if="tab === 'gear'" class="gear-tab-wrap glass-panel">
+      <section v-show="tab === 'gear'" class="gear-tab-wrap glass-panel sheet-part">
+        <h2 class="print-only">{{ $t('Gear') }}</h2>
         <GearTab :model-value="data.gear || {}" :carry-limit="data.computed?.special?.carry_limit || 0" />
       </section>
 
-      <section v-else-if="tab === 'spells'" class="gear-tab-wrap glass-panel">
+      <section v-show="tab === 'spells'" class="gear-tab-wrap glass-panel sheet-part">
+        <h2 class="print-only">{{ $t('Spells') }}</h2>
         <SpellsTab :model-value="data.spells || []" />
       </section>
     </template>
@@ -90,6 +103,7 @@
 <script setup>
 import IconImage from '../components/IconImage.vue'
 import BackLink from '../components/BackLink.vue'
+import { statusLabel } from '../characterStatus'
 import { pageTitle, viewPicture } from '../navigation'
 import { ref, computed, onMounted, h } from 'vue'
 import { t } from '../i18n'
@@ -153,6 +167,12 @@ async function load() {
 }
 
 onMounted(load)
+
+// The browser's print dialog, which can also save a PDF. The print styles
+// (style.css) show every tab at once on a plain light page.
+function print() {
+  window.print()
+}
 </script>
 
 <style scoped>

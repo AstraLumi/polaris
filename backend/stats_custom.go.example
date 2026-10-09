@@ -1,0 +1,50 @@
+package main
+
+// Your own stat formulas.
+//
+// Copy this file to stats_custom.go (same folder) and edit it. Git ignores
+// stats_custom.go, so updating Polaris never overwrites it. Rebuild after
+// any change:  docker compose up -d --build
+//
+// List only the stats you want to change; every stat you leave out keeps
+// the default from stats_formulas.go (open that file to see them all).
+//
+// What a formula can read (all numbers):
+//   in.VIT  in.DEF  in.RES  in.STR  in.DEX  in.INT  in.WIS  in.AGL
+//       the primary stats, after class/race/gear bonuses
+//   in.Level  in.Age (years)  in.HeightM (metres)  in.WeightKG
+//   in.Base("sanity")  a number typed on the character sheet, by stat key
+//
+// The stats you can set:
+//   Base Stats       hp mp attack potency defense resistance speed
+//   Special Stats    luck carry_limit fall_damage_threshold sanity
+//                    heat_threshold cold_threshold
+//   Special Defenses resist_water resist_fire resist_wind resist_earth
+//                    resist_ice resist_thunder resist_impact
+//   Lifeskills       cooking crafting alchemy hunting gathering farming
+//                    blessing enchanting smithing
+//
+// values is a stat's number before class/race/gear bonuses are added.
+// multipliers is an optional percentage the result is multiplied by
+// (0.25 means +25%); by default only carry_limit has one, from STR.
+// Luck is always kept between 0 and 2.
+//
+// If an update changes what formulas can read, this file stops compiling
+// and the build error names it: compare it with stats_formulas.go.
+
+import "math"
+
+func init() {
+	customFormulas = func(in StatInputs) (values, multipliers map[string]float64) {
+		values = map[string]float64{
+			// Examples: delete these and write your own.
+			"hp":    20 + in.VIT*15 + in.Level*3,
+			"speed": 1 + in.AGL*2 + in.DEX*0.5,
+		}
+		multipliers = map[string]float64{
+			// Carry limit grows more gently with STR than the default.
+			"carry_limit": math.Pow(in.STR/10, 1.5),
+		}
+		return values, multipliers
+	}
+}

@@ -1,5 +1,5 @@
 <template>
-  <div class="card glass-panel" :class="{ 'is-selected': selected }">
+  <div class="card glass-panel" :class="{ 'is-selected': selected, 'is-dead': character.status === 'dead' }">
     <label v-if="selectMode" class="select-box">
       <input type="checkbox" :checked="selected" @change="$emit('toggle-select')" />
     </label>
@@ -11,6 +11,9 @@
       </div>
       <div class="identity">
         <p class="name-line">{{ character.name }} <span class="level">{{ $t('Lv.') }} {{ paddedLevel }}</span></p>
+        <p v-if="character.status && character.status !== 'alive'" class="status-line">
+          <span class="status-badge" :class="'is-' + character.status">{{ statusLabel(character.status) }}</span>
+        </p>
         <p v-if="character.nickname" class="nickname">"{{ character.nickname }}"</p>
         <p class="class-line">
           <span v-if="character.class_icon" class="class-icon"><IconImage :src="character.class_icon" :name="character.class_name" /></span>
@@ -31,6 +34,7 @@
 import { computed } from 'vue'
 import { t } from '../i18n'
 import IconImage from './IconImage.vue'
+import { statusLabel } from '../characterStatus'
 
 const props = defineProps({
   character: { type: Object, required: true },
@@ -59,6 +63,16 @@ const initials = computed(() =>
 </script>
 
 <style scoped>
+.status-line {
+  margin: 0.2rem 0 0.1rem;
+}
+
+/* The dead stay on the list, a little faded. */
+.card.is-dead .portrait {
+  filter: grayscale(0.85);
+  opacity: 0.7;
+}
+
 .card {
   padding: 1.1rem;
   display: flex;

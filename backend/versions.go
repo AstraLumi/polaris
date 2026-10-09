@@ -45,6 +45,7 @@ type storyDetail struct {
 	Description      string `json:"description"`
 	Bio              string `json:"bio"`
 	SpeechMannerisms string `json:"speech_mannerisms"`
+	Status           string `json:"status"` // "alive" | "missing" | "dead"
 }
 
 type versionDetail struct {
@@ -181,11 +182,11 @@ func createVersionHandler(db *sql.DB) http.HandlerFunc {
 			INSERT INTO character_story
 				(version_id, gender, race_id, height, weight, body_type_id,
 				 human_birth_date, blood_type, born_in, nation, born_in_location_id, nation_location_id,
-				 birth_date, deaths, description, bio, speech_mannerisms)
+				 birth_date, deaths, description, bio, speech_mannerisms, status)
 			SELECT ?, gender, race_id, height, weight, body_type_id,
 				human_birth_date, blood_type, born_in, nation, born_in_location_id, nation_location_id,
 				birth_date, deaths,
-				description, bio, speech_mannerisms
+				description, bio, speech_mannerisms, status
 			FROM character_story WHERE version_id = ?
 		`, newVersionID, sourceID); err != nil {
 			tx.Rollback()
@@ -267,7 +268,7 @@ func buildVersionDetail(db *sql.DB, versionID string) (*versionDetail, error) {
 			COALESCE(st.born_in, ''), COALESCE(st.nation, ''), COALESCE(st.birth_date, ''),
 			st.born_in_location_id, COALESCE(bl.name, ''), st.nation_location_id, COALESCE(nl.name, ''),
 			COALESCE(st.deaths, 0), COALESCE(st.description, ''), COALESCE(st.bio, ''),
-			COALESCE(st.speech_mannerisms, ''), st.race_id, st.body_type_id,
+			COALESCE(st.speech_mannerisms, ''), COALESCE(st.status, 'alive'), st.race_id, st.body_type_id,
 			COALESCE(b.vit, 0), COALESCE(b.def, 0), COALESCE(b.res, 0), COALESCE(b.str, 0),
 			COALESCE(b.dex, 0), COALESCE(b.intel, 0), COALESCE(b.wis, 0), COALESCE(b.agl, 0)
 		FROM character_versions v
@@ -292,7 +293,7 @@ func buildVersionDetail(db *sql.DB, versionID string) (*versionDetail, error) {
 		&d.Story.BirthDate,
 		&bornInLoc, &d.Story.BornInName, &nationLoc, &d.Story.NationName,
 		&d.Story.Deaths, &d.Story.Description, &d.Story.Bio,
-		&d.Story.SpeechMannerisms, &raceID, &bodyTypeID,
+		&d.Story.SpeechMannerisms, &d.Story.Status, &raceID, &bodyTypeID,
 		&d.Build.VIT, &d.Build.DEF, &d.Build.RES, &d.Build.STR,
 		&d.Build.DEX, &d.Build.Intel, &d.Build.WIS, &d.Build.AGL,
 	)
@@ -558,7 +559,7 @@ func updateVersionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			SET gender = ?, race_id = ?, height = ?, weight = ?, body_type_id = ?, age = ?,
 				human_birth_date = ?, blood_type = ?, born_in = ?, nation = ?, birth_date = ?,
 				born_in_location_id = ?, nation_location_id = ?,
-				deaths = ?, description = ?, bio = ?, speech_mannerisms = ?
+				deaths = ?, description = ?, bio = ?, speech_mannerisms = ?, status = ?
 			WHERE version_id = ?
 		`,
 			nullableString(strings.TrimSpace(r.FormValue("gender"))), raceID,
@@ -575,6 +576,7 @@ func updateVersionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			nullableString(r.FormValue("description")),
 			nullableString(r.FormValue("bio")),
 			nullableString(r.FormValue("speech_mannerisms")),
+			normalizeStatus(r.FormValue("status")),
 			versionID,
 		)
 		if err != nil {
@@ -787,4 +789,14 @@ func unlinkedText(text string, link sql.NullInt64) string {
 		return ""
 	}
 	return strings.TrimSpace(text)
+}
+
+// normalizeStatus keeps a version's status to the three the schema allows;
+// anything else (including nothing, from an older form) means alive.
+func normalizeStatus(s string) string {
+	switch s = strings.TrimSpace(strings.ToLower(s)); s {
+	case "missing", "dead":
+		return s
+	}
+	return "alive"
 }

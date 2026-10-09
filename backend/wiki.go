@@ -218,6 +218,9 @@ type wikiListItem struct {
 	Name    string `json:"name"`
 	Picture string `json:"picture"`
 	Written bool   `json:"written"` // someone has added wiki content
+	// EditedAt is when its written text last changed (UTC, SQLite format);
+	// empty for an article nobody has written in.
+	EditedAt string `json:"edited_at,omitempty"`
 }
 
 // pictureURL turns a stored picture or icon into what the frontend expects:
@@ -232,19 +235,19 @@ func pictureURL(stored string) string {
 // ---- Reading -----------------------------------------------------------------
 
 func listWikiItems(db *sql.DB) ([]wikiListItem, error) {
-	written := map[string]bool{}
-	rows, err := db.Query(`SELECT entity_type, entity_id FROM wiki_entries`)
+	written := map[string]string{} // "type:id" -> edited at
+	rows, err := db.Query(`SELECT entity_type, entity_id, updated_at FROM wiki_entries`)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
-		var typ string
+		var typ, edited string
 		var id int64
-		if err := rows.Scan(&typ, &id); err != nil {
+		if err := rows.Scan(&typ, &id, &edited); err != nil {
 			rows.Close()
 			return nil, err
 		}
-		written[typ+":"+strconv.FormatInt(id, 10)] = true
+		written[typ+":"+strconv.FormatInt(id, 10)] = edited
 	}
 	rows.Close()
 
@@ -261,7 +264,7 @@ func listWikiItems(db *sql.DB) ([]wikiListItem, error) {
 				return nil, err
 			}
 			it.Picture = pictureURL(it.Picture)
-			it.Written = written[t.Key+":"+strconv.FormatInt(it.ID, 10)]
+			it.EditedAt, it.Written = written[t.Key+":"+strconv.FormatInt(it.ID, 10)]
 			items = append(items, it)
 		}
 		rows.Close()
@@ -316,6 +319,9 @@ func refOf(typ string, id sql.NullInt64, name sql.NullString) *wikiRef {
 }
 
 // addFact appends a row unless it is empty.
+// statusWord is how a character's status reads in the infobox.
+var statusWord = map[string]string{"alive": "Alive", "missing": "Missing", "dead": "Dead"}
+
 func (a *wikiArticle) addFact(key, value, kind string, link *wikiRef) {
 	if link != nil {
 		value = link.Name
@@ -344,14 +350,14 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 	id := a.ID
 	switch a.Type {
 	case "character":
-		var nick, gender, birth, bornText, nationText, desc, bio, speech string
+		var nick, gender, birth, bornText, nationText, desc, bio, speech, status string
 		var raceID, bodyID, classID, subID, specID, bornLoc, nationLoc sql.NullInt64
 		var raceName, bodyName, className, subName, specName, bornName, nationName sql.NullString
 		err := db.QueryRow(`
 			SELECT COALESCE(v.nickname, ''), COALESCE(st.gender, ''), COALESCE(st.birth_date, ''),
 			       COALESCE(st.born_in, ''), COALESCE(st.nation, ''),
 			       COALESCE(st.description, ''), COALESCE(st.bio, ''), COALESCE(st.speech_mannerisms, ''),
-			       st.race_id, r.name, st.body_type_id, b.name,
+			       COALESCE(st.status, 'alive'), st.race_id, r.name, st.body_type_id, b.name,
 			       v.class_id, cl.name, v.subclass_id, sc.name, v.specialization_id, sp.name,
 			       st.born_in_location_id, bl.name, st.nation_location_id, nl.name
 			FROM character_versions v
@@ -365,7 +371,7 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 			LEFT JOIN locations nl ON nl.id = st.nation_location_id
 			WHERE v.character_id = ? AND v.is_current = 1`, id).Scan(
 			&nick, &gender, &birth, &bornText, &nationText, &desc, &bio, &speech,
-			&raceID, &raceName, &bodyID, &bodyName,
+			&status, &raceID, &raceName, &bodyID, &bodyName,
 			&classID, &className, &subID, &subName, &specID, &specName,
 			&bornLoc, &bornName, &nationLoc, &nationName)
 		if err != nil {
@@ -373,6 +379,7 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 			return
 		}
 		a.addFact("nickname", nick, "", nil)
+		a.addFact("status", statusWord[status], "word", nil)
 		a.addFact("race", "", "", refOf("race", raceID, raceName))
 		a.addFact("gender", gender, "", nil)
 		a.addFact("body_type", "", "", refOf("body_type", bodyID, bodyName))

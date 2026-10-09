@@ -8,6 +8,9 @@
           · {{ $tn('{n} written', '{n} written', writtenCount) }}
         </p>
       </div>
+      <button v-if="items.length" type="button" class="btn btn-ghost" :title="$t('Open an article at random')" @click="openRandom">
+        {{ $t('Random article') }}
+      </button>
     </header>
 
     <p class="intro">
@@ -53,6 +56,21 @@
       </p>
     </div>
 
+    <section v-if="recent.length && !search.trim() && !filter" class="glass-panel category recent">
+      <h2>{{ $t('Recently changed') }}</h2>
+      <ul class="recent-list">
+        <li v-for="it in recent" :key="it.type + it.id">
+          <RouterLink :to="wikiPath(it.type, it.id)" class="article-link">
+            <span class="thumb">
+              <IconImage :src="it.picture" :name="it.name" />
+            </span>
+            <span class="article-name">{{ it.name }}</span>
+            <span class="recent-meta">{{ $t(TYPE_LABELS[it.type]) }} · {{ timeAgo(it.edited_at) }}</span>
+          </RouterLink>
+        </li>
+      </ul>
+    </section>
+
     <section v-for="g in groups" :key="g.type" class="glass-panel category">
       <h2>
         {{ $t(TYPE_PLURALS[g.type]) }}
@@ -74,8 +92,12 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import IconImage from '../components/IconImage.vue'
-import { TYPE_ORDER, TYPE_PLURALS, wikiApi, wikiPath } from '../wiki'
+import { TYPE_ORDER, TYPE_PLURALS, TYPE_LABELS, wikiApi, wikiPath } from '../wiki'
+import { timeAgo } from '../timeAgo'
+
+const router = useRouter()
 
 const items = ref([])
 const loading = ref(true)
@@ -85,6 +107,20 @@ const filter = ref('')
 const writtenOnly = ref(false)
 
 const writtenCount = computed(() => items.value.filter((i) => i.written).length)
+
+// The articles whose written text changed last.
+const recent = computed(() =>
+  items.value
+    .filter((i) => i.edited_at)
+    .sort((a, b) => b.edited_at.localeCompare(a.edited_at))
+    .slice(0, 8),
+)
+
+// Any article, written or not: a stub is a nudge to write it.
+function openRandom() {
+  const it = items.value[Math.floor(Math.random() * items.value.length)]
+  if (it) router.push(wikiPath(it.type, it.id))
+}
 
 const typeCounts = computed(() =>
   TYPE_ORDER.map((type) => ({ type, count: items.value.filter((i) => i.type === type).length })).filter((g) => g.count),
@@ -114,6 +150,23 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+  gap: 0.25rem 1rem;
+}
+
+.recent-meta {
+  margin-left: auto;
+  padding-left: 0.5rem;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
 .intro {
   margin: -0.5rem 0 1.25rem;
   max-width: 46rem;

@@ -129,6 +129,23 @@
           />
           <DateField v-model="form.birth_date" :label="$t('Birth date (in-story)')" class="span-2" />
           <DateField v-model="form.human_birth_date" :label="$t('Human birth date')" class="span-2" />
+          <div class="field">
+            <span>{{ $t('Status') }}</span>
+            <div class="status-picker" role="radiogroup" :aria-label="$t('Status')">
+              <button
+                v-for="s in STATUSES"
+                :key="s.key"
+                type="button"
+                role="radio"
+                class="status-option"
+                :class="['is-' + s.key, { 'is-on': form.status === s.key }]"
+                :aria-checked="form.status === s.key"
+                @click="form.status = s.key"
+              >
+                {{ $t(s.label) }}
+              </button>
+            </div>
+          </div>
           <label class="field">
             <span>{{ $t('Deaths') }}</span>
             <input v-model.number="form.deaths" type="number" min="0" />
@@ -197,6 +214,7 @@ import LocationSelect from '../components/LocationSelect.vue'
 import GearTab from '../components/GearTab.vue'
 import SpellsTab from '../components/SpellsTab.vue'
 import BackLink from '../components/BackLink.vue'
+import { STATUSES } from '../characterStatus'
 import { pageTitle, useUnsavedGuard, useSaveShortcut } from '../navigation'
 
 const props = defineProps({
@@ -240,6 +258,7 @@ const form = reactive({
   nation_location_id: null,
   birth_date: '',
   deaths: 0,
+  status: 'alive',
   description: '',
   bio: '',
   speech_mannerisms: '',
@@ -383,6 +402,7 @@ async function load() {
       nation_location_id: data.story.nation_location_id,
       birth_date: data.story.birth_date,
       deaths: data.story.deaths,
+      status: data.story.status || 'alive',
       description: data.story.description,
       bio: data.story.bio,
       speech_mannerisms: data.story.speech_mannerisms,
@@ -447,6 +467,40 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.status-picker {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.status-option {
+  flex: 1;
+  min-height: var(--control-h);
+  padding: 0 0.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.status-option.is-on {
+  color: var(--text-primary);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.status-option.is-missing.is-on {
+  border-color: var(--kind-birth);
+  background: color-mix(in srgb, var(--kind-birth) 16%, transparent);
+}
+
+.status-option.is-dead.is-on {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+}
+
 .identity-form {
   display: flex;
   gap: 1.5rem;

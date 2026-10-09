@@ -597,6 +597,27 @@ input[type='radio'] {
   grid-column: span 2;
 }
 
+/* A character's status when it isn't "alive" (cards, sheet). */
+.status-badge {
+  display: inline-block;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+  border: 1px solid currentColor;
+}
+
+.status-badge.is-missing {
+  color: var(--kind-birth);
+}
+
+.status-badge.is-dead {
+  color: var(--danger-text);
+}
+
 /* A picture that opens full size when clicked (PictureViewer.vue). */
 .zoomable {
   cursor: zoom-in;
@@ -631,4 +652,85 @@ input[type='radio'] {
   border-radius: 6px;
   background: var(--accent-soft);
   font-size: 0.7rem;
+}
+
+/* ---- Printing ------------------------------------------------------------
+   Mostly for the character sheet: a plain light page whatever the theme, no
+   navigation or buttons, and every tab of the sheet one after another. */
+
+.print-only {
+  display: none;
+}
+
+@media print {
+  :root,
+  :root[data-theme] {
+    --text-primary: #111;
+    --text-muted: #333;
+    --text-faint: #555;
+    --glass: transparent;
+    --glass-border: #bbb;
+    --surface: #fff;
+    --accent: #6b5413;
+    --accent-soft: transparent;
+    --line: #333;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #111;
+  }
+
+  .rail,
+  .back-link,
+  .btn,
+  .tab-bar,
+  .identity-actions,
+  .overlay {
+    display: none !important;
+  }
+
+  .shell {
+    display: block;
+    padding: 0;
+  }
+
+  .page {
+    max-width: none;
+    padding: 0;
+  }
+
+  .glass-panel {
+    background: none;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-radius: 8px;
+    break-inside: avoid;
+  }
+
+  .print-only {
+    display: block;
+  }
+
+  h2.print-only {
+    margin: 0 0 0.75rem;
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 1.15rem;
+  }
+
+  /* Every part of the sheet, not just the open tab. */
+  .sheet-part {
+    display: block !important;
+    margin-bottom: 1rem;
+  }
+
+  input,
+  select,
+  textarea {
+    color: #111;
+    background: none;
+  }
 }

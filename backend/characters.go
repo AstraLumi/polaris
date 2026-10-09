@@ -25,6 +25,7 @@ type characterSummary struct {
 	RaceName     string `json:"race_name"`
 	PicturePath  string `json:"picture_path"`
 	UpdatedAt    string `json:"updated_at"`
+	Status       string `json:"status"`
 	HP           int    `json:"hp"`
 	MP           int    `json:"mp"`
 }
@@ -40,7 +41,7 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 				c.id, v.id, v.name, COALESCE(v.nickname, ''), v.level,
 				COALESCE(cl.name, ''), COALESCE(sc.name, ''),
 				COALESCE(v.picture_path, ''), COALESCE(cl.icon_path, ''),
-				COALESCE(ra.name, ''), v.updated_at
+				COALESCE(ra.name, ''), v.updated_at, COALESCE(st.status, 'alive')
 			FROM characters c
 			JOIN character_versions v ON v.character_id = c.id AND v.is_current = 1
 			LEFT JOIN classes cl ON cl.id = v.class_id
@@ -58,7 +59,7 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 		type row struct {
 			characterID, versionID                                  int64
 			name, nickname, className, subclassName, pic, classIcon string
-			raceName, updatedAt                                     string
+			raceName, updatedAt, status                             string
 			level                                                   int
 		}
 		var raw []row
@@ -67,7 +68,7 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 			if err := rows.Scan(
 				&rr.characterID, &rr.versionID, &rr.name, &rr.nickname, &rr.level,
 				&rr.className, &rr.subclassName, &rr.pic, &rr.classIcon,
-				&rr.raceName, &rr.updatedAt,
+				&rr.raceName, &rr.updatedAt, &rr.status,
 			); err != nil {
 				rows.Close()
 				http.Error(w, "failed to read characters", http.StatusInternalServerError)
@@ -83,7 +84,7 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 			c := characterSummary{
 				ID: rr.characterID, VersionID: rr.versionID, Name: rr.name, Nickname: rr.nickname,
 				Level: rr.level, ClassName: rr.className, SubclassName: rr.subclassName,
-				RaceName: rr.raceName, UpdatedAt: rr.updatedAt,
+				RaceName: rr.raceName, UpdatedAt: rr.updatedAt, Status: rr.status,
 				ClassIcon: uploadURL(rr.classIcon),
 			}
 			if rr.pic != "" {

@@ -62,6 +62,7 @@ export const FIELD_LABELS = {
 // Infobox rows that come from the story itself.
 export const FACT_LABELS = {
   nickname: tr('Nickname'),
+  status: tr('Status'),
   race: tr('Race'),
   gender: tr('Gender'),
   body_type: tr('Body type'),
@@ -84,7 +85,10 @@ export const FACT_LABELS = {
 }
 
 // Words the server sends as an infobox value.
-export const WORD_LABELS = [tr('Kingdom'), tr('Major location'), tr('Minor location'), tr('Capital'), tr('City')]
+export const WORD_LABELS = [
+  tr('Kingdom'), tr('Major location'), tr('Minor location'), tr('Capital'), tr('City'),
+  tr('Alive'), tr('Missing'), tr('Dead'),
+]
 
 // Related lists.
 export const GROUP_LABELS = {
