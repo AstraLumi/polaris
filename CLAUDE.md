@@ -58,3 +58,5 @@ addresses in tracked files. The repo is meant to be publishable as is.
 - Match the surrounding code; no new dependencies without a reason.
 - Commit messages: a short imperative summary line, then a body if needed.
 - Do not push without being asked.
+- Versions are Major.Minor.Bugfix (semver), kept in `frontend/package.json`
+  and tagged `vX.Y.Z`. New features bump Minor, fixes bump Bugfix.
