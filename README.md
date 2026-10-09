@@ -3,7 +3,8 @@
 Polaris is a self-hosted campaign and character tracker for writers, game
 masters and worldbuilders. It keeps everything about a story in one place
 that you own: characters and how they change over time, their stats, gear and
-spells, a hex map, a custom calendar, events and a timeline.
+spells, a hex map, a custom calendar, events, a timeline and a wiki that
+writes itself from all of it.
 
 Polaris is a single Go program with the web interface built in. Each story
 has its own SQLite database, so it runs comfortably on a small home server.
@@ -19,6 +20,12 @@ has its own SQLite database, so it runs comfortably on a small home server.
 - **Character Assets**: classes, subclasses, specializations, races, body
   types, gear and spells, each of which can grant stat bonuses.
 - **Map**: a paintable hex map with major locations you can inspect.
+- **Wiki**: every character, location, event, class, race, spell and piece
+  of gear automatically gets an article, so there are no pages to create. Its
+  infobox and related lists are read live from the rest of your story, and you
+  add the lore on top: markdown boxes (history, personality, geography and so
+  on), your own sections and infobox rows, `[[links]]` between articles and a
+  "What links here" list. Delete something and its article goes with it.
 - **Calendar, events and timeline**: define your own calendar (months per year,
   days per month), link events with tags, and view them on a timeline drawn to
   scale.
@@ -27,6 +34,26 @@ has its own SQLite database, so it runs comfortably on a small home server.
 - **Languages**: English, Português (Brasil), Español (España) and Español
   (Latinoamérica). Only the interface is translated, never your own content.
 - **Themes**: five colour themes, chosen per device.
+
+## Screenshots
+
+The screenshots use mock data.
+
+**Map**: paint kingdoms on the hex map and place towns and landmarks.
+
+![The hex map with four painted kingdoms](docs/screenshots/map.png)
+
+**Character gear**: a paper-doll of equipped gear, with weight and the stat
+bonuses it grants.
+
+![A character's gear tab](docs/screenshots/gear.png)
+
+**Wiki**: an article built from the map and your own text, with an infobox,
+contents and links to other articles.
+
+![A wiki article for a kingdom](docs/screenshots/wiki.png)
+
+![The wiki index](docs/screenshots/wiki-index.png)
 
 ## Security
 
