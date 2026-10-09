@@ -1,6 +1,6 @@
 <template>
   <div class="page wiki-article">
-    <RouterLink to="/wiki" class="back-link">{{ $t('← Back to the wiki') }}</RouterLink>
+    <BackLink to="/wiki" :label="$t('← Back to the wiki')" />
 
     <p v-if="loadError" class="error-banner">{{ loadError }}</p>
     <p v-else-if="!article" class="loading-hint">{{ $t('Loading…') }}</p>
@@ -192,9 +192,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, nextTick, onBeforeUnmount } from 'vue'
-import { useRouter, onBeforeRouteLeave } from 'vue-router'
+import { ref, reactive, computed, watch, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import IconImage from '../components/IconImage.vue'
+import BackLink from '../components/BackLink.vue'
+import { pageTitle, useUnsavedGuard, useSaveShortcut } from '../navigation'
 import { renderMarkdown } from '../markdown'
 import { fullDate, dateParts } from '../calendar'
 import { t } from '../i18n'
@@ -348,7 +350,7 @@ async function load() {
     const [a, list] = await Promise.all([wikiApi.get(props.type, props.id), wikiApi.list()])
     article.value = a
     items.value = list
-    document.title = `${a.name} · ${t('Wiki')}`
+    pageTitle.value = a.name
   } catch (e) {
     loadError.value = e.message
   }
@@ -356,15 +358,8 @@ async function load() {
 
 watch(() => [props.type, props.id], load, { immediate: true })
 
-onBeforeRouteLeave(() => {
-  if (dirty() && !window.confirm(t('Discard your changes?'))) return false
-})
-
-const warnUnload = (e) => {
-  if (dirty()) e.preventDefault()
-}
-window.addEventListener('beforeunload', warnUnload)
-onBeforeUnmount(() => window.removeEventListener('beforeunload', warnUnload))
+useUnsavedGuard(dirty)
+useSaveShortcut(() => editing.value && !saving.value && save())
 </script>
 
 <style scoped>

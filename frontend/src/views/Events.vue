@@ -116,7 +116,14 @@ async function load() {
 let searchTimer = null
 watch(search, () => {
   clearTimeout(searchTimer)
-  searchTimer = setTimeout(load, 250)
+  searchTimer = setTimeout(() => {
+    // Kept in the URL so coming back to the list keeps the search.
+    const query = { ...route.query }
+    if (search.value.trim()) query.q = search.value.trim()
+    else delete query.q
+    router.replace({ path: '/events', query })
+    load()
+  }, 250)
 })
 watch(() => route.query.tag, load)
 

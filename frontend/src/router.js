@@ -15,31 +15,34 @@ import WikiHome from './views/WikiHome.vue'
 import WikiArticle from './views/WikiArticle.vue'
 import StoryPicker from './views/StoryPicker.vue'
 import { activeStoryId, forgetStory, loadStories, stories } from './stories'
+import { tr } from './i18n'
+import { pageTitle } from './navigation'
 
 const routes = [
   // The picker is the one page that isn't inside a story (no sidebar).
-  { path: '/stories', name: 'stories', component: StoryPicker, meta: { bare: true } },
-  { path: '/', name: 'home', component: Home },
-  { path: '/characters', name: 'characters', component: Characters },
-  { path: '/characters/:id', name: 'character-view', component: CharacterView, props: true },
-  { path: '/characters/:id/versions', name: 'version-list', component: VersionList, props: true },
+  { path: '/stories', name: 'stories', component: StoryPicker, meta: { bare: true, title: tr('Stories') } },
+  { path: '/', name: 'home', component: Home, meta: { title: tr('Home') } },
+  { path: '/characters', name: 'characters', component: Characters, meta: { title: tr('Characters') } },
+  { path: '/characters/:id', name: 'character-view', component: CharacterView, meta: { title: tr('Characters') }, props: true },
+  { path: '/characters/:id/versions', name: 'version-list', component: VersionList, meta: { title: tr('Versions') }, props: true },
   {
     path: '/characters/:id/versions/:versionId/edit',
     name: 'version-edit',
     component: VersionEdit,
+    meta: { title: tr('Edit version') },
     props: true,
   },
-  { path: '/assets', name: 'assets', component: CharacterAssets },
-  { path: '/map', name: 'map', component: MapView },
-  { path: '/settings', name: 'settings', component: SettingsView },
-  { path: '/timeline', name: 'timeline', component: TimelineView },
-  { path: '/events', name: 'events', component: Events },
+  { path: '/assets', name: 'assets', component: CharacterAssets, meta: { title: tr('Character Assets') } },
+  { path: '/map', name: 'map', component: MapView, meta: { title: tr('Map') } },
+  { path: '/settings', name: 'settings', component: SettingsView, meta: { title: tr('Settings') } },
+  { path: '/timeline', name: 'timeline', component: TimelineView, meta: { title: tr('Timeline') } },
+  { path: '/events', name: 'events', component: Events, meta: { title: tr('Events') } },
   // 'new' must be declared before ':id' so it isn't read as an event id.
-  { path: '/events/new', name: 'event-new', component: EventEdit },
-  { path: '/events/:id', name: 'event-view', component: EventView, props: true },
-  { path: '/events/:id/edit', name: 'event-edit', component: EventEdit, props: true },
-  { path: '/wiki', name: 'wiki', component: WikiHome },
-  { path: '/wiki/:type/:id', name: 'wiki-article', component: WikiArticle, props: true },
+  { path: '/events/new', name: 'event-new', component: EventEdit, meta: { title: tr('New event') } },
+  { path: '/events/:id', name: 'event-view', component: EventView, meta: { title: tr('Events') }, props: true },
+  { path: '/events/:id/edit', name: 'event-edit', component: EventEdit, meta: { title: tr('Edit event') }, props: true },
+  { path: '/wiki', name: 'wiki', component: WikiHome, meta: { title: tr('Wiki') } },
+  { path: '/wiki/:type/:id', name: 'wiki-article', component: WikiArticle, meta: { title: tr('Wiki') }, props: true },
 ]
 
 const router = createRouter({
@@ -68,6 +71,11 @@ router.beforeEach(async (to) => {
     }
   }
   return true
+})
+
+// A detail page names what it shows once it has loaded it (see pageTitle).
+router.afterEach((to, from, failure) => {
+  if (!failure) pageTitle.value = ''
 })
 
 export default router

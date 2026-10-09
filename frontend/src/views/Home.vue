@@ -55,7 +55,7 @@
           </div>
           <ul v-if="data.loose_ends.length" class="loose">
             <li v-for="(l, i) in data.loose_ends" :key="i">
-              <RouterLink :to="l.kind === 'character' ? `/characters/${l.id}` : '/map'" class="loose-row">
+              <RouterLink :to="l.kind === 'character' ? `/characters/${l.id}` : { path: '/map', query: { edit: l.id } }" class="loose-row">
                 <strong>{{ l.name }}</strong>
                 <span>{{ $t(l.issue) }}</span>
               </RouterLink>
@@ -66,16 +66,23 @@
         </section>
       </div>
 
-      <section class="glass-panel block shortcuts">
-        <h2>{{ $t('Jump to') }}</h2>
-        <div class="shortcut-row">
-          <RouterLink to="/characters" class="btn btn-ghost">{{ $t('Characters') }}</RouterLink>
-          <RouterLink to="/assets" class="btn btn-ghost">{{ $t('Character Assets') }}</RouterLink>
-          <RouterLink to="/timeline" class="btn btn-ghost">{{ $t('Timeline') }}</RouterLink>
-          <RouterLink to="/events" class="btn btn-ghost">{{ $t('Events') }}</RouterLink>
-          <RouterLink to="/map" class="btn btn-ghost">{{ $t('Map') }}</RouterLink>
-          <RouterLink to="/settings" class="btn btn-ghost">{{ $t('Settings') }}</RouterLink>
+      <section class="glass-panel block">
+        <div class="block-head">
+          <h2>{{ $t('Recently added events') }}</h2>
+          <RouterLink to="/events" class="more">{{ $t('All events →') }}</RouterLink>
         </div>
+        <ul v-if="data.events.length" class="recent">
+          <li v-for="e in data.events" :key="e.id">
+            <RouterLink :to="`/events/${e.id}`" class="recent-row">
+              <span class="recent-text">
+                <strong>{{ e.name }}</strong>
+                <small>{{ fullDate(e.event_date) || $t('No date set') }}</small>
+              </span>
+              <span class="when">{{ ago(e.created_at) }}</span>
+            </RouterLink>
+          </li>
+        </ul>
+        <p v-else class="empty">{{ $t('No events yet.') }} <RouterLink to="/events/new">{{ $t('New event') }}</RouterLink></p>
       </section>
     </template>
   </div>
@@ -85,6 +92,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { fetchHome } from '../api'
 import { t, tn, tr } from '../i18n'
+import { fullDate } from '../calendar'
 
 // The "loose ends" labels come from the backend (home.go); listing them here
 // lets the language checker see them and keep every catalog complete.
@@ -300,19 +308,5 @@ onMounted(async () => {
   margin: 0.8rem 0 0;
   font-size: 0.72rem;
   color: var(--text-faint);
-}
-
-.shortcuts h2 {
-  margin-bottom: 0.8rem;
-}
-
-.shortcut-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-}
-
-.shortcut-row .btn {
-  text-decoration: none;
 }
 </style>

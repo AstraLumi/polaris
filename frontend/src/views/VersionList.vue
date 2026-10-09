@@ -1,6 +1,6 @@
 <template>
   <div class="page is-narrow">
-    <RouterLink :to="`/characters/${id}`" class="back-link">{{ $t('← Back to character') }}</RouterLink>
+    <BackLink :to="`/characters/${id}`" :label="$t('← Back to character')" />
 
     <header class="page-header">
       <div>
@@ -69,6 +69,7 @@ import { ref, onMounted } from 'vue'
 import { t } from '../i18n'
 import { fetchVersions, deleteVersion, setCurrentVersion } from '../api'
 import NewVersionModal from '../components/NewVersionModal.vue'
+import BackLink from '../components/BackLink.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 
 const props = defineProps({ id: { type: String, required: true } })

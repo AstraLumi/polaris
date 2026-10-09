@@ -86,6 +86,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { t, tr } from '../i18n'
 import { mapApi } from '../api'
 import { themeRgba } from '../theme'
@@ -1040,7 +1041,25 @@ onMounted(async () => {
   window.addEventListener('keyup', onKeyUp)
   window.addEventListener('blur', onWindowBlur)
   await load()
+  openFromQuery()
 })
+
+// /map?edit=<id> (the Home page's loose ends) opens that major location's
+// editor straight away. The query is dropped so a reload doesn't reopen it.
+const route = useRoute()
+const router = useRouter()
+function openFromQuery() {
+  const id = Number(route.query.edit)
+  if (!id) return
+  const loc = locMap.get(id)
+  if (loc && loc.kind === 'major') {
+    activeId.value = loc.id
+    editMajor.value = loc
+  }
+  const query = { ...route.query }
+  delete query.edit
+  router.replace({ query })
+}
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()

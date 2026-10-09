@@ -5,13 +5,19 @@
       <p class="message">{{ message }}</p>
       <div class="modal-actions">
         <button class="btn btn-ghost" @click="$emit('cancel')">{{ $t('Cancel') }}</button>
-        <button class="btn btn-danger" @click="$emit('confirm')">{{ confirmLabel || $t('Confirm') }}</button>
+        <button ref="confirmBtn" class="btn btn-danger" @click="$emit('confirm')">{{ confirmLabel || $t('Confirm') }}</button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
+import { ref, onMounted } from 'vue'
+
+// Focused on open, so Enter confirms and Escape (App.vue) cancels.
+const confirmBtn = ref(null)
+onMounted(() => confirmBtn.value?.focus())
+
 defineProps({
   title: { type: String, required: true },
   message: { type: String, default: '' },

@@ -33,16 +33,24 @@ type homeLooseEnd struct {
 	Issue string `json:"issue"`
 }
 
+type homeEvent struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	EventDate string `json:"event_date"`
+	CreatedAt string `json:"created_at"`
+}
+
 type homePayload struct {
 	Counts   homeCounts       `json:"counts"`
 	Calendar calendarSettings `json:"calendar"`
 	Recent   []homeRecent     `json:"recent"`
 	Loose    []homeLooseEnd   `json:"loose_ends"`
+	Events   []homeEvent      `json:"events"`
 }
 
 func homeHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		p := homePayload{Calendar: loadCalendar(db), Recent: []homeRecent{}, Loose: []homeLooseEnd{}}
+		p := homePayload{Calendar: loadCalendar(db), Recent: []homeRecent{}, Loose: []homeLooseEnd{}, Events: []homeEvent{}}
 
 		for _, c := range []struct {
 			dest *int
@@ -115,6 +123,21 @@ func homeHandler(db *sql.DB) http.HandlerFunc {
 		if len(p.Loose) > 12 {
 			p.Loose = p.Loose[:12]
 		}
+
+		// The newest events, by when they were added (not their in-story date).
+		er, err := db.Query(`SELECT id, name, event_date, created_at FROM events ORDER BY created_at DESC, id DESC LIMIT 6`)
+		if err != nil {
+			http.Error(w, "failed to load home", http.StatusInternalServerError)
+			log.Printf("home events: %v", err)
+			return
+		}
+		for er.Next() {
+			var e homeEvent
+			if er.Scan(&e.ID, &e.Name, &e.EventDate, &e.CreatedAt) == nil {
+				p.Events = append(p.Events, e)
+			}
+		}
+		er.Close()
 
 		writeJSON(w, p)
 	}

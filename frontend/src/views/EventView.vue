@@ -1,6 +1,6 @@
 <template>
   <div class="page event-page">
-    <RouterLink to="/events" class="back-link">{{ $t('← Back to events') }}</RouterLink>
+    <BackLink to="/events" :label="$t('← Back to events')" />
 
     <p v-if="loadError" class="error-banner">{{ loadError }}</p>
     <p v-else-if="!event" class="loading-hint">{{ $t('Loading…') }}</p>
@@ -111,6 +111,8 @@ import { useRouter } from 'vue-router'
 import { eventsApi } from '../api'
 import { shortDate, fullDate, dateParts } from '../calendar'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import BackLink from '../components/BackLink.vue'
+import { pageTitle } from '../navigation'
 import { t as tt } from '../i18n'
 
 const props = defineProps({ id: { type: String, required: true } })
@@ -148,6 +150,7 @@ async function load() {
   related.value = []
   try {
     event.value = await eventsApi.get(props.id)
+    pageTitle.value = event.value.name
   } catch (err) {
     loadError.value = tt("Couldn't find that event.")
     return
@@ -167,7 +170,13 @@ async function remove() {
   confirmOpen.value = false
   try {
     await eventsApi.remove(event.value.id)
-    router.push('/events')
+    // Back to where you came from, unless that was a page about this event
+    // (its wiki article), which is gone now too.
+    const previous = router.options.history.state.back
+    const gone = [`/events/${event.value.id}`, `/wiki/event/${event.value.id}`]
+    const path = previous ? router.resolve(previous).path : ''
+    if (previous && !gone.some((p) => path === p || path.startsWith(`${p}/`))) router.back()
+    else router.replace('/events')
   } catch (err) {
     loadError.value = err.message || tt("Couldn't delete.")
   }

@@ -1,6 +1,6 @@
 <template>
   <div class="page">
-    <RouterLink :to="`/characters/${id}/versions`" class="back-link">{{ $t('← Back to versions') }}</RouterLink>
+    <BackLink :to="`/characters/${id}/versions`" :label="$t('← Back to versions')" />
 
     <p v-if="loadError" class="error-banner">{{ loadError }}</p>
     <p v-else-if="loading" class="loading-hint">{{ $t('Loading…') }}</p>
@@ -196,6 +196,8 @@ import DateField from '../components/DateField.vue'
 import LocationSelect from '../components/LocationSelect.vue'
 import GearTab from '../components/GearTab.vue'
 import SpellsTab from '../components/SpellsTab.vue'
+import BackLink from '../components/BackLink.vue'
+import { pageTitle, useUnsavedGuard, useSaveShortcut } from '../navigation'
 
 const props = defineProps({
   id: { type: String, required: true },
@@ -344,6 +346,15 @@ function onFileChange(e) {
   pictureFile.value = e.target.files[0] || null
 }
 
+// Everything Save sends, to tell whether anything changed since the last
+// load or save.
+let snapshot = ''
+const formState = () =>
+  JSON.stringify([form, specialBases, assignedSpells.value.map((s) => s.id), Object.entries(equippedGear.value).map(([slot, g]) => [slot, g?.id])])
+const dirty = () => !loading.value && !loadError.value && (formState() !== snapshot || !!pictureFile.value)
+useUnsavedGuard(dirty)
+useSaveShortcut(() => !saving.value && !loading.value && !loadError.value && save())
+
 async function load() {
   loading.value = true
   loadError.value = ''
@@ -390,6 +401,8 @@ async function load() {
     assignedSpells.value = data.spells || []
     equippedGear.value = data.gear || {}
     existingPicturePath.value = data.picture_path
+    pageTitle.value = data.name
+    snapshot = formState()
   } catch (err) {
     loadError.value = t("Couldn't load this version. Try refreshing.")
   } finally {
@@ -415,6 +428,8 @@ async function save() {
     assignedSpells.value = updated.spells || []
     equippedGear.value = updated.gear || {}
     pictureFile.value = null
+    snapshot = formState()
+    pageTitle.value = form.name
     savedAt.value = true
     setTimeout(() => (savedAt.value = false), 2500)
   } catch (err) {

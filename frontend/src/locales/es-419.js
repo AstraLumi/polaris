@@ -69,4 +69,5 @@ export default {
   "Add section": "Agregar sección",
   "Add characters, locations or events and they appear here by themselves.": "Agrega personajes, ubicaciones o eventos y aparecerán aquí solos.",
   "Add your own titled sections, shown after the ones above.": "Agrega tus propias secciones con título, que se muestran después de las anteriores.",
+  "Recently added events": "Eventos agregados recientemente",
 }

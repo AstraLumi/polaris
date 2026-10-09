@@ -22,7 +22,9 @@ type characterSummary struct {
 	ClassName    string `json:"class_name"`
 	ClassIcon    string `json:"class_icon"`
 	SubclassName string `json:"subclass_name"`
+	RaceName     string `json:"race_name"`
 	PicturePath  string `json:"picture_path"`
+	UpdatedAt    string `json:"updated_at"`
 	HP           int    `json:"hp"`
 	MP           int    `json:"mp"`
 }
@@ -37,11 +39,14 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 			SELECT
 				c.id, v.id, v.name, COALESCE(v.nickname, ''), v.level,
 				COALESCE(cl.name, ''), COALESCE(sc.name, ''),
-				COALESCE(v.picture_path, ''), COALESCE(cl.icon_path, '')
+				COALESCE(v.picture_path, ''), COALESCE(cl.icon_path, ''),
+				COALESCE(ra.name, ''), v.updated_at
 			FROM characters c
 			JOIN character_versions v ON v.character_id = c.id AND v.is_current = 1
 			LEFT JOIN classes cl ON cl.id = v.class_id
 			LEFT JOIN subclasses sc ON sc.id = v.subclass_id
+			LEFT JOIN character_story st ON st.version_id = v.id
+			LEFT JOIN races ra ON ra.id = st.race_id
 			ORDER BY v.name COLLATE NOCASE
 		`)
 		if err != nil {
@@ -53,6 +58,7 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 		type row struct {
 			characterID, versionID                                  int64
 			name, nickname, className, subclassName, pic, classIcon string
+			raceName, updatedAt                                     string
 			level                                                   int
 		}
 		var raw []row
@@ -61,6 +67,7 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 			if err := rows.Scan(
 				&rr.characterID, &rr.versionID, &rr.name, &rr.nickname, &rr.level,
 				&rr.className, &rr.subclassName, &rr.pic, &rr.classIcon,
+				&rr.raceName, &rr.updatedAt,
 			); err != nil {
 				rows.Close()
 				http.Error(w, "failed to read characters", http.StatusInternalServerError)
@@ -76,6 +83,7 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 			c := characterSummary{
 				ID: rr.characterID, VersionID: rr.versionID, Name: rr.name, Nickname: rr.nickname,
 				Level: rr.level, ClassName: rr.className, SubclassName: rr.subclassName,
+				RaceName: rr.raceName, UpdatedAt: rr.updatedAt,
 				ClassIcon: uploadURL(rr.classIcon),
 			}
 			if rr.pic != "" {

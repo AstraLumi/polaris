@@ -42,14 +42,38 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, onBeforeUnmount, watchEffect } from 'vue'
+import { useRoute } from 'vue-router'
 import { loadCalendar } from './calendar'
-import { tr } from './i18n'
+import { t, tr } from './i18n'
+import { pageTitle } from './navigation'
 import PolarisLogo from './components/PolarisLogo.vue'
 import IconImage from './components/IconImage.vue'
 import { currentStory } from './stories'
 
+const route = useRoute()
+
 onMounted(loadCalendar)
+
+// "Aria · Characters · My Story · Polaris", most specific first.
+watchEffect(() => {
+  const parts = [pageTitle.value, route.meta.title ? t(route.meta.title) : '', route.meta.bare ? '' : currentStory.value?.name, t('Polaris')]
+  document.title = [...new Set(parts.filter(Boolean))].join(' · ')
+})
+
+// Escape closes the topmost dialog the same way clicking its backdrop does.
+// Capture phase, so pages with their own Escape handling (the map, the
+// timeline) don't also react to the key that closed a dialog.
+function onKeyDown(e) {
+  if (e.key !== 'Escape' || e.defaultPrevented) return
+  const overlays = document.querySelectorAll('.overlay')
+  if (!overlays.length) return
+  e.preventDefault()
+  e.stopPropagation()
+  overlays[overlays.length - 1].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+}
+onMounted(() => window.addEventListener('keydown', onKeyDown, true))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown, true))
 
 const navItems = [
   { label: tr('Home'), to: '/' },

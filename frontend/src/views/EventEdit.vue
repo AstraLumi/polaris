@@ -1,8 +1,6 @@
 <template>
   <div class="page is-narrow">
-    <RouterLink :to="id ? `/events/${id}` : '/events'" class="back-link">
-      {{ id ? $t('← Back to event') : $t('← Back to events') }}
-    </RouterLink>
+    <BackLink :to="id ? `/events/${id}` : '/events'" :label="id ? $t('← Back to event') : $t('← Back to events')" />
 
     <p v-if="loadError" class="error-banner">{{ loadError }}</p>
     <p v-else-if="loading" class="loading-hint">{{ $t('Loading…') }}</p>
@@ -65,7 +63,7 @@
         <button class="btn btn-primary" type="submit" :disabled="saving">
           {{ saving ? $t('Saving…') : id ? $t('Save changes') : $t('Create event') }}
         </button>
-        <RouterLink :to="id ? `/events/${id}` : '/events'" class="btn btn-ghost cancel">{{ $t('Cancel') }}</RouterLink>
+        <button type="button" class="btn btn-ghost cancel" @click="cancel">{{ $t('Cancel') }}</button>
       </div>
     </form>
   </div>
@@ -81,6 +79,8 @@ import DateField from '../components/DateField.vue'
 import LocationSelect from '../components/LocationSelect.vue'
 import TagInput from '../components/TagInput.vue'
 import PeoplePicker from '../components/PeoplePicker.vue'
+import BackLink from '../components/BackLink.vue'
+import { useUnsavedGuard, useSaveShortcut } from '../navigation'
 
 // No id means "new event".
 const props = defineProps({ id: { type: String, default: '' } })
@@ -135,13 +135,33 @@ function clearPicture() {
 
 onBeforeUnmount(() => objectUrl && URL.revokeObjectURL(objectUrl))
 
+// What the form looked like when it was loaded, to tell whether it changed.
+let snapshot = ''
+let saved = false
+const formState = () => JSON.stringify(form)
+const dirty = () =>
+  !loading.value && !loadError.value && !saved && (formState() !== snapshot || !!pictureFile.value || removePicture.value)
+useUnsavedGuard(dirty)
+useSaveShortcut(() => !saving.value && !loading.value && !loadError.value && save())
+
+// Cancel returns to wherever the editor was opened from, like the back link.
+function cancel() {
+  if (router.options.history.state.back) router.back()
+  else router.push(props.id ? `/events/${props.id}` : '/events')
+}
+
 async function save() {
   saving.value = true
   saveError.value = ''
   try {
     const body = buildEventFormData(form, pictureFile.value, removePicture.value)
-    const saved = props.id ? await eventsApi.update(props.id, body) : await eventsApi.create(body)
-    router.push(`/events/${saved.id}`)
+    const result = props.id ? await eventsApi.update(props.id, body) : await eventsApi.create(body)
+    saved = true
+    // Leave the edit page out of history: back from the event goes wherever
+    // you were before editing it.
+    const target = `/events/${result.id}`
+    if (props.id && router.options.history.state.back === target) router.back()
+    else router.replace(target)
   } catch (err) {
     saveError.value = err.message || t("Couldn't save. Try again.")
   } finally {
@@ -164,6 +184,7 @@ onMounted(async () => {
     // /events/new?tag=a&tag=b pre-fills tags (used for "new event with these tags").
     const q = route.query.tag
     form.tags = (Array.isArray(q) ? q : q ? [q] : []).filter((t) => typeof t === 'string')
+    snapshot = formState()
     loading.value = false
     return
   }
@@ -177,6 +198,7 @@ onMounted(async () => {
     form.characterIds = e.people.map((p) => p.id)
     existingPicture.value = e.picture_path
     source.value = e.source
+    snapshot = formState()
   } catch (err) {
     loadError.value = t("Couldn't find that event.")
   } finally {

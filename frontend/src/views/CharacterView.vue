@@ -1,6 +1,6 @@
 <template>
   <div class="page">
-    <RouterLink to="/characters" class="back-link">{{ $t('← Characters') }}</RouterLink>
+    <BackLink to="/characters" :label="$t('← Characters')" />
 
     <p v-if="loadError" class="error-banner">{{ loadError }}</p>
     <p v-else-if="loading" class="loading-hint">{{ $t('Loading…') }}</p>
@@ -84,6 +84,8 @@
 
 <script setup>
 import IconImage from '../components/IconImage.vue'
+import BackLink from '../components/BackLink.vue'
+import { pageTitle } from '../navigation'
 import { ref, computed, onMounted, h } from 'vue'
 import { t } from '../i18n'
 import { fetchCurrentVersion } from '../api'
@@ -137,6 +139,7 @@ async function load() {
   loadError.value = ''
   try {
     data.value = await fetchCurrentVersion(props.id)
+    pageTitle.value = data.value.name
   } catch (err) {
     loadError.value = t("Couldn't load this character. Try refreshing.")
   } finally {
