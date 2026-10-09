@@ -697,9 +697,14 @@ function draw() {
     ctx.stroke()
   }
   if (hoverHex.value && !panning.value) {
-    const [cx, cy] = hexCenter(hoverHex.value.q, hoverHex.value.r)
+    // With Paint or Erase, show every hex the brush will touch.
+    const painting = tool.value === 'paint' || tool.value === 'erase'
+    const under = painting && brush.value ? hexesWithin(hoverHex.value, brush.value) : [hoverHex.value]
     ctx.beginPath()
-    addHexPath(ctx, cx, cy, HEX_SIZE)
+    for (const h of under) {
+      const [cx, cy] = hexCenter(h.q, h.r)
+      addHexPath(ctx, cx, cy, HEX_SIZE)
+    }
     ctx.fillStyle = 'rgba(255, 255, 255, 0.07)'
     ctx.fill()
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)'
@@ -1182,7 +1187,7 @@ async function placeLocation(loc) {
 }
 
 // ---- Lifecycle --------------------------------------------------------------------------------------
-watch([tool, activeId, selectedHex, panning], scheduleDraw)
+watch([tool, activeId, selectedHex, panning, brush], scheduleDraw)
 
 onMounted(async () => {
   updateSize()
