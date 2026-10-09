@@ -12,7 +12,7 @@ import (
 // oldest migration (or a brand new one) gets wiped and recreated from
 // freshSchema — so every schema change from here on should ship with a
 // migration instead of relying on that reset.
-const currentSchemaVersion = "12"
+const currentSchemaVersion = "13"
 
 const freshSchema = `
 CREATE TABLE classes (
@@ -373,6 +373,12 @@ var migrations = map[string]migration{
 			characterGearTableSQL,
 		},
 	},
+	"12": {
+		to: "13",
+		// The wiki's own tables and the triggers that clean them up when a
+		// source (character, location, ...) is deleted.
+		statements: wikiSchemaStatements,
+	},
 }
 
 func applyMigration(db *sql.DB, m migration) error {
@@ -400,6 +406,9 @@ func applyMigration(db *sql.DB, m migration) error {
 // tablesInDependencyOrder lists every app-owned table, children before
 // parents, so dropping them in this order never trips a foreign key.
 var tablesInDependencyOrder = []string{
+	"wiki_infobox",
+	"wiki_sections",
+	"wiki_entries",
 	"event_characters",
 	"event_tags",
 	"stat_modifiers",
@@ -497,6 +506,11 @@ func ensureSchema(db *sql.DB) error {
 
 	if _, err := db.Exec(freshSchema); err != nil {
 		return fmt.Errorf("create schema: %w", err)
+	}
+	for _, stmt := range wikiSchemaStatements {
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("create wiki schema: %w", err)
+		}
 	}
 
 	if _, err := db.Exec(

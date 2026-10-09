@@ -1,0 +1,770 @@
+<template>
+  <div class="page wiki-article">
+    <RouterLink to="/wiki" class="back-link">{{ $t('← Back to the wiki') }}</RouterLink>
+
+    <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+    <p v-else-if="!article" class="loading-hint">{{ $t('Loading…') }}</p>
+
+    <article v-else class="paper glass-panel">
+      <header class="title-row">
+        <div class="title-text">
+          <h1>{{ article.name }}</h1>
+          <span class="kind">{{ $t(TYPE_LABELS[article.type]) }}</span>
+        </div>
+        <div class="actions">
+          <template v-if="!editing">
+            <button class="btn btn-primary small" @click="startEdit()">{{ $t('Edit') }}</button>
+          </template>
+          <template v-else>
+            <button class="btn btn-ghost small" :disabled="saving" @click="cancelEdit">{{ $t('Cancel') }}</button>
+            <button class="btn btn-primary small" :disabled="saving" @click="save">
+              {{ saving ? $t('Saving…') : $t('Save') }}
+            </button>
+          </template>
+        </div>
+      </header>
+
+      <p v-if="saveError" class="error-banner">{{ saveError }}</p>
+
+      <p class="hatnote">
+        {{ hatParts[0] }}<RouterLink :to="sourcePath(article.type, article.id)">{{ sourceLabel(article.type) }}</RouterLink>{{ hatParts[1] }}
+      </p>
+
+      <div class="layout">
+        <!-- ------------------------------------------------ the text -->
+        <div class="main" @click="onContentClick">
+          <template v-if="!editing">
+            <div v-if="article.summary" class="md lead" v-html="md(article.summary)"></div>
+            <p v-else-if="!hasText" class="stub-note">
+              {{ $t('This article has no written text yet.') }}
+              <a href="#" @click.prevent="startEdit()">{{ $t('Start writing it') }}</a>
+            </p>
+
+            <nav v-if="toc.length >= 2" class="toc">
+              <div class="toc-head">
+                <strong>{{ $t('Contents') }}</strong>
+                <a href="#" class="toc-toggle" @click.prevent="tocOpen = !tocOpen">[{{ tocOpen ? $t('hide') : $t('show') }}]</a>
+              </div>
+              <ol v-if="tocOpen">
+                <li v-for="(s, n) in toc" :key="s.id">
+                  <a :href="`#${s.id}`" @click.prevent="jump(s.id)"><span class="num">{{ n + 1 }}</span> {{ s.title }}</a>
+                </li>
+              </ol>
+            </nav>
+
+            <section v-for="s in sheetSections" :id="s.id" :key="s.id" class="part">
+              <h2>{{ s.title }}</h2>
+              <p class="origin-note">{{ $t('Written on the original page; edit it there.') }}</p>
+              <div class="md" v-html="md(s.body)"></div>
+            </section>
+
+            <section v-for="s in fieldSections" :id="s.id" :key="s.id" class="part">
+              <h2>
+                {{ s.title }}
+                <a href="#" class="edit-link" @click.prevent="startEdit(s.focus)">[ {{ $t('edit') }} ]</a>
+              </h2>
+              <div class="md" v-html="md(s.body)"></div>
+            </section>
+
+            <section v-for="s in customSections" :id="s.id" :key="s.id" class="part">
+              <h2>
+                {{ s.title }}
+                <a href="#" class="edit-link" @click.prevent="startEdit(s.focus)">[ {{ $t('edit') }} ]</a>
+              </h2>
+              <div class="md" v-html="md(s.body)"></div>
+            </section>
+
+            <section v-if="article.groups.length" id="sec-related" class="part">
+              <h2>{{ $t('Related') }}</h2>
+              <div v-for="g in article.groups" :key="g.key" class="group">
+                <h3>{{ $t(GROUP_LABELS[g.key]) }}</h3>
+                <ul class="links">
+                  <li v-for="r in g.items" :key="r.type + r.id">
+                    <RouterLink :to="wikiPath(r.type, r.id)">{{ r.name }}</RouterLink>
+                  </li>
+                </ul>
+              </div>
+            </section>
+
+            <section id="sec-backlinks" class="part">
+              <h2>{{ $t('What links here') }}</h2>
+              <ul v-if="article.backlinks.length" class="links">
+                <li v-for="r in article.backlinks" :key="r.type + r.id">
+                  <RouterLink :to="wikiPath(r.type, r.id)">{{ r.name }}</RouterLink>
+                  <span class="faint"> ({{ $t(TYPE_LABELS[r.type]) }})</span>
+                </li>
+              </ul>
+              <p v-else class="faint">{{ $t('No other article links here yet.') }}</p>
+            </section>
+
+            <p v-if="article.updated_at" class="foot">
+              {{ $t('Last edited {when}', { when: editedAt }) }}
+            </p>
+          </template>
+
+          <!-- ------------------------------------------- the editor -->
+          <form v-else class="editor" @submit.prevent="save">
+            <p class="hint">
+              {{ $t('Text uses Markdown: **bold**, *italic*, - lists, > quotes, | tables |. Link to other articles with [[Name]], or [[Name|shown text]]. If two articles share a name, write [[class:Name]] (character, location, event, class, subclass, specialization, race, body type, spell, gear).') }}
+            </p>
+
+            <label class="field">
+              <span>{{ $t('Introduction') }}</span>
+              <textarea id="f-summary" v-model="draft.summary" rows="5" :placeholder="$t('A few sentences that open the article.')"></textarea>
+            </label>
+
+            <label v-for="k in article.field_keys" :key="k" class="field">
+              <span>{{ $t(FIELD_LABELS[k]) }}</span>
+              <textarea :id="`f-${k}`" v-model="draft.fields[k]" rows="5"></textarea>
+            </label>
+
+            <div class="custom-head">
+              <h2>{{ $t('Extra sections') }}</h2>
+              <button type="button" class="btn btn-ghost small" @click="addSection">{{ $t('Add section') }}</button>
+            </div>
+            <p v-if="!draft.sections.length" class="faint">{{ $t('Add your own titled sections, shown after the ones above.') }}</p>
+            <div v-for="(s, i) in draft.sections" :key="s.key" class="custom-section">
+              <div class="custom-row">
+                <input :id="`s-${i}`" v-model="s.title" type="text" :placeholder="$t('Section title')" :aria-label="$t('Section title')" maxlength="120" />
+                <button type="button" class="btn btn-ghost small" :disabled="i === 0" :aria-label="$t('Move up')" @click="move(draft.sections, i, -1)">↑</button>
+                <button type="button" class="btn btn-ghost small" :disabled="i === draft.sections.length - 1" :aria-label="$t('Move down')" @click="move(draft.sections, i, 1)">↓</button>
+                <button type="button" class="btn btn-danger small" @click="draft.sections.splice(i, 1)">{{ $t('Remove') }}</button>
+              </div>
+              <textarea v-model="s.body" rows="5" :aria-label="$t('Section text')"></textarea>
+            </div>
+
+            <div class="editor-actions">
+              <button type="button" class="btn btn-ghost" :disabled="saving" @click="cancelEdit">{{ $t('Cancel') }}</button>
+              <button type="submit" class="btn btn-primary" :disabled="saving">{{ saving ? $t('Saving…') : $t('Save') }}</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- ------------------------------------------------ the infobox -->
+        <aside class="infobox" :aria-label="$t('Summary box')">
+          <div class="info-title">{{ article.name }}</div>
+          <div v-if="article.picture" class="info-pic">
+            <IconImage :src="article.picture" :name="article.name" :alt="article.name" />
+          </div>
+          <table>
+            <tbody>
+              <tr>
+                <th>{{ $t('Kind') }}</th>
+                <td>{{ $t(TYPE_LABELS[article.type]) }}</td>
+              </tr>
+              <tr v-for="f in article.facts" :key="f.key">
+                <th>{{ $t(FACT_LABELS[f.key]) }}</th>
+                <td>
+                  <RouterLink v-if="f.link" :to="wikiPath(f.link.type, f.link.id)">{{ f.link.name }}</RouterLink>
+                  <template v-else>{{ factText(f) }}</template>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <template v-if="!editing && article.infobox.length">
+            <div class="info-sub">{{ $t('More details') }}</div>
+            <table>
+              <tbody>
+                <tr v-for="(r, i) in article.infobox" :key="i">
+                  <th>{{ r.label }}</th>
+                  <td class="md inline" v-html="mdInline(r.value)"></td>
+                </tr>
+              </tbody>
+            </table>
+          </template>
+
+          <template v-if="editing">
+            <div class="info-sub">{{ $t('More details') }}</div>
+            <div class="info-edit">
+              <div v-for="(r, i) in draft.infobox" :key="r.key" class="info-row">
+                <input v-model="r.label" type="text" :placeholder="$t('Label')" :aria-label="$t('Label')" maxlength="120" />
+                <input v-model="r.value" type="text" :placeholder="$t('Value')" :aria-label="$t('Value')" maxlength="2000" />
+                <button type="button" class="btn btn-ghost small" :aria-label="$t('Remove')" @click="draft.infobox.splice(i, 1)">×</button>
+              </div>
+              <button type="button" class="btn btn-ghost small" @click="addRow">{{ $t('Add row') }}</button>
+            </div>
+          </template>
+        </aside>
+      </div>
+    </article>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, computed, watch, nextTick, onBeforeUnmount } from 'vue'
+import { useRouter, onBeforeRouteLeave } from 'vue-router'
+import IconImage from '../components/IconImage.vue'
+import { renderMarkdown } from '../markdown'
+import { fullDate, dateParts } from '../calendar'
+import { t } from '../i18n'
+import {
+  TYPE_LABELS, FIELD_LABELS, FACT_LABELS, GROUP_LABELS, SHEET_LABELS,
+  wikiApi, wikiPath, sourcePath, sourceLabel, makeLinkResolver,
+} from '../wiki'
+
+const props = defineProps({
+  type: { type: String, required: true },
+  id: { type: String, required: true },
+})
+const router = useRouter()
+
+const article = ref(null)
+const items = ref([])
+const loadError = ref('')
+const saveError = ref('')
+const editing = ref(false)
+const saving = ref(false)
+const tocOpen = ref(true)
+const draft = reactive({ summary: '', fields: {}, sections: [], infobox: [] })
+let snapshot = ''
+let keySeq = 0
+
+const resolver = computed(() => makeLinkResolver(items.value))
+const md = (text) => renderMarkdown(text, resolver.value)
+// Infobox values are one line: no paragraph wrapper.
+const mdInline = (text) => md(text).replace(/^<p>([\s\S]*)<\/p>$/, '$1')
+
+// "For the {link}, see …" is one translatable sentence with a link slot.
+const hatParts = computed(() =>
+  t('Facts shown here come from the {link}; this page adds the story around them.', { link: '\u0001' }).split('\u0001'),
+)
+
+const sheetSections = computed(() =>
+  article.value.sheet.map((s) => ({ id: `sec-sheet-${s.key}`, title: t(SHEET_LABELS[s.key]), body: s.body })),
+)
+const fieldSections = computed(() =>
+  article.value.field_keys
+    .filter((k) => article.value.fields[k])
+    .map((k) => ({ id: `sec-${k}`, title: t(FIELD_LABELS[k]), body: article.value.fields[k], focus: `f-${k}` })),
+)
+const customSections = computed(() =>
+  article.value.sections.map((s, i) => ({ id: `sec-custom-${i}`, title: s.title, body: s.body, focus: `s-${i}` })),
+)
+const hasText = computed(
+  () => fieldSections.value.length || customSections.value.length || article.value.infobox.length || sheetSections.value.length,
+)
+
+const toc = computed(() => {
+  const rows = [...sheetSections.value, ...fieldSections.value, ...customSections.value]
+  if (article.value.groups.length) rows.push({ id: 'sec-related', title: t('Related') })
+  rows.push({ id: 'sec-backlinks', title: t('What links here') })
+  return rows
+})
+
+// The server stores UTC ("2026-10-08 21:33:54").
+const editedAt = computed(() => {
+  const d = new Date(`${article.value.updated_at.replace(' ', 'T')}Z`)
+  return Number.isNaN(d.getTime()) ? article.value.updated_at : d.toLocaleString()
+})
+
+function factText(f) {
+  if (f.kind === 'date') return dateParts(f.value) ? fullDate(f.value) : f.value
+  if (f.kind === 'word') return t(f.value)
+  return f.value
+}
+
+function jump(id) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+// Links written as [[Name]] are plain anchors in the rendered text; send them
+// through the router so the page doesn't reload.
+function onContentClick(e) {
+  const a = e.target.closest && e.target.closest('a[data-wiki]')
+  if (!a) return
+  e.preventDefault()
+  router.push(a.getAttribute('href'))
+}
+
+const makeDraft = () => ({
+  summary: draft.summary,
+  fields: Object.fromEntries(Object.entries(draft.fields).filter(([, v]) => v && v.trim())),
+  sections: draft.sections.map((s) => ({ title: s.title, body: s.body })),
+  infobox: draft.infobox.map((r) => ({ label: r.label, value: r.value })),
+})
+const dirty = () => editing.value && JSON.stringify(makeDraft()) !== snapshot
+
+function fillDraft() {
+  const a = article.value
+  draft.summary = a.summary
+  draft.fields = Object.fromEntries(a.field_keys.map((k) => [k, a.fields[k] || '']))
+  draft.sections = a.sections.map((s) => ({ key: ++keySeq, title: s.title, body: s.body }))
+  draft.infobox = a.infobox.map((r) => ({ key: ++keySeq, label: r.label, value: r.value }))
+  snapshot = JSON.stringify(makeDraft())
+}
+
+async function startEdit(focusId) {
+  saveError.value = ''
+  fillDraft()
+  editing.value = true
+  await nextTick()
+  const el = focusId && document.getElementById(focusId)
+  if (el) {
+    el.scrollIntoView({ block: 'center' })
+    el.focus()
+  } else {
+    window.scrollTo({ top: 0 })
+  }
+}
+
+function cancelEdit() {
+  if (dirty() && !window.confirm(t('Discard your changes?'))) return
+  editing.value = false
+  saveError.value = ''
+}
+
+const addSection = () => draft.sections.push({ key: ++keySeq, title: '', body: '' })
+const addRow = () => draft.infobox.push({ key: ++keySeq, label: '', value: '' })
+
+function move(list, i, by) {
+  const j = i + by
+  if (j < 0 || j >= list.length) return
+  list.splice(j, 0, list.splice(i, 1)[0])
+}
+
+async function save() {
+  saving.value = true
+  saveError.value = ''
+  try {
+    article.value = await wikiApi.save(props.type, props.id, makeDraft())
+    editing.value = false
+    // A new written article should show up as such in the links' index too.
+    items.value = await wikiApi.list()
+    window.scrollTo({ top: 0 })
+  } catch (e) {
+    saveError.value = e.message
+  } finally {
+    saving.value = false
+  }
+}
+
+async function load() {
+  loadError.value = ''
+  saveError.value = ''
+  article.value = null
+  editing.value = false
+  try {
+    const [a, list] = await Promise.all([wikiApi.get(props.type, props.id), wikiApi.list()])
+    article.value = a
+    items.value = list
+    document.title = `${a.name} · ${t('Wiki')}`
+  } catch (e) {
+    loadError.value = e.message
+  }
+}
+
+watch(() => [props.type, props.id], load, { immediate: true })
+
+onBeforeRouteLeave(() => {
+  if (dirty() && !window.confirm(t('Discard your changes?'))) return false
+})
+
+const warnUnload = (e) => {
+  if (dirty()) e.preventDefault()
+}
+window.addEventListener('beforeunload', warnUnload)
+onBeforeUnmount(() => window.removeEventListener('beforeunload', warnUnload))
+</script>
+
+<style scoped>
+.paper {
+  padding: 1.4rem 1.75rem 2rem;
+}
+
+.title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.title-text {
+  display: flex;
+  align-items: baseline;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.title-text h1 {
+  margin: 0;
+  font-size: 2.1rem;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.kind {
+  font-size: 0.8rem;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.hatnote {
+  margin: 0.8rem 0 1.2rem 1rem;
+  font-size: 0.86rem;
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+.hatnote a,
+.links a,
+.toc a,
+.stub-note a,
+.infobox a,
+.md :deep(a) {
+  color: var(--line);
+  text-decoration: none;
+}
+
+.hatnote a:hover,
+.links a:hover,
+.toc a:hover,
+.stub-note a:hover,
+.infobox a:hover,
+.md :deep(a:hover) {
+  text-decoration: underline;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 19rem;
+  gap: 1.75rem;
+  align-items: start;
+}
+
+/* ---- the text ---- */
+
+.lead {
+  margin-bottom: 1.2rem;
+}
+
+.stub-note {
+  margin: 0 0 1.2rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px dashed var(--glass-border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.toc {
+  display: inline-block;
+  min-width: 15rem;
+  max-width: 100%;
+  margin: 0 0 1.4rem;
+  padding: 0.7rem 1.2rem 0.8rem;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.88rem;
+}
+
+.toc-head {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.toc-toggle {
+  font-size: 0.8rem;
+}
+
+.toc ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.toc li {
+  padding: 0.12rem 0;
+}
+
+.toc .num {
+  color: var(--text-faint);
+  margin-right: 0.35rem;
+}
+
+.part {
+  margin-bottom: 1.4rem;
+}
+
+.part h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin: 0 0 0.7rem;
+  padding-bottom: 0.2rem;
+  font-size: 1.6rem;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.edit-link {
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--line);
+  text-decoration: none;
+}
+
+.edit-link:hover {
+  text-decoration: underline;
+}
+
+.origin-note {
+  margin: -0.3rem 0 0.6rem;
+  font-size: 0.78rem;
+  font-style: italic;
+  color: var(--text-faint);
+}
+
+.group h3 {
+  margin: 0.8rem 0 0.3rem;
+  font-size: 1.1rem;
+}
+
+.links {
+  margin: 0;
+  padding-left: 1.2rem;
+  columns: 14rem;
+  font-size: 0.92rem;
+}
+
+.faint {
+  color: var(--text-faint);
+  font-size: 0.88rem;
+}
+
+.foot {
+  margin: 2rem 0 0;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--glass-border);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
+/* ---- rendered markdown ---- */
+
+.md {
+  font-size: 0.95rem;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.md :deep(p) {
+  margin: 0 0 0.85rem;
+}
+
+.md :deep(h3),
+.md :deep(h4),
+.md :deep(h5),
+.md :deep(h6) {
+  margin: 1.1rem 0 0.4rem;
+}
+
+.md :deep(ul),
+.md :deep(ol) {
+  margin: 0 0 0.85rem;
+  padding-left: 1.5rem;
+}
+
+.md :deep(blockquote) {
+  margin: 0 0 0.85rem;
+  padding: 0.1rem 0 0.1rem 1rem;
+  border-left: 3px solid var(--glass-border);
+  color: var(--text-muted);
+}
+
+.md :deep(code) {
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 0.88em;
+}
+
+.md :deep(pre) {
+  margin: 0 0 0.85rem;
+  padding: 0.7rem 0.9rem;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.md :deep(pre code) {
+  padding: 0;
+  background: none;
+}
+
+.md :deep(hr) {
+  border: 0;
+  border-top: 1px solid var(--glass-border);
+  margin: 1rem 0;
+}
+
+.md :deep(table) {
+  border-collapse: collapse;
+  margin: 0 0 0.85rem;
+  font-size: 0.9rem;
+}
+
+.md :deep(th),
+.md :deep(td) {
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--glass-border);
+}
+
+.md :deep(th) {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.md :deep(.wikilink.is-missing) {
+  color: var(--danger-text);
+  border-bottom: 1px dashed var(--danger-text);
+  cursor: help;
+}
+
+.md.inline :deep(p) {
+  margin: 0;
+}
+
+/* ---- the infobox ---- */
+
+.infobox {
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.86rem;
+}
+
+.info-title,
+.info-sub {
+  padding: 0.5rem 0.7rem;
+  text-align: center;
+  font-weight: 700;
+  color: #fff;
+  background: color-mix(in srgb, var(--line) 62%, var(--surface));
+}
+
+.info-title {
+  font-size: 0.98rem;
+  overflow-wrap: anywhere;
+}
+
+.info-sub {
+  font-size: 0.8rem;
+  background: color-mix(in srgb, var(--line) 38%, var(--surface));
+}
+
+.info-pic {
+  display: flex;
+  justify-content: center;
+  padding: 0.8rem;
+}
+
+.info-pic > :deep(img) {
+  max-width: 100%;
+  max-height: 16rem;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+.info-pic:has(svg) {
+  height: 6rem;
+}
+
+.infobox table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.infobox th {
+  width: 38%;
+  padding: 0.35rem 0.6rem;
+  text-align: right;
+  vertical-align: top;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.infobox td {
+  padding: 0.35rem 0.6rem;
+  vertical-align: top;
+  border-left: 1px solid var(--glass-border);
+  overflow-wrap: anywhere;
+}
+
+.info-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.6rem;
+}
+
+.info-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0.35rem;
+}
+
+/* ---- the editor ---- */
+
+.hint {
+  margin: 0 0 1rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.editor textarea {
+  resize: vertical;
+  min-height: 6rem;
+}
+
+.custom-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 1.5rem 0 0.6rem;
+}
+
+.custom-head h2 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+.custom-section {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+}
+
+.custom-row {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .infobox {
+    order: -1;
+  }
+}
+</style>

@@ -155,6 +155,12 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	// Timeline: every dated event, birth and founding on one number line.
 	mux.HandleFunc("GET /api/timeline", timelineHandler(db))
 
+	// Wiki: an article for everything in the story, with the user's own
+	// text layered on top (see wiki.go).
+	mux.HandleFunc("GET /api/wiki", listWikiHandler(db))
+	mux.HandleFunc("GET /api/wiki/{type}/{id}", getWikiHandler(db))
+	mux.HandleFunc("PUT /api/wiki/{type}/{id}", saveWikiHandler(db))
+
 	// Home dashboard.
 	mux.HandleFunc("GET /api/home", homeHandler(db))
 

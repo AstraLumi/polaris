@@ -11,6 +11,8 @@ import Events from './views/Events.vue'
 import EventView from './views/EventView.vue'
 import EventEdit from './views/EventEdit.vue'
 import TimelineView from './views/TimelineView.vue'
+import WikiHome from './views/WikiHome.vue'
+import WikiArticle from './views/WikiArticle.vue'
 import StoryPicker from './views/StoryPicker.vue'
 import { activeStoryId, forgetStory, loadStories, stories } from './stories'
 
@@ -36,6 +38,8 @@ const routes = [
   { path: '/events/new', name: 'event-new', component: EventEdit },
   { path: '/events/:id', name: 'event-view', component: EventView, props: true },
   { path: '/events/:id/edit', name: 'event-edit', component: EventEdit, props: true },
+  { path: '/wiki', name: 'wiki', component: WikiHome },
+  { path: '/wiki/:type/:id', name: 'wiki-article', component: WikiArticle, props: true },
 ]
 
 const router = createRouter({

@@ -65,4 +65,8 @@ export default {
   "couldn't copy the Character Assets": "no se pudieron copiar los activos de personaje",
   "Add gear": "Agregar equipo",
   "Create some on the Character Assets page, under Gear.": "Crea alguno en la página de activos de personaje, en Equipo.",
+  "Add row": "Agregar fila",
+  "Add section": "Agregar sección",
+  "Add characters, locations or events and they appear here by themselves.": "Agrega personajes, ubicaciones o eventos y aparecerán aquí solos.",
+  "Add your own titled sections, shown after the ones above.": "Agrega tus propias secciones con título, que se muestran después de las anteriores.",
 }

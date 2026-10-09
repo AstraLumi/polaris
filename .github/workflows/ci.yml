@@ -34,3 +34,4 @@ jobs:
         run: |
           node tests/i18n.check.mjs
           node tests/timelineLayout.test.mjs
+          node tests/markdown.test.mjs

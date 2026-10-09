@@ -36,6 +36,7 @@ Production-style build into the Go binary:
 
     cd backend && go test ./...      # includes the multi-story tests
     node frontend/tests/timelineLayout.test.mjs   # timeline geometry, no deps
+    node frontend/tests/markdown.test.mjs         # the wiki's markdown renderer
     node frontend/tests/i18n.check.mjs            # every UI string translated in every language
 
 CI (`.github/workflows/ci.yml`) runs the same checks.
@@ -49,7 +50,7 @@ migration; add a new one and a test (see `TestMigrationAddsGearTables`).
 ## Feature and architecture notes
 
 Characters, Character Assets (classes, subclasses, specializations, races, body
-types, gear, spells), Map, Events, Timeline, Settings and a Home dashboard.
+types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard.
 
 - Stories: the app holds any number of separate stories. Each has its own
   SQLite file and uploads folder, so characters, map, events, assets and
@@ -68,6 +69,22 @@ types, gear, spells), Map, Events, Timeline, Settings and a Home dashboard.
     with "copy Character Assets") or `storyOnlyTables` in
     `backend/storyassets.go`; `TestEveryTableIsClassified` fails until you do.
     Put its picture/icon columns in `fileCols` so copies keep their images.
+- Wiki (`backend/wiki.go`, `frontend/src/views/Wiki*.vue`, `markdown.js`,
+  `wiki.js`): nobody creates wiki pages. Every character, location, event,
+  class, subclass, specialization, race, body type, spell and piece of gear is
+  an article, and its infobox and related lists are read live from the source
+  tables. Only the extra text is stored (`wiki_entries`: introduction plus the
+  fixed markdown fields; `wiki_sections`, `wiki_infobox`: the user's own
+  sections and rows). The entry points at one of ten tables, so there is no
+  foreign key; instead `wikiSchemaStatements` creates an `AFTER DELETE` trigger
+  on each source table that removes its entry, so deleting a source from any
+  path deletes its wiki text. Events that only carry a birth or founding are
+  not articles. `[[Name]]`, `[[Name|text]]` and `[[type:Name]]` link articles;
+  the Go (`resolveWikiLink`) and JS (`makeLinkResolver`) resolvers must agree.
+  Markdown is rendered by our own small escaping renderer (no dependency, no raw
+  HTML); `node frontend/tests/markdown.test.mjs` covers it. Adding an article
+  kind: a `wikiTypeDef`, its facts in `loadSourceFacts`, its labels in
+  `wiki.js`, and a migration creating its trigger.
 - Look and feel: every page shares one layout (`.page`), one set of form
   controls, one modal style and one set of colour variables, all in
   `frontend/src/style.css`. Colour themes (Polaris default, Obsidian,

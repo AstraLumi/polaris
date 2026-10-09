@@ -58,6 +58,7 @@ const navItems = [
   { label: tr('Timeline'), to: '/timeline' },
   { label: tr('Map'), to: '/map' },
   { label: tr('Events'), to: '/events' },
+  { label: tr('Wiki'), to: '/wiki' },
   { label: tr('Settings'), to: '/settings' },
 ]
 </script>
