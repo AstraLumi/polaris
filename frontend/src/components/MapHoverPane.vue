@@ -6,7 +6,7 @@
         <span class="type">{{ $t(e.type) }}</span>
       </div>
       <h4 class="name">{{ e.name }}</h4>
-      <p v-if="e.type === 'Location'" class="row">
+      <p v-if="['Location', 'City', 'Capital'].includes(e.type)" class="row">
         <span>{{ $t('Belongs to') }}</span>
         <strong>{{ e.belongsTo || $t('No kingdom') }}</strong>
       </p>
@@ -25,7 +25,7 @@
 import { tr } from '../i18n'
 
 defineProps({
-  // [{ type: 'Kingdom' | 'Major location' | 'Location', name, color, belongsTo,
+  // [{ type: 'Kingdom' | 'Major location' | 'Location' | 'City' | 'Capital', name, color, belongsTo,
   //    founding_date, description }]
   entries: { type: Array, default: () => [] },
 })
@@ -34,6 +34,8 @@ defineProps({
 tr('Kingdom')
 tr('Major location')
 tr('Location')
+tr('City')
+tr('Capital')
 </script>
 
 <style scoped>

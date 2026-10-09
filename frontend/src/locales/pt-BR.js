@@ -676,4 +676,8 @@ export default {
   "{n} articles, built from your story": "{n} artigos, criados a partir da sua história",
   "{n} written": "{n} escrito",
   "← Back to the wiki": "← Voltar à wiki",
+  "Capital": "Capital",
+  "City": "Cidade",
+  "Settlement": "Povoado",
+  "A city shows its name from further out. A capital is always labelled, whatever the zoom.": "Uma cidade mostra o nome de mais longe. Uma capital sempre tem o nome visível, em qualquer zoom.",
 }

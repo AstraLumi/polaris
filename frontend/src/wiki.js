@@ -80,10 +80,11 @@ export const FACT_LABELS = {
   source: tr('Source'),
   origin: tr('Origin'),
   slot: tr('Slot'),
+  settlement: tr('Settlement'),
 }
 
 // Words the server sends as an infobox value.
-export const WORD_LABELS = [tr('Kingdom'), tr('Major location'), tr('Minor location')]
+export const WORD_LABELS = [tr('Kingdom'), tr('Major location'), tr('Minor location'), tr('Capital'), tr('City')]
 
 // Related lists.
 export const GROUP_LABELS = {

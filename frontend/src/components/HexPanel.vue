@@ -35,7 +35,11 @@
       <ul class="mini-list">
         <li v-for="m in panel.minors" :key="m.id" class="minor-item">
           <div class="minor-main">
-            <span class="mini-name">{{ m.name }}</span>
+            <span class="mini-name">
+              {{ m.name }}
+              <span v-if="m.is_capital" class="badge is-capital">{{ $t('Capital') }}</span>
+              <span v-else-if="m.is_city" class="badge">{{ $t('City') }}</span>
+            </span>
             <span class="belongs">{{ $t('Belongs to: {name}', { name: belongsLabel(m) }) }}</span>
           </div>
           <div class="minor-actions">
@@ -50,6 +54,12 @@
           <span>{{ $t('Name') }}</span>
           <input v-model="name" type="text" required autofocus />
         </label>
+        <div class="settlement">
+          <span class="settlement-title">{{ $t('Settlement') }}</span>
+          <label class="check"><input v-model="isCity" type="checkbox" /> {{ $t('City') }}</label>
+          <label class="check"><input v-model="isCapital" type="checkbox" /> {{ $t('Capital') }}</label>
+          <p class="settlement-hint">{{ $t('A city shows its name from further out. A capital is always labelled, whatever the zoom.') }}</p>
+        </div>
         <DateField v-model="founding" :label="$t('Founding date')" />
         <label class="field">
           <span>{{ $t('Belongs to') }}</span>
@@ -124,6 +134,8 @@ const name = ref('')
 const founding = ref('')
 const desc = ref('')
 const belongs = ref('') // '' = automatic, otherwise a major location's id
+const isCity = ref(false)
+const isCapital = ref(false)
 const saving = ref(false)
 const error = ref('')
 const confirmTarget = ref(null)
@@ -134,6 +146,8 @@ function openAdd() {
   founding.value = ''
   desc.value = ''
   belongs.value = ''
+  isCity.value = false
+  isCapital.value = false
   error.value = ''
   formOpen.value = true
 }
@@ -144,6 +158,8 @@ function openEdit(m) {
   founding.value = m.founding_date
   desc.value = m.description
   belongs.value = m.belongs_to_id ?? ''
+  isCity.value = !!m.is_city
+  isCapital.value = !!m.is_capital
   error.value = ''
   formOpen.value = true
 }
@@ -178,6 +194,8 @@ async function submit() {
       founding_date: founding.value,
       description: desc.value,
       belongs_to_id: belongs.value === '' ? null : belongs.value,
+      is_city: isCity.value,
+      is_capital: isCapital.value,
     }),
   )
   saving.value = false
@@ -334,6 +352,52 @@ h4 {
   gap: 0.15rem;
   min-width: 0;
   flex: 1;
+}
+
+.badge {
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.badge.is-capital {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.settlement {
+  margin-bottom: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1.1rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.settlement-title {
+  width: 100%;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--text-primary);
+}
+
+.settlement-hint {
+  width: 100%;
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--text-faint);
 }
 
 .belongs {

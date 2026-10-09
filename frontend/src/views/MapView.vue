@@ -125,6 +125,7 @@ const notice = ref('')
 let hexMembers = new Map() // "q,r" -> { q, r, x, y, ids: [major location ids] }
 let painted = new Map() // "q,r" -> { q, r, x, y, color } — hexes owned by a kingdom
 let minorsByKey = new Map() // "q,r" -> [minor locations on that hex]
+let minorSpots = [] // one marker per hex with minor locations: { x, y, rank, count, name }
 let locMap = new Map() // id -> location
 let hexesOfCache = new Map() // location id -> [hex entries]
 
@@ -198,6 +199,14 @@ function rebuildIndexes() {
       minorsByKey.get(k).push(l)
     }
   }
+  // Within a hex the most important location comes first (it names the marker).
+  minorSpots = []
+  for (const list of minorsByKey.values()) {
+    list.sort((a, b) => rankOf(b) - rankOf(a))
+    const [x, y] = hexCenter(list[0].q, list[0].r)
+    minorSpots.push({ x, y, rank: rankOf(list[0]), count: list.length, name: list[0].name })
+  }
+  minorSpots.sort((a, b) => a.rank - b.rank) // draw order: capitals last
 
   painted = new Map()
   for (const [k, h] of hexMembers) {
@@ -231,7 +240,7 @@ function describeHex(q, r) {
   const entries = []
   for (const m of minorsByKey.get(k) ?? []) {
     entries.push({
-      type: 'Location',
+      type: m.is_capital ? 'Capital' : m.is_city ? 'City' : 'Location',
       name: m.name,
       color: '',
       belongsTo: belongsToName(m),
@@ -353,6 +362,209 @@ function gridPattern(ctx, z, dpr) {
   return gridTile.pattern
 }
 
+// ---- Minor location markers ------------------------------------------------------
+// rank: 2 = capital, 1 = city, 0 = anything else.
+const rankOf = (l) => (l.is_capital ? 2 : l.is_city ? 1 : 0)
+
+// A label is drawn once a hex is at least this many screen pixels wide
+// (HEX_SIZE * zoom); capitals are always labelled.
+const LABEL_AT = [26, 12, 0]
+const LABEL_MAX = [16, 20, 26]
+
+// Marker radii: the world size at normal zoom, and the smallest it may get on
+// screen, so cities and capitals stay readable when zoomed far out.
+const MARKER = [
+  { rad: HEX_SIZE * 0.26, minPx: 0 },
+  { rad: HEX_SIZE * 0.5, minPx: 7 },
+  { rad: HEX_SIZE * 0.82, minPx: 11 },
+]
+
+// Far out, the on-screen sizes shrink a little so a cluster of capitals and
+// cities stays legible instead of piling up.
+const compact = (z) => Math.min(1, Math.max(0.72, (HEX_SIZE * z) / 14))
+
+function markerRadius(rank, z) {
+  return Math.max(MARKER[rank].rad, (MARKER[rank].minPx * compact(z)) / z)
+}
+
+function drawDot(ctx, cx, cy, rad, z) {
+  ctx.beginPath()
+  ctx.arc(cx, cy, rad, 0, Math.PI * 2)
+  ctx.fillStyle = themeRgba('--accent')
+  ctx.fill()
+  ctx.strokeStyle = themeRgba('--surface', 0.95)
+  ctx.lineWidth = 1.5 / z
+  ctx.stroke()
+}
+
+// A city: a dark medallion with a little castle in the accent colour.
+function drawCity(ctx, cx, cy, r, z) {
+  ctx.beginPath()
+  ctx.arc(cx, cy, r, 0, Math.PI * 2)
+  ctx.fillStyle = themeRgba('--surface', 0.96)
+  ctx.fill()
+  ctx.strokeStyle = themeRgba('--accent')
+  ctx.lineWidth = Math.max(1.4, r * z * 0.11) / z
+  ctx.stroke()
+
+  const u = (r * 0.62) / 6 // the castle is drawn on a 12 x 11 grid
+  ctx.save()
+  ctx.translate(cx, cy + u * 0.4)
+  ctx.scale(u, u)
+  ctx.beginPath()
+  ctx.moveTo(-6, 5.5)
+  ctx.lineTo(-6, -5.5)
+  ctx.lineTo(-3.6, -5.5)
+  ctx.lineTo(-3.6, -3.4)
+  ctx.lineTo(-1.2, -3.4)
+  ctx.lineTo(-1.2, -5.5)
+  ctx.lineTo(1.2, -5.5)
+  ctx.lineTo(1.2, -3.4)
+  ctx.lineTo(3.6, -3.4)
+  ctx.lineTo(3.6, -5.5)
+  ctx.lineTo(6, -5.5)
+  ctx.lineTo(6, 5.5)
+  ctx.closePath()
+  ctx.fillStyle = themeRgba('--accent')
+  ctx.fill()
+  // The gate.
+  ctx.beginPath()
+  ctx.moveTo(-1.7, 5.5)
+  ctx.lineTo(-1.7, 1.6)
+  ctx.arc(0, 1.6, 1.7, Math.PI, 0)
+  ctx.lineTo(1.7, 5.5)
+  ctx.closePath()
+  ctx.fillStyle = themeRgba('--surface', 0.96)
+  ctx.fill()
+  ctx.restore()
+}
+
+// A capital: a glowing four-pointed star (like the Polaris logo) rising out of
+// a ring, larger than anything else on the map.
+function drawCapital(ctx, cx, cy, R, z) {
+  const glow = ctx.createRadialGradient(cx, cy, R * 0.2, cx, cy, R * 2.1)
+  glow.addColorStop(0, themeRgba('--accent', 0.38))
+  glow.addColorStop(1, themeRgba('--accent', 0))
+  ctx.beginPath()
+  ctx.arc(cx, cy, R * 2.1, 0, Math.PI * 2)
+  ctx.fillStyle = glow
+  ctx.fill()
+
+  ctx.beginPath()
+  ctx.arc(cx, cy, R * 0.56, 0, Math.PI * 2)
+  ctx.fillStyle = themeRgba('--surface', 0.92)
+  ctx.fill()
+  ctx.strokeStyle = themeRgba('--accent')
+  ctx.lineWidth = Math.max(1.4, R * z * 0.07) / z
+  ctx.stroke()
+
+  const star = (len, waist, rot) => {
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.rotate(rot)
+    ctx.beginPath()
+    ctx.moveTo(0, -len)
+    ctx.quadraticCurveTo(waist, -waist, len, 0)
+    ctx.quadraticCurveTo(waist, waist, 0, len)
+    ctx.quadraticCurveTo(-waist, waist, -len, 0)
+    ctx.quadraticCurveTo(-waist, -waist, 0, -len)
+    ctx.closePath()
+    ctx.restore()
+  }
+  star(R, R * 0.13, 0)
+  ctx.fillStyle = themeRgba('--accent')
+  ctx.fill()
+  ctx.strokeStyle = themeRgba('--surface', 0.95)
+  ctx.lineWidth = 1.4 / z
+  ctx.stroke()
+  star(R * 0.5, R * 0.1, Math.PI / 4)
+  ctx.fillStyle = themeRgba('--accent', 0.85)
+  ctx.fill()
+
+  ctx.beginPath()
+  ctx.arc(cx, cy, R * 0.1, 0, Math.PI * 2)
+  ctx.fillStyle = themeRgba('--surface')
+  ctx.fill()
+}
+
+function drawMinorMarker(ctx, spot, z) {
+  const { x: cx, y: cy, rank, count } = spot
+  const rad = markerRadius(rank, z)
+  if (count > 1) {
+    ctx.beginPath()
+    ctx.arc(cx, cy, rad * (rank === 2 ? 0.8 : rank === 1 ? 1.25 : 1.6), 0, Math.PI * 2)
+    ctx.strokeStyle = themeRgba('--accent', 0.75)
+    ctx.lineWidth = 1.5 / z
+    ctx.stroke()
+  }
+  if (rank === 2) drawCapital(ctx, cx, cy, rad, z)
+  else if (rank === 1) drawCity(ctx, cx, cy, rad, z)
+  else drawDot(ctx, cx, cy, rad, z)
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.arcTo(x + w, y, x + w, y + h, r)
+  ctx.arcTo(x + w, y + h, x, y + h, r)
+  ctx.arcTo(x, y + h, x, y, r)
+  ctx.arcTo(x, y, x + w, y, r)
+  ctx.closePath()
+}
+
+// Labels, most important first. A capital's label is always drawn; the rest
+// are skipped when they would land on a label that is already there.
+function drawMinorLabels(ctx, spots, z, screenSize) {
+  const placed = []
+  const free = (r) => !placed.some((p) => r.x < p.x + p.w && r.x + r.w > p.x && r.y < p.y + p.h && r.y + r.h > p.y)
+  const ordered = [...spots].sort((a, b) => b.rank - a.rank)
+
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.lineJoin = 'round'
+  for (const spot of ordered) {
+    const { rank, count } = spot
+    if (rank < 2 && screenSize < LABEL_AT[rank]) continue
+    const name = spot.name
+    let text = name.length > LABEL_MAX[rank] ? `${name.slice(0, LABEL_MAX[rank] - 1)}…` : name
+    if (count > 1) text += ` +${count - 1}`
+    if (rank === 2) text = text.toUpperCase()
+
+    const px = (rank === 2 ? 12.5 : rank === 1 ? 12 : 11) * compact(z)
+    const family = rank === 2 ? "Fraunces, 'Times New Roman', serif" : 'Manrope, sans-serif'
+    ctx.font = `${rank === 2 ? 700 : 600} ${px / z}px ${family}`
+    if ('letterSpacing' in ctx) ctx.letterSpacing = rank === 2 ? `${1.2 / z}px` : '0px'
+    const tw = ctx.measureText(text).width
+    const padX = ((rank === 2 ? 9 : 3) * compact(z)) / z
+    const padY = ((rank === 2 ? 4 : 2) * compact(z)) / z
+    const h = px / z + padY * 2
+    const w = tw + padX * 2
+    const top = spot.y + markerRadius(rank, z) + (rank === 2 ? 5 : 3) / z
+    const rect = { x: spot.x - w / 2, y: top, w, h }
+    if (rank < 2 && !free(rect)) continue
+    placed.push(rect)
+
+    const ty = top + h / 2
+    if (rank === 2) {
+      roundRect(ctx, rect.x, rect.y, w, h, h / 2)
+      ctx.fillStyle = themeRgba('--surface', 0.88)
+      ctx.fill()
+      ctx.strokeStyle = themeRgba('--accent', 0.9)
+      ctx.lineWidth = 1.2 / z
+      ctx.stroke()
+      ctx.fillStyle = themeRgba('--accent')
+      ctx.fillText(text, spot.x, ty)
+    } else {
+      ctx.lineWidth = 3.2 / z
+      ctx.strokeStyle = themeRgba('--surface', 0.92)
+      ctx.strokeText(text, spot.x, ty)
+      ctx.fillStyle = themeRgba('--text-primary')
+      ctx.fillText(text, spot.x, ty)
+    }
+  }
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px'
+}
+
 function draw() {
   const canvas = canvasEl.value
   if (!canvas || !size.w) return
@@ -441,41 +653,13 @@ function draw() {
     }
   }
 
-  // 5. Minor locations: a marker per hex (a ring when there are several).
-  for (const list of minorsByKey.values()) {
-    const [cx, cy] = hexCenter(list[0].q, list[0].r)
-    if (!inView(cx, cy)) continue
-    const rad = HEX_SIZE * 0.26
-    if (list.length > 1) {
-      ctx.beginPath()
-      ctx.arc(cx, cy, rad * 1.6, 0, Math.PI * 2)
-      ctx.strokeStyle = themeRgba('--accent', 0.75)
-      ctx.lineWidth = 1.5 / z
-      ctx.stroke()
-    }
-    ctx.beginPath()
-    ctx.arc(cx, cy, rad, 0, Math.PI * 2)
-    ctx.fillStyle = themeRgba('--accent')
-    ctx.fill()
-    ctx.strokeStyle = themeRgba('--surface', 0.95)
-    ctx.lineWidth = 1.5 / z
-    ctx.stroke()
-
-    if (screenSize >= 26) {
-      const first = list[0].name
-      const text = first.length > 16 ? `${first.slice(0, 15)}…` : first
-      const label = list.length > 1 ? `${text} +${list.length - 1}` : text
-      ctx.font = `600 ${11 / z}px Manrope, sans-serif`
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'top'
-      ctx.lineJoin = 'round'
-      ctx.lineWidth = 3 / z
-      ctx.strokeStyle = themeRgba('--surface', 0.9)
-      ctx.strokeText(label, cx, cy + rad + 3 / z)
-      ctx.fillStyle = themeRgba('--text-primary')
-      ctx.fillText(label, cx, cy + rad + 3 / z)
-    }
-  }
+  // 5. Minor locations. Capitals and cities get their own markers and are
+  //    labelled from further out than ordinary places (see LABEL_AT); markers
+  //    are drawn lowest rank first so a capital is never buried, then the
+  //    labels go on top of everything.
+  const spots = minorSpots.filter((spot) => inView(spot.x, spot.y))
+  for (const spot of spots) drawMinorMarker(ctx, spot, z)
+  drawMinorLabels(ctx, spots, z, screenSize)
 
   // 6. Selected and hovered hex.
   if (selectedHex.value) {
@@ -807,6 +991,8 @@ async function saveMinor(payload) {
     founding_date: payload.founding_date,
     description: payload.description,
     belongs_to_id: payload.belongs_to_id,
+    is_city: payload.is_city,
+    is_capital: payload.is_capital,
     q: hex.q,
     r: hex.r,
   }
@@ -834,6 +1020,8 @@ async function placeLocation(loc) {
     founding_date: loc.founding_date,
     description: loc.description,
     belongs_to_id: loc.belongs_to_id,
+    is_city: loc.is_city,
+    is_capital: loc.is_capital,
     q: hex.q,
     r: hex.r,
   })

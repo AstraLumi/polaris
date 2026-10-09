@@ -401,11 +401,12 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 		var kind, color, desc, founded string
 		var parentID sql.NullInt64
 		var parentName sql.NullString
+		var isCity, isCapital bool
 		err := db.QueryRow(`
 			SELECT l.kind, COALESCE(l.color, ''), COALESCE(l.description, ''), COALESCE(l.founding_date, ''),
-			       l.belongs_to_id, p.name
+			       l.belongs_to_id, p.name, l.is_city, l.is_capital
 			FROM locations l LEFT JOIN locations p ON p.id = l.belongs_to_id WHERE l.id = ?`, id).Scan(
-			&kind, &color, &desc, &founded, &parentID, &parentName)
+			&kind, &color, &desc, &founded, &parentID, &parentName, &isCity, &isCapital)
 		if err != nil {
 			log.Printf("wiki location facts: %v", err)
 			return
@@ -418,6 +419,11 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 			}
 		}
 		a.addFact("type", word, "word", nil)
+		if isCapital {
+			a.addFact("settlement", "Capital", "word", nil)
+		} else if isCity {
+			a.addFact("settlement", "City", "word", nil)
+		}
 		a.addFact("part_of", "", "", refOf("location", parentID, parentName))
 		a.addFact("founded", normalizeStoryDate(founded), "date", nil)
 		a.addSheet("description", desc)

@@ -264,7 +264,7 @@ func TestMigrationAddsGearTables(t *testing.T) {
 	id := createStoryDirect(t, mgr, "Old")
 	app, _ := mgr.open(id)
 	app.db.Exec(`INSERT INTO classes (name) VALUES ('Keeper')`)
-	for _, q := range []string{`DROP TABLE character_gear`, `DROP TABLE gear`, `UPDATE schema_meta SET value = '11' WHERE key = 'schema_version'`} {
+	for _, q := range []string{`ALTER TABLE locations DROP COLUMN is_city`, `ALTER TABLE locations DROP COLUMN is_capital`, `DROP TABLE wiki_infobox`, `DROP TABLE wiki_sections`, `DROP TABLE wiki_entries`, `DROP TABLE character_gear`, `DROP TABLE gear`, `UPDATE schema_meta SET value = '11' WHERE key = 'schema_version'`} {
 		if _, err := app.db.Exec(q); err != nil {
 			t.Fatal(err)
 		}

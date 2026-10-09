@@ -25,6 +25,8 @@ type mapLocation struct {
 	Q            *int64 `json:"q"` // minor locations only; null = not placed on a hex yet
 	R            *int64 `json:"r"`
 	BelongsToID  *int64 `json:"belongs_to_id"` // minor locations only; null = automatic
+	IsCity       bool   `json:"is_city"`       // minor locations only
+	IsCapital    bool   `json:"is_capital"`    // minor locations only
 }
 
 // mapPayload is the whole map in one response: every location, plus every
@@ -36,7 +38,7 @@ type mapPayload struct {
 
 const mapLocationSelect = `
 	SELECT id, kind, name, COALESCE(color, ''), COALESCE(founding_date, ''),
-	       COALESCE(description, ''), q, r, belongs_to_id
+	       COALESCE(description, ''), q, r, belongs_to_id, is_city, is_capital
 	FROM locations
 `
 
@@ -47,7 +49,7 @@ type rowScanner interface {
 func scanMapLocation(s rowScanner) (mapLocation, error) {
 	var l mapLocation
 	var q, r, belongs sql.NullInt64
-	if err := s.Scan(&l.ID, &l.Kind, &l.Name, &l.Color, &l.FoundingDate, &l.Description, &q, &r, &belongs); err != nil {
+	if err := s.Scan(&l.ID, &l.Kind, &l.Name, &l.Color, &l.FoundingDate, &l.Description, &q, &r, &belongs, &l.IsCity, &l.IsCapital); err != nil {
 		return l, err
 	}
 	if q.Valid {
@@ -117,6 +119,8 @@ type mapLocationInput struct {
 	Q            *int64 `json:"q"`
 	R            *int64 `json:"r"`
 	BelongsToID  *int64 `json:"belongs_to_id"`
+	IsCity       bool   `json:"is_city"`
+	IsCapital    bool   `json:"is_capital"`
 }
 
 func optInt(p *int64) sql.NullInt64 {
@@ -221,12 +225,12 @@ func createMapLocationHandler(db *sql.DB) http.HandlerFunc {
 		}
 
 		res, err := db.Exec(
-			`INSERT INTO locations (name, kind, color, founding_date, description, q, r, belongs_to_id)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO locations (name, kind, color, founding_date, description, q, r, belongs_to_id, is_city, is_capital)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			in.Name, in.Kind, color,
 			nullableString(normalizeStoryDate(in.FoundingDate)),
 			nullableString(strings.TrimSpace(in.Description)),
-			q, rr, belongs,
+			q, rr, belongs, in.IsCity && in.Kind == "minor", in.IsCapital && in.Kind == "minor",
 		)
 		if err != nil {
 			log.Printf("insert location: %v", err)
@@ -302,12 +306,13 @@ func updateMapLocationHandler(db *sql.DB) http.HandlerFunc {
 		}
 		if _, err := tx.Exec(
 			`UPDATE locations
-			 SET name = ?, color = ?, founding_date = ?, description = ?, q = ?, r = ?, belongs_to_id = ?
+			 SET name = ?, color = ?, founding_date = ?, description = ?, q = ?, r = ?, belongs_to_id = ?,
+			     is_city = ?, is_capital = ?
 			 WHERE id = ?`,
 			in.Name, color,
 			nullableString(normalizeStoryDate(in.FoundingDate)),
 			nullableString(strings.TrimSpace(in.Description)),
-			q, rr, belongs, id,
+			q, rr, belongs, in.IsCity && kind == "minor", in.IsCapital && kind == "minor", id,
 		); err != nil {
 			tx.Rollback()
 			log.Printf("update location: %v", err)

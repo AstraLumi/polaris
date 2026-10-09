@@ -12,7 +12,7 @@ import (
 // oldest migration (or a brand new one) gets wiped and recreated from
 // freshSchema — so every schema change from here on should ship with a
 // migration instead of relying on that reset.
-const currentSchemaVersion = "13"
+const currentSchemaVersion = "14"
 
 const freshSchema = `
 CREATE TABLE classes (
@@ -172,7 +172,9 @@ CREATE TABLE locations (
 	founding_date TEXT,
 	q             INTEGER,
 	r             INTEGER,
-	belongs_to_id INTEGER REFERENCES locations(id) ON DELETE SET NULL
+	belongs_to_id INTEGER REFERENCES locations(id) ON DELETE SET NULL,
+	is_city       INTEGER NOT NULL DEFAULT 0,
+	is_capital    INTEGER NOT NULL DEFAULT 0
 );
 
 ` + eventsTableSQL + `;
@@ -378,6 +380,15 @@ var migrations = map[string]migration{
 		// The wiki's own tables and the triggers that clean them up when a
 		// source (character, location, ...) is deleted.
 		statements: wikiSchemaStatements,
+	},
+	"13": {
+		to: "14",
+		statements: []string{
+			// Minor locations can be tagged as a city and/or a capital, which
+			// changes how the map draws them.
+			`ALTER TABLE locations ADD COLUMN is_city INTEGER NOT NULL DEFAULT 0`,
+			`ALTER TABLE locations ADD COLUMN is_capital INTEGER NOT NULL DEFAULT 0`,
+		},
 	},
 }
 
