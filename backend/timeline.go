@@ -19,9 +19,10 @@ type timelineNode struct {
 	Kind         string        `json:"kind"` // "event" | "birth" | "founding"
 	Name         string        `json:"name"`
 	Date         string        `json:"date"`
-	T            float64       `json:"t"`         // days on one number line, see timeValue
-	EventID      *int64        `json:"event_id"`  // the events row, if there is one
-	SourceID     *int64        `json:"source_id"` // character id (birth) / location id (founding)
+	T            float64       `json:"t"`           // days on one number line, see timeValue
+	EventID      *int64        `json:"event_id"`    // the events row, if there is one
+	SourceID     *int64        `json:"source_id"`   // character id (birth) / location id (founding)
+	SourceName   string        `json:"source_name"` // that character's or location's own name
 	Description  string        `json:"description"`
 	LocationID   *int64        `json:"location_id"`
 	LocationName string        `json:"location_name"`
@@ -136,7 +137,7 @@ func timelineHandler(db *sql.DB) http.HandlerFunc {
 			}
 			sid := id
 			n := timelineNode{Key: "birth:" + itoa(id), Kind: "birth", Name: "Birth of " + name,
-				SourceID: &sid, Tags: []string{}, People: []eventPerson{}}
+				SourceID: &sid, SourceName: name, Tags: []string{}, People: []eventPerson{}}
 			if !place(&n, normalizeStoryDate(birth)) {
 				continue
 			}
@@ -162,7 +163,7 @@ func timelineHandler(db *sql.DB) http.HandlerFunc {
 			}
 			sid := id
 			n := timelineNode{Key: "founding:" + itoa(id), Kind: "founding", Name: "Founding of " + name,
-				SourceID: &sid, Tags: []string{}, People: []eventPerson{}}
+				SourceID: &sid, SourceName: name, Tags: []string{}, People: []eventPerson{}}
 			if !place(&n, normalizeStoryDate(founded)) {
 				continue
 			}

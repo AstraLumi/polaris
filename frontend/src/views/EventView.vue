@@ -7,7 +7,7 @@
 
     <template v-else>
       <article class="glass-panel hero">
-        <img v-if="event.picture_path" :src="event.picture_path" :alt="event.name" class="hero-pic" />
+        <img v-if="event.picture_path" :src="event.picture_path" :alt="event.name" class="hero-pic zoomable" @click="viewPicture(event.picture_path, event.name)" />
         <div class="hero-text">
           <div class="when">
             <template v-if="shown">
@@ -112,7 +112,7 @@ import { eventsApi } from '../api'
 import { shortDate, fullDate, dateParts } from '../calendar'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import BackLink from '../components/BackLink.vue'
-import { pageTitle } from '../navigation'
+import { pageTitle, viewPicture } from '../navigation'
 import { t as tt } from '../i18n'
 
 const props = defineProps({ id: { type: String, required: true } })

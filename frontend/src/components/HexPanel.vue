@@ -422,4 +422,17 @@ h4 {
   justify-content: flex-end;
   gap: 0.5rem;
 }
+
+/* Phones: a sheet across the bottom of the map, above the location bar. */
+@media (max-width: 720px) {
+  .hex-panel {
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: 72px;
+    width: auto;
+    max-height: 55%;
+    z-index: 8;
+  }
+}
 </style>

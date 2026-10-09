@@ -145,6 +145,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+
 .sub a {
   color: var(--accent);
 }
@@ -189,7 +190,7 @@ onMounted(async () => {
 
 .columns {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
   gap: 1rem;
   margin-bottom: 1rem;
 }
@@ -308,5 +309,12 @@ onMounted(async () => {
   margin: 0.8rem 0 0;
   font-size: 0.72rem;
   color: var(--text-faint);
+}
+
+/* Phones: two tiles per row. */
+@media (max-width: 720px) {
+  .tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style>

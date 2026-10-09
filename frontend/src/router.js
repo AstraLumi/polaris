@@ -4,6 +4,7 @@ import Characters from './views/Characters.vue'
 import CharacterView from './views/CharacterView.vue'
 import VersionList from './views/VersionList.vue'
 import VersionEdit from './views/VersionEdit.vue'
+import VersionCompare from './views/VersionCompare.vue'
 import CharacterAssets from './views/CharacterAssets.vue'
 import MapView from './views/MapView.vue'
 import SettingsView from './views/SettingsView.vue'
@@ -25,6 +26,13 @@ const routes = [
   { path: '/characters', name: 'characters', component: Characters, meta: { title: tr('Characters') } },
   { path: '/characters/:id', name: 'character-view', component: CharacterView, meta: { title: tr('Characters') }, props: true },
   { path: '/characters/:id/versions', name: 'version-list', component: VersionList, meta: { title: tr('Versions') }, props: true },
+  {
+    path: '/characters/:id/compare',
+    name: 'version-compare',
+    component: VersionCompare,
+    meta: { title: tr('Compare versions') },
+    props: true,
+  },
   {
     path: '/characters/:id/versions/:versionId/edit',
     name: 'version-edit',

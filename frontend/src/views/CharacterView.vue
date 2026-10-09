@@ -8,7 +8,7 @@
     <template v-else-if="data">
       <header class="identity glass-panel">
         <div class="portrait">
-          <img v-if="data.picture_path" :src="data.picture_path" :alt="data.name" />
+          <img v-if="data.picture_path" :src="data.picture_path" :alt="data.name" class="zoomable" @click="viewPicture(data.picture_path, data.name)" />
           <span v-else class="portrait-fallback">{{ initials }}</span>
         </div>
         <div class="identity-text">
@@ -19,9 +19,14 @@
             {{ classLine }}
           </p>
         </div>
-        <RouterLink :to="`/characters/${data.character_id}/versions`" class="btn btn-ghost">
-          {{ $t('Edit') }}
-        </RouterLink>
+        <div class="identity-actions">
+          <RouterLink :to="{ path: '/timeline', query: { person: data.character_id } }" class="btn btn-ghost">
+            {{ $t('Timeline') }}
+          </RouterLink>
+          <RouterLink :to="`/characters/${data.character_id}/versions`" class="btn btn-ghost">
+            {{ $t('Edit') }}
+          </RouterLink>
+        </div>
       </header>
 
       <div class="tab-bar">
@@ -85,7 +90,7 @@
 <script setup>
 import IconImage from '../components/IconImage.vue'
 import BackLink from '../components/BackLink.vue'
-import { pageTitle } from '../navigation'
+import { pageTitle, viewPicture } from '../navigation'
 import { ref, computed, onMounted, h } from 'vue'
 import { t } from '../i18n'
 import { fetchCurrentVersion } from '../api'
@@ -151,6 +156,13 @@ onMounted(load)
 </script>
 
 <style scoped>
+.identity-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .identity {
   display: flex;
   align-items: center;
@@ -228,5 +240,20 @@ onMounted(load)
 .field.long .read-value {
   white-space: pre-wrap;
   line-height: 1.55;
+}
+
+/* Phones: the buttons move under the name. */
+@media (max-width: 720px) {
+  .identity {
+    flex-wrap: wrap;
+  }
+  .identity-text {
+    flex: 1;
+    min-width: 0;
+  }
+  .identity-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 </style>

@@ -39,3 +39,9 @@ export function useSaveShortcut(save) {
   onMounted(() => window.addEventListener('keydown', onKey))
   onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 }
+
+// The full-size picture viewer (PictureViewer.vue, shown by App.vue).
+export const viewedPicture = ref(null) // { src, alt } or null
+export function viewPicture(src, alt = '') {
+  if (src) viewedPicture.value = { src, alt }
+}

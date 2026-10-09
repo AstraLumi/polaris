@@ -193,7 +193,9 @@ func spaHandler(staticFS fs.FS) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/")
 		if path != "" {
-			if _, err := fs.Stat(staticFS, path); err != nil {
+			// Folders count as missing too: /assets is both a page and the
+			// folder of built scripts, and must load the page.
+			if info, err := fs.Stat(staticFS, path); err != nil || info.IsDir() {
 				r2 := r.Clone(r.Context())
 				r2.URL.Path = "/"
 				fileServer.ServeHTTP(w, r2)

@@ -24,6 +24,24 @@
         >
           {{ $t(t.label) }}
         </button>
+        <template v-if="tool === 'paint' || tool === 'erase'">
+          <div class="tool-sep"></div>
+          <button
+            v-for="b in BRUSHES"
+            :key="b.radius"
+            type="button"
+            class="tool-btn brush-btn"
+            :class="{ active: brush === b.radius }"
+            :title="$tn('Brush: {n} hex', 'Brush: {n} hexes', b.hexes)"
+            :aria-label="$tn('Brush: {n} hex', 'Brush: {n} hexes', b.hexes)"
+            @click="brush = b.radius"
+          >
+            <i class="brush-dot" :style="{ width: b.dot + 'px', height: b.dot + 'px' }"></i>
+          </button>
+        </template>
+        <div class="tool-sep"></div>
+        <button type="button" class="tool-btn history-btn" :disabled="!undoStack.length" :title="$t('Undo painting (Ctrl+Z)')" @click="undo">↶</button>
+        <button type="button" class="tool-btn history-btn" :disabled="!redoStack.length" :title="$t('Redo painting (Ctrl+Shift+Z)')" @click="redo">↷</button>
         <div class="tool-sep"></div>
         <button type="button" class="tool-btn" :title="$t('Zoom in')" @click="zoomBy(1.25)">+</button>
         <button type="button" class="tool-btn" :title="$t('Zoom out')" @click="zoomBy(0.8)">−</button>
@@ -90,7 +108,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { t, tr } from '../i18n'
 import { mapApi } from '../api'
 import { themeRgba } from '../theme'
-import { HEX_SIZE, SQRT3, CORNERS, keyOf, hexCenter, pixelToHex, hexLine } from '../hexMath'
+import { HEX_SIZE, SQRT3, CORNERS, keyOf, hexCenter, pixelToHex, hexLine, hexesWithin } from '../hexMath'
 import MapHoverPane from '../components/MapHoverPane.vue'
 import HexPanel from '../components/HexPanel.vue'
 import MajorLocationModal from '../components/MajorLocationModal.vue'
@@ -109,6 +127,13 @@ const tools = [
 const wrapEl = ref(null)
 const canvasEl = ref(null)
 const tool = ref('select')
+// Brush radius in hexes: 0 paints one hex, 1 a patch of 7, 2 a patch of 19.
+const BRUSHES = [
+  { radius: 0, hexes: 1, dot: 5 },
+  { radius: 1, hexes: 7, dot: 9 },
+  { radius: 2, hexes: 19, dot: 13 },
+]
+const brush = ref(0)
 const locations = ref([])
 const activeId = ref(null) // the major location being painted/erased
 const hoverHex = ref(null)
@@ -781,8 +806,35 @@ function startPan(e, sx, sy, selectOnClick) {
   if (!selectOnClick) panning.value = true
 }
 
+// ---- Touch: two fingers pinch to zoom and drag to move ---------------------------
+const touches = new Map() // pointerId -> { sx, sy }
+let pinch = null // { dist, mx, my }
+
+function pinchState() {
+  const [a, b] = [...touches.values()]
+  return { dist: Math.hypot(b.sx - a.sx, b.sy - a.sy), mx: (a.sx + b.sx) / 2, my: (a.sy + b.sy) / 2 }
+}
+
 function onPointerDown(e) {
   const { sx, sy } = eventPoint(e)
+  if (e.pointerType === 'touch') {
+    touches.set(e.pointerId, { sx, sy })
+    try {
+      canvasEl.value.setPointerCapture(e.pointerId)
+    } catch (err) {
+      // Not a live pointer (it already lifted); nothing to capture.
+    }
+    if (touches.size === 2) {
+      // A second finger turns whatever the first one started into a pinch;
+      // a stroke painted so far is kept.
+      if (drag && (drag.type === 'paint' || drag.type === 'erase')) commitStroke(drag)
+      drag = null
+      panning.value = false
+      pinch = pinchState()
+      return
+    }
+    if (touches.size > 2) return
+  }
   const wantsPan = e.button === 1 || (e.button === 0 && (spaceDown.value || tool.value === 'pan'))
   if (wantsPan) {
     startPan(e, sx, sy, false)
@@ -796,7 +848,7 @@ function onPointerDown(e) {
       return
     }
     canvasEl.value.setPointerCapture(e.pointerId)
-    drag = { type: tool.value, locId: activeId.value, last: null, changed: new Map() }
+    drag = { type: tool.value, locId: activeId.value, last: null, changed: new Map(), before: new Map() }
     strokeTo(hexAt(sx, sy))
     return
   }
@@ -807,6 +859,16 @@ function onPointerDown(e) {
 
 function onPointerMove(e) {
   const { sx, sy } = eventPoint(e)
+  if (touches.has(e.pointerId)) touches.set(e.pointerId, { sx, sy })
+  if (pinch && touches.size >= 2) {
+    const now = pinchState()
+    view.x += now.mx - pinch.mx
+    view.y += now.my - pinch.my
+    if (pinch.dist > 0) zoomAt(now.mx, now.my, now.dist / pinch.dist)
+    pinch = now
+    scheduleDraw()
+    return
+  }
   if (drag && drag.type === 'pan') {
     const dx = sx - drag.sx
     const dy = sy - drag.sy
@@ -827,6 +889,15 @@ function onPointerMove(e) {
 }
 
 function onPointerUp(e) {
+  touches.delete(e.pointerId)
+  if (pinch) {
+    // Lifting one finger of a pinch ends it; the other finger does nothing
+    // until it is lifted too.
+    if (touches.size === 0) pinch = null
+    const canvas = canvasEl.value
+    if (canvas?.hasPointerCapture?.(e.pointerId)) canvas.releasePointerCapture(e.pointerId)
+    return
+  }
   const finished = drag
   drag = null
   panning.value = false
@@ -895,9 +966,11 @@ function eraseLocal(k, locId) {
 
 function strokeTo(hex) {
   if (!hex || !drag) return
-  const path = drag.last ? hexLine(drag.last, hex) : [hex]
+  const line = drag.last ? hexLine(drag.last, hex) : [hex]
+  const path = brush.value ? line.flatMap((c) => hexesWithin(c, brush.value)) : line
   for (const h of path) {
     const k = keyOf(h.q, h.r)
+    if (!drag.before.has(k)) drag.before.set(k, idsAt(k))
     const changed =
       drag.type === 'paint' ? paintLocal(k, h.q, h.r, drag.locId) : eraseLocal(k, drag.locId)
     if (changed) drag.changed.set(k, [h.q, h.r])
@@ -911,6 +984,7 @@ function strokeTo(hex) {
 function commitStroke(stroke) {
   const hexes = [...stroke.changed.values()]
   if (!hexes.length) return
+  remember([...stroke.changed].map(([k, [q, r]]) => ({ k, q, r, before: stroke.before.get(k), after: idsAt(k) })))
   saveChain = saveChain.then(async () => {
     try {
       if (stroke.type === 'paint') await mapApi.paint(stroke.locId, hexes)
@@ -921,6 +995,75 @@ function commitStroke(stroke) {
     }
     refreshPanels()
   })
+}
+
+// ---- Undo / redo ---------------------------------------------------------------------------
+// Every stroke remembers what its hexes held before and after it, so it can
+// be played back either way. Only painting and erasing are undoable.
+const UNDO_LIMIT = 50
+const undoStack = ref([])
+const redoStack = ref([])
+
+const idsAt = (k) => [...(hexMembers.get(k)?.ids ?? [])]
+
+function remember(hexes) {
+  undoStack.value = [...undoStack.value.slice(1 - UNDO_LIMIT), hexes]
+  redoStack.value = []
+}
+
+// Puts each hex back to the given list of location ids, on screen at once
+// and then on the server, as the erases and paints that turn one into the
+// other. Locations deleted since are skipped.
+function restore(hexes, which) {
+  const erase = new Map()
+  const paint = new Map()
+  const add = (m, id, h) => {
+    if (!m.has(id)) m.set(id, [])
+    m.get(id).push([h.q, h.r])
+  }
+  for (const h of hexes) {
+    const target = h[which].filter((id) => locMap.has(id))
+    const now = idsAt(h.k)
+    for (const id of now) if (!target.includes(id)) add(erase, id, h)
+    for (const id of target) if (!now.includes(id)) add(paint, id, h)
+    const entry = hexMembers.get(h.k)
+    const [x, y] = entry ? [entry.x, entry.y] : hexCenter(h.q, h.r)
+    if (target.length) hexMembers.set(h.k, { q: h.q, r: h.r, x, y, ids: target })
+    else hexMembers.delete(h.k)
+    const owner = coloredOf(target)
+    if (owner) painted.set(h.k, { q: h.q, r: h.r, x, y, color: owner.color })
+    else painted.delete(h.k)
+  }
+  hexesOfCache.clear()
+  scheduleDraw()
+  saveChain = saveChain.then(async () => {
+    try {
+      for (const [id, list] of erase) await mapApi.erase(id, list)
+      // Kingdoms last: painting one claims the hex from any other.
+      const order = [...paint].sort(([a], [b]) => Number(!!locMap.get(a)?.color) - Number(!!locMap.get(b)?.color))
+      for (const [id, list] of order) await mapApi.paint(id, list)
+    } catch (err) {
+      flash(t("Couldn't save that change, so the map was reloaded."))
+      await load({ keepView: true })
+    }
+    refreshPanels()
+  })
+}
+
+function undo() {
+  const last = undoStack.value[undoStack.value.length - 1]
+  if (!last) return
+  undoStack.value = undoStack.value.slice(0, -1)
+  redoStack.value = [...redoStack.value, last]
+  restore(last, 'before')
+}
+
+function redo() {
+  const next = redoStack.value[redoStack.value.length - 1]
+  if (!next) return
+  redoStack.value = redoStack.value.slice(0, -1)
+  undoStack.value = [...undoStack.value, next]
+  restore(next, 'after')
 }
 
 // ---- Keyboard --------------------------------------------------------------------------------
@@ -937,6 +1080,15 @@ function onKeyDown(e) {
     spaceDown.value = true
   } else if (e.key === 'Escape' && !isTyping(e)) {
     closePanel()
+  } else if ((e.ctrlKey || e.metaKey) && !isTyping(e) && !drag) {
+    const key = e.key.toLowerCase()
+    if (key === 'z' && !e.shiftKey) {
+      e.preventDefault()
+      undo()
+    } else if ((key === 'z' && e.shiftKey) || key === 'y') {
+      e.preventDefault()
+      redo()
+    }
   }
 }
 
@@ -1135,6 +1287,29 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
+.tool-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.history-btn {
+  font-size: 1.05rem;
+  padding: 0.25rem 0.2rem;
+}
+
+.brush-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.9rem;
+}
+
+.brush-dot {
+  display: block;
+  border-radius: 50%;
+  background: currentColor;
+}
+
 .tool-btn:hover {
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.05);
@@ -1256,5 +1431,35 @@ onBeforeUnmount(() => {
   color: var(--text-faint);
   padding: 0 0.4rem;
   white-space: nowrap;
+}
+
+/* Phones: the map fills the screen under the top bar, the keyboard hint is
+   dropped (two fingers pinch and drag instead) and the location bar spans
+   the width. */
+@media (max-width: 720px) {
+  .map-page {
+    height: calc(100dvh - 6.5rem);
+    min-height: 420px;
+  }
+  .hint-line {
+    display: none;
+  }
+  .top-notes {
+    left: 80px;
+    right: 8px;
+    max-width: none;
+    transform: none;
+  }
+  .kingdom-bar {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    max-width: none;
+    transform: none;
+  }
+  .toolbar {
+    top: 8px;
+    left: 8px;
+  }
 }
 </style>

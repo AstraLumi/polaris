@@ -143,7 +143,12 @@
         <!-- ------------------------------------------------ the infobox -->
         <aside class="infobox" :aria-label="$t('Summary box')">
           <div class="info-title">{{ article.name }}</div>
-          <div v-if="article.picture" class="info-pic">
+          <div
+            v-if="article.picture"
+            class="info-pic"
+            :class="{ zoomable: article.picture.startsWith('/uploads/') }"
+            @click="article.picture.startsWith('/uploads/') && viewPicture(article.picture, article.name)"
+          >
             <IconImage :src="article.picture" :name="article.name" :alt="article.name" />
           </div>
           <table>
@@ -196,7 +201,7 @@ import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import IconImage from '../components/IconImage.vue'
 import BackLink from '../components/BackLink.vue'
-import { pageTitle, useUnsavedGuard, useSaveShortcut } from '../navigation'
+import { pageTitle, useUnsavedGuard, useSaveShortcut, viewPicture } from '../navigation'
 import { renderMarkdown } from '../markdown'
 import { fullDate, dateParts } from '../calendar'
 import { t } from '../i18n'

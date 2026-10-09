@@ -5,7 +5,8 @@
         <h1>{{ $t('Timeline') }}</h1>
         <p class="page-sub">
           <template v-if="data">
-            {{ $tn('{n} point', '{n} points', data.nodes.length) }}
+            <template v-if="filtering">{{ $t('{shown} of {total}', { shown: nodes.length, total: data.nodes.length }) }}</template>
+            <template v-else>{{ $tn('{n} point', '{n} points', data.nodes.length) }}</template>
             <template v-if="range"> · {{ range }}</template>
           </template>
           <template v-else>&nbsp;</template>
@@ -48,10 +49,35 @@
           </select>
         </label>
 
+        <label v-if="personOptions.length" class="ctl">
+          <span>{{ $t('Person') }}</span>
+          <select :value="personId" @change="setFilter('person', $event.target.value)">
+            <option value="">{{ $t('Everyone') }}</option>
+            <option v-for="p in personOptions" :key="p.id" :value="String(p.id)">{{ p.name }}</option>
+          </select>
+        </label>
+
+        <label v-if="placeOptions.length" class="ctl">
+          <span>{{ $t('Place') }}</span>
+          <select :value="placeId" @change="setFilter('place', $event.target.value)">
+            <option value="">{{ $t('Everywhere') }}</option>
+            <option v-for="p in placeOptions" :key="p.id" :value="String(p.id)">{{ p.name }}</option>
+          </select>
+        </label>
+
         <div class="legend" :aria-label="$t('Legend')">
-          <span class="key"><i class="dot kind-event"></i>{{ $t('Event') }}</span>
-          <span class="key"><i class="dot kind-birth"></i>{{ $t('Birth') }}</span>
-          <span class="key"><i class="dot kind-founding"></i>{{ $t('Founding') }}</span>
+          <button
+            v-for="k in KINDS"
+            :key="k"
+            type="button"
+            class="key"
+            :class="{ 'is-off': hiddenKinds.has(k) }"
+            :title="$t('Show or hide these points')"
+            :aria-pressed="!hiddenKinds.has(k)"
+            @click="toggleKind(k)"
+          >
+            <i class="dot" :class="'kind-' + k"></i>{{ kindLabel(k) }}
+          </button>
         </div>
       </section>
 
@@ -60,7 +86,12 @@
         <RouterLink to="/events">{{ $t('Fix on the Events page') }}</RouterLink>
       </p>
 
-      <div v-if="!data.nodes.length" class="empty-state glass-panel">
+      <div v-if="data.nodes.length && !nodes.length" class="empty-state glass-panel">
+        <p class="empty-title">{{ $t('Nothing matches these filters.') }}</p>
+        <p class="empty-hint"><button type="button" class="link-btn" @click="clearFilters">{{ $t('Clear filter') }}</button></p>
+      </div>
+
+      <div v-else-if="!data.nodes.length" class="empty-state glass-panel">
         <p class="empty-title">{{ $t('Nothing to place yet.') }}</p>
         <p class="empty-hint">
           {{ $t('Create an event, give a character an in-story birth date, or set a founding date on the Map — each shows up here.') }}
@@ -86,7 +117,7 @@
               :key="'coil-' + i"
               class="coil-caption"
               :x="c.x"
-              :y="c.y + 26"
+:y="c.y + c.depth + 18"
               text-anchor="middle"
             >
               ≈ {{ formatYears(c.years) }}
@@ -132,7 +163,7 @@
         </p>
         <p v-if="selected.location_name" class="where">{{ $t('at {place}', { place: selected.location_name }) }}</p>
 
-        <img v-if="selected.picture_path" :src="selected.picture_path" :alt="selected.name" class="pic" />
+        <img v-if="selected.picture_path" :src="selected.picture_path" :alt="selected.name" class="pic zoomable" @click="viewPicture(selected.picture_path, selected.name)" />
 
         <p v-if="selected.description" class="desc">{{ selected.description }}</p>
         <p v-else class="desc is-empty">{{ $t('No description yet.') }}</p>
@@ -207,13 +238,15 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { timelineApi, eventsApi } from '../api'
 import { shortDate, fullDate } from '../calendar'
 import { t, tn } from '../i18n'
 import { layoutTimeline, autoPxPerYear, minimumWidth, DEFAULTS } from '../timelineLayout'
+import { viewPicture } from '../navigation'
 
 const router = useRouter()
+const route = useRoute()
 
 const data = ref(null)
 const loadError = ref('')
@@ -258,14 +291,13 @@ const layoutWidth = computed(() => Math.max(measuredWidth.value, minimumWidth())
 const pxPerYear = computed(() => {
   if (!data.value) return manualPx.value
   return auto.value
-    ? autoPxPerYear(data.value.nodes, data.value.year_days, layoutWidth.value, opts.value)
+    ? autoPxPerYear(nodes.value, data.value.year_days, layoutWidth.value, opts.value)
     : manualPx.value
 })
 
 const layout = computed(() => {
-  const nodes = data.value ? data.value.nodes : []
   const yd = data.value ? data.value.year_days : 360
-  return layoutTimeline(nodes, yd, layoutWidth.value, { ...opts.value, pxPerYear: pxPerYear.value })
+  return layoutTimeline(nodes.value, yd, layoutWidth.value, { ...opts.value, pxPerYear: pxPerYear.value })
 })
 
 // The slider is logarithmic: 2 px/yr at the left, 400 at the right.
@@ -284,8 +316,68 @@ function setAuto() {
 
 // ---- Derived data ---------------------------------------------------------------
 
+// ---- Filters (in the URL, so a character page can link to its own life) -------
+
+const KINDS = ['event', 'birth', 'founding']
+const queryText = (k) => (typeof route.query[k] === 'string' ? route.query[k] : '')
+const personId = computed(() => queryText('person'))
+const placeId = computed(() => queryText('place'))
+const hiddenKinds = computed(() => new Set(queryText('hide').split(',').filter((k) => KINDS.includes(k))))
+const filtering = computed(() => !!(personId.value || placeId.value || hiddenKinds.value.size))
+
+function setFilter(key, value) {
+  const query = { ...route.query }
+  if (value) query[key] = value
+  else delete query[key]
+  selectedKey.value = null
+  router.replace({ query })
+}
+
+function toggleKind(k) {
+  const next = new Set(hiddenKinds.value)
+  if (next.has(k)) next.delete(k)
+  else next.add(k)
+  setFilter('hide', [...next].join(','))
+}
+
+function clearFilters() {
+  router.replace({ query: {} })
+}
+
+// A person's points: their birth and every event they're in. A place's: its
+// founding and every event set there.
+const inPerson = (n, id) => (n.kind === 'birth' && n.source_id === id) || n.people.some((p) => p.id === id)
+const inPlace = (n, id) => (n.kind === 'founding' && n.source_id === id) || n.location_id === id
+
+const nodes = computed(() => {
+  const all = data.value ? data.value.nodes : []
+  const person = Number(personId.value)
+  const place = Number(placeId.value)
+  return all.filter(
+    (n) => !hiddenKinds.value.has(n.kind) && (!person || inPerson(n, person)) && (!place || inPlace(n, place)),
+  )
+})
+
+function optionsFrom(pairs) {
+  const seen = new Map()
+  for (const [id, name] of pairs) if (id != null && name) seen.set(id, name)
+  return [...seen].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
+}
+const personOptions = computed(() =>
+  optionsFrom((data.value?.nodes || []).flatMap((n) => [
+    ...(n.kind === 'birth' ? [[n.source_id, n.source_name]] : []),
+    ...n.people.map((p) => [p.id, p.name]),
+  ])),
+)
+const placeOptions = computed(() =>
+  optionsFrom((data.value?.nodes || []).flatMap((n) => [
+    ...(n.kind === 'founding' ? [[n.source_id, n.source_name]] : []),
+    [n.location_id, n.location_name],
+  ])),
+)
+
 const range = computed(() => {
-  const n = data.value?.nodes
+  const n = nodes.value
   if (!n || !n.length) return ''
   const a = shortDate(n[0].date)
   const b = shortDate(n[n.length - 1].date)
@@ -298,7 +390,7 @@ const allTags = computed(() => {
   return [...seen.values()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
 })
 
-const selected = computed(() => data.value?.nodes.find((n) => n.key === selectedKey.value) || null)
+const selected = computed(() => nodes.value.find((n) => n.key === selectedKey.value) || null)
 
 const hasTag = (n, tag) => n.tags.some((t) => t.toLowerCase() === tag.toLowerCase())
 
@@ -306,7 +398,7 @@ const hasTag = (n, tag) => n.tags.some((t) => t.toLowerCase() === tag.toLowerCas
 const linkedNodes = computed(() => {
   const s = selected.value
   if (!s || !s.tags.length) return []
-  return data.value.nodes.filter((n) => n.key !== s.key && s.tags.some((t) => hasTag(n, t)))
+  return nodes.value.filter((n) => n.key !== s.key && s.tags.some((t) => hasTag(n, t)))
 })
 const related = computed(() => new Set(linkedNodes.value.map((n) => n.key)))
 
@@ -442,7 +534,8 @@ onBeforeUnmount(() => {
 
 .ctl select {
   width: auto;
-  padding: 0.3rem 0.5rem;
+  max-width: 14rem;
+  padding: 0.3rem 2.2rem 0.3rem 0.5rem; /* room for the dropdown arrow */
 }
 
 .ctl-value {
@@ -481,6 +574,26 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.key.is-off {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+.link-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
 }
 
 .dot {
@@ -837,6 +950,12 @@ onBeforeUnmount(() => {
   }
   .legend {
     margin-left: 0;
+  }
+  .ctl {
+    flex-wrap: wrap;
+  }
+  .ctl input[type='range'] {
+    width: 120px;
   }
 }
 </style>

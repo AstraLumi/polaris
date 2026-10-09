@@ -19,6 +19,16 @@
       </button>
     </div>
 
+    <div class="bulk-bar">
+      <template v-if="selectMode">
+        <span class="bulk-count">{{ $tn('{n} selected', '{n} selected', selectedIds.size) }}</span>
+        <button class="btn btn-danger small" :disabled="!selectedIds.size" @click="bulkConfirm = true">
+          {{ $t('Delete selected ({n})', { n: selectedIds.size }) }}
+        </button>
+      </template>
+      <button class="btn btn-ghost small" @click="toggleSelectMode">{{ selectMode ? $t('Cancel') : $t('Select several') }}</button>
+    </div>
+
     <p v-if="loadError" class="error-banner">{{ loadError }}</p>
 
     <!-- Classes -->
@@ -35,8 +45,7 @@
             <span class="asset-name">{{ c.name }}</span>
           </div>
           <div class="asset-actions">
-            <button class="btn btn-ghost small" @click="editClass(c)">{{ $t('Edit') }}</button>
-            <button class="btn btn-ghost small" @click="confirmDelete('class', c)">{{ $t('Delete') }}</button>
+            <RowActions kind="class" :item="c" />
           </div>
         </li>
       </ul>
@@ -59,8 +68,7 @@
             <span v-else class="scope-badge scope-badge-any">{{ $t('Any class') }}</span>
           </div>
           <div class="asset-actions">
-            <button class="btn btn-ghost small" @click="editSubclass(s)">{{ $t('Edit') }}</button>
-            <button class="btn btn-ghost small" @click="confirmDelete('subclass', s)">{{ $t('Delete') }}</button>
+            <RowActions kind="subclass" :item="s" />
           </div>
         </li>
       </ul>
@@ -80,8 +88,7 @@
             <span class="scope-badge">{{ s.class_name }}</span>
           </div>
           <div class="asset-actions">
-            <button class="btn btn-ghost small" @click="editSpecialization(s)">{{ $t('Edit') }}</button>
-            <button class="btn btn-ghost small" @click="confirmDelete('specialization', s)">{{ $t('Delete') }}</button>
+            <RowActions kind="specialization" :item="s" />
           </div>
         </li>
       </ul>
@@ -98,8 +105,7 @@
         <li v-for="r in races" :key="r.id" class="asset-row glass-panel">
           <span class="asset-name">{{ r.name }}</span>
           <div class="asset-actions">
-            <button class="btn btn-ghost small" @click="editRace(r)">{{ $t('Edit') }}</button>
-            <button class="btn btn-ghost small" @click="confirmDelete('race', r)">{{ $t('Delete') }}</button>
+            <RowActions kind="race" :item="r" />
           </div>
         </li>
       </ul>
@@ -116,8 +122,7 @@
         <li v-for="b in bodyTypes" :key="b.id" class="asset-row glass-panel">
           <span class="asset-name">{{ b.name }}</span>
           <div class="asset-actions">
-            <button class="btn btn-ghost small" @click="editBodyType(b)">{{ $t('Edit') }}</button>
-            <button class="btn btn-ghost small" @click="confirmDelete('bodyType', b)">{{ $t('Delete') }}</button>
+            <RowActions kind="bodyType" :item="b" />
           </div>
         </li>
       </ul>
@@ -139,8 +144,7 @@
       <div class="spell-list">
         <SpellRow v-for="s in spells" :key="s.id" :spell="s">
           <template #actions>
-            <button class="btn btn-ghost small" @click="spellEdit = s">{{ $t('Edit') }}</button>
-            <button class="btn btn-ghost small" @click="confirmDelete('spell', s)">{{ $t('Delete') }}</button>
+            <RowActions kind="spell" :item="s" />
           </template>
         </SpellRow>
       </div>
@@ -172,8 +176,7 @@
       <div class="spell-list">
         <GearRow v-for="g in filteredGear" :key="g.id" :gear="g">
           <template #actions>
-            <button class="btn btn-ghost small" @click="gearEdit = g">{{ $t('Edit') }}</button>
-            <button class="btn btn-ghost small" @click="confirmDelete('gear', g)">{{ $t('Delete') }}</button>
+            <RowActions kind="gear" :item="g" />
           </template>
         </GearRow>
       </div>
@@ -236,6 +239,15 @@
     />
 
     <ConfirmDialog
+      v-if="bulkConfirm"
+      :title="$tn('Delete {n} item?', 'Delete {n} items?', selectedIds.size)"
+      :message="bulkMessage"
+      :confirm-label="$t('Delete')"
+      @cancel="bulkConfirm = false"
+      @confirm="handleBulkDelete"
+    />
+
+    <ConfirmDialog
       v-if="confirmTarget"
       :title="$t('Delete {name}?', { name: confirmTarget.item.name })"
       :message="confirmMessage"
@@ -247,8 +259,8 @@
 </template>
 
 <script setup>
-import { ref, computed, h, onMounted } from 'vue'
-import { t, tr } from '../i18n'
+import { ref, computed, watch, h, onMounted } from 'vue'
+import { t, tn, tr } from '../i18n'
 import {
   fetchCatalogs, classesApi, racesApi, bodyTypesApi, specializationsApi, subclassesApi, spellsApi, gearApi,
 } from '../api'
@@ -421,6 +433,81 @@ function confirmDelete(kind, item) {
   confirmTarget.value = { kind, item }
 }
 
+// ---- Selecting several to delete at once (on the open tab) -------------------
+
+const TAB_KIND = {
+  classes: 'class', subclasses: 'subclass', specializations: 'specialization', races: 'race',
+  bodyTypes: 'bodyType', gear: 'gear', spells: 'spell',
+}
+const selectMode = ref(false)
+const selectedIds = ref(new Set())
+const bulkConfirm = ref(false)
+
+function toggleSelectMode() {
+  selectMode.value = !selectMode.value
+  selectedIds.value = new Set()
+}
+function toggleSelected(id) {
+  const next = new Set(selectedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedIds.value = next
+}
+watch(tab, () => {
+  selectMode.value = false
+  selectedIds.value = new Set()
+})
+
+const bulkMessage = computed(() =>
+  ['spell', 'gear'].includes(TAB_KIND[tab.value])
+    ? t("They're removed from every character that has them.")
+    : t('Characters using them keep their data, but lose the link and any bonuses they gave them.'),
+)
+
+async function handleBulkDelete() {
+  const kind = TAB_KIND[tab.value]
+  bulkConfirm.value = false
+  let failed = 0
+  for (const id of selectedIds.value) {
+    try {
+      await deleteApis[kind].delete(id)
+    } catch (err) {
+      failed++
+    }
+  }
+  if (failed) loadError.value = tn("Couldn't delete {n} of them.", "Couldn't delete {n} of them.", failed)
+  selectMode.value = false
+  selectedIds.value = new Set()
+  await load()
+}
+
+const editors = {
+  class: editClass, subclass: editSubclass, specialization: editSpecialization, race: editRace, bodyType: editBodyType,
+  spell: (s) => (spellEdit.value = s),
+  gear: (g) => (gearEdit.value = g),
+}
+
+// A row's Edit and Delete buttons, or its checkbox while selecting.
+const RowActions = {
+  props: { kind: String, item: Object },
+  setup(p) {
+    return () =>
+      selectMode.value
+        ? h('label', { class: 'row-pick', title: t('Select') }, [
+            h('input', {
+              type: 'checkbox',
+              checked: selectedIds.value.has(p.item.id),
+              'aria-label': p.item.name,
+              onChange: () => toggleSelected(p.item.id),
+            }),
+          ])
+        : [
+            h('button', { class: 'btn btn-ghost small', onClick: () => editors[p.kind](p.item) }, t('Edit')),
+            h('button', { class: 'btn btn-ghost small', onClick: () => confirmDelete(p.kind, p.item) }, t('Delete')),
+          ]
+  },
+}
+
 const deleteApis = {
   class: classesApi, race: racesApi, bodyType: bodyTypesApi,
   specialization: specializationsApi, subclass: subclassesApi, spell: spellsApi, gear: gearApi,
@@ -452,6 +539,32 @@ onMounted(load)
 </script>
 
 <style scoped>
+.bulk-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.6rem;
+  margin: -0.5rem 0 1rem;
+}
+
+.bulk-count {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.row-pick {
+  display: flex;
+  align-items: center;
+  padding: 0.3rem 0.5rem;
+  cursor: pointer;
+}
+
+.row-pick input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--accent);
+}
+
 .section-header {
   display: flex;
   justify-content: space-between;

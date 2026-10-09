@@ -7,7 +7,20 @@
           {{ activeTag ? $tn('{n} event tagged #{tag}', '{n} events tagged #{tag}', events.length, { tag: activeTag }) : $tn('{n} event', '{n} events', events.length) }}
         </p>
       </div>
-      <RouterLink :to="newLink" class="btn btn-primary add-btn">{{ $t('New event') }}</RouterLink>
+      <div class="header-actions">
+        <button
+          v-if="selectMode"
+          class="btn btn-danger"
+          :disabled="selectedIds.size === 0"
+          @click="confirmOpen = true"
+        >
+          {{ $t('Delete selected ({n})', { n: selectedIds.size }) }}
+        </button>
+        <button v-if="events.length || selectMode" class="btn btn-ghost" @click="toggleSelectMode">
+          {{ selectMode ? $t('Cancel') : $t('Select several') }}
+        </button>
+        <RouterLink :to="newLink" class="btn btn-primary add-btn">{{ $t('New event') }}</RouterLink>
+      </div>
     </header>
 
     <div class="controls">
@@ -44,7 +57,22 @@
 
     <ul class="event-list">
       <li v-for="e in events" :key="e.id">
-        <RouterLink :to="`/events/${e.id}`" class="event-row glass-panel">
+        <!-- While selecting, a row is a toggle rather than a link. -->
+        <component
+          :is="selectMode ? 'div' : RouterLink"
+          :to="selectMode ? undefined : `/events/${e.id}`"
+          class="event-row glass-panel"
+          :class="{ 'is-selected': selectedIds.has(e.id), 'is-picking': selectMode }"
+          @click="selectMode && toggleSelected(e.id)"
+        >
+          <input
+            v-if="selectMode"
+            type="checkbox"
+            class="row-check"
+            :checked="selectedIds.has(e.id)"
+            :aria-label="e.name"
+            tabindex="-1"
+          />
           <div class="date-block">
             <template v-if="parts(e)">
               <span class="year">{{ parts(e).year }}</span>
@@ -66,18 +94,28 @@
             </div>
           </div>
           <img v-if="e.picture_path" :src="e.picture_path" :alt="e.name" class="thumb" />
-        </RouterLink>
+        </component>
       </li>
     </ul>
+
+    <ConfirmDialog
+      v-if="confirmOpen"
+      :title="$tn('Delete {n} event?', 'Delete {n} events?', selectedIds.size)"
+      :message="$t('Their pictures go with them. This can\'t be undone.')"
+      :confirm-label="$t('Delete')"
+      @cancel="confirmOpen = false"
+      @confirm="handleDelete"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { eventsApi } from '../api'
 import { dateParts } from '../calendar'
-import { t } from '../i18n'
+import { t, tn } from '../i18n'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -87,6 +125,42 @@ const allTags = ref([])
 const loading = ref(true)
 const loadError = ref('')
 const search = ref(typeof route.query.q === 'string' ? route.query.q : '')
+
+// Selecting several events to delete at once.
+const selectMode = ref(false)
+const selectedIds = ref(new Set())
+const confirmOpen = ref(false)
+
+function toggleSelectMode() {
+  selectMode.value = !selectMode.value
+  selectedIds.value = new Set()
+}
+function toggleSelected(id) {
+  const next = new Set(selectedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedIds.value = next
+}
+async function handleDelete() {
+  confirmOpen.value = false
+  let failed = 0
+  for (const id of selectedIds.value) {
+    try {
+      await eventsApi.remove(id)
+    } catch (err) {
+      failed++
+    }
+  }
+  selectMode.value = false
+  selectedIds.value = new Set()
+  await load()
+  if (failed) loadError.value = tn("Couldn't delete {n} of them.", "Couldn't delete {n} of them.", failed)
+  try {
+    allTags.value = await eventsApi.tags()
+  } catch (err) {
+    // Tag chips are a convenience; they refresh next visit.
+  }
+}
 
 const activeTag = computed(() => (typeof route.query.tag === 'string' ? route.query.tag : ''))
 const newLink = computed(() => ({ path: '/events/new', query: activeTag.value ? { tag: activeTag.value } : {} }))
@@ -217,6 +291,30 @@ onMounted(async () => {
 
 .event-row:hover {
   transform: translateY(-1px);
+}
+
+.event-row.is-picking {
+  cursor: pointer;
+  user-select: none;
+}
+
+.event-row.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.row-check {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  pointer-events: none;
+}
+
+.header-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
 }
 
 .date-block {

@@ -8,7 +8,7 @@
 //  - nodes are never closer than `minGapPx`, so same-year events stay
 //    separate dots (this is the only place proportionality gives way);
 //  - a gap longer than `collapseYears` is not drawn to scale. It becomes a
-//    fixed-length coil with a "≈ N years" caption, so a century of nothing
+//    short zigzag break (the "coil") with a "≈ N years" caption, so a century of nothing
 //    doesn't cost pages of scrolling. (collapseYears of 0 turns this off.)
 // U-turns are not counted as time: only straight runs are to scale.
 
@@ -18,8 +18,9 @@ export const DEFAULTS = {
   collapseYears: 25,
   rowHeight: 300, // distance between rows; the U-turn radius is half of it
   pad: 40, // outer margin around the whole drawing
-  coilLoops: 2,
-  coilAdvance: 150, // how far along the line a coil carries you
+  coilLoops: 2, // up-and-down strokes in a coil
+  coilAdvance: 48, // how far along the line a coil carries you
+  coilAmplitude: 28, // height of the tallest spike above the line
   coilLeadPx: 80, // straight line kept on each side of a coil
   topPad: 170, // first row's distance from the top (room for labels above)
   bottomPad: 190,
@@ -43,21 +44,26 @@ export function minimumWidth(opts = {}) {
   return 2 * (o.pad + o.rowHeight / 2) + 320
 }
 
-// A coil: a line that loops back over itself `loops` times while still
-// carrying you `advance` px forward. A prolate cycloid, phased so it
-// enters and leaves tangent to the line (no kink where it joins).
-export function coilPoints(x0, y0, dir, advance, loops, samplesPerLoop = 28) {
-  const a = advance / (2 * Math.PI * loops)
-  const b = 1.7 * a // b > a is what makes it loop
-  const pts = []
-  const n = samplesPerLoop * loops
-  for (let i = 1; i <= n; i++) {
-    const t = Math.PI + (2 * Math.PI * loops * i) / n
-    const x = x0 + dir * (a * (t - Math.PI) - b * Math.sin(t))
-    const y = y0 - b * (1 + Math.cos(t))
-    pts.push([x, y])
+// A coil: a tight zigzag, like the break mark on a chart axis, that
+// carries you `advance` px forward. `loops` up-and-down strokes, each a
+// little smaller than the one before, then back onto the line. Returns the
+// corner points (the last one is back on the line), how far it rises
+// above the line (height) and how far it dips below it (depth).
+export function coilPoints(x0, y0, dir, advance, loops, amplitude = DEFAULTS.coilAmplitude) {
+  const peaks = []
+  for (let i = 0; i < loops; i++) {
+    const fade = 1 - (0.2 * i) / Math.max(1, loops - 1)
+    peaks.push(amplitude * fade, -0.7 * amplitude * fade)
   }
-  return { points: pts, height: 2 * b }
+  // Corners are evenly spaced; the climb in and the drop out are a half step.
+  const step = advance / peaks.length
+  const pts = peaks.map((h, i) => [x0 + dir * step * (i + 0.5), y0 - h])
+  pts.push([x0 + dir * advance, y0])
+  return {
+    points: pts,
+    height: Math.max(...peaks),
+    depth: -Math.min(...peaks),
+  }
 }
 
 export function layoutTimeline(nodes, yearDays, width, userOpts = {}) {
@@ -116,7 +122,7 @@ export function layoutTimeline(nodes, yearDays, width, userOpts = {}) {
       }
       turn()
     }
-    const { points, height } = coilPoints(x, y, dir, o.coilAdvance, o.coilLoops)
+    const { points, height, depth } = coilPoints(x, y, dir, o.coilAdvance, o.coilLoops, o.coilAmplitude)
     for (const [px, py] of points) d.push(`L ${f(px)} ${f(py)}`)
     const startX = x
     x += dir * o.coilAdvance
@@ -127,6 +133,7 @@ export function layoutTimeline(nodes, yearDays, width, userOpts = {}) {
       dir,
       years,
       height,
+      depth,
     })
     advance(o.coilLeadPx)
   }

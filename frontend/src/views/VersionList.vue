@@ -7,7 +7,12 @@
         <h1>{{ $t('Versions') }}</h1>
         <p class="page-sub">{{ $t('Pick one to edit, or start a new one from the current version.') }}</p>
       </div>
-      <button class="btn btn-primary" @click="newOpen = true">{{ $t('New version') }}</button>
+      <div class="header-actions">
+        <RouterLink v-if="versions.length > 1" :to="`/characters/${id}/compare`" class="btn btn-ghost">
+          {{ $t('Compare versions') }}
+        </RouterLink>
+        <button class="btn btn-primary" @click="newOpen = true">{{ $t('New version') }}</button>
+      </div>
     </header>
 
     <p v-if="loadError" class="error-banner">{{ loadError }}</p>
@@ -31,6 +36,14 @@
           </span>
         </RouterLink>
         <div class="version-actions">
+          <RouterLink
+            v-if="!v.is_current && currentVersion"
+            :to="{ path: `/characters/${id}/compare`, query: { a: v.id, b: currentVersion.id } }"
+            class="btn btn-ghost small"
+            :title="$t('Compare with the current version')"
+          >
+            {{ $t('Compare') }}
+          </RouterLink>
           <button v-if="!v.is_current" class="btn btn-ghost small" @click="handleSetCurrent(v.id)">
             {{ $t('Set current') }}
           </button>
@@ -65,7 +78,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { t } from '../i18n'
 import { fetchVersions, deleteVersion, setCurrentVersion } from '../api'
 import NewVersionModal from '../components/NewVersionModal.vue'
@@ -79,6 +92,7 @@ const loading = ref(true)
 const loadError = ref('')
 const newOpen = ref(false)
 const confirmTarget = ref(null)
+const currentVersion = computed(() => versions.value.find((v) => v.is_current) || null)
 
 async function load() {
   loading.value = true
@@ -121,6 +135,12 @@ onMounted(load)
 </script>
 
 <style scoped>
+.header-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
 .versions {
   list-style: none;
   margin: 0;

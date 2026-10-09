@@ -57,3 +57,14 @@ export function hexLine(a, b) {
   }
   return hexes
 }
+
+// Every hex within `radius` steps of the center (radius 0 is just the center).
+export function hexesWithin(center, radius) {
+  const out = []
+  for (let dq = -radius; dq <= radius; dq++) {
+    for (let dr = Math.max(-radius, -dq - radius); dr <= Math.min(radius, -dq + radius); dr++) {
+      out.push({ q: center.q + dq, r: center.r + dr })
+    }
+  }
+  return out
+}

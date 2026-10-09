@@ -1,4 +1,4 @@
-import { layoutTimeline, autoPxPerYear, minimumWidth, estimateLabelWidth, LANES, DEFAULTS } from '../src/timelineLayout.js'
+import { layoutTimeline, coilPoints, autoPxPerYear, minimumWidth, estimateLabelWidth, LANES, DEFAULTS } from '../src/timelineLayout.js'
 let failed = 0
 const ok = (c, m) => { if (!c) failed++; console.log((c ? 'PASS ' : 'FAIL ') + m) }
 const YD = 360
@@ -65,7 +65,8 @@ const W = 1000
   for (let w = 700; w <= 1600; w += 50) {
     const nodes = [node(1000), node(1003), node(1090), node(1093), node(1200), node(1204), node(1320)]
     const L = layoutTimeline(nodes, YD, w, { pxPerYear: 50 })
-    for (const c of L.coils) if (c.x - 75 < L.xmin - 0.5 || c.x + 75 > L.xmax + 0.5) bad++
+    const half = L.opts.coilAdvance / 2
+    for (const c of L.coils) if (c.x - half < L.xmin - 0.5 || c.x + half > L.xmax + 0.5) bad++
     const xs = L.pathD.match(/L ([\d.-]+) /g).map((m) => parseFloat(m.slice(2)))
     if (xs.some((v) => v < L.xmin - L.opts.coilAdvance || v > L.xmax + L.opts.coilAdvance)) bad++
   }
@@ -87,5 +88,18 @@ const W = 1000
   const t = (y) => (y - 1) * 400
   const L = layoutTimeline([{ name: 'a', t: t(1000) }, { name: 'b', t: t(1002) }], 400, 1400, { pxPerYear: 60, collapseYears: 0 })
   ok(Math.abs((L.nodes[1].x - L.nodes[0].x) - 120) < 0.01, 'spacing uses the calendar year length')
+}
+// 10. a coil is a zigzag break: spikes alternate above and below the line,
+//     shrink as they go and land back on the line `advance` px on
+{
+  for (const dir of [1, -1]) {
+    const { points, height, depth } = coilPoints(500, 200, dir, 64, 2, 26)
+    const ys = points.slice(0, -1).map(([, y]) => 200 - y)
+    ok(ys.every((h, i) => (i % 2 === 0 ? h > 0 : h < 0)), `spikes alternate (dir ${dir}): ${ys.map((h) => h.toFixed(1))}`)
+    ok(ys[2] < ys[0] && ys[3] > ys[1], `later spikes are smaller (dir ${dir})`)
+    const [lx, ly] = points[points.length - 1]
+    ok(lx === 500 + dir * 64 && ly === 200, `ends back on the line (dir ${dir})`)
+    ok(height === 26 && depth > 0 && depth < height, `height ${height}, depth ${depth}`)
+  }
 }
 process.exit(failed ? 1 : 0)
