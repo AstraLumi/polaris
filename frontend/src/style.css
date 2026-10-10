@@ -685,6 +685,7 @@ input[type='radio'] {
   .rail,
   .back-link,
   .btn,
+  .no-print,
   .tab-bar,
   .identity-actions,
   .overlay {

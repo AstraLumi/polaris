@@ -14,20 +14,21 @@ import (
 )
 
 type characterSummary struct {
-	ID           int64  `json:"id"`
-	VersionID    int64  `json:"version_id"`
-	Name         string `json:"name"`
-	Nickname     string `json:"nickname"`
-	Level        int    `json:"level"`
-	ClassName    string `json:"class_name"`
-	ClassIcon    string `json:"class_icon"`
-	SubclassName string `json:"subclass_name"`
-	RaceName     string `json:"race_name"`
-	PicturePath  string `json:"picture_path"`
-	UpdatedAt    string `json:"updated_at"`
-	Status       string `json:"status"`
-	HP           int    `json:"hp"`
-	MP           int    `json:"mp"`
+	ID           int64   `json:"id"`
+	VersionID    int64   `json:"version_id"`
+	Name         string  `json:"name"`
+	Nickname     string  `json:"nickname"`
+	Level        int     `json:"level"`
+	ClassName    string  `json:"class_name"`
+	ClassIcon    string  `json:"class_icon"`
+	SubclassName string  `json:"subclass_name"`
+	RaceName     string  `json:"race_name"`
+	PicturePath  string  `json:"picture_path"`
+	UpdatedAt    string  `json:"updated_at"`
+	Status       string  `json:"status"`
+	FactionIDs   []int64 `json:"faction_ids"`
+	HP           int     `json:"hp"`
+	MP           int     `json:"mp"`
 }
 
 // listCharactersHandler powers the grid. HP/MP shown here go through the
@@ -79,13 +80,26 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 		}
 		rows.Close()
 
+		// Faction memberships (current and former), for the Characters filter.
+		factionsOf := map[int64][]int64{}
+		if fr, err := db.Query(`SELECT character_id, faction_id FROM faction_members`); err == nil {
+			for fr.Next() {
+				var c, f int64
+				if fr.Scan(&c, &f) == nil {
+					factionsOf[c] = append(factionsOf[c], f)
+				}
+			}
+			fr.Close()
+		}
+
 		results := []characterSummary{}
 		for _, rr := range raw {
 			c := characterSummary{
 				ID: rr.characterID, VersionID: rr.versionID, Name: rr.name, Nickname: rr.nickname,
 				Level: rr.level, ClassName: rr.className, SubclassName: rr.subclassName,
 				RaceName: rr.raceName, UpdatedAt: rr.updatedAt, Status: rr.status,
-				ClassIcon: uploadURL(rr.classIcon),
+				FactionIDs: append([]int64{}, factionsOf[rr.characterID]...),
+				ClassIcon:  uploadURL(rr.classIcon),
 			}
 			if rr.pic != "" {
 				c.PicturePath = "/uploads/" + rr.pic

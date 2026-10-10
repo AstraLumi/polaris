@@ -38,6 +38,7 @@ type eventDetail struct {
 	EventDate    string        `json:"event_date"`
 	LocationID   *int64        `json:"location_id"`
 	LocationName string        `json:"location_name"`
+	ChapterID    *int64        `json:"chapter_id"`
 	PicturePath  string        `json:"picture_path"`
 	Tags         []string      `json:"tags"`
 	People       []eventPerson `json:"people"`
@@ -51,6 +52,7 @@ type eventSummary struct {
 	Name         string   `json:"name"`
 	EventDate    string   `json:"event_date"`
 	LocationName string   `json:"location_name"`
+	ChapterID    *int64   `json:"chapter_id"`
 	PicturePath  string   `json:"picture_path"`
 	Tags         []string `json:"tags"`
 	PeopleCount  int      `json:"people_count"`
@@ -178,7 +180,7 @@ func loadEventPeople(db *sql.DB, eventID int64) []eventPerson {
 const eventSelect = `
 	SELECT e.id, e.name, COALESCE(e.description, ''), COALESCE(e.event_date, ''),
 	       e.location_id, COALESCE(l.name, ''), COALESCE(e.picture_path, ''),
-	       COALESCE(e.source_type, ''), COALESCE(e.source_id, 0), e.created_at, e.updated_at
+	       COALESCE(e.source_type, ''), COALESCE(e.source_id, 0), e.created_at, e.updated_at, e.chapter_id
 	FROM events e
 	LEFT JOIN locations l ON l.id = e.location_id
 `
@@ -191,12 +193,15 @@ type eventRow struct {
 
 func scanEventRow(s rowScanner) (eventRow, error) {
 	var r eventRow
-	var loc sql.NullInt64
+	var loc, chapter sql.NullInt64
 	if err := s.Scan(
 		&r.d.ID, &r.d.Name, &r.d.Description, &r.d.EventDate, &loc, &r.d.LocationName,
-		&r.d.PicturePath, &r.sourceType, &r.sourceID, &r.d.CreatedAt, &r.d.UpdatedAt,
+		&r.d.PicturePath, &r.sourceType, &r.sourceID, &r.d.CreatedAt, &r.d.UpdatedAt, &chapter,
 	); err != nil {
 		return r, err
+	}
+	if chapter.Valid {
+		r.d.ChapterID = &chapter.Int64
 	}
 	if loc.Valid {
 		v := loc.Int64
@@ -287,6 +292,10 @@ func listEventsHandler(db *sql.DB) http.HandlerFunc {
 			query += ` AND e.location_id = ?`
 			args = append(args, lid)
 		}
+		if ch := strings.TrimSpace(r.URL.Query().Get("chapter_id")); ch != "" {
+			query += ` AND e.chapter_id = ?`
+			args = append(args, ch)
+		}
 
 		rows, err := db.Query(query, args...)
 		if err != nil {
@@ -335,7 +344,7 @@ func listEventsHandler(db *sql.DB) http.HandlerFunc {
 			people := loadEventPeople(db, er.d.ID)
 			out = append(out, eventSummary{
 				ID: er.d.ID, Name: er.d.Name, EventDate: er.d.EventDate,
-				LocationName: er.d.LocationName, PicturePath: er.d.PicturePath,
+				LocationName: er.d.LocationName, ChapterID: er.d.ChapterID, PicturePath: er.d.PicturePath,
 				Tags: loadEventTags(db, er.d.ID), PeopleCount: len(people), SourceType: er.sourceType,
 			})
 		}
@@ -403,6 +412,7 @@ type eventForm struct {
 	Description  string
 	EventDate    string
 	LocationID   sql.NullInt64
+	ChapterID    sql.NullInt64
 	Tags         []string
 	CharacterIDs []int64
 	HasTags      bool
@@ -418,6 +428,7 @@ func parseEventForm(db *sql.DB, r *http.Request) (eventForm, string) {
 	f.Description = strings.TrimSpace(r.FormValue("description"))
 	f.EventDate = normalizeStoryDate(r.FormValue("event_date"))
 	f.LocationID = parseLocationID(db, r.FormValue("location_id"), false)
+	f.ChapterID = validChapter(db, r.FormValue("chapter_id"))
 
 	if raw := r.Form["tags"]; len(raw) > 0 {
 		var tags []string
@@ -535,8 +546,8 @@ func createEventHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			return
 		}
 		res, err := tx.Exec(
-			`INSERT INTO events (name, description, event_date, location_id) VALUES (?, ?, ?, ?)`,
-			f.Name, nullableString(f.Description), f.EventDate, f.LocationID,
+			`INSERT INTO events (name, description, event_date, location_id, chapter_id) VALUES (?, ?, ?, ?, ?)`,
+			f.Name, nullableString(f.Description), f.EventDate, f.LocationID, f.ChapterID,
 		)
 		if err != nil {
 			tx.Rollback()
@@ -619,13 +630,13 @@ func updateEventHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 		// details are written; a free-standing event takes everything.
 		if linked {
 			_, err = tx.Exec(
-				`UPDATE events SET description = ?, location_id = ?, updated_at = datetime('now') WHERE id = ?`,
-				nullableString(f.Description), f.LocationID, id,
+				`UPDATE events SET description = ?, location_id = ?, chapter_id = ?, updated_at = datetime('now') WHERE id = ?`,
+				nullableString(f.Description), f.LocationID, f.ChapterID, id,
 			)
 		} else {
 			_, err = tx.Exec(
-				`UPDATE events SET name = ?, description = ?, event_date = ?, location_id = ?, updated_at = datetime('now') WHERE id = ?`,
-				f.Name, nullableString(f.Description), f.EventDate, f.LocationID, id,
+				`UPDATE events SET name = ?, description = ?, event_date = ?, location_id = ?, chapter_id = ?, updated_at = datetime('now') WHERE id = ?`,
+				f.Name, nullableString(f.Description), f.EventDate, f.LocationID, f.ChapterID, id,
 			)
 		}
 		if err != nil {

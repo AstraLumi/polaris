@@ -15,25 +15,36 @@ has its own SQLite database, so it runs comfortably on a small home server.
 
 ## Features
 
-- **Characters**: version history, automatically computed stats, a
-  paper-doll gear tab and a spell list.
+- **Characters**: version history (compare any two versions side by side),
+  alive / missing / dead status, automatically computed stats, a paper-doll
+  gear tab, a spell list and a printable sheet.
+- **Relations and factions**: who is whose parent, mentor, rival and so on,
+  read correctly from both sides, with optional dates. Factions (guilds,
+  orders, houses) can sit inside one another, have a headquarters on the map
+  and members with ranks.
 - **Character Assets**: classes, subclasses, specializations, races, body
   types, gear and spells, each of which can grant stat bonuses.
-- **Map**: a paintable hex map with major locations you can inspect.
-- **Wiki**: every character, location, event, class, race, spell and piece
-  of gear automatically gets an article, so there are no pages to create. Its
+- **Map**: a paintable hex map with major locations you can inspect, brush
+  sizes, and undo.
+- **Wiki**: every character, location, faction, event, class, race, spell and
+  piece of gear automatically gets an article, so there are no pages to create. Its
   infobox and related lists are read live from the rest of your story, and you
   add the lore on top: markdown boxes (history, personality, geography and so
   on), your own sections and infobox rows, `[[links]]` between articles and a
   "What links here" list. Delete something and its article goes with it.
 - **Calendar, events and timeline**: define your own calendar (months per year,
   days per month), link events with tags, and view them on a timeline drawn to
-  scale.
+  scale, filtered by person or place.
+- **Chapters**: chapters grouped into volumes, each with your notes and the
+  events and character changes that happen in it.
+- **Search**: Ctrl+K finds any character, place, faction, event, asset or
+  chapter.
 - **Multiple stories**: each story is fully separate and can be exported to
-  and imported from a `.zip` file.
+  and imported from a `.zip` file. The story list shows when each was last
+  exported.
 - **Languages**: English, Português (Brasil), Español (España) and Español
   (Latinoamérica). Only the interface is translated, never your own content.
-- **Themes**: five colour themes, chosen per device.
+- **Themes**: five colour themes, chosen per device. Works on phones too.
 
 ## Screenshots
 

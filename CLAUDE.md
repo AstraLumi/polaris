@@ -21,7 +21,12 @@ Run all of these before committing. `backend/static/` is build output (only
 - **Database changes are forward-only migrations** in `backend/db.go`
   (`currentSchemaVersion`, `ensureSchema`, `canMigrate`). Never edit an old
   migration. Add a new one, add it to the fresh-schema path, and add a test
-  (see `TestMigrationAddsGearTables`). Bump the version.
+  (see `TestMigrationAddsGearTables`). Bump the version. Tests that roll a
+  fresh database back to an older schema undo the newest one first with
+  `rollBackSchema16` (`backend/schema16_test.go`); a new schema needs its own
+  undo step there, or those tests fail with "duplicate column". A new wiki
+  article kind gets its delete trigger in its own migration
+  (`wikiTriggerSQL`); the schema-13 migration's list is frozen.
 - **Every new table must be classified** in `backend/storyassets.go`: either
   `assetTables` (copied with "copy Character Assets") or `storyOnlyTables`.
   `TestEveryTableIsClassified` fails until you do. List image/icon columns in

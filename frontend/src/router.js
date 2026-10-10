@@ -15,6 +15,9 @@ import TimelineView from './views/TimelineView.vue'
 import WikiHome from './views/WikiHome.vue'
 import WikiArticle from './views/WikiArticle.vue'
 import StoryPicker from './views/StoryPicker.vue'
+import Factions from './views/Factions.vue'
+import Chapters from './views/Chapters.vue'
+import ChapterView from './views/ChapterView.vue'
 import { activeStoryId, forgetStory, loadStories, stories } from './stories'
 import { tr } from './i18n'
 import { pageTitle } from './navigation'
@@ -49,6 +52,9 @@ const routes = [
   { path: '/events/new', name: 'event-new', component: EventEdit, meta: { title: tr('New event') } },
   { path: '/events/:id', name: 'event-view', component: EventView, meta: { title: tr('Events') }, props: true },
   { path: '/events/:id/edit', name: 'event-edit', component: EventEdit, meta: { title: tr('Edit event') }, props: true },
+  { path: '/factions', name: 'factions', component: Factions, meta: { title: tr('Factions') } },
+  { path: '/chapters', name: 'chapters', component: Chapters, meta: { title: tr('Chapters') } },
+  { path: '/chapters/:id', name: 'chapter', component: ChapterView, meta: { title: tr('Chapters') }, props: true },
   { path: '/wiki', name: 'wiki', component: WikiHome, meta: { title: tr('Wiki') } },
   { path: '/wiki/:type/:id', name: 'wiki-article', component: WikiArticle, meta: { title: tr('Wiki') }, props: true },
 ]

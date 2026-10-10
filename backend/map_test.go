@@ -69,6 +69,7 @@ func TestMigrationAddsSettlementColumns(t *testing.T) {
 	id := createStoryDirect(t, mgr, "Old")
 	app, _ := mgr.open(id)
 	app.db.Exec(`INSERT INTO locations (name, kind) VALUES ('Greyhold', 'minor')`)
+	rollBackSchema16(t, app.db)
 	for _, q := range []string{
 		`ALTER TABLE locations DROP COLUMN is_city`,
 		`ALTER TABLE locations DROP COLUMN is_capital`,

@@ -56,7 +56,7 @@ export async function fetchVersions(characterId) {
   return res.json()
 }
 
-export async function createVersion(characterId, { versionDate, versionReference, cloneFromVersionId }) {
+export async function createVersion(characterId, { versionDate, versionReference, cloneFromVersionId, chapterId }) {
   const res = await fetch(`${BASE}/characters/${characterId}/versions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -64,6 +64,7 @@ export async function createVersion(characterId, { versionDate, versionReference
       version_date: versionDate || '',
       version_reference: versionReference || '',
       clone_from_version_id: cloneFromVersionId ?? null,
+      chapter_id: chapterId ?? null,
     }),
   })
   if (!res.ok) throw apiError('failed to create version')
@@ -405,7 +406,7 @@ export function buildVersionFormData(form, specialBases, pictureFile, spellIds, 
     'version_date', 'version_reference', 'name', 'nickname', 'level',
     'class', 'subclass', 'specialization',
     'gender', 'race', 'height', 'weight', 'body_type', 'age', 'human_birth_date',
-    'blood_type', 'born_in', 'nation', 'born_in_location_id', 'nation_location_id', 'birth_date', 'deaths',
+    'blood_type', 'born_in', 'nation', 'born_in_location_id', 'nation_location_id', 'birth_date', 'deaths', 'chapter_id',
     'description', 'bio', 'speech_mannerisms', 'status',
     'vit', 'def', 'res', 'str', 'dex', 'intel', 'wis', 'agl',
   ]
@@ -467,8 +468,9 @@ async function eventRequest(path, options, fallback) {
 
 // Builds the multipart body shared by create and update. tags and
 // characterIds are sent as JSON arrays; picture is a File or null.
-export function buildEventFormData({ name, description, eventDate, locationId, tags, characterIds }, pictureFile, removePicture) {
+export function buildEventFormData({ name, description, eventDate, locationId, chapterId, tags, characterIds }, pictureFile, removePicture) {
   const fd = new FormData()
+  fd.append('chapter_id', chapterId ?? '')
   fd.append('name', name ?? '')
   fd.append('description', description ?? '')
   fd.append('event_date', eventDate ?? '')
@@ -485,6 +487,7 @@ export const eventsApi = {
   list: (filters = {}) => {
     const p = new URLSearchParams()
     if (filters.tag) p.set('tag', filters.tag)
+    if (filters.chapterId) p.set('chapter_id', filters.chapterId)
     if (filters.q) p.set('q', filters.q)
     if (filters.characterId) p.set('character_id', filters.characterId)
     if (filters.locationId) p.set('location_id', filters.locationId)
@@ -516,4 +519,56 @@ export async function fetchCharacterOptions() {
   const res = await fetch(`${BASE}/character-options`)
   if (!res.ok) return []
   return res.json()
+}
+
+// ---- Relations, factions, chapters ---------------------------------------------
+
+// Messages these endpoints can send back (backend relations.go, factions.go,
+// chapters.go); listed so they get translated.
+void [
+  tr("a character can't be related to themselves"), tr('pick two characters'),
+  tr('a custom relation needs its wording'), tr('that wording is too long'), tr('unknown kind of relation'),
+  tr('dates must look like DD-MM-YYYY (or just a year)'), tr('the end date is before the start date'),
+  tr('failed to save the relation'), tr('failed to delete the relation'), tr('relation not found'),
+  tr('name is required'), tr('a faction with that name already exists'), tr('invalid color'),
+  tr("a faction can't sit inside itself"), tr('invalid member list'), tr('too many members'),
+  tr('failed to save the faction'), tr('failed to delete the faction'), tr('faction not found'),
+  tr('failed to load factions'), tr('a title is required'), tr('that text is too long'),
+  tr('failed to save the chapter'), tr('failed to delete the chapter'), tr('chapter not found'),
+  tr('failed to load chapters'), tr('failed to save the volume'), tr('failed to delete the volume'),
+  tr('volume not found'), tr('failed to save the order'), tr('invalid request'), tr('failed to load relations'),
+]
+
+const request = eventRequest
+
+export const fetchConnections = (characterId) =>
+  request(`/characters/${characterId}/connections`, undefined, 'failed to load relations')
+
+export const relationsApi = {
+  create: (payload) => request('/relations', jsonBody('POST', payload), 'failed to save the relation'),
+  update: (id, payload) => request(`/relations/${id}`, jsonBody('PUT', payload), 'failed to save the relation'),
+  remove: (id) => request(`/relations/${id}`, { method: 'DELETE' }, 'failed to delete the relation'),
+}
+
+export const factionsApi = {
+  list: () => request('/factions', undefined, 'failed to load factions'),
+  get: (id) => request(`/factions/${id}`, undefined, 'faction not found'),
+  // formData: name, description, color, hq_location_id, parent_id,
+  // founding_date, members (JSON), and optionally picture / remove_picture.
+  save: (id, formData) =>
+    request(id ? `/factions/${id}` : '/factions', { method: id ? 'PUT' : 'POST', body: formData }, 'failed to save the faction'),
+  remove: (id) => request(`/factions/${id}`, { method: 'DELETE' }, 'failed to delete the faction'),
+}
+
+export const chaptersApi = {
+  list: () => request('/chapters', undefined, 'failed to load chapters'),
+  get: (id) => request(`/chapters/${id}`, undefined, 'chapter not found'),
+  create: (payload) => request('/chapters', jsonBody('POST', payload), 'failed to save the chapter'),
+  update: (id, payload) => request(`/chapters/${id}`, jsonBody('PUT', payload), 'failed to save the chapter'),
+  remove: (id) => request(`/chapters/${id}`, { method: 'DELETE' }, 'failed to delete the chapter'),
+  // { volumes: [ids], chapters: [{ id, volume_id }] }, both in reading order
+  reorder: (order) => request('/chapters/order', jsonBody('PUT', order), 'failed to save the order'),
+  createVolume: (title) => request('/volumes', jsonBody('POST', { title }), 'failed to save the volume'),
+  renameVolume: (id, title) => request(`/volumes/${id}`, jsonBody('PUT', { title }), 'failed to save the volume'),
+  removeVolume: (id) => request(`/volumes/${id}`, { method: 'DELETE' }, 'failed to delete the volume'),
 }

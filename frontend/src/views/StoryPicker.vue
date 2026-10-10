@@ -27,6 +27,9 @@
                 <span v-if="s.id === activeStoryId" class="pill">{{ $t('Current') }}</span>
                 {{ $tn('{n} character', '{n} characters', s.characters) }}
               </span>
+              <span class="card-export" :class="{ 'is-stale': exportStale(s) }">
+                {{ s.last_exported_at ? $t('Last exported {when}', { when: timeAgo(s.last_exported_at) }) : $t('Never exported') }}
+              </span>
             </button>
             <div class="card-actions">
               <button class="btn btn-ghost small" type="button" @click="formStory = s">{{ $t('Edit') }}</button>
@@ -75,6 +78,15 @@ import {
   importStory, storyExportUrl,
 } from '../stories'
 import { t } from '../i18n'
+import { timeAgo } from '../timeAgo'
+
+// An export older than a month (or none at all) is worth a nudge.
+const STALE_DAYS = 30
+function exportStale(s) {
+  if (!s.last_exported_at) return true
+  const ts = new Date(String(s.last_exported_at).replace(' ', 'T') + 'Z').getTime()
+  return Date.now() - ts > STALE_DAYS * 86400000
+}
 
 const error = ref('')
 const notice = ref('')
@@ -247,6 +259,16 @@ async function onImport(e) {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.card-export {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
+/* No export in the last month: a gentle nudge to back up. */
+.card-export.is-stale {
+  color: var(--danger-text);
 }
 
 .pill {

@@ -20,6 +20,7 @@ type versionSummary struct {
 	Level            int    `json:"level"`
 	ClassName        string `json:"class_name"`
 	SubclassName     string `json:"subclass_name"`
+	ChapterID        *int64 `json:"chapter_id"`
 	CreatedAt        string `json:"created_at"`
 }
 
@@ -54,6 +55,7 @@ type versionDetail struct {
 	IsCurrent          bool                  `json:"is_current"`
 	VersionDate        string                `json:"version_date"`
 	VersionReference   string                `json:"version_reference"`
+	ChapterID          *int64                `json:"chapter_id"`
 	Name               string                `json:"name"`
 	Nickname           string                `json:"nickname"`
 	Level              int                   `json:"level"`
@@ -81,7 +83,7 @@ func listVersionsHandler(db *sql.DB) http.HandlerFunc {
 			SELECT
 				v.id, v.is_current, COALESCE(v.version_date, ''), COALESCE(v.version_reference, ''),
 				v.name, COALESCE(v.nickname, ''), v.level,
-				COALESCE(cl.name, ''), COALESCE(sc.name, ''), v.created_at
+				COALESCE(cl.name, ''), COALESCE(sc.name, ''), v.created_at, v.chapter_id
 			FROM character_versions v
 			LEFT JOIN classes cl ON cl.id = v.class_id
 			LEFT JOIN subclasses sc ON sc.id = v.subclass_id
@@ -104,13 +106,17 @@ func listVersionsHandler(db *sql.DB) http.HandlerFunc {
 		results := []versionSummary{}
 		for rows.Next() {
 			var v versionSummary
+			var chapter sql.NullInt64
 			if err := rows.Scan(
 				&v.ID, &v.IsCurrent, &v.VersionDate, &v.VersionReference,
-				&v.Name, &v.Nickname, &v.Level, &v.ClassName, &v.SubclassName, &v.CreatedAt,
+				&v.Name, &v.Nickname, &v.Level, &v.ClassName, &v.SubclassName, &v.CreatedAt, &chapter,
 			); err != nil {
 				http.Error(w, "failed to read versions", http.StatusInternalServerError)
 				log.Printf("listVersions scan: %v", err)
 				return
+			}
+			if chapter.Valid {
+				v.ChapterID = &chapter.Int64
 			}
 			results = append(results, v)
 		}
@@ -132,6 +138,7 @@ func createVersionHandler(db *sql.DB) http.HandlerFunc {
 			VersionDate      string `json:"version_date"`
 			VersionReference string `json:"version_reference"`
 			CloneFromID      *int64 `json:"clone_from_version_id"`
+			ChapterID        *int64 `json:"chapter_id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -165,11 +172,12 @@ func createVersionHandler(db *sql.DB) http.HandlerFunc {
 
 		res, err := tx.Exec(`
 			INSERT INTO character_versions
-				(character_id, is_current, version_date, version_reference,
+				(character_id, is_current, version_date, version_reference, chapter_id,
 				 name, nickname, level, class_id, subclass_id, specialization_id, picture_path)
-			SELECT character_id, 0, ?, ?, name, nickname, level, class_id, subclass_id, specialization_id, NULL
+			SELECT character_id, 0, ?, ?, ?, name, nickname, level, class_id, subclass_id, specialization_id, NULL
 			FROM character_versions WHERE id = ?
-		`, nullableString(normalizeStoryDate(payload.VersionDate)), nullableString(strings.TrimSpace(payload.VersionReference)), sourceID)
+		`, nullableString(normalizeStoryDate(payload.VersionDate)), nullableString(strings.TrimSpace(payload.VersionReference)),
+			validChapter(db, chapterParam(payload.ChapterID)), sourceID)
 		if err != nil {
 			tx.Rollback()
 			http.Error(w, "failed to create version", http.StatusInternalServerError)
@@ -250,7 +258,7 @@ func createVersionHandler(db *sql.DB) http.HandlerFunc {
 // stat breakdown.
 func buildVersionDetail(db *sql.DB, versionID string) (*versionDetail, error) {
 	var d versionDetail
-	var classID, subclassID, specializationID, raceID, bodyTypeID sql.NullInt64
+	var classID, subclassID, specializationID, raceID, bodyTypeID, chapterID sql.NullInt64
 	var height, weight, age sql.NullFloat64
 	var bornInLoc, nationLoc sql.NullInt64
 
@@ -268,7 +276,7 @@ func buildVersionDetail(db *sql.DB, versionID string) (*versionDetail, error) {
 			COALESCE(st.born_in, ''), COALESCE(st.nation, ''), COALESCE(st.birth_date, ''),
 			st.born_in_location_id, COALESCE(bl.name, ''), st.nation_location_id, COALESCE(nl.name, ''),
 			COALESCE(st.deaths, 0), COALESCE(st.description, ''), COALESCE(st.bio, ''),
-			COALESCE(st.speech_mannerisms, ''), COALESCE(st.status, 'alive'), st.race_id, st.body_type_id,
+			COALESCE(st.speech_mannerisms, ''), COALESCE(st.status, 'alive'), st.race_id, st.body_type_id, v.chapter_id,
 			COALESCE(b.vit, 0), COALESCE(b.def, 0), COALESCE(b.res, 0), COALESCE(b.str, 0),
 			COALESCE(b.dex, 0), COALESCE(b.intel, 0), COALESCE(b.wis, 0), COALESCE(b.agl, 0)
 		FROM character_versions v
@@ -293,7 +301,7 @@ func buildVersionDetail(db *sql.DB, versionID string) (*versionDetail, error) {
 		&d.Story.BirthDate,
 		&bornInLoc, &d.Story.BornInName, &nationLoc, &d.Story.NationName,
 		&d.Story.Deaths, &d.Story.Description, &d.Story.Bio,
-		&d.Story.SpeechMannerisms, &d.Story.Status, &raceID, &bodyTypeID,
+		&d.Story.SpeechMannerisms, &d.Story.Status, &raceID, &bodyTypeID, &chapterID,
 		&d.Build.VIT, &d.Build.DEF, &d.Build.RES, &d.Build.STR,
 		&d.Build.DEX, &d.Build.Intel, &d.Build.WIS, &d.Build.AGL,
 	)
@@ -305,6 +313,9 @@ func buildVersionDetail(db *sql.DB, versionID string) (*versionDetail, error) {
 		d.PicturePath = "/uploads/" + d.PicturePath
 	}
 	d.ClassIcon = uploadURL(d.ClassIcon)
+	if chapterID.Valid {
+		d.ChapterID = &chapterID.Int64
+	}
 	if bornInLoc.Valid {
 		d.Story.BornInLocationID = &bornInLoc.Int64
 	}
@@ -538,12 +549,13 @@ func updateVersionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 
 		_, err = tx.Exec(`
 			UPDATE character_versions
-			SET version_date = ?, version_reference = ?, name = ?, nickname = ?, level = ?,
+			SET version_date = ?, version_reference = ?, chapter_id = ?, name = ?, nickname = ?, level = ?,
 				class_id = ?, subclass_id = ?, specialization_id = ?, updated_at = datetime('now')
 			WHERE id = ?
 		`,
 			nullableString(normalizeStoryDate(r.FormValue("version_date"))),
 			nullableString(strings.TrimSpace(r.FormValue("version_reference"))),
+			validChapter(db, r.FormValue("chapter_id")),
 			name, nullableString(strings.TrimSpace(r.FormValue("nickname"))), level,
 			classID, subclassID, specializationID, versionID,
 		)
@@ -799,4 +811,13 @@ func normalizeStatus(s string) string {
 		return s
 	}
 	return "alive"
+}
+
+// chapterParam turns an optional JSON chapter id into the form value
+// validChapter reads.
+func chapterParam(id *int64) string {
+	if id == nil {
+		return ""
+	}
+	return strconv.FormatInt(*id, 10)
 }

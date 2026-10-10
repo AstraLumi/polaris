@@ -57,6 +57,7 @@ import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { t, tr } from '../i18n'
 import { wikiApi, wikiPath, TYPE_LABELS } from '../wiki'
+import { chapterIndex, chapterLabel, loadChapters } from '../chapters'
 import IconImage from './IconImage.vue'
 
 const emit = defineEmits(['close'])
@@ -65,6 +66,8 @@ const router = useRouter()
 const PAGES = [
   { name: tr('Home'), path: '/' },
   { name: tr('Characters'), path: '/characters' },
+  { name: tr('Factions'), path: '/factions' },
+  { name: tr('Chapters'), path: '/chapters' },
   { name: tr('Character Assets'), path: '/assets' },
   { name: tr('Timeline'), path: '/timeline' },
   { name: tr('Map'), path: '/map' },
@@ -104,7 +107,16 @@ const entries = computed(() => {
     path: primaryPath(it.type, it.id),
     wiki: wikiPath(it.type, it.id),
   }))
-  return [...things, ...pages].map((e) => ({ ...e, folded: fold(e.name) }))
+  // Chapters aren't wiki articles; they have their own page.
+  const chapters = chapterIndex.value.chapters.map((c) => ({
+    key: `chapter:${c.id}`,
+    kind: 'item',
+    name: c.title,
+    label: chapterLabel(c.id, { short: true }),
+    picture: '',
+    path: `/chapters/${c.id}`,
+  }))
+  return [...things, ...chapters, ...pages].map((e) => ({ ...e, folded: fold(e.name) }))
 })
 
 // Best first: the name starts with the query, then a word in it does, then
@@ -147,6 +159,7 @@ function choose(r, toWiki) {
 
 onMounted(async () => {
   inputEl.value?.focus()
+  loadChapters()
   try {
     items.value = await wikiApi.list()
   } catch (e) {

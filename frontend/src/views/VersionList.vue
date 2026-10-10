@@ -33,6 +33,7 @@
             <span v-if="v.class_name"> · {{ v.class_name }}</span>
             <span v-if="v.version_date"> · {{ v.version_date }}</span>
             <span v-if="v.version_reference"> · {{ v.version_reference }}</span>
+            <span v-if="v.chapter_id && chapterLabel(v.chapter_id)"> · {{ chapterLabel(v.chapter_id) }}</span>
           </span>
         </RouterLink>
         <div class="version-actions">
@@ -83,9 +84,11 @@ import { t } from '../i18n'
 import { fetchVersions, deleteVersion, setCurrentVersion } from '../api'
 import NewVersionModal from '../components/NewVersionModal.vue'
 import BackLink from '../components/BackLink.vue'
+import { chapterLabel, loadChapters } from '../chapters'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 
 const props = defineProps({ id: { type: String, required: true } })
+loadChapters()
 
 const versions = ref([])
 const loading = ref(true)

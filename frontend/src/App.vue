@@ -115,10 +115,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown, true))
 const navItems = [
   { label: tr('Home'), to: '/' },
   { label: tr('Characters'), to: '/characters' },
+  { label: tr('Factions'), to: '/factions' },
   { label: tr('Character Assets'), to: '/assets' },
   { label: tr('Timeline'), to: '/timeline' },
   { label: tr('Map'), to: '/map' },
   { label: tr('Events'), to: '/events' },
+  { label: tr('Chapters'), to: '/chapters' },
   { label: tr('Wiki'), to: '/wiki' },
   { label: tr('Settings'), to: '/settings' },
 ]

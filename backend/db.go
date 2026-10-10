@@ -12,7 +12,7 @@ import (
 // oldest migration (or a brand new one) gets wiped and recreated from
 // freshSchema — so every schema change from here on should ship with a
 // migration instead of relying on that reset.
-const currentSchemaVersion = "15"
+const currentSchemaVersion = "16"
 
 const freshSchema = `
 CREATE TABLE classes (
@@ -381,8 +381,9 @@ var migrations = map[string]migration{
 	"12": {
 		to: "13",
 		// The wiki's own tables and the triggers that clean them up when a
-		// source (character, location, ...) is deleted.
-		statements: wikiSchemaStatements,
+		// source (character, location, ...) is deleted. Only the article
+		// kinds that existed at schema 13: later ones add their own trigger.
+		statements: wikiSchemaFor(wikiTypesAtSchema13...),
 	},
 	"13": {
 		to: "14",
@@ -400,6 +401,29 @@ var migrations = map[string]migration{
 			`ALTER TABLE character_story ADD COLUMN status TEXT NOT NULL DEFAULT 'alive' CHECK (status IN ('alive', 'missing', 'dead'))`,
 		},
 	},
+	"15": {
+		to: "16",
+		// Relations between characters, factions, and chapters (in volumes)
+		// that events and character versions can point to.
+		statements: append(append([]string{}, worldSchemaStatements...), wikiTriggerSQL("faction")),
+	},
+}
+
+// worldSchemaStatements create what schema 16 added. They run after the
+// fresh schema too, so both paths end up with the same tables.
+var worldSchemaStatements = []string{
+	`ALTER TABLE events ADD COLUMN chapter_id INTEGER`,
+	`ALTER TABLE character_versions ADD COLUMN chapter_id INTEGER`,
+	volumesTableSQL,
+	chaptersTableSQL,
+	chaptersUnlinkTriggerSQL,
+	characterRelationsTableSQL,
+	`CREATE INDEX idx_relations_from ON character_relations(from_id)`,
+	`CREATE INDEX idx_relations_to ON character_relations(to_id)`,
+	factionsTableSQL,
+	factionMembersTableSQL,
+	`CREATE INDEX idx_faction_members_faction ON faction_members(faction_id)`,
+	`CREATE INDEX idx_faction_members_character ON faction_members(character_id)`,
 }
 
 func applyMigration(db *sql.DB, m migration) error {
@@ -427,6 +451,11 @@ func applyMigration(db *sql.DB, m migration) error {
 // tablesInDependencyOrder lists every app-owned table, children before
 // parents, so dropping them in this order never trips a foreign key.
 var tablesInDependencyOrder = []string{
+	"faction_members",
+	"factions",
+	"character_relations",
+	"chapters",
+	"volumes",
 	"wiki_infobox",
 	"wiki_sections",
 	"wiki_entries",
@@ -527,6 +556,11 @@ func ensureSchema(db *sql.DB) error {
 
 	if _, err := db.Exec(freshSchema); err != nil {
 		return fmt.Errorf("create schema: %w", err)
+	}
+	for _, stmt := range worldSchemaStatements {
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("create schema: %w", err)
+		}
 	}
 	for _, stmt := range wikiSchemaStatements {
 		if _, err := db.Exec(stmt); err != nil {

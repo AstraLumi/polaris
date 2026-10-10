@@ -50,6 +50,9 @@
         <button class="tab-button" :class="{ 'is-active': tab === 'spells' }" @click="tab = 'spells'">
           {{ $t('Spells') }}
         </button>
+        <button class="tab-button" :class="{ 'is-active': tab === 'relations' }" @click="tab = 'relations'">
+          {{ $t('Relations') }}
+        </button>
       </div>
 
       <section v-show="tab === 'story'" class="story-tab glass-panel sheet-part">
@@ -96,6 +99,11 @@
         <h2 class="print-only">{{ $t('Spells') }}</h2>
         <SpellsTab :model-value="data.spells || []" />
       </section>
+
+      <section v-show="tab === 'relations'" class="gear-tab-wrap glass-panel sheet-part">
+        <h2 class="print-only">{{ $t('Relations') }}</h2>
+        <RelationsTab :character-id="data.character_id" :character-name="data.name" />
+      </section>
     </template>
   </div>
 </template>
@@ -105,12 +113,13 @@ import IconImage from '../components/IconImage.vue'
 import BackLink from '../components/BackLink.vue'
 import { statusLabel } from '../characterStatus'
 import { pageTitle, viewPicture } from '../navigation'
-import { ref, computed, onMounted, h } from 'vue'
+import { ref, computed, watch, h } from 'vue'
 import { t } from '../i18n'
 import { fetchCurrentVersion } from '../api'
 import BuildStatsPanel from '../components/BuildStatsPanel.vue'
 import GearTab from '../components/GearTab.vue'
 import SpellsTab from '../components/SpellsTab.vue'
+import RelationsTab from '../components/RelationsTab.vue'
 
 const props = defineProps({ id: { type: String, required: true } })
 
@@ -166,7 +175,8 @@ async function load() {
   }
 }
 
-onMounted(load)
+// Reload when a link leads straight to another character (a relation, say).
+watch(() => props.id, load, { immediate: true })
 
 // The browser's print dialog, which can also save a PDF. The print styles
 // (style.css) show every tab at once on a plain light page.

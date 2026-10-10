@@ -75,6 +75,9 @@ type storyInfo struct {
 	Icon       string `json:"icon"` // "", "builtin:<name>" or an /uploads/s/<id>/... URL
 	CreatedAt  string `json:"created_at"`
 	Characters int    `json:"characters"`
+	// LastExportedAt is when the story was last exported (UTC, SQLite
+	// format), or "" if never: the picker nudges toward a fresh backup.
+	LastExportedAt string `json:"last_exported_at"`
 }
 
 func newStoryManager(dataDir, uploadsRoot string) (*storyManager, error) {
@@ -94,6 +97,10 @@ func newStoryManager(dataDir, uploadsRoot string) (*storyManager, error) {
 		created_at TEXT NOT NULL DEFAULT (datetime('now'))
 	)`); err != nil {
 		return nil, fmt.Errorf("create registry: %w", err)
+	}
+	// Registries made before exports were tracked lack the column.
+	if err := addColumnIfMissing(reg, "stories", "last_exported_at", "TEXT"); err != nil {
+		return nil, fmt.Errorf("upgrade registry: %w", err)
 	}
 	return &storyManager{
 		dataDir:     dataDir,
@@ -216,6 +223,7 @@ func iconValue(id, stored string) string {
 
 func (m *storyManager) info(id, name, icon, created string) storyInfo {
 	si := storyInfo{ID: id, Name: name, Icon: iconValue(id, icon), CreatedAt: created}
+	m.reg.QueryRow(`SELECT COALESCE(last_exported_at, '') FROM stories WHERE id = ?`, id).Scan(&si.LastExportedAt)
 	if a, err := m.open(id); err == nil {
 		a.db.QueryRow(`SELECT COUNT(*) FROM characters`).Scan(&si.Characters)
 	}
@@ -564,4 +572,27 @@ func (m *storyManager) uploadsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Security-Policy", "sandbox")
 	http.StripPrefix("/uploads/s/"+id, http.FileServer(http.Dir(m.uploadsFor(id)))).ServeHTTP(w, r)
+}
+
+// addColumnIfMissing adds a column to a registry table that predates it.
+// (Story databases use the migrations in db.go; the registry is just one
+// small table, so it is upgraded in place like this.)
+func addColumnIfMissing(db *sql.DB, table, column, decl string) error {
+	rows, err := db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		if name == column {
+			return nil
+		}
+	}
+	rows.Close()
+	_, err = db.Exec(`ALTER TABLE ` + quoteIdent(table) + ` ADD COLUMN ` + quoteIdent(column) + ` ` + decl)
+	return err
 }

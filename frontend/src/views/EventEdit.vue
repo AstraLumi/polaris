@@ -31,6 +31,8 @@
         :options="locationOptions"
       />
 
+      <ChapterSelect v-model="form.chapterId" :label="$t('Chapter (optional)')" />
+
       <label class="field">
         <span>{{ $t('Description') }}</span>
         <textarea v-model="form.description" rows="6"></textarea>
@@ -79,6 +81,7 @@ import DateField from '../components/DateField.vue'
 import LocationSelect from '../components/LocationSelect.vue'
 import TagInput from '../components/TagInput.vue'
 import PeoplePicker from '../components/PeoplePicker.vue'
+import ChapterSelect from '../components/ChapterSelect.vue'
 import BackLink from '../components/BackLink.vue'
 import { useUnsavedGuard, useSaveShortcut } from '../navigation'
 
@@ -101,6 +104,7 @@ const form = reactive({
   eventDate: '',
   description: '',
   locationId: null,
+  chapterId: null,
   tags: [],
   characterIds: [],
 })
@@ -184,6 +188,7 @@ onMounted(async () => {
     // /events/new?tag=a&tag=b pre-fills tags (used for "new event with these tags").
     const q = route.query.tag
     form.tags = (Array.isArray(q) ? q : q ? [q] : []).filter((t) => typeof t === 'string')
+    if (Number(route.query.chapter)) form.chapterId = Number(route.query.chapter)
     snapshot = formState()
     loading.value = false
     return
@@ -194,6 +199,7 @@ onMounted(async () => {
     form.eventDate = e.event_date
     form.description = e.description
     form.locationId = e.location_id
+    form.chapterId = e.chapter_id ?? null
     form.tags = [...e.tags]
     form.characterIds = e.people.map((p) => p.id)
     existingPicture.value = e.picture_path

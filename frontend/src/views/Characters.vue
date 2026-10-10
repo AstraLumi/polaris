@@ -39,6 +39,10 @@
         <option value="">{{ $t('All races') }}</option>
         <option v-for="r in raceOptions" :key="r" :value="r">{{ r }}</option>
       </select>
+      <select v-if="factionOptions.length" :value="factionFilter" :aria-label="$t('Faction')" @change="setQuery('faction', $event.target.value)">
+        <option value="">{{ $t('Any faction') }}</option>
+        <option v-for="f in factionOptions" :key="f.id" :value="String(f.id)">{{ f.name }}</option>
+      </select>
       <select :value="statusFilter" :aria-label="$t('Status')" @change="setQuery('status', $event.target.value)">
         <option value="">{{ $t('Any status') }}</option>
         <option v-for="s in STATUSES" :key="s.key" :value="s.key">{{ $t(s.label) }}</option>
@@ -92,7 +96,7 @@ import { STATUSES } from '../characterStatus'
 import CharacterCard from '../components/CharacterCard.vue'
 import AddCharacterModal from '../components/AddCharacterModal.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
-import { fetchCharacters, deleteCharacters } from '../api'
+import { fetchCharacters, deleteCharacters, factionsApi } from '../api'
 
 const characters = ref([])
 const loading = ref(true)
@@ -116,8 +120,11 @@ const search = ref(queryText('q'))
 const classFilter = computed(() => queryText('class'))
 const raceFilter = computed(() => queryText('race'))
 const statusFilter = computed(() => queryText('status'))
+const factionFilter = computed(() => queryText('faction'))
+const factionOptions = ref([])
+factionsApi.list().then((list) => (factionOptions.value = list)).catch(() => {})
 const sort = computed(() => (SORTS.some((o) => o.key === queryText('sort')) ? queryText('sort') : 'name'))
-const filtering = computed(() => !!(search.value.trim() || classFilter.value || raceFilter.value || statusFilter.value))
+const filtering = computed(() => !!(search.value.trim() || classFilter.value || raceFilter.value || statusFilter.value || factionFilter.value))
 
 function setQuery(key, value) {
   const query = { ...route.query }
@@ -148,6 +155,7 @@ const shown = computed(() => {
     if (classFilter.value && c.class_name !== classFilter.value) return false
     if (raceFilter.value && c.race_name !== raceFilter.value) return false
     if (statusFilter.value && (c.status || 'alive') !== statusFilter.value) return false
+    if (factionFilter.value && !(c.faction_ids || []).includes(Number(factionFilter.value))) return false
     const text = [c.name, c.nickname, c.class_name, c.subclass_name, c.race_name].join(' ').toLowerCase()
     return words.every((w) => text.includes(w))
   })

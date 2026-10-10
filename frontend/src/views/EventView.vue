@@ -20,6 +20,9 @@
           <p v-if="event.location_id" class="where">
             {{ $t('at') }} <RouterLink to="/map">{{ event.location_name }}</RouterLink>
           </p>
+          <p v-if="event.chapter_id && chapterLabel(event.chapter_id)" class="where">
+            {{ $t('in') }} <RouterLink :to="`/chapters/${event.chapter_id}`">{{ chapterLabel(event.chapter_id) }}</RouterLink>
+          </p>
           <p v-if="event.source" class="linked-note">
             {{ importedParts[0] }}<RouterLink :to="event.source.type === 'character' ? `/characters/${event.source.id}` : '/map'">{{ event.source.type === 'character' ? $t('{name}\'s birth date', { name: event.source.name }) : $t('{name}\'s founding date', { name: event.source.name }) }}</RouterLink>{{ importedParts[1] }}
           </p>
@@ -112,11 +115,13 @@ import { eventsApi } from '../api'
 import { shortDate, fullDate, dateParts } from '../calendar'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import BackLink from '../components/BackLink.vue'
+import { chapterLabel, loadChapters } from '../chapters'
 import { pageTitle, viewPicture } from '../navigation'
 import { t as tt } from '../i18n'
 
 const props = defineProps({ id: { type: String, required: true } })
 const router = useRouter()
+loadChapters()
 
 const event = ref(null)
 const related = ref([])

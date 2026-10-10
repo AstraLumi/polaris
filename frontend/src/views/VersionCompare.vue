@@ -73,9 +73,11 @@ import { fetchVersions, fetchVersion } from '../api'
 import { EQUIP_SLOTS } from '../gear'
 import BackLink from '../components/BackLink.vue'
 import { statusLabel } from '../characterStatus'
+import { chapterLabel, loadChapters } from '../chapters'
 import { pageTitle } from '../navigation'
 
 const props = defineProps({ id: { type: String, required: true } })
+loadChapters()
 const route = useRoute()
 const router = useRouter()
 
@@ -155,6 +157,7 @@ const groups = computed(() => {
         row(t('Specialization'), x.specialization_name, y.specialization_name),
         row(t('Version date'), x.version_date, y.version_date),
         row(t('Reference'), x.version_reference, y.version_reference),
+        row(t('Chapter'), chapterLabel(x.chapter_id), chapterLabel(y.chapter_id)),
       ],
     },
     {

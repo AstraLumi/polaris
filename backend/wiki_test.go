@@ -197,8 +197,10 @@ func TestMigrationAddsWikiTables(t *testing.T) {
 	id := createStoryDirect(t, mgr, "Old")
 	app, _ := mgr.open(id)
 	app.db.Exec(`INSERT INTO classes (name) VALUES ('Keeper')`)
+	rollBackSchema16(t, app.db)
 	drops := []string{`DROP TABLE wiki_infobox`, `DROP TABLE wiki_sections`, `DROP TABLE wiki_entries`}
-	for _, wt := range wikiTypes {
+	for _, key := range wikiTypesAtSchema13 {
+		wt, _ := wikiTypeFor(key)
 		drops = append(drops, `DROP TRIGGER wiki_cleanup_`+wt.Table)
 	}
 	drops = append(drops, `ALTER TABLE locations DROP COLUMN is_city`, `ALTER TABLE locations DROP COLUMN is_capital`)

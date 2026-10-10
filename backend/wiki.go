@@ -51,6 +51,9 @@ var wikiTypes = []wikiTypeDef{
 	{Key: "location", Table: "locations", IDCol: "id",
 		Select: `SELECT id, name, COALESCE(picture_path, '') FROM locations`,
 		Fields: []string{"geography", "history", "culture", "inhabitants", "points_of_interest", "trivia"}},
+	{Key: "faction", Table: "factions", IDCol: "id",
+		Select: `SELECT id, name, COALESCE(picture_path, '') FROM factions`,
+		Fields: []string{"history", "goals", "structure", "notable_members", "trivia"}},
 	// Events that merely carry a character's birth or a location's founding
 	// have no name of their own; that information lives on the character or
 	// location article.
@@ -144,15 +147,36 @@ const wikiInfoboxTableSQL = `CREATE TABLE IF NOT EXISTS wiki_infobox (
 // source table so a deleted source takes its wiki entry with it. Used by both
 // the fresh schema and the migration that introduced the wiki.
 var wikiSchemaStatements = func() []string {
-	stmts := []string{wikiEntriesTableSQL, wikiSectionsTableSQL, wikiInfoboxTableSQL}
+	var keys []string
 	for _, t := range wikiTypes {
-		stmts = append(stmts, fmt.Sprintf(
-			`CREATE TRIGGER IF NOT EXISTS wiki_cleanup_%s AFTER DELETE ON %s BEGIN
-				DELETE FROM wiki_entries WHERE entity_type = '%s' AND entity_id = OLD.id;
-			END`, t.Table, t.Table, t.Key))
+		keys = append(keys, t.Key)
+	}
+	return wikiSchemaFor(keys...)
+}()
+
+// wikiTypesAtSchema13 are the article kinds the wiki started with. The
+// migration that created the wiki makes triggers for exactly these, since
+// later kinds' tables don't exist yet at that point.
+var wikiTypesAtSchema13 = []string{
+	"character", "location", "event", "class", "subclass", "specialization", "race", "body_type", "spell", "gear",
+}
+
+func wikiSchemaFor(keys ...string) []string {
+	stmts := []string{wikiEntriesTableSQL, wikiSectionsTableSQL, wikiInfoboxTableSQL}
+	for _, k := range keys {
+		stmts = append(stmts, wikiTriggerSQL(k))
 	}
 	return stmts
-}()
+}
+
+// wikiTriggerSQL makes a deleted source take its wiki entry with it.
+func wikiTriggerSQL(key string) string {
+	t, _ := wikiTypeFor(key)
+	return fmt.Sprintf(
+		`CREATE TRIGGER IF NOT EXISTS wiki_cleanup_%s AFTER DELETE ON %s BEGIN
+			DELETE FROM wiki_entries WHERE entity_type = '%s' AND entity_id = OLD.id;
+		END`, t.Table, t.Table, t.Key)
+}
 
 // ---- Payloads ----------------------------------------------------------------
 
@@ -160,6 +184,11 @@ type wikiRef struct {
 	Type string `json:"type"`
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
+	// Note is shown after the name in a related list: a member's role, or
+	// how a relation reads ("Child of"). NoteWord marks an English phrase
+	// the frontend translates rather than the user's own text.
+	Note     string `json:"note,omitempty"`
+	NoteWord bool   `json:"note_word,omitempty"`
 }
 
 // wikiFact is one row of the infobox that comes from the source itself. The
@@ -403,6 +432,21 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 		a.addGroup("events", queryRefs(db, "event", `
 			SELECT e.id, e.name FROM events e JOIN event_characters ec ON ec.event_id = e.id
 			WHERE ec.character_id = ? AND e.source_type IS NULL ORDER BY e.name COLLATE NOCASE`, id))
+		var rels []wikiRef
+		for _, r := range relationsOf(db, id) {
+			text, builtin := r.wording(id)
+			other := wikiRef{Type: "character", ID: r.ToID, Name: r.ToName, Note: text, NoteWord: builtin}
+			if r.ToID == id {
+				other.ID, other.Name = r.FromID, r.FromName
+			}
+			rels = append(rels, other)
+		}
+		a.addGroup("relations", rels)
+		var facs []wikiRef
+		for _, m := range membershipsOf(db, id) {
+			facs = append(facs, wikiRef{Type: "faction", ID: m.FactionID, Name: m.Name, Note: m.Role})
+		}
+		a.addGroup("factions", facs)
 
 	case "location":
 		var kind, color, desc, founded string
@@ -442,6 +486,36 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 		a.addGroup("nation_members", queryRefs(db, "character", fmt.Sprintf(wikiMembersSQL, "st.nation_location_id"), id))
 		a.addGroup("spells_from", queryRefs(db, "spell",
 			`SELECT id, name FROM spells WHERE origin_location_id = ? ORDER BY name COLLATE NOCASE`, id))
+		a.addGroup("factions_here", queryRefs(db, "faction",
+			`SELECT id, name FROM factions WHERE hq_location_id = ? ORDER BY name COLLATE NOCASE`, id))
+
+	case "faction":
+		f, err := loadFaction(db, id)
+		if err != nil {
+			log.Printf("wiki faction facts: %v", err)
+			return
+		}
+		if f.ParentID != nil {
+			a.addFact("part_of", "", "", &wikiRef{Type: "faction", ID: *f.ParentID, Name: f.ParentName})
+		}
+		if f.HQLocationID != nil {
+			a.addFact("headquarters", "", "", &wikiRef{Type: "location", ID: *f.HQLocationID, Name: f.HQName})
+		}
+		a.addFact("founded", f.FoundingDate, "date", nil)
+		a.addSheet("description", f.Description)
+		var current, former []wikiRef
+		for _, m := range f.Members {
+			ref := wikiRef{Type: "character", ID: m.CharacterID, Name: m.Name, Note: m.Role}
+			if m.Until != "" {
+				former = append(former, ref)
+			} else {
+				current = append(current, ref)
+			}
+		}
+		a.addGroup("members", current)
+		a.addGroup("former_members", former)
+		a.addGroup("subfactions", queryRefs(db, "faction",
+			`SELECT id, name FROM factions WHERE parent_id = ? ORDER BY name COLLATE NOCASE`, id))
 
 	case "event":
 		var desc, date string

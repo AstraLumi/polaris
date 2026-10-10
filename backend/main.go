@@ -181,6 +181,30 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	mux.HandleFunc("DELETE /api/versions/{id}", deleteVersionHandler(db, uploadsDir))
 	mux.HandleFunc("POST /api/versions/{id}/set-current", setCurrentVersionHandler(db))
 
+	// Relations between characters, and a character's relations + factions.
+	mux.HandleFunc("GET /api/characters/{id}/connections", characterConnectionsHandler(db))
+	mux.HandleFunc("POST /api/relations", createRelationHandler(db))
+	mux.HandleFunc("PUT /api/relations/{id}", updateRelationHandler(db))
+	mux.HandleFunc("DELETE /api/relations/{id}", deleteRelationHandler(db))
+
+	// Factions (with their members in the same request).
+	mux.HandleFunc("GET /api/factions", listFactionsHandler(db))
+	mux.HandleFunc("GET /api/factions/{id}", getFactionHandler(db))
+	mux.HandleFunc("POST /api/factions", saveFactionHandler(db, uploadsDir))
+	mux.HandleFunc("PUT /api/factions/{id}", saveFactionHandler(db, uploadsDir))
+	mux.HandleFunc("DELETE /api/factions/{id}", deleteFactionHandler(db, uploadsDir))
+
+	// Chapters and volumes.
+	mux.HandleFunc("GET /api/chapters", listChaptersHandler(db))
+	mux.HandleFunc("PUT /api/chapters/order", reorderChaptersHandler(db))
+	mux.HandleFunc("GET /api/chapters/{id}", getChapterHandler(db))
+	mux.HandleFunc("POST /api/chapters", createChapterHandler(db))
+	mux.HandleFunc("PUT /api/chapters/{id}", updateChapterHandler(db))
+	mux.HandleFunc("DELETE /api/chapters/{id}", deleteChapterHandler(db))
+	mux.HandleFunc("POST /api/volumes", createVolumeHandler(db))
+	mux.HandleFunc("PUT /api/volumes/{id}", updateVolumeHandler(db))
+	mux.HandleFunc("DELETE /api/volumes/{id}", deleteVolumeHandler(db))
+
 	return mux
 }
 

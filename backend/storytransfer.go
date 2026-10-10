@@ -120,6 +120,13 @@ func (m *storyManager) exportHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		return nil
 	})
+	if err := zw.Close(); err != nil {
+		log.Printf("export %s: %v", id, err)
+		return
+	}
+	if _, err := m.reg.Exec(`UPDATE stories SET last_exported_at = datetime('now') WHERE id = ?`, id); err != nil {
+		log.Printf("export %s: remember export time: %v", id, err)
+	}
 }
 
 func addFileToZip(zw *zip.Writer, name, src string) error {

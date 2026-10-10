@@ -55,6 +55,8 @@ var storyOnlyTables = []string{
 	"app_settings",
 	// The wiki's extra text belongs to the story, not the reusable library.
 	"wiki_entries", "wiki_sections", "wiki_infobox",
+	// Who is related to whom, the story's factions, and its chapters.
+	"character_relations", "factions", "faction_members", "volumes", "chapters",
 }
 
 func isNullCol(t assetTable, col string) bool {

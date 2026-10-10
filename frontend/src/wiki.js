@@ -7,12 +7,13 @@ import { STORY_API } from './stories'
 // refers to by key; tr() marks them for translation.
 
 export const TYPE_ORDER = [
-  'character', 'location', 'event', 'class', 'subclass', 'specialization', 'race', 'body_type', 'spell', 'gear',
+  'character', 'location', 'faction', 'event', 'class', 'subclass', 'specialization', 'race', 'body_type', 'spell', 'gear',
 ]
 
 export const TYPE_LABELS = {
   character: tr('Character'),
   location: tr('Location'),
+  faction: tr('Faction'),
   event: tr('Event'),
   class: tr('Class'),
   subclass: tr('Subclass'),
@@ -26,6 +27,7 @@ export const TYPE_LABELS = {
 export const TYPE_PLURALS = {
   character: tr('Characters'),
   location: tr('Locations'),
+  faction: tr('Factions'),
   event: tr('Events'),
   class: tr('Classes'),
   subclass: tr('Subclasses'),
@@ -82,6 +84,7 @@ export const FACT_LABELS = {
   origin: tr('Origin'),
   slot: tr('Slot'),
   settlement: tr('Settlement'),
+  headquarters: tr('Headquarters'),
 }
 
 // Words the server sends as an infobox value.
@@ -103,6 +106,11 @@ export const GROUP_LABELS = {
   specializations: tr('Specializations'),
   spells: tr('Spells'),
   members: tr('Members'),
+  former_members: tr('Former members'),
+  subfactions: tr('Factions within'),
+  factions: tr('Factions'),
+  factions_here: tr('Factions based here'),
+  relations: tr('Relations'),
   classes: tr('Classes'),
 }
 
@@ -120,6 +128,7 @@ export function sourcePath(type, id) {
   if (type === 'character') return `/characters/${id}`
   if (type === 'event') return `/events/${id}`
   if (type === 'location') return '/map'
+  if (type === 'faction') return '/factions'
   return '/assets'
 }
 
@@ -127,6 +136,7 @@ export function sourceLabel(type) {
   if (type === 'character') return t('character sheet')
   if (type === 'event') return t('event page')
   if (type === 'location') return t('map')
+  if (type === 'faction') return t('Factions page')
   return t('Character Assets page')
 }
 

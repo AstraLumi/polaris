@@ -79,8 +79,10 @@
               <div v-for="g in article.groups" :key="g.key" class="group">
                 <h3>{{ $t(GROUP_LABELS[g.key]) }}</h3>
                 <ul class="links">
-                  <li v-for="r in g.items" :key="r.type + r.id">
+                  <li v-for="(r, i) in g.items" :key="i">
+                    <template v-if="r.note && g.key === 'relations'">{{ (r.note_word ? $t(r.note) : r.note) + ' ' }}</template>
                     <RouterLink :to="wikiPath(r.type, r.id)">{{ r.name }}</RouterLink>
+                    <span v-if="r.note && g.key !== 'relations'" class="faint"> ({{ r.note_word ? $t(r.note) : r.note }})</span>
                   </li>
                 </ul>
               </div>

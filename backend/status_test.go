@@ -65,6 +65,7 @@ func TestMigrationAddsCharacterStatus(t *testing.T) {
 	mgr, _ := newTestServer(t)
 	id := createStoryDirect(t, mgr, "Old")
 	app, _ := mgr.open(id)
+	rollBackSchema16(t, app.db)
 	for _, q := range []string{
 		`INSERT INTO characters (id) VALUES (1)`,
 		`INSERT INTO character_versions (id, character_id, is_current, name) VALUES (1, 1, 1, 'Bram')`,

@@ -46,6 +46,11 @@
       </div>
     </div>
 
+    <p v-if="activeChapter" class="chapter-filter">
+      {{ $t('Only events in {chapter}', { chapter: chapterLabel(activeChapter) || '…' }) }}
+      <button type="button" class="clear" @click="clearChapter">{{ $t('Clear filter') }}</button>
+    </p>
+
     <p v-if="loadError" class="error-banner">{{ loadError }}</p>
 
     <div v-if="!loading && !loadError && events.length === 0" class="empty-state glass-panel">
@@ -88,6 +93,7 @@
             <div class="meta">
               <span v-if="e.location_name">{{ e.location_name }}</span>
               <span v-if="e.people_count">{{ $tn('{n} person', '{n} people', e.people_count) }}</span>
+              <span v-if="e.chapter_id && chapterLabel(e.chapter_id)">{{ chapterLabel(e.chapter_id, { short: true }) }}</span>
             </div>
             <div v-if="e.tags.length" class="row-tags">
               <span v-for="t in e.tags" :key="t" class="mini-tag" @click.prevent.stop="toggleTag(t)">#{{ t }}</span>
@@ -116,6 +122,7 @@ import { eventsApi } from '../api'
 import { dateParts } from '../calendar'
 import { t, tn } from '../i18n'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { chapterLabel, loadChapters } from '../chapters'
 
 const route = useRoute()
 const router = useRouter()
@@ -163,9 +170,18 @@ async function handleDelete() {
 }
 
 const activeTag = computed(() => (typeof route.query.tag === 'string' ? route.query.tag : ''))
+// /events?chapter=3 (from a chapter page) lists only that chapter's events.
+const activeChapter = computed(() => Number(route.query.chapter) || null)
+loadChapters()
 const newLink = computed(() => ({ path: '/events/new', query: activeTag.value ? { tag: activeTag.value } : {} }))
 
 const parts = (e) => dateParts(e.event_date)
+
+function clearChapter() {
+  const query = { ...route.query }
+  delete query.chapter
+  router.replace({ path: '/events', query })
+}
 
 function toggleTag(tag) {
   const same = activeTag.value && tag.toLowerCase() === activeTag.value.toLowerCase()
@@ -179,7 +195,7 @@ async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    events.value = await eventsApi.list({ tag: activeTag.value, q: search.value.trim() })
+    events.value = await eventsApi.list({ tag: activeTag.value, q: search.value.trim(), chapterId: activeChapter.value })
   } catch (err) {
     loadError.value = t("Couldn't load events. Try refreshing.")
   } finally {
@@ -199,7 +215,7 @@ watch(search, () => {
     load()
   }, 250)
 })
-watch(() => route.query.tag, load)
+watch(() => [route.query.tag, route.query.chapter], load)
 
 onMounted(async () => {
   load()
@@ -309,6 +325,12 @@ onMounted(async () => {
   flex-shrink: 0;
   accent-color: var(--accent);
   pointer-events: none;
+}
+
+.chapter-filter {
+  margin: -0.5rem 0 1rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }
 
 .header-actions {

@@ -57,6 +57,7 @@
           </div>
           <div class="field-row">
             <DateField v-model="form.version_date" :label="$t('Story date')" />
+            <ChapterSelect v-model="form.chapter_id" :label="$t('Chapter')" />
             <label class="field">
               <span>{{ $t('Volume / Chapter / Page') }}</span>
               <input v-model="form.version_reference" type="text" :placeholder="$t('Vol. 2 - Ch. 5 - Pg. 12')" />
@@ -214,6 +215,7 @@ import LocationSelect from '../components/LocationSelect.vue'
 import GearTab from '../components/GearTab.vue'
 import SpellsTab from '../components/SpellsTab.vue'
 import BackLink from '../components/BackLink.vue'
+import ChapterSelect from '../components/ChapterSelect.vue'
 import { STATUSES } from '../characterStatus'
 import { pageTitle, useUnsavedGuard, useSaveShortcut } from '../navigation'
 
@@ -238,6 +240,7 @@ const locationOptions = ref([])
 const form = reactive({
   version_date: '',
   version_reference: '',
+  chapter_id: null,
   name: '',
   nickname: '',
   level: 1,
@@ -382,6 +385,7 @@ async function load() {
     Object.assign(form, {
       version_date: data.version_date,
       version_reference: data.version_reference,
+      chapter_id: data.chapter_id ?? null,
       name: data.name,
       nickname: data.nickname,
       level: data.level,
@@ -600,5 +604,12 @@ onMounted(async () => {
 
 .save-error {
   margin-bottom: 1rem;
+}
+
+/* Phones: the picture goes above the name fields instead of beside them. */
+@media (max-width: 720px) {
+  .identity-form {
+    flex-direction: column;
+  }
 }
 </style>
