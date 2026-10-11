@@ -51,8 +51,11 @@ function tipOf(start) {
     if (title) {
       el.removeAttribute('title')
       el.setAttribute('data-tip', title)
-      // The title was its only name: keep it for screen readers.
-      if (!el.hasAttribute('aria-label') && !hasLetters(el.textContent || '')) el.setAttribute('aria-label', title)
+      // An icon-only button's title was its only name: keep it for screen
+      // readers. (Form fields have their label for that.)
+      if (el.matches('button, a, [role="button"]') && !el.hasAttribute('aria-label') && !hasLetters(el.textContent || '')) {
+        el.setAttribute('aria-label', title)
+      }
     }
     const text = el.getAttribute('data-tip')
     if (text) return { el, text }

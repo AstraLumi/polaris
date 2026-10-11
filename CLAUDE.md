@@ -15,6 +15,7 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/markdownEdit.test.mjs
     node frontend/tests/graphLayout.test.mjs
     node frontend/tests/familyLayout.test.mjs
+    node frontend/tests/dateDigits.test.mjs
 
 Run all of these before committing. `backend/static/` is build output (only
 `.gitkeep` is tracked); the tests do not need it.
@@ -53,7 +54,9 @@ Run all of these before committing. `backend/static/` is build output (only
 - **Uploads:** handlers emit `/uploads/<file>`; a rewriter turns that into
   `/uploads/s/<story-id>/<file>`. Uploaded files are served sandboxed with
   `nosniff`. Do not weaken that.
-- Dates are `DD-MM-YYYY`, there is no year 0.
+- Dates are `DD-MM-YYYY`, there is no year 0. They are typed in one box
+  (`components/DateField.vue`) whose digits fill in from the right
+  (`dateDigits.js`); a year alone is emitted as just the year.
 - Any file input must read `e.target.files[0]` *before* clearing the input
   (see `dropFile(keepInput)`), or the picker shows "No file chosen".
 

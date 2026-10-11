@@ -1,56 +1,43 @@
 <template>
-  <div class="field date-field-wrap">
+  <label class="field date-field-wrap">
     <span>{{ $t(label) }}</span>
-    <div class="date-inputs">
-      <input
-        v-model="day"
-        type="number"
-        inputmode="numeric"
-        step="1"
-        :min="1"
-        :max="calendar.days_per_month"
-        :placeholder="$t('DD')"
-        :aria-label="$t('Day')"
-        @input="commit"
-      />
-      <input
-        v-model="month"
-        type="number"
-        inputmode="numeric"
-        step="1"
-        :min="1"
-        :max="calendar.months_per_year"
-        :placeholder="$t('MM')"
-        :aria-label="$t('Month')"
-        @input="commit"
-      />
-      <input
-        v-model="year"
-        type="number"
-        inputmode="numeric"
-        step="1"
-        class="year-input"
-        :placeholder="$t('Year')"
-        :aria-label="$t('Year')"
-        @input="commit"
-      />
-    </div>
-    <p v-if="problem" class="date-note is-error">{{ problem }}</p>
+    <input
+      ref="inputEl"
+      class="date-input"
+      :class="{ 'is-invalid': showProblem }"
+      type="text"
+      inputmode="numeric"
+      autocomplete="off"
+      spellcheck="false"
+      :value="shown"
+      :placeholder="$t('DD-MM-YYYY')"
+      :title="$t('Digits fill in from the right: the last four are the year, then the month, then the day. Type - for a year before 1.')"
+      @beforeinput="onBeforeInput"
+      @focus="focused = true"
+      @blur="onBlur"
+    />
+    <p v-if="showProblem" class="date-note is-error">{{ problem }}</p>
     <p v-else-if="legacyText" class="date-note">
       {{ $t('Saved as “{text}”, which can\'t be placed on the timeline. Enter a year to replace it.', { text: legacyText }) }}
     </p>
     <p v-else-if="hint" class="date-note">{{ $t(hint) }}</p>
-  </div>
+  </label>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { calendar, parseStoryDate, formatStoryDate } from '../calendar'
+import { digitsToParts, partsToDigits, displayDigits, parsePasted, MAX_DIGITS } from '../dateDigits'
 import { t, tr } from '../i18n'
 
+// One box for a story date, typed as digits that fill in from the right
+// (dateDigits.js): 1456 is the year 1456, 21456 the 2nd month of it, 3021456
+// the 3rd of that month. Backspace takes the last digit off, "-" switches to
+// a year before 1, and a whole date can be pasted.
+//
 // v-model is the canonical text ("DD-MM-YYYY", year may be negative) or ''.
-// Day and month are optional: leave them blank and the date is saved as the
-// 1st of the 1st month of that year.
+// Day and month are optional: a year alone is saved as the 1st of its 1st
+// month.
 const props = defineProps({
   modelValue: { type: String, default: '' },
   label: { type: String, default: tr('Date') },
@@ -58,30 +45,28 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:modelValue'])
 
-const day = ref('')
-const month = ref('')
-const year = ref('')
+const inputEl = ref(null)
+const digits = ref('')
+const negative = ref(false)
 const legacyText = ref('')
+const focused = ref(false)
 let lastEmitted = null
 
 function load(text) {
   legacyText.value = ''
-  if (!text) {
-    day.value = month.value = year.value = ''
-    return
-  }
+  negative.value = false
+  digits.value = ''
+  if (!text) return
   const d = parseStoryDate(text)
   if (!d) {
-    // Old free text: keep it untouched until a real year is typed.
+    // Old free text: keep it untouched until a real date is typed.
     legacyText.value = text
-    day.value = month.value = year.value = ''
     return
   }
-  // A bare year was stored as 01-01-YYYY; show it the way it was typed.
-  const bare = d.day === 1 && d.month === 1 && !/^\d{1,3}-\d{1,3}-/.test(text.trim())
-  day.value = bare ? '' : d.day
-  month.value = bare ? '' : d.month
-  year.value = d.year
+  // A year typed on its own is shown that way again.
+  const bare = !/^\s*\d{1,3}-\d{1,3}-/.test(text)
+  digits.value = partsToDigits(d, bare)
+  negative.value = d.year < 0
 }
 
 watch(
@@ -92,53 +77,100 @@ watch(
   { immediate: true },
 )
 
-function toInt(v) {
-  if (v === '' || v === null) return null
-  const n = Number(v)
-  return Number.isInteger(n) ? n : NaN
-}
+const shown = computed(() => displayDigits(digits.value, negative.value, { day: t('DD'), month: t('MM') }))
 
 const problem = computed(() => {
-  const d = toInt(day.value)
-  const m = toInt(month.value)
-  const y = toInt(year.value)
-  if (Number.isNaN(d) || Number.isNaN(m) || Number.isNaN(y)) return t('Use whole numbers.')
-  if (y === 0) return t('There is no year 0 — the year before 1 is -1.')
-  if ((d !== null || m !== null) && y === null) return t('Enter a year.')
-  if (m !== null && (m < 1 || m > calendar.months_per_year))
+  const p = digitsToParts(digits.value, negative.value)
+  if (!p) return negative.value ? t('Enter a year.') : ''
+  if (p.year === 0) return t('There is no year 0 — the year before 1 is -1.')
+  if (p.month !== null && (p.month < 1 || p.month > calendar.months_per_year))
     return t('Month must be 1–{max}.', { max: calendar.months_per_year })
-  if (d !== null && (d < 1 || d > calendar.days_per_month))
+  if (p.day !== null && (p.day < 1 || p.day > calendar.days_per_month))
     return t('Day must be 1–{max}.', { max: calendar.days_per_month })
   return ''
 })
+// Half-typed dates are often "wrong" on the way (21 as a month), so problems
+// only show once the box is left.
+const showProblem = computed(() => !focused.value && !!problem.value)
 
 function commit() {
-  legacyText.value = ''
-  const y = toInt(year.value)
+  const p = digitsToParts(digits.value, negative.value)
   let out = ''
-  if (!problem.value && y !== null) {
-    out = formatStoryDate({
-      day: toInt(day.value) ?? 1,
-      month: toInt(month.value) ?? 1,
-      year: y,
-    })
+  if (p && !problem.value) {
+    out = formatStoryDate({ day: p.day ?? 1, month: p.month ?? 1, year: p.year })
+    // A year alone keeps that shape, so it shows up the same way again.
+    if (p.day === null && p.month === null) out = String(p.year)
   }
+  if (digits.value || negative.value) legacyText.value = ''
   lastEmitted = out
   emit('update:modelValue', out)
+}
+
+async function refresh() {
+  commit()
+  await nextTick()
+  const el = inputEl.value
+  if (!el) return
+  el.value = shown.value // the browser's own edit was cancelled
+  el.setSelectionRange(el.value.length, el.value.length)
+}
+
+function onBeforeInput(e) {
+  const el = e.target
+  e.preventDefault()
+  const everything = el.value.length > 0 && el.selectionStart === 0 && el.selectionEnd === el.value.length
+  const type = e.inputType
+
+  if (type.startsWith('insert')) {
+    const text = e.data ?? e.dataTransfer?.getData('text/plain') ?? ''
+    if (type !== 'insertText') {
+      const pasted = parsePasted(text)
+      if (pasted) {
+        digits.value = pasted.digits
+        negative.value = pasted.negative
+        return refresh()
+      }
+    }
+    if (everything) {
+      digits.value = ''
+      negative.value = false
+    }
+    for (const ch of text) {
+      if (ch >= '0' && ch <= '9') {
+        if (digits.value.length < MAX_DIGITS && !(digits.value === '' && ch === '0')) digits.value += ch
+      } else if (ch === '-' && type === 'insertText') {
+        negative.value = !negative.value
+      }
+    }
+    return refresh()
+  }
+
+  if (type === 'deleteContentBackward' && !everything) {
+    digits.value = digits.value.slice(0, -1)
+    if (!digits.value) negative.value = false
+    return refresh()
+  }
+  if (type.startsWith('delete')) {
+    // Delete, cutting, deleting a word or everything selected: start over.
+    digits.value = ''
+    negative.value = false
+    return refresh()
+  }
+}
+
+function onBlur() {
+  focused.value = false
 }
 </script>
 
 <style scoped>
-.date-inputs {
-  display: grid;
-  grid-template-columns: 3.6rem 3.6rem minmax(4.6rem, 1fr);
-  gap: 0.5rem;
+.date-input {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
 }
 
-.date-inputs input {
-  min-width: 0;
-  padding-left: 0.6rem;
-  padding-right: 0.4rem;
+.date-input.is-invalid {
+  border-color: var(--danger-text);
 }
 
 .date-note {
