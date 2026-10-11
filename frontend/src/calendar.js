@@ -69,15 +69,16 @@ export function shortDate(text) {
   return `${d.year} ${t('Q{n}', { n: quarterOf(d.month) })}`
 }
 
-// "15-03-1054" for anything readable, the raw text otherwise. This is for
-// display only: a negative year is parenthesised ("15-03-(-0054)") so the
-// two dashes don't read as a typo. Stored dates keep the plain form.
+// "15 / 03 / 1054" for anything readable, the raw text otherwise. This is
+// for display only ("01 / 01 / -2000" before year 1); stored dates keep the
+// DD-MM-YYYY form.
 export function fullDate(text) {
   const d = parseStoryDate(text)
   if (!d) return text || ''
   const dd = String(d.day).padStart(2, '0')
   const mm = String(d.month).padStart(2, '0')
-  return d.year < 0 ? `${dd}-${mm}-(${padYear(d.year)})` : `${dd}-${mm}-${padYear(d.year)}`
+  // Slashes with spaces read cleanly even before year 1: "01 / 01 / -2000".
+  return `${dd} / ${mm} / ${padYear(d.year)}`
 }
 
 // { year, quarter } for the big year / small "Q2" blocks, or null when the

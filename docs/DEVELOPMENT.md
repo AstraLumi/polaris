@@ -150,6 +150,10 @@ types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard
   `from_id` is the parent.
   `components/WikiLinkPanel.vue` is the shared "Link to an article" picker
   (the Markdown editor and the infobox value rows use it).
+- Sidebar (`App.vue`): the pages in groups (`navGroups`) with line icons
+  (`components/NavIcon.vue`); the current page is the longest path the
+  address starts with. It collapses to an icon rail (remembered per device)
+  and on phones slides in from the left. A new page goes into a group there.
 - Look and feel: every page shares one layout (`.page`), one set of form
   controls, one modal style and one set of colour variables, all in
   `frontend/src/style.css`. Colour themes (Polaris default, Obsidian,

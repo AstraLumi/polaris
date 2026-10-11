@@ -4,6 +4,22 @@ What changed in each version of Polaris. The same notes are on the
 [Releases](https://github.com/AstraLumi/polaris/releases) page. Versions are
 Major.Minor.Bugfix: new features raise Minor, fixes raise Bugfix.
 
+## 2.1.0 (2026-10-11)
+
+**Upgrade:** stories are upgraded to database schema 25 the first time they are opened. This can't be undone, so export your stories first.
+
+### Added
+
+- **Bestiary.** A new page for the monsters, animals and constructs of your world: each has a tag, a level range, the place it's native to, a description, a picture and related creatures (related both ways). Every creature has its own wiki article, and a place's article lists the creatures native to it.
+- **Creature territories.** A creature lives on the area of the place it's native to, or on hexes you paint yourself in its form. Its wiki article shows the territory as a picture of the map: its hexes in the colour of its tag, the rest of the map grey, empty hexes black.
+- Gear has a description, shown in the gear list, when hovering an equipped piece, and in its wiki article.
+- A stat can be marked "Lower is better" in Settings → Stats, so negative bonuses and falling values show as improvements. Cold Threshold has it on.
+
+### Changed
+
+- The sidebar is redesigned: pages grouped into Story, World, Time and Lore with icons, the story at the top, Settings at the bottom, and a button to collapse it to icons only. It fits short screens, and on phones it slides in from the side.
+- Dates read as "01 / 01 / -2000" instead of "01-01-(-2000)".
+
 ## 2.0.2 (2026-10-11)
 
 ### Added

@@ -1,54 +1,87 @@
 <template>
   <router-view v-if="$route.meta.bare" />
-  <div v-else class="shell">
-    <aside class="rail glass-panel" :class="{ 'is-open': menuOpen }">
-      <div class="brand">
-        <PolarisLogo class="brand-mark" />
-        <span class="brand-name">{{ $t('Polaris') }}</span>
+  <div v-else class="shell" :class="{ 'nav-collapsed': collapsed }">
+    <aside class="rail glass-panel" :class="{ 'is-open': menuOpen, 'is-collapsed': collapsed }">
+      <div class="rail-top">
+        <router-link to="/stories" class="story-head" :title="collapsed ? currentStory?.name : $t('Switch story')">
+          <span class="story-icon">
+            <IconImage :src="currentStory?.icon || ''" :name="currentStory?.name || ''" />
+          </span>
+          <span class="story-meta">
+            <span class="story-name" data-tip-overflow>{{ currentStory?.name || '…' }}</span>
+            <span class="story-app">{{ $t('Polaris') }}</span>
+          </span>
+          <NavIcon name="switch" class="story-switch-icon" />
+        </router-link>
         <button
           type="button"
           class="menu-toggle"
           :aria-expanded="menuOpen"
-          :aria-label="$t('Menu')"
+          :aria-label="menuOpen ? $t('Close menu') : $t('Menu')"
           @click="menuOpen = !menuOpen"
         >
-          {{ menuOpen ? '✕' : '☰' }}
+          <NavIcon :name="menuOpen ? 'close' : 'menu'" />
         </button>
       </div>
 
-      <router-link to="/stories" class="story-switch" :title="$t('Switch story')">
-        <span class="story-icon">
-          <IconImage :src="currentStory?.icon || ''" :name="currentStory?.name || ''" />
-        </span>
-        <span class="story-meta">
-          <span class="story-name" data-tip-overflow>{{ currentStory?.name || '…' }}</span>
-          <span class="story-action">{{ $t('Switch story') }}</span>
-        </span>
-      </router-link>
+      <div class="rail-body">
+        <button
+          type="button"
+          class="search-btn"
+          :aria-label="$t('Search')"
+          :title="collapsed ? $t('Search') + ' (' + shortcutLabel + ')' : $t('Find any character, place, event or article')"
+          @click="searchOpen = true"
+        >
+          <NavIcon name="search" />
+          <span class="search-label">{{ $t('Search') }}</span>
+          <kbd>{{ shortcutLabel }}</kbd>
+        </button>
 
-      <button type="button" class="search-btn" :title="$t('Find any character, place, event or article')" @click="searchOpen = true">
-        <span>{{ $t('Search') }}</span>
-        <kbd>{{ shortcutLabel }}</kbd>
-      </button>
+        <nav ref="navEl" class="nav" :aria-label="$t('Pages')">
+          <template v-for="group in navGroups" :key="group.label || 'top'">
+            <div v-if="group.label" class="nav-group" role="presentation">
+              <span class="nav-group-label">{{ $t(group.label) }}</span>
+            </div>
+            <router-link
+              v-for="item in group.items"
+              :key="item.to"
+              :to="item.to"
+              class="nav-item"
+              :class="{ 'is-active': activeTo === item.to }"
+              :aria-current="activeTo === item.to ? 'page' : undefined"
+              :title="collapsed ? $t(item.label) : $t(item.tip)"
+            >
+              <NavIcon :name="item.icon" />
+              <span class="nav-label">{{ $t(item.label) }}</span>
+            </router-link>
+          </template>
+        </nav>
 
-      <nav class="nav">
-        <template v-for="item in navItems" :key="item.label">
+        <div class="rail-bottom">
           <router-link
-            v-if="item.to"
-            :to="item.to"
+            to="/settings"
             class="nav-item"
-            active-class="is-active"
-            :title="$t(item.tip)"
+            :class="{ 'is-active': activeTo === '/settings' }"
+            :aria-current="activeTo === '/settings' ? 'page' : undefined"
+            :title="collapsed ? $t('Settings') : $t('Language, theme, calendar and stats')"
           >
-            <span class="nav-label">{{ $t(item.label) }}</span>
+            <NavIcon name="settings" />
+            <span class="nav-label">{{ $t('Settings') }}</span>
           </router-link>
-          <span v-else class="nav-item is-disabled">
-            <span class="nav-label">{{ $t(item.label) }}</span>
-            <span class="nav-status">{{ $t('not built yet') }}</span>
-          </span>
-        </template>
-      </nav>
+          <button
+            type="button"
+            class="nav-item collapse-btn"
+            :aria-label="collapsed ? $t('Expand the sidebar') : $t('Collapse the sidebar')"
+            :title="collapsed ? $t('Expand the sidebar') : $t('Collapse the sidebar')"
+            @click="toggleCollapsed"
+          >
+            <NavIcon :name="collapsed ? 'expand' : 'collapse'" />
+            <span class="nav-label">{{ $t('Collapse') }}</span>
+          </button>
+        </div>
+      </div>
     </aside>
+    <div v-if="menuOpen" class="nav-backdrop" @click="menuOpen = false"></div>
 
     <main class="stage">
       <router-view />
@@ -62,13 +95,13 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onBeforeUnmount, watchEffect } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
 import { loadCalendar } from './calendar'
 import { loadStatSystem } from './stats'
 import { t, tr } from './i18n'
 import { pageTitle, viewedPicture } from './navigation'
-import PolarisLogo from './components/PolarisLogo.vue'
+import NavIcon from './components/NavIcon.vue'
 import IconImage from './components/IconImage.vue'
 import SearchPalette from './components/SearchPalette.vue'
 import TooltipLayer from './components/TooltipLayer.vue'
@@ -78,8 +111,8 @@ import { currentStory } from './stories'
 
 const route = useRoute()
 
-// On a phone the sidebar folds into a bar with a menu button; any
-// navigation closes the menu again.
+// On a phone the sidebar folds into a bar with a menu button that slides
+// the pages in; any navigation closes them again.
 const menuOpen = ref(false)
 watch(() => route.fullPath, () => {
   menuOpen.value = false
@@ -121,21 +154,77 @@ function onKeyDown(e) {
 onMounted(() => window.addEventListener('keydown', onKeyDown, true))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown, true))
 
-const navItems = [
-  { label: tr('Home'), to: '/', tip: tr('Recent edits and loose ends') },
-  { label: tr('Characters'), to: '/characters', tip: tr('Everyone in the story, with their sheets and versions') },
-  { label: tr('Factions'), to: '/factions', tip: tr('Guilds, orders, houses and who belongs to them') },
-  { label: tr('Bestiary'), to: '/bestiary', tip: tr('The monsters, animals and constructs of the world') },
-  { label: tr('Character Assets'), to: '/assets', tip: tr('Classes, races, spells, gear and the rest a character is built from') },
-  { label: tr('Timeline'), to: '/timeline', tip: tr('Events, births and foundings, drawn to scale') },
-  { label: tr('Calendar'), to: '/calendar', tip: tr('What happens in each month, day by day') },
-  { label: tr('Map'), to: '/map', tip: tr('The hex map of kingdoms and places') },
-  { label: tr('Events'), to: '/events', tip: tr('Everything that happens, with dates, places and people') },
-  { label: tr('Chapters'), to: '/chapters', tip: tr('Volumes and chapters, with your notes and what happens in each') },
-  { label: tr('Wiki'), to: '/wiki', tip: tr('An article for everything in the story, with your lore on top') },
-  { label: tr('Graph'), to: '/wiki/graph', tip: tr('Every wiki article and how they connect') },
-  { label: tr('Settings'), to: '/settings', tip: tr('Calendar, language and colour theme') },
+// The pages, in groups. The tip is the tooltip while the sidebar is open;
+// collapsed, the tooltip is the page's name.
+const navGroups = [
+  { items: [{ label: tr('Home'), to: '/', icon: 'home', tip: tr('Recent edits and loose ends') }] },
+  {
+    label: tr('Story'),
+    items: [
+      { label: tr('Characters'), to: '/characters', icon: 'characters', tip: tr('Everyone in the story, with their sheets and versions') },
+      { label: tr('Factions'), to: '/factions', icon: 'factions', tip: tr('Guilds, orders, houses and who belongs to them') },
+      { label: tr('Chapters'), to: '/chapters', icon: 'chapters', tip: tr('Volumes and chapters, with your notes and what happens in each') },
+    ],
+  },
+  {
+    label: tr('World'),
+    items: [
+      { label: tr('Map'), to: '/map', icon: 'map', tip: tr('The hex map of kingdoms and places') },
+      { label: tr('Bestiary'), to: '/bestiary', icon: 'bestiary', tip: tr('The monsters, animals and constructs of the world') },
+      { label: tr('Character Assets'), to: '/assets', icon: 'assets', tip: tr('Classes, races, spells, gear and the rest a character is built from') },
+    ],
+  },
+  {
+    label: tr('Time'),
+    items: [
+      { label: tr('Timeline'), to: '/timeline', icon: 'timeline', tip: tr('Events, births and foundings, drawn to scale') },
+      { label: tr('Calendar'), to: '/calendar', icon: 'calendar', tip: tr('What happens in each month, day by day') },
+      { label: tr('Events'), to: '/events', icon: 'events', tip: tr('Everything that happens, with dates, places and people') },
+    ],
+  },
+  {
+    label: tr('Lore'),
+    items: [
+      { label: tr('Wiki'), to: '/wiki', icon: 'wiki', tip: tr('An article for everything in the story, with your lore on top') },
+      { label: tr('Graph'), to: '/wiki/graph', icon: 'graph', tip: tr('Every wiki article and how they connect') },
+    ],
+  },
 ]
+
+// The page being shown: the longest page path the address starts with, so
+// a wiki article lights up Wiki but the graph lights up only Graph.
+const allPaths = [...navGroups.flatMap((g) => g.items.map((i) => i.to)), '/settings']
+// When the list has to scroll, the page being shown stays in view.
+const navEl = ref(null)
+watch(
+  () => route.path,
+  () => nextTick(() => navEl.value?.querySelector('.is-active')?.scrollIntoView({ block: 'nearest' })),
+  { immediate: true },
+)
+
+const activeTo = computed(() => {
+  const p = route.path
+  return allPaths
+    .filter((to) => (to === '/' ? p === '/' : p === to || p.startsWith(to + '/')))
+    .sort((a, b) => b.length - a.length)[0]
+})
+
+// Icons only, remembered on this device.
+const COLLAPSE_KEY = 'polaris-nav-collapsed'
+const collapsed = ref(false)
+try {
+  collapsed.value = localStorage.getItem(COLLAPSE_KEY) === '1'
+} catch (e) {
+  /* storage unavailable: start open */
+}
+function toggleCollapsed() {
+  collapsed.value = !collapsed.value
+  try {
+    localStorage.setItem(COLLAPSE_KEY, collapsed.value ? '1' : '0')
+  } catch (e) {
+    /* not remembered, still toggled */
+  }
+}
 </script>
 
 <style scoped>
@@ -147,58 +236,60 @@ const navItems = [
   align-items: stretch;
 }
 
+/* The sidebar fills the window's height and scrolls its page list on its
+   own, so Settings stays reachable on short screens. */
 .rail {
   width: 240px;
   flex-shrink: 0;
-  padding: 1.75rem 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 2.5rem;
-  align-self: flex-start;
+  height: calc(100vh - 3rem);
   position: sticky;
   top: 1.5rem;
+  padding: 0.75rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: width 0.18s ease;
 }
 
-.brand {
+.rail.is-collapsed {
+  width: 64px;
+  padding-inline: 0.55rem;
+}
+
+.rail-top {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
-.brand-mark {
-  height: 2.6rem;
-  flex-shrink: 0;
+.rail-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
-.brand-name {
-  font-size: 1.1rem;
-  font-weight: 600;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-
-.story-switch {
+/* ---- story header ---- */
+.story-head {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 0.7rem;
-  padding: 0.55rem 0.6rem;
-  margin: -1.4rem 0 -0.6rem;
+  gap: 0.65rem;
+  padding: 0.45rem;
   border-radius: 10px;
-  border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.03);
   text-decoration: none;
   color: inherit;
 }
 
-.story-switch:hover {
-  background: var(--accent-soft);
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+.story-head:hover {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .story-icon {
-  width: 2.2rem;
-  height: 2.2rem;
+  width: 2.1rem;
+  height: 2.1rem;
   flex-shrink: 0;
   border-radius: 8px;
   background: var(--accent-soft);
@@ -209,13 +300,15 @@ const navItems = [
 }
 
 .story-meta {
+  flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
+  line-height: 1.25;
 }
 
 .story-name {
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
@@ -223,68 +316,40 @@ const navItems = [
   white-space: nowrap;
 }
 
-.story-action {
-  font-size: 0.72rem;
-  color: var(--text-faint);
-}
-
-.story-switch:hover .story-action {
+.story-app {
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
   color: var(--accent);
 }
 
-.nav {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.nav-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding: 0.6rem 0.75rem;
-  border-radius: 8px;
-  border-left: 2px solid transparent;
-  font-size: 0.92rem;
-  color: var(--text-muted);
-  text-decoration: none;
-}
-
-.nav-item.is-active {
-  color: var(--text-primary);
-  border-left-color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.nav-item.is-disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.nav-status {
-  font-size: 0.7rem;
+.story-switch-icon {
   color: var(--text-faint);
 }
 
-.stage {
-  flex: 1;
-  min-width: 0;
+.story-head:hover .story-switch-icon {
+  color: var(--text-primary);
 }
 
+/* ---- search ---- */
 .search-btn {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 0.5rem;
-  margin: -1.2rem 0 -1rem;
-  padding: 0.5rem 0.75rem;
+  gap: 0.55rem;
+  padding: 0.5rem 0.65rem;
   border-radius: 8px;
   border: 1px solid var(--glass-border);
   background: rgba(255, 255, 255, 0.03);
-  color: var(--text-muted);
+  color: var(--text-faint);
   font: inherit;
   font-size: 0.85rem;
   cursor: pointer;
+}
+
+.search-label {
+  flex: 1;
+  text-align: left;
 }
 
 .search-btn:hover {
@@ -294,57 +359,196 @@ const navItems = [
 
 .search-btn kbd {
   font-family: inherit;
-  font-size: 0.7rem;
+  font-size: 0.68rem;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
   color: var(--text-faint);
 }
 
-.menu-toggle {
-  display: none;
-  margin-left: auto;
-  width: 2.4rem;
-  height: 2.4rem;
-  border-radius: 8px;
-  border: 1px solid var(--glass-border);
-  background: transparent;
-  color: var(--text-primary);
-  font-size: 1.1rem;
-  cursor: pointer;
+/* ---- pages ---- */
+.nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-inline: -0.25rem;
+  padding-inline: 0.25rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--glass-border) transparent;
 }
 
-/* Phones: the sidebar becomes a bar across the top; its menu button shows
-   the story switch, search and pages. */
+.nav-group {
+  padding: 0.55rem 0.65rem 0.2rem;
+}
+
+.nav-group-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  padding: 0.38rem 0.65rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.nav-item:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.nav-item.is-active {
+  color: var(--text-primary);
+  background: var(--accent-soft);
+}
+
+.nav-item.is-active .nav-icon {
+  color: var(--accent);
+}
+
+.nav-item:focus-visible,
+.search-btn:focus-visible,
+.story-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--glass-border);
+}
+
+/* ---- collapsed: icons only ---- */
+.is-collapsed .story-head {
+  justify-content: center;
+  padding: 0.35rem 0;
+}
+
+.is-collapsed .story-meta,
+.is-collapsed .story-switch-icon,
+.is-collapsed .search-label,
+.is-collapsed .search-btn kbd,
+.is-collapsed .nav-label,
+.is-collapsed .nav-group-label {
+  display: none;
+}
+
+.is-collapsed .search-btn,
+.is-collapsed .nav-item {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+/* Group headings become thin dividers. */
+.is-collapsed .nav-group {
+  padding: 0.45rem 0.6rem;
+}
+
+.is-collapsed .nav-group::after {
+  content: '';
+  display: block;
+  border-top: 1px solid var(--glass-border);
+}
+
+.stage {
+  flex: 1;
+  min-width: 0;
+}
+
+.menu-toggle,
+.nav-backdrop {
+  display: none;
+}
+
+/* Phones: a bar across the top with the story and a menu button; the menu
+   slides in from the left over the page. */
 @media (max-width: 720px) {
   .shell {
     flex-direction: column;
     gap: 0.75rem;
     padding: 0.75rem;
   }
-  .rail {
+  .rail,
+  .rail.is-collapsed {
     width: auto;
-    position: sticky;
+    height: auto;
     top: 0.5rem;
     z-index: 40;
-    padding: 0.6rem 0.75rem;
-    gap: 0.9rem;
-    align-self: stretch;
+    padding: 0.4rem 0.5rem;
+    /* A blur would trap the fixed menu inside the bar. */
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
-  .brand-mark {
-    height: 2rem;
+  .is-collapsed .story-meta,
+  .is-collapsed .nav-label,
+  .is-collapsed .search-label,
+  .is-collapsed .nav-group-label {
+    display: revert;
   }
   .menu-toggle {
-    display: block;
+    display: grid;
+    place-items: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 8px;
+    border: 1px solid var(--glass-border);
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
   }
-  .rail:not(.is-open) .story-switch,
-  .rail:not(.is-open) .search-btn,
-  .rail:not(.is-open) .nav {
-    display: none;
-  }
-  .story-switch,
-  .search-btn {
-    margin: 0;
-  }
+  .story-switch-icon,
+  .collapse-btn,
   .search-btn kbd {
     display: none;
+  }
+  .rail-body {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(290px, 85vw);
+    padding: 1rem 0.75rem;
+    background: var(--surface);
+    border-right: 1px solid var(--glass-border);
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    z-index: 61;
+  }
+  .rail.is-open .rail-body {
+    transform: none;
+  }
+  .nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 39;
   }
 }
 </style>
