@@ -76,4 +76,23 @@ addresses in tracked files. The repo is meant to be publishable as is.
 - Commit messages: a short imperative summary line, then a body if needed.
 - Do not push without being asked.
 - Versions are Major.Minor.Bugfix (semver), kept in `frontend/package.json`
-  and tagged `vX.Y.Z`. New features bump Minor, fixes bump Bugfix.
+  (and the two top `version` fields of `package-lock.json`). New features
+  bump Minor, fixes bump Bugfix.
+
+## Pushing and releases
+
+- **"push"** on its own means commit and push to `main`, nothing more: no
+  version bump, no tag, no release.
+- **"push as X.Y.Z"** (any push that names a version) is a release:
+  1. set the version to X.Y.Z;
+  2. add a `## X.Y.Z (YYYY-MM-DD)` section at the top of `CHANGELOG.md`
+     explaining the changes since the last release, in plain words for the
+     user, under `### Added` / `### Changed` / `### Fixed`. When the
+     schema changed, start it with the `**Upgrade:**` line used in earlier
+     entries (stories upgrade on first open, it can't be undone, export
+     first);
+  3. commit, tag `vX.Y.Z`, push `main` and the tag;
+  4. `gh release create vX.Y.Z --title "Polaris X.Y.Z" --notes-file <file>`
+     with that same section as the notes (it becomes the latest release).
+- If changes were pushed without a release since the last one, the next
+  release's notes cover them too.

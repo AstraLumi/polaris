@@ -122,7 +122,9 @@ docker run --rm -v polaris_uploads:/d -v "$PWD":/b alpine tar czf /b/polaris_upl
 
 ## Updating
 
-Back up first (see above), then run:
+What changed in each version is in [CHANGELOG.md](CHANGELOG.md) and on the
+[Releases](https://github.com/AstraLumi/polaris/releases) page; an update that
+upgrades the databases says so at the top. Back up first (see above), then run:
 
 ```bash
 ./scripts/update.sh
