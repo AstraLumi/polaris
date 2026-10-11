@@ -47,6 +47,10 @@ type statDef struct {
 	// Min and Max keep the final value in bounds, when set.
 	Min *float64 `json:"min"`
 	Max *float64 `json:"max"`
+	// LowerIsBetter: a drop is good news (a cold threshold that goes down
+	// means the character stands more cold), so a negative bonus or change
+	// is shown as an improvement. Only how it looks; the maths is the same.
+	LowerIsBetter bool `json:"lower_is_better"`
 }
 
 type statSystem struct {
@@ -352,6 +356,8 @@ func defaultStatSystem() statSystem {
 	// and doubles it at 10.
 	carry.Multiplier = "([str] / 10) ^ 2"
 	hp := calc("base", "hp", "HP", "10 + [vit] * 10 + [level] * 2", "", 0)
+	cold := calc("special", "cold_threshold", "Cold Threshold", "[base] - ([weight] - 70) * 0.05", "°C", 0)
+	cold.LowerIsBetter = true
 	mp := calc("base", "mp", "MP", "10 + [wis] * 5 + [intel] + [level] * 2", "", 0)
 	return statSystem{
 		PointsFormula: "[level]",
@@ -376,7 +382,7 @@ func defaultStatSystem() statSystem {
 			calc("special", "fall_damage_threshold", "Fall Damage Threshold", "2 + ([height] / 100 - 1.7) - ([weight] - 70) * 0.02", "m", 1),
 			calc("special", "sanity", "Sanity", "[base]", "γ", 0),
 			calc("special", "heat_threshold", "Heat Threshold", "[base] - ([weight] - 70) * 0.05", "°C", 0),
-			calc("special", "cold_threshold", "Cold Threshold", "[base] - ([weight] - 70) * 0.05", "°C", 0),
+			cold,
 
 			defense("resist_water", "Water"),
 			defense("resist_fire", "Fire"),
@@ -419,10 +425,10 @@ func writeStatSystem(db execer, s statSystem) error {
 	for _, d := range s.Stats {
 		pos[d.Category]++
 		if _, err := db.Exec(`INSERT INTO stat_defs
-			(key, category, position, name, short_name, formula, multiplier, unit, decimals, min_value, max_value)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			(key, category, position, name, short_name, formula, multiplier, unit, decimals, min_value, max_value, lower_is_better)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			d.Key, d.Category, pos[d.Category], d.Name, d.ShortName, d.Formula, d.Multiplier, d.Unit, d.Decimals,
-			nullableFloatPtr(d.Min), nullableFloatPtr(d.Max)); err != nil {
+			nullableFloatPtr(d.Min), nullableFloatPtr(d.Max), d.LowerIsBetter); err != nil {
 			return err
 		}
 	}
@@ -435,7 +441,7 @@ func writeStatSystem(db execer, s statSystem) error {
 func readStatSystem(db *sql.DB) (statSystem, error) {
 	s := statSystem{Stats: []statDef{}}
 	db.QueryRow(`SELECT value FROM stat_settings WHERE key = 'points_formula'`).Scan(&s.PointsFormula)
-	rows, err := db.Query(`SELECT key, category, name, short_name, formula, multiplier, unit, decimals, min_value, max_value
+	rows, err := db.Query(`SELECT key, category, name, short_name, formula, multiplier, unit, decimals, min_value, max_value, lower_is_better
 		FROM stat_defs ORDER BY CASE category
 			WHEN 'primary' THEN 0 WHEN 'base' THEN 1 WHEN 'special' THEN 2 WHEN 'defense' THEN 3 ELSE 4 END,
 			position, key`)
@@ -446,7 +452,7 @@ func readStatSystem(db *sql.DB) (statSystem, error) {
 	for rows.Next() {
 		var d statDef
 		var lo, hi sql.NullFloat64
-		if err := rows.Scan(&d.Key, &d.Category, &d.Name, &d.ShortName, &d.Formula, &d.Multiplier, &d.Unit, &d.Decimals, &lo, &hi); err != nil {
+		if err := rows.Scan(&d.Key, &d.Category, &d.Name, &d.ShortName, &d.Formula, &d.Multiplier, &d.Unit, &d.Decimals, &lo, &hi, &d.LowerIsBetter); err != nil {
 			return s, err
 		}
 		if lo.Valid {

@@ -1188,4 +1188,6 @@ export default {
   "Body type bonus": "Bonificación de tipo corporal",
   "Gear bonus": "Bonificación de equipo",
   "The bonus to this stat, as typed on the asset (not multiplied by level). Once a formula uses it, that bonus is no longer added on its own: the formula decides how it counts.": "La bonificación a este atributo, tal como se escribió en el recurso (sin multiplicar por el nivel). Cuando una fórmula la usa, esa bonificación ya no se suma sola: la fórmula decide cómo cuenta.",
+  "A drop is good news, as for a cold threshold: negative bonuses and falling values are shown as improvements.": "Bajar es una buena noticia, como en un umbral de frío: las bonificaciones negativas y los valores que bajan se muestran como mejoras.",
+  "Lower is better": "Menos es mejor",
 }

@@ -14,7 +14,7 @@ import (
 // oldest migration (or a brand new one) gets wiped and recreated from
 // freshSchema — so every schema change from here on should ship with a
 // migration instead of relying on that reset.
-const currentSchemaVersion = "23"
+const currentSchemaVersion = "24"
 
 const freshSchema = `
 CREATE TABLE classes (
@@ -453,6 +453,11 @@ var migrations = map[string]migration{
 		// and specializations get a native kingdom.
 		statements: schema23Statements,
 	},
+	"23": {
+		to: "24",
+		// Stats where lower is better.
+		statements: schema24Statements,
+	},
 }
 
 // schema20Statements create what schema 20 added. The fresh schema runs them
@@ -656,7 +661,7 @@ func ensureSchema(db *sql.DB) error {
 			return fmt.Errorf("create schema: %w", err)
 		}
 	}
-	later := [][]string{wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements}
+	later := [][]string{wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements, schema24Statements}
 	for _, stmt := range slices.Concat(later...) {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("create wiki schema: %w", err)
@@ -715,4 +720,12 @@ func moveToCharacterSQL(cols ...string) []string {
 			ORDER BY v.is_current DESC, v.id LIMIT 1)`, c, valid))
 	}
 	return out
+}
+
+// schema24Statements create what schema 24 added: a stat can say that lower
+// is better, so its drops show as improvements. The default Cold Threshold
+// is one (a lower threshold stands more cold).
+var schema24Statements = []string{
+	`ALTER TABLE stat_defs ADD COLUMN lower_is_better INTEGER NOT NULL DEFAULT 0`,
+	`UPDATE stat_defs SET lower_is_better = 1 WHERE key = 'cold_threshold'`,
 }

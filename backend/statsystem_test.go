@@ -371,3 +371,35 @@ func TestBonusBlocks(t *testing.T) {
 		t.Errorf("points formula reading a bonus: %q", codes)
 	}
 }
+
+// Upgrading to schema 24 marks the default Cold Threshold as lower-is-better,
+// and the flag is saved with the stat system.
+func TestLowerIsBetter(t *testing.T) {
+	mgr, _ := newTestServer(t)
+	app, _ := mgr.open(createStoryDirect(t, mgr, "Cold"))
+	rollBackSchema24(t, app.db)
+	if err := ensureSchema(app.db); err != nil {
+		t.Fatal(err)
+	}
+	sys := statSystemOf(t, app.db)
+	if d := sys.def("cold_threshold"); d == nil || !d.LowerIsBetter {
+		t.Fatal("Cold Threshold should be lower-is-better after upgrading")
+	}
+	if sys.def("heat_threshold").LowerIsBetter {
+		t.Error("Heat Threshold isn't lower-is-better")
+	}
+	sys.def("heat_threshold").LowerIsBetter = true
+	if issues := sys.compile(); len(issues) > 0 {
+		t.Fatal(issueCodes(issues))
+	}
+	if err := writeStatSystem(app.db, sys); err != nil {
+		t.Fatal(err)
+	}
+	if saved := statSystemOf(t, app.db); !saved.def("heat_threshold").LowerIsBetter {
+		t.Error("the flag wasn't saved")
+	}
+	defaults := defaultStatSystem()
+	if !defaults.def("cold_threshold").LowerIsBetter {
+		t.Error("the defaults should mark Cold Threshold too")
+	}
+}

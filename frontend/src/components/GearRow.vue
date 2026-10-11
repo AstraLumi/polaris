@@ -11,7 +11,7 @@
       </div>
       <div class="gear-meta">
         <span class="gear-weight">{{ formatKg(gear.weight) }}</span>
-        <span v-for="b in bonuses" :key="b.key" class="bonus" :class="{ 'is-negative': b.value < 0 }">{{ b.text }}</span>
+        <span v-for="b in bonuses" :key="b.key" class="bonus" :class="{ 'is-negative': !b.good }">{{ b.text }}</span>
         <span v-if="!bonuses.length" class="no-bonus">{{ $t('No stat bonuses') }}</span>
       </div>
     </div>

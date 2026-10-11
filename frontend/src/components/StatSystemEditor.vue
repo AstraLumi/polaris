@@ -115,6 +115,10 @@
                     <span>{{ $t('Lowest value') }}</span>
                     <input :value="stat.min ?? ''" type="number" step="any" :placeholder="$t('None')" @input="setBound(stat, 'min', $event.target.value)" />
                   </label>
+                  <label class="field check-field" :title="$t('A drop is good news, as for a cold threshold: negative bonuses and falling values are shown as improvements.')">
+                    <input v-model="stat.lower_is_better" type="checkbox" />
+                    <span>{{ $t('Lower is better') }}</span>
+                  </label>
                   <label class="field">
                     <span>{{ $t('Highest value') }}</span>
                     <input :value="stat.max ?? ''" type="number" step="any" :placeholder="$t('None')" @input="setBound(stat, 'max', $event.target.value)" />
@@ -250,7 +254,7 @@ useSaveShortcut(() => loaded.value && dirty() && !saving.value && askSave())
 
 function setDraft(system) {
   draft.points_formula = system.points_formula || ''
-  draft.stats = (system.stats || []).map((s) => ({ ...s, short_name: s.short_name || '', formula: s.formula || '', multiplier: s.multiplier || '', unit: s.unit || '' }))
+  draft.stats = (system.stats || []).map((s) => ({ ...s, lower_is_better: !!s.lower_is_better, short_name: s.short_name || '', formula: s.formula || '', multiplier: s.multiplier || '', unit: s.unit || '' }))
 }
 
 function takeSaved(system) {
@@ -385,6 +389,7 @@ function add(category) {
     multiplier: '',
     min: null,
     max: null,
+    lower_is_better: false,
     ...NEW_STAT[category],
   }
   // After the last stat of its category.
@@ -633,6 +638,14 @@ async function useDefaults() {
 
 .stat-body {
   padding: 0.5rem 0.5rem 1rem 2rem;
+}
+
+.check-field {
+  flex-direction: row;
+  align-items: center;
+  align-self: end;
+  gap: 0.5rem;
+  min-height: var(--control-h);
 }
 
 .formula-field {

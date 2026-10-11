@@ -49,7 +49,7 @@
                 <td class="arrow">{{ row.changed ? '→' : '' }}</td>
                 <td class="to" :class="{ long: row.long }">
                   {{ show(row.to) }}
-                  <span v-if="row.delta" class="delta" :class="row.delta > 0 ? 'up' : 'down'">
+                  <span v-if="row.delta" class="delta" :class="row.better ? 'up' : 'down'">
                     {{ row.delta > 0 ? '+' : '' }}{{ formatNumber(row.delta) }}
                   </span>
                 </td>
@@ -71,7 +71,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { t } from '../i18n'
 import { fetchVersions, fetchVersion } from '../api'
 import { EQUIP_SLOTS } from '../gear'
-import { STAT_CATEGORIES, statSystem, statsIn, statName, statShort } from '../stats'
+import { STAT_CATEGORIES, statSystem, statsIn, statName, statShort, isImprovement } from '../stats'
 import BackLink from '../components/BackLink.vue'
 import { statusLabel } from '../characterStatus'
 import { genderLabel } from '../gender'
@@ -116,7 +116,10 @@ const round = (n, d = 0) => (typeof n === 'number' ? Math.round(n * 10 ** d) / 1
 function row(label, from, to, opts = {}) {
   const changed = String(from ?? '') !== String(to ?? '')
   const numeric = typeof from === 'number' && typeof to === 'number'
-  return { label, from, to, changed, long: !!opts.long, delta: changed && numeric ? to - from : 0 }
+  const delta = changed && numeric ? to - from : 0
+  // Shown as good or bad news: a rise, or a drop where lower is better.
+  const better = opts.key ? isImprovement(opts.key, delta) : delta > 0
+  return { label, from, to, changed, long: !!opts.long, delta, better }
 }
 
 // One group per stat category, with the story's own stats: the points spent
@@ -126,8 +129,8 @@ function statGroups(x, y) {
     title: t(cat.label),
     rows: statsIn(cat.id, statSystem.stats).map((d) =>
       cat.id === 'primary'
-        ? row(statShort(d), x.build?.[d.key] ?? 0, y.build?.[d.key] ?? 0)
-        : row(statName(d), round(x.computed?.[d.key] ?? 0, d.decimals), round(y.computed?.[d.key] ?? 0, d.decimals)),
+        ? row(statShort(d), x.build?.[d.key] ?? 0, y.build?.[d.key] ?? 0, { key: d.key })
+        : row(statName(d), round(x.computed?.[d.key] ?? 0, d.decimals), round(y.computed?.[d.key] ?? 0, d.decimals), { key: d.key }),
     ),
   }))
 }

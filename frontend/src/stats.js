@@ -73,6 +73,12 @@ export const statLabel = (key) => statShort(statDef(key)) || key
 export const readsBase = (def) => /\[\s*base\s*\]/.test(`${def?.formula || ''} ${def?.multiplier || ''}`)
 export const isTyped = (def) => def?.category === 'primary' || readsBase(def)
 
+// Whether a change of this size to the stat is good news: usually a rise, but
+// a drop for a stat where lower is better (Cold Threshold).
+export function isImprovement(key, change) {
+  return statDef(key)?.lower_is_better ? change < 0 : change > 0
+}
+
 // "1.25x", "21.4 kg", "12".
 export function formatStat(def, value) {
   const n = Number(value) || 0

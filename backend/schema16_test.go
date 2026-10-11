@@ -5,9 +5,23 @@ import (
 	"testing"
 )
 
+// rollBackSchema24 turns a fresh database back into schema 23.
+func rollBackSchema24(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, q := range []string{
+		`ALTER TABLE stat_defs DROP COLUMN lower_is_better`,
+		`UPDATE schema_meta SET value = '23' WHERE key = 'schema_version'`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+}
+
 // rollBackSchema23 turns a fresh database back into schema 22.
 func rollBackSchema23(t *testing.T, db *sql.DB) {
 	t.Helper()
+	rollBackSchema24(t, db)
 	for _, q := range []string{
 		`ALTER TABLE character_story ADD COLUMN blood_type TEXT`,
 		`ALTER TABLE character_story ADD COLUMN born_in TEXT`,

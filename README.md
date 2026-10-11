@@ -196,8 +196,10 @@ HP = 10 + **VIT** × 10 + **Race bonus** × **Level** × 2.
 
 Each stat can also have a unit, a number of decimals, a lowest and highest
 value, and a multiplier (Carry Limit uses one: the stronger the character,
-the more they carry). A preview shows what every formula gives for a sample
-character while you edit.
+the more they carry). A stat can be marked **Lower is better** (Cold Threshold
+is: a lower threshold stands more cold), so negative bonuses and falling
+values show as improvements. A preview shows what every formula gives for a
+sample character while you edit.
 
 Stats are calculated every time a character is shown and never stored, so
 saving updates every character at once. Removing a stat also removes what was

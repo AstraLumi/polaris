@@ -3,7 +3,7 @@
 
 import { tr, t } from './i18n'
 import { BUILTIN_PREFIX } from './builtinIcons'
-import { statSystem, statLabel } from './stats'
+import { statSystem, statLabel, isImprovement } from './stats'
 
 // What a piece of gear IS. `icon` is the built-in icon shown when the gear has
 // none of its own.
@@ -52,15 +52,16 @@ export function gearIconSrc(gear) {
 
 const round = (n) => Math.round(n * 100) / 100
 
-// [{ key, text }] for a { stat: value } map, in the order stats are listed
-// everywhere else, e.g. "+5 Attack".
+// [{ key, value, good, text }] for a { stat: value } map, in the order stats
+// are listed everywhere else, e.g. "+5 Attack". good: whether it helps (a
+// minus on a stat where lower is better does).
 export function formatBonuses(modifiers) {
   return statSystem.stats
     .map((s) => s.key)
     .filter((k) => modifiers?.[k])
     .map((key) => {
       const v = round(modifiers[key])
-      return { key, value: v, text: `${v > 0 ? '+' : '\u2212'}${Math.abs(v)} ${statLabel(key)}` }
+      return { key, value: v, good: isImprovement(key, v), text: `${v > 0 ? '+' : '\u2212'}${Math.abs(v)} ${statLabel(key)}` }
     })
 }
 

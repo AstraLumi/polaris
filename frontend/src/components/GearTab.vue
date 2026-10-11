@@ -36,7 +36,7 @@
       <div class="bonus-card">
         <span class="bonus-title">{{ $t('Bonuses from gear') }}</span>
         <div v-if="bonuses.length" class="bonus-chips">
-          <span v-for="b in bonuses" :key="b.key" class="bonus" :class="{ 'is-negative': b.value < 0 }">{{ b.text }}</span>
+          <span v-for="b in bonuses" :key="b.key" class="bonus" :class="{ 'is-negative': !b.good }">{{ b.text }}</span>
         </div>
         <span v-else class="no-bonus">{{ $t('No stat bonuses') }}</span>
       </div>
