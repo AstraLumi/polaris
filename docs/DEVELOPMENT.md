@@ -189,6 +189,11 @@ types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard
   afterwards through `after`); see `migrations` in `backend/db.go`. Character tags
   (`character_tags`) belong to the character, not a version.
 
+## README screenshots
+
+`scripts/screenshots/` retakes them from a demo story of invented data; its
+README says how.
+
 ## Data on disk
 
 - `DATA_DIR` (`/data` in the container) holds `stories.db` (the list of
