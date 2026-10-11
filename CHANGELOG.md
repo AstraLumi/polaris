@@ -4,6 +4,15 @@ What changed in each version of Polaris. The same notes are on the
 [Releases](https://github.com/AstraLumi/polaris/releases) page. Versions are
 Major.Minor.Bugfix: new features raise Minor, fixes raise Bugfix.
 
+## 2.0.1 (2026-10-11)
+
+**Upgrade:** stories are upgraded to database schema 23 the first time they are opened (if 2.0.0 couldn't upgrade them). This can't be undone, so export your stories first.
+
+### Fixed
+
+- Some existing stories couldn't be opened or imported after updating to 2.0.0 ("FOREIGN KEY constraint failed"). Their data was never changed; they now upgrade normally.
+- Deleting a character version now always removes everything that belonged to it. Before, it sometimes left rows behind, which is what tripped the 2.0.0 upgrade.
+
 ## 2.0.0 (2026-10-11)
 
 **Upgrade:** stories are upgraded to database schema 23 the first time they are opened. This can't be undone, so export your stories first. If you made your own stat formulas in `backend/stats_custom.go`, delete that file before updating (it no longer builds) and make the formulas again under Settings → Stats.

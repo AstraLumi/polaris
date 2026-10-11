@@ -30,7 +30,10 @@ Run all of these before committing. `backend/static/` is build output (only
   (see `TestMigrationAddsGearTables`). Bump the version. Tests that roll a
   fresh database back to an older schema undo the newest one first with
   `rollBackSchema16` (`backend/schema16_test.go`); a new schema needs its own
-  undo step there, or those tests fail with "duplicate column". A new wiki
+  undo step there, or those tests fail with "duplicate column". Before
+  2.0.1 foreign keys were enforced on one pooled connection only, so real
+  databases hold rows whose parent is gone: a migration that copies rows
+  into a table with a foreign key must skip those (`TestMigrationsSkipLeftoverRows`). A new wiki
   article kind gets its delete trigger in its own migration
   (`wikiTriggerSQL`); the schema-13 migration's list is frozen.
 - **Every new table must be classified** in `backend/storyassets.go`: either

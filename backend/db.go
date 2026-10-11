@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"slices"
+	"strings"
 )
 
 // Bump this whenever the schema changes. If there's an entry in
@@ -699,13 +700,19 @@ var schema23Statements = slices.Concat(
 	},
 )
 
+// A birthplace pointing at a location deleted long ago (foreign keys weren't
+// always enforced) is left behind, as copying it would fail the upgrade.
 func moveToCharacterSQL(cols ...string) []string {
 	var out []string
 	for _, c := range cols {
+		valid := ""
+		if strings.HasSuffix(c, "_location_id") {
+			valid = fmt.Sprintf(" AND st.%s IN (SELECT id FROM locations)", c)
+		}
 		out = append(out, fmt.Sprintf(`UPDATE characters SET %[1]s = (
 			SELECT st.%[1]s FROM character_versions v JOIN character_story st ON st.version_id = v.id
-			WHERE v.character_id = characters.id AND st.%[1]s IS NOT NULL AND st.%[1]s != ''
-			ORDER BY v.is_current DESC, v.id LIMIT 1)`, c))
+			WHERE v.character_id = characters.id AND st.%[1]s IS NOT NULL AND st.%[1]s != ''%[2]s
+			ORDER BY v.is_current DESC, v.id LIMIT 1)`, c, valid))
 	}
 	return out
 }

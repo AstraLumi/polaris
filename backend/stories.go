@@ -162,12 +162,11 @@ func (m *storyManager) openLocked(id string) (*storyApp, error) {
 		return nil, err
 	}
 	dbPath := m.dbPathFor(id)
-	db, err := sql.Open("sqlite", dbPath)
+	// Foreign keys on every pooled connection, not just the first: a PRAGMA
+	// run once only reaches one connection, so deletes elsewhere didn't
+	// cascade and left rows behind.
+	db, err := sql.Open("sqlite", dbPath+"?_pragma=foreign_keys(1)")
 	if err != nil {
-		return nil, err
-	}
-	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
-		db.Close()
 		return nil, err
 	}
 	if err := ensureSchema(db); err != nil {

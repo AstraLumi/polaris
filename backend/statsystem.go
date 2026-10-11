@@ -676,11 +676,16 @@ func statSeedSQL(s statSystem) []string {
 	return out
 }
 
+// Rows left behind by versions deleted long ago (foreign keys weren't always
+// enforced) are skipped: copying them would break the new table's foreign key
+// and fail the whole upgrade (2.0.0 did, so this filter was added after the
+// release; it changes nothing for a database without such rows).
 func movePrimaryPointsSQL() []string {
 	var out []string
 	for _, col := range []string{"vit", "def", "res", "str", "dex", "intel", "wis", "agl"} {
 		out = append(out, fmt.Sprintf(`INSERT OR REPLACE INTO character_special_bases (version_id, stat_key, value)
-			SELECT version_id, '%s', %s FROM character_build WHERE %s != 0`, col, col, col))
+			SELECT version_id, '%s', %s FROM character_build
+			WHERE %s != 0 AND version_id IN (SELECT id FROM character_versions)`, col, col, col))
 	}
 	return out
 }
