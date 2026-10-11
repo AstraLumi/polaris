@@ -1,5 +1,6 @@
 import { tr, t } from './i18n'
 import { STORY_API } from './stories'
+import { mapPath } from './navigation'
 
 // The wiki has no pages of its own: the server builds an article for every
 // character, location, event and asset (see backend/wiki.go) and stores only
@@ -127,7 +128,7 @@ export const wikiPath = (type, id) => `/wiki/${type}/${id}`
 export function sourcePath(type, id) {
   if (type === 'character') return `/characters/${id}`
   if (type === 'event') return `/events/${id}`
-  if (type === 'location') return '/map'
+  if (type === 'location') return mapPath(id)
   if (type === 'faction') return '/factions'
   return '/assets'
 }

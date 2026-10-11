@@ -25,7 +25,7 @@
           </p>
         </div>
         <div class="identity-actions">
-          <RouterLink :to="{ path: '/timeline', query: { person: data.character_id } }" class="btn btn-ghost">
+          <RouterLink :to="{ path: '/timeline', query: { person: data.character_id, match: 'highlight' } }" class="btn btn-ghost">
             {{ $t('Timeline') }}
           </RouterLink>
           <RouterLink :to="`/characters/${data.character_id}/versions`" class="btn btn-ghost">

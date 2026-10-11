@@ -13,7 +13,7 @@
           <strong>{{ form.name }}</strong>
           <span>{{ fullDate(form.eventDate) || $t('No date set') }}</span>
           <p>
-            {{ importedParts[0] }}<RouterLink :to="source.type === 'character' ? `/characters/${source.id}` : '/map'">{{ source.name }}</RouterLink>{{ importedParts[1] }}
+            {{ importedParts[0] }}<RouterLink :to="source.type === 'character' ? `/characters/${source.id}` : mapPath(source.id)">{{ source.name }}</RouterLink>{{ importedParts[1] }}
           </p>
         </div>
       </template>
@@ -83,7 +83,7 @@ import TagInput from '../components/TagInput.vue'
 import PeoplePicker from '../components/PeoplePicker.vue'
 import ChapterSelect from '../components/ChapterSelect.vue'
 import BackLink from '../components/BackLink.vue'
-import { useUnsavedGuard, useSaveShortcut } from '../navigation'
+import { useUnsavedGuard, useSaveShortcut, mapPath } from '../navigation'
 
 // No id means "new event".
 const props = defineProps({ id: { type: String, default: '' } })

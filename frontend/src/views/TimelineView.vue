@@ -7,6 +7,7 @@
           <template v-if="data">
             <template v-if="filtering">{{ $t('{shown} of {total}', { shown: nodes.length, total: data.nodes.length }) }}</template>
             <template v-else>{{ $tn('{n} point', '{n} points', data.nodes.length) }}</template>
+            <template v-if="highlighting"> · {{ $t('{n} highlighted', { n: matchCount }) }}</template>
             <template v-if="range"> · {{ range }}</template>
           </template>
           <template v-else>&nbsp;</template>
@@ -64,6 +65,16 @@
             <option v-for="p in placeOptions" :key="p.id" :value="String(p.id)">{{ p.name }}</option>
           </select>
         </label>
+
+        <div v-if="personId || placeId" class="ctl" role="group" :aria-label="$t('How to show the person or place')">
+          <span>{{ $t('Show') }}</span>
+          <button type="button" class="chip-btn" :class="{ 'is-on': !highlightMatch }" :aria-pressed="!highlightMatch" :title="$t('Hide every other point')" @click="setFilter('match', '')">
+            {{ $t('Only theirs') }}
+          </button>
+          <button type="button" class="chip-btn" :class="{ 'is-on': highlightMatch }" :aria-pressed="highlightMatch" :title="$t('Keep every point and fade the others')" @click="setFilter('match', 'highlight')">
+            {{ $t('Highlight') }}
+          </button>
+        </div>
 
         <div class="legend" :aria-label="$t('Legend')">
           <button
@@ -128,7 +139,7 @@
             <button
               type="button"
               class="label"
-              :class="[labelClass(n), { 'is-selected': selectedKey === n.key, 'is-dim': isDim(n) }]"
+              :class="[labelClass(n), { 'is-selected': selectedKey === n.key, 'is-dim': isDim(n), 'is-marked': isMarked(n) }]"
               :style="{ left: n.x + 'px', top: n.y + labelOffset(n) + 'px', width: n.labelWidth + 'px' }"
               @click="select(n.key)"
             >
@@ -140,7 +151,7 @@
               class="node"
               :class="[
                 'kind-' + n.kind,
-                { 'is-selected': selectedKey === n.key, 'is-related': related.has(n.key), 'is-dim': isDim(n) },
+                { 'is-selected': selectedKey === n.key, 'is-related': related.has(n.key), 'is-dim': isDim(n), 'is-marked': isMarked(n) },
               ]"
               :style="{ left: n.x + 'px', top: n.y + 'px' }"
               :aria-label="`${n.name}, ${shortDate(n.date)}`"
@@ -221,7 +232,7 @@
             >
               {{ $t('View character') }}
             </RouterLink>
-            <RouterLink v-else to="/map" class="btn btn-primary">{{ $t('View on map') }}</RouterLink>
+            <RouterLink v-else :to="mapPath(selected.source_id)" class="btn btn-primary">{{ $t('View on map') }}</RouterLink>
 
             <RouterLink v-if="selected.event_id" :to="`/events/${selected.event_id}`" class="btn btn-ghost">
               {{ $t('Event page') }}
@@ -243,7 +254,7 @@ import { timelineApi, eventsApi } from '../api'
 import { shortDate, fullDate } from '../calendar'
 import { t, tn } from '../i18n'
 import { layoutTimeline, autoPxPerYear, minimumWidth, DEFAULTS } from '../timelineLayout'
-import { viewPicture } from '../navigation'
+import { viewPicture, mapPath } from '../navigation'
 
 const router = useRouter()
 const route = useRoute()
@@ -323,7 +334,12 @@ const queryText = (k) => (typeof route.query[k] === 'string' ? route.query[k] : 
 const personId = computed(() => queryText('person'))
 const placeId = computed(() => queryText('place'))
 const hiddenKinds = computed(() => new Set(queryText('hide').split(',').filter((k) => KINDS.includes(k))))
-const filtering = computed(() => !!(personId.value || placeId.value || hiddenKinds.value.size))
+// match=highlight keeps every point and fades the ones that aren't the
+// person's or place's (the character page links this way); without it the
+// others are hidden.
+const highlightMatch = computed(() => queryText('match') === 'highlight')
+const highlighting = computed(() => highlightMatch.value && !!(personId.value || placeId.value))
+const filtering = computed(() => !!(((personId.value || placeId.value) && !highlightMatch.value) || hiddenKinds.value.size))
 
 function setFilter(key, value) {
   const query = { ...route.query }
@@ -349,14 +365,33 @@ function clearFilters() {
 const inPerson = (n, id) => (n.kind === 'birth' && n.source_id === id) || n.people.some((p) => p.id === id)
 const inPlace = (n, id) => (n.kind === 'founding' && n.source_id === id) || n.location_id === id
 
-const nodes = computed(() => {
-  const all = data.value ? data.value.nodes : []
+function matches(n) {
   const person = Number(personId.value)
   const place = Number(placeId.value)
-  return all.filter(
-    (n) => !hiddenKinds.value.has(n.kind) && (!person || inPerson(n, person)) && (!place || inPlace(n, place)),
-  )
+  return (!person || inPerson(n, person)) && (!place || inPlace(n, place))
+}
+
+const nodes = computed(() => {
+  const all = data.value ? data.value.nodes : []
+  return all.filter((n) => !hiddenKinds.value.has(n.kind) && (highlightMatch.value || matches(n)))
 })
+
+const isMarked = (n) => highlighting.value && matches(n)
+const matchCount = computed(() => nodes.value.filter(isMarked).length)
+
+// Bring the first highlighted point into view when the highlight changes.
+watch(
+  () => [data.value, personId.value, placeId.value, highlightMatch.value],
+  async () => {
+    if (!highlighting.value) return
+    await nextTick()
+    const first = layout.value.nodes.find(isMarked)
+    if (first && scrollerEl.value) {
+      scrollerEl.value.scrollTo({ left: Math.max(0, first.x - scrollerEl.value.clientWidth / 3), behavior: 'smooth' })
+    }
+  },
+  { flush: 'post' },
+)
 
 function optionsFrom(pairs) {
   const seen = new Map()
@@ -402,7 +437,7 @@ const linkedNodes = computed(() => {
 })
 const related = computed(() => new Set(linkedNodes.value.map((n) => n.key)))
 
-const isDim = (n) => !!highlightTag.value && !hasTag(n, highlightTag.value)
+const isDim = (n) => (!!highlightTag.value && !hasTag(n, highlightTag.value)) || (highlighting.value && !matches(n))
 
 // ---- Drawing helpers ------------------------------------------------------------
 
@@ -708,6 +743,15 @@ onBeforeUnmount(() => {
 .node.is-dim,
 .label.is-dim {
   opacity: 0.22;
+}
+
+.node.is-marked {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-primary) 75%, transparent), 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.label.is-marked .label-name {
+  color: var(--text-primary);
+  font-weight: 700;
 }
 
 .label {

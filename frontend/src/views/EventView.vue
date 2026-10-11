@@ -18,13 +18,13 @@
           </div>
           <h1>{{ event.name }}</h1>
           <p v-if="event.location_id" class="where">
-            {{ $t('at') }} <RouterLink to="/map">{{ event.location_name }}</RouterLink>
+            {{ $t('at') }} <RouterLink :to="mapPath(event.location_id)">{{ event.location_name }}</RouterLink>
           </p>
           <p v-if="event.chapter_id && chapterLabel(event.chapter_id)" class="where">
             {{ $t('in') }} <RouterLink :to="`/chapters/${event.chapter_id}`">{{ chapterLabel(event.chapter_id) }}</RouterLink>
           </p>
           <p v-if="event.source" class="linked-note">
-            {{ importedParts[0] }}<RouterLink :to="event.source.type === 'character' ? `/characters/${event.source.id}` : '/map'">{{ event.source.type === 'character' ? $t('{name}\'s birth date', { name: event.source.name }) : $t('{name}\'s founding date', { name: event.source.name }) }}</RouterLink>{{ importedParts[1] }}
+            {{ importedParts[0] }}<RouterLink :to="event.source.type === 'character' ? `/characters/${event.source.id}` : mapPath(event.source.id)">{{ event.source.type === 'character' ? $t('{name}\'s birth date', { name: event.source.name }) : $t('{name}\'s founding date', { name: event.source.name }) }}</RouterLink>{{ importedParts[1] }}
           </p>
           <div class="actions">
             <RouterLink :to="`/events/${event.id}/edit`" class="btn btn-primary">{{ $t('Edit') }}</RouterLink>
@@ -116,7 +116,7 @@ import { shortDate, fullDate, dateParts } from '../calendar'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import BackLink from '../components/BackLink.vue'
 import { chapterLabel, loadChapters } from '../chapters'
-import { pageTitle, viewPicture } from '../navigation'
+import { pageTitle, viewPicture, mapPath } from '../navigation'
 import { t as tt } from '../i18n'
 
 const props = defineProps({ id: { type: String, required: true } })

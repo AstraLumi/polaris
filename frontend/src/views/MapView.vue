@@ -136,6 +136,7 @@ const BRUSHES = [
 const brush = ref(0)
 const locations = ref([])
 const activeId = ref(null) // the major location being painted/erased
+const focusId = ref(null) // the major location a link pointed at (outlined)
 const hoverHex = ref(null)
 const hoverEntries = ref([])
 const selectedHex = ref(null)
@@ -671,6 +672,7 @@ function draw() {
     const active = locMap.get(activeId.value)
     if (active && !active.color) outline(hexesOf(activeId.value), 'rgba(255, 255, 255, 0.8)', 2)
   }
+  if (focusId.value != null) outline(hexesOf(focusId.value), themeRgba('--accent', 0.95), 3)
   if (hoverHex.value) {
     const ids = hexMembers.get(keyOf(hoverHex.value.q, hoverHex.value.r))?.ids ?? []
     for (const id of ids) {
@@ -779,6 +781,50 @@ function fitToContent() {
   view.x = size.w / 2 - cx * zoom
   view.y = size.h / 2 - cy * zoom
   setZoomLabel()
+}
+
+// Centre the view on a box of world points and zoom so it fills most of the
+// screen: a big kingdom ends up far out, a single hex close in.
+const FOCUS_ZOOM_MAX = 2.5
+function fitBox(minX, maxX, minY, maxY) {
+  const fitX = (size.w * 0.7) / (maxX - minX + HEX_SIZE * 4)
+  const fitY = (size.h * 0.7) / (maxY - minY + HEX_SIZE * 4)
+  const zoom = Math.min(FOCUS_ZOOM_MAX, Math.max(ZOOM_MIN, Math.min(fitX, fitY)))
+  view.zoom = zoom
+  view.x = size.w / 2 - ((minX + maxX) / 2) * zoom
+  view.y = size.h / 2 - ((minY + maxY) / 2) * zoom
+  setZoomLabel()
+}
+
+// Show one location: a minor one's hex is selected (its panel opens), a
+// major one's hexes are outlined. Returns false if it isn't on the map.
+function focusLocation(loc) {
+  if (loc.kind === 'minor') {
+    if (loc.q == null || loc.r == null) return false
+    const [x, y] = hexCenter(loc.q, loc.r)
+    fitBox(x, x, y, y)
+    focusId.value = null
+    selectedHex.value = { q: loc.q, r: loc.r }
+  } else {
+    const hexes = hexesOf(loc.id)
+    if (!hexes.length) return false
+    let minX = Infinity
+    let maxX = -Infinity
+    let minY = Infinity
+    let maxY = -Infinity
+    for (const h of hexes) {
+      minX = Math.min(minX, h.x)
+      maxX = Math.max(maxX, h.x)
+      minY = Math.min(minY, h.y)
+      maxY = Math.max(maxY, h.y)
+    }
+    fitBox(minX, maxX, minY, maxY)
+    focusId.value = loc.id
+    selectedHex.value = null
+  }
+  refreshPanels()
+  scheduleDraw()
+  return true
 }
 
 function fitAndDraw() {
@@ -914,6 +960,7 @@ function onPointerUp(e) {
   if (finished.type === 'pan' && finished.selectOnClick && !finished.moved) {
     const { sx, sy } = eventPoint(e)
     selectedHex.value = hexAt(sx, sy)
+    focusId.value = null
     refreshPanels()
     scheduleDraw()
   } else if (finished.type === 'paint' || finished.type === 'erase') {
@@ -1199,6 +1246,7 @@ onMounted(async () => {
   window.addEventListener('blur', onWindowBlur)
   await load()
   openFromQuery()
+  focusFromQuery()
 })
 
 // /map?edit=<id> (the Home page's loose ends) opens that major location's
@@ -1217,6 +1265,20 @@ function openFromQuery() {
   delete query.edit
   router.replace({ query })
 }
+
+// /map?focus=<id> (links from events, the timeline, the wiki…) centres and
+// zooms the view on that location. The query stays, so a reload keeps it.
+function focusFromQuery() {
+  const id = Number(route.query.focus)
+  if (!id) return
+  const loc = locMap.get(id)
+  if (!loc) return
+  if (!focusLocation(loc)) flash(t('{name} isn\'t drawn on the map yet.', { name: loc.name }))
+}
+// Following another such link while the map is already open.
+watch(() => route.query.focus, () => {
+  if (route.path === '/map') focusFromQuery()
+})
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()

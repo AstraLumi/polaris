@@ -10,6 +10,10 @@ import { t } from './i18n'
 // with the route's own title and the story name into document.title.
 export const pageTitle = ref('')
 
+// A link to the map that opens centred and zoomed on one location (see
+// focusFromQuery in MapView.vue). Without an id it's the plain map.
+export const mapPath = (locationId) => (locationId ? `/map?focus=${locationId}` : '/map')
+
 // Asks before leaving a page whose form has unsaved edits: in-app navigation
 // (including to the same view with other params, such as a wiki link to
 // another article) and closing or reloading the tab. isDirty is a function
