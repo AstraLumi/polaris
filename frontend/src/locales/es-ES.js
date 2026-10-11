@@ -406,6 +406,7 @@ export default {
   "Pan": "Mover",
   "Pants": "Pantalones",
   "Parents, children, siblings and partners, as a tree": "Padres, hijos, hermanos y parejas, en forma de árbol",
+  "Personal": "Personal",
   "Pick a colour theme. It applies straight away and is remembered on this device only, so your phone and your desktop can look different.": "Elige un tema de color. Se aplica al instante y se recuerda solo en este dispositivo, así que tu móvil y tu ordenador pueden verse distintos.",
   "Pick a major location in the bar below to paint with.": "Elige una ubicación principal en la barra de abajo para pintar.",
   "Pick a version to edit": "Elegir una versión para editar",

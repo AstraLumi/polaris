@@ -95,6 +95,16 @@ export const FACT_LABELS = {
   headquarters: tr('Headquarters'),
 }
 
+// How the infobox groups its facts, top to bottom. Facts that aren't listed
+// here stay at the top, with Kind, in the order the server sends them; a
+// group with none of its facts filled in isn't shown.
+export const FACT_GROUPS = [
+  { label: '', keys: ['nickname', 'also_known_as', 'status', 'tags'] },
+  { label: tr('Personal'), keys: ['gender', 'age', 'race', 'body_type', 'blood_type'] },
+  { label: tr('Birth'), keys: ['born', 'born_in', 'nation', 'human_birth_date'] },
+  { label: tr('Abilities'), keys: ['class', 'subclass', 'specialization'] },
+]
+
 // Words the server sends as an infobox value.
 export const WORD_LABELS = [
   tr('Kingdom'), tr('Major location'), tr('Minor location'), tr('Capital'), tr('City'),

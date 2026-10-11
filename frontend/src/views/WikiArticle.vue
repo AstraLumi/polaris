@@ -216,13 +216,18 @@
                 <th>{{ $t('Kind') }}</th>
                 <td>{{ $t(TYPE_LABELS[article.type]) }}</td>
               </tr>
-              <tr v-for="f in shownFacts" :key="f.key">
-                <th>{{ $t(FACT_LABELS[f.key]) }}</th>
-                <td>
-                  <RouterLink v-if="f.link" :to="wikiPath(f.link.type, f.link.id)">{{ f.link.name }}</RouterLink>
-                  <template v-else>{{ factText(f) }}</template>
-                </td>
-              </tr>
+              <template v-for="(group, gi) in factGroups" :key="gi">
+                <tr v-if="group.label" class="group-row">
+                  <th colspan="2">{{ $t(group.label) }}</th>
+                </tr>
+                <tr v-for="f in group.facts" :key="f.key">
+                  <th>{{ $t(FACT_LABELS[f.key]) }}</th>
+                  <td>
+                    <RouterLink v-if="f.link" :to="wikiPath(f.link.type, f.link.id)">{{ f.link.name }}</RouterLink>
+                    <template v-else>{{ factText(f) }}</template>
+                  </td>
+                </tr>
+              </template>
             </tbody>
           </table>
 
@@ -300,7 +305,7 @@ import { fullDate, dateParts } from '../calendar'
 import { chapterLabel, loadChapters } from '../chapters'
 import { t } from '../i18n'
 import {
-  TYPE_LABELS, FIELD_LABELS, FACT_LABELS, GROUP_LABELS, SHEET_LABELS,
+  TYPE_LABELS, FIELD_LABELS, FACT_LABELS, FACT_GROUPS, GROUP_LABELS, SHEET_LABELS,
   wikiApi, wikiPath, sourcePath, sourceLabel, makeLinkResolver,
 } from '../wiki'
 
@@ -341,6 +346,19 @@ const shownVersion = computed(() => {
 })
 const shownFacts = computed(() => shownVersion.value?.facts ?? article.value.facts)
 const shownGroups = computed(() => shownVersion.value?.groups ?? article.value.groups)
+
+// The facts in their groups (FACT_GROUPS): the unlisted ones and the first
+// group without a heading, then each labelled group that has something.
+const factGroups = computed(() => {
+  const facts = shownFacts.value
+  const listed = new Set(FACT_GROUPS.flatMap((g) => g.keys))
+  const pick = (keys) => keys.map((k) => facts.find((f) => f.key === k)).filter(Boolean)
+  const [top, ...rest] = FACT_GROUPS
+  return [
+    { label: '', facts: [...facts.filter((f) => !listed.has(f.key)), ...pick(top.keys)] },
+    ...rest.map((g) => ({ label: g.label, facts: pick(g.keys) })).filter((g) => g.facts.length),
+  ]
+})
 const shownName = computed(() => shownVersion.value?.name || article.value.name)
 const infoPicture = computed(() => (shownVersion.value ? shownVersion.value.picture : article.value.picture))
 let snapshot = ''
@@ -810,6 +828,20 @@ useSaveShortcut(() => editing.value && !saving.value && save())
 .info-sub {
   font-size: 0.8rem;
   background: color-mix(in srgb, var(--line) 38%, var(--surface));
+}
+
+/* A heading between groups of facts (Personal, Birth…). */
+.infobox .group-row th {
+  width: auto;
+  padding: 0.45rem 0.6rem 0.25rem;
+  border-top: 1px solid var(--glass-border);
+  text-align: left;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--line) 80%, var(--text-muted));
+  background: color-mix(in srgb, var(--line) 8%, transparent);
 }
 
 .info-pic {
