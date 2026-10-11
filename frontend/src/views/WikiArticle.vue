@@ -16,6 +16,7 @@
             <button class="btn btn-primary small" @click="startEdit()">{{ $t('Edit') }}</button>
           </template>
           <template v-else>
+            <button v-if="isLore" class="btn btn-danger small" :disabled="saving" @click="deleteOpen = true">{{ $t('Delete article') }}</button>
             <button class="btn btn-ghost small" :disabled="saving" @click="cancelEdit">{{ $t('Cancel') }}</button>
             <button class="btn btn-primary small" :disabled="saving" @click="save">
               {{ saving ? $t('Saving…') : $t('Save') }}
@@ -26,7 +27,8 @@
 
       <p v-if="saveError" class="error-banner">{{ saveError }}</p>
 
-      <p class="hatnote">
+      <p v-if="isLore" class="hatnote">{{ $t('A free-form article: everything on it is written here.') }}</p>
+      <p v-else class="hatnote">
         {{ hatParts[0] }}<RouterLink :to="sourcePath(article.type, article.id)">{{ sourceLabel(article.type) }}</RouterLink>{{ hatParts[1] }}
       </p>
 
@@ -110,6 +112,11 @@
               {{ $t('Format text with the buttons above each box, or type Markdown. Use “Link to article” to link to another page of the wiki.') }}
             </p>
 
+            <div v-if="isLore" class="field">
+              <label for="f-title">{{ $t('Title') }}</label>
+              <input id="f-title" v-model="draft.name" type="text" maxlength="120" required />
+            </div>
+
             <div class="field">
               <label for="f-summary">{{ $t('Introduction') }}</label>
               <MarkdownEditor id="f-summary" v-model="draft.summary" :items="items" :resolve="resolver" :placeholder="$t('A few sentences that open the article.')" />
@@ -145,8 +152,21 @@
         <!-- ------------------------------------------------ the infobox -->
         <aside class="infobox" :aria-label="$t('Summary box')">
           <div class="info-title">{{ article.name }}</div>
+          <div v-if="editing && isLore" class="info-pic-edit">
+            <div class="info-pic">
+              <IconImage v-if="shownPicture" :src="shownPicture" :name="draft.name" :alt="draft.name" />
+              <span v-else class="no-pic">{{ $t('No picture') }}</span>
+            </div>
+            <div class="pic-actions">
+              <button type="button" class="btn btn-ghost small" @click="pictureInput.click()">
+                {{ shownPicture ? $t('Change picture') : $t('Upload picture') }}
+              </button>
+              <button v-if="shownPicture" type="button" class="btn btn-ghost small" @click="dropPicture">{{ $t('Remove') }}</button>
+              <input ref="pictureInput" type="file" accept="image/*" hidden @change="onPicture" />
+            </div>
+          </div>
           <div
-            v-if="article.picture"
+            v-else-if="article.picture"
             class="info-pic"
             :class="{ zoomable: article.picture.startsWith('/uploads/') }"
             @click="article.picture.startsWith('/uploads/') && viewPicture(article.picture, article.name)"
@@ -186,7 +206,13 @@
             <div class="info-edit">
               <div v-for="(r, i) in draft.infobox" :key="r.key" class="info-row">
                 <input v-model="r.label" type="text" :placeholder="$t('Label')" :aria-label="$t('Label')" maxlength="120" />
-                <input v-model="r.value" type="text" :placeholder="$t('Value')" :aria-label="$t('Value')" maxlength="2000" />
+                <input :ref="(el) => (valueEls[r.key] = el)" v-model="r.value" type="text" :placeholder="$t('Value')" :aria-label="$t('Value')" maxlength="2000" />
+                <button type="button" class="btn btn-ghost small row-link" :title="$t('Link to another wiki article')" @mousedown.prevent @click="openRowLink(r)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" />
+                    <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
+                  </svg>
+                </button>
                 <button type="button" class="btn btn-ghost small" :aria-label="$t('Remove')" @click="draft.infobox.splice(i, 1)">×</button>
               </div>
               <button type="button" class="btn btn-ghost small" @click="addRow">{{ $t('Add row') }}</button>
@@ -195,15 +221,27 @@
         </aside>
       </div>
     </article>
+
+    <WikiLinkPanel v-if="rowLink" :items="items" :resolve="resolver" :text="rowLink.selected" @pick="insertRowLink" @close="closeRowLink" />
+    <ConfirmDialog
+      v-if="deleteOpen"
+      :title="$t('Delete this article?')"
+      :message="$t('Its text and picture are deleted. Links to it from other articles stay, shown as missing.')"
+      :confirm-label="$t('Delete')"
+      @cancel="deleteOpen = false"
+      @confirm="deleteArticle"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, watch, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import IconImage from '../components/IconImage.vue'
 import BackLink from '../components/BackLink.vue'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
+import WikiLinkPanel from '../components/WikiLinkPanel.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import { pageTitle, useUnsavedGuard, useSaveShortcut, viewPicture } from '../navigation'
 import { renderMarkdown } from '../markdown'
 import { fullDate, dateParts } from '../calendar'
@@ -218,6 +256,7 @@ const props = defineProps({
   id: { type: String, required: true },
 })
 const router = useRouter()
+const route = useRoute()
 
 const article = ref(null)
 const items = ref([])
@@ -226,7 +265,8 @@ const saveError = ref('')
 const editing = ref(false)
 const saving = ref(false)
 const tocOpen = ref(true)
-const draft = reactive({ summary: '', fields: {}, sections: [], infobox: [] })
+const draft = reactive({ name: '', summary: '', fields: {}, sections: [], infobox: [] })
+const isLore = computed(() => article.value?.type === 'lore')
 let snapshot = ''
 let keySeq = 0
 
@@ -293,15 +333,82 @@ const makeDraft = () => ({
   sections: draft.sections.map((s) => ({ title: s.title, body: s.body })),
   infobox: draft.infobox.map((r) => ({ label: r.label, value: r.value })),
 })
-const dirty = () => editing.value && JSON.stringify(makeDraft()) !== snapshot
+// A lore article's title and picture are saved apart from its text.
+const draftState = () => JSON.stringify({ ...makeDraft(), name: draft.name })
+const pictureChanged = () => !!pictureFile.value || pictureRemoved.value
+const metaChanged = () => draft.name.trim() !== article.value.name || pictureChanged()
+const dirty = () => editing.value && (draftState() !== snapshot || pictureChanged())
+
+// ---- a lore article's picture ----
+
+const pictureInput = ref(null)
+const pictureFile = ref(null)
+const pictureRemoved = ref(false)
+const previewUrl = ref('')
+const shownPicture = computed(() => previewUrl.value || (pictureRemoved.value ? '' : article.value?.picture || ''))
+
+function clearPreview() {
+  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
+  previewUrl.value = ''
+}
+
+function onPicture(e) {
+  const file = e.target.files[0] // read before clearing the input
+  e.target.value = ''
+  if (!file) return
+  clearPreview()
+  pictureFile.value = file
+  pictureRemoved.value = false
+  previewUrl.value = URL.createObjectURL(file)
+}
+
+function dropPicture() {
+  clearPreview()
+  pictureFile.value = null
+  pictureRemoved.value = true
+}
+
+// ---- linking from an infobox value ----
+
+const valueEls = {}
+const rowLink = ref(null) // { key, from, to, selected }
+
+function openRowLink(r) {
+  const el = valueEls[r.key]
+  const focused = el && document.activeElement === el
+  const from = focused ? el.selectionStart : r.value.length
+  const to = focused ? el.selectionEnd : r.value.length
+  rowLink.value = { key: r.key, from, to, selected: r.value.slice(from, to) }
+}
+
+async function closeRowLink(caret) {
+  const key = rowLink.value?.key
+  rowLink.value = null
+  await nextTick()
+  const el = valueEls[key]
+  if (!el) return
+  el.focus()
+  if (caret != null) el.setSelectionRange(caret, caret)
+}
+
+function insertRowLink(markup) {
+  const { key, from, to } = rowLink.value
+  const row = draft.infobox.find((r) => r.key === key)
+  if (row) row.value = row.value.slice(0, from) + markup + row.value.slice(to)
+  closeRowLink(from + markup.length)
+}
 
 function fillDraft() {
   const a = article.value
+  draft.name = a.name
+  clearPreview()
+  pictureFile.value = null
+  pictureRemoved.value = false
   draft.summary = a.summary
   draft.fields = Object.fromEntries(a.field_keys.map((k) => [k, a.fields[k] || '']))
   draft.sections = a.sections.map((s) => ({ key: ++keySeq, title: s.title, body: s.body }))
   draft.infobox = a.infobox.map((r) => ({ key: ++keySeq, label: r.label, value: r.value }))
-  snapshot = JSON.stringify(makeDraft())
+  snapshot = draftState()
 }
 
 async function startEdit(focusId) {
@@ -337,7 +444,16 @@ async function save() {
   saving.value = true
   saveError.value = ''
   try {
+    if (isLore.value && metaChanged()) {
+      const fd = new FormData()
+      fd.append('name', draft.name.trim())
+      if (pictureFile.value) fd.append('picture', pictureFile.value)
+      else if (pictureRemoved.value) fd.append('remove_picture', '1')
+      await wikiApi.saveLore(props.id, fd)
+    }
     article.value = await wikiApi.save(props.type, props.id, makeDraft())
+    pageTitle.value = article.value.name
+    clearPreview()
     editing.value = false
     // A new written article should show up as such in the links' index too.
     items.value = await wikiApi.list()
@@ -361,6 +477,28 @@ async function load() {
     pageTitle.value = a.name
   } catch (e) {
     loadError.value = e.message
+    return
+  }
+  // A new article opens straight in the editor (WikiHome's "New article").
+  if (route.query.edit === '1') {
+    router.replace({ query: {} })
+    startEdit('f-title')
+  }
+}
+
+const deleteOpen = ref(false)
+async function deleteArticle() {
+  deleteOpen.value = false
+  saving.value = true
+  saveError.value = ''
+  try {
+    await wikiApi.deleteLore(props.id)
+    editing.value = false
+    router.push('/wiki')
+  } catch (e) {
+    saveError.value = e.message
+  } finally {
+    saving.value = false
   }
 }
 
@@ -635,8 +773,35 @@ useSaveShortcut(() => editing.value && !saving.value && save())
 
 .info-row {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: 1fr 1fr auto auto;
   gap: 0.35rem;
+}
+
+.row-link svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.info-row .btn.small {
+  padding: 0 0.55rem;
+}
+
+.info-pic-edit .info-pic {
+  min-height: 6rem;
+  align-items: center;
+}
+
+.no-pic {
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--text-faint);
+}
+
+.pic-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0 0.6rem 0.7rem;
 }
 
 /* ---- the editor ---- */

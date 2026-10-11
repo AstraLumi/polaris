@@ -160,6 +160,9 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	mux.HandleFunc("GET /api/wiki", listWikiHandler(db))
 	mux.HandleFunc("GET /api/wiki/{type}/{id}", getWikiHandler(db))
 	mux.HandleFunc("PUT /api/wiki/{type}/{id}", saveWikiHandler(db))
+	mux.HandleFunc("POST /api/lore", saveLoreHandler(db, uploadsDir))
+	mux.HandleFunc("PUT /api/lore/{id}", saveLoreHandler(db, uploadsDir))
+	mux.HandleFunc("DELETE /api/lore/{id}", deleteLoreHandler(db, uploadsDir))
 
 	// Home dashboard.
 	mux.HandleFunc("GET /api/home", homeHandler(db))

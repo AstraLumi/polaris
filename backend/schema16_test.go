@@ -5,11 +5,26 @@ import (
 	"testing"
 )
 
+// rollBackSchema17 turns a fresh database back into schema 16.
+func rollBackSchema17(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, q := range []string{
+		`DROP TRIGGER wiki_cleanup_lore_articles`,
+		`DROP TABLE lore_articles`,
+		`UPDATE schema_meta SET value = '16' WHERE key = 'schema_version'`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+}
+
 // rollBackSchema16 turns a fresh database back into schema 15, for the
 // tests that start from an older schema and migrate up again. Triggers go
 // first: SQLite won't drop a column a trigger mentions.
 func rollBackSchema16(t *testing.T, db *sql.DB) {
 	t.Helper()
+	rollBackSchema17(t, db)
 	for _, q := range []string{
 		`DROP TRIGGER wiki_cleanup_factions`,
 		`DROP TRIGGER chapters_unlink`,

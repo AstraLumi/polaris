@@ -12,7 +12,7 @@ import (
 // oldest migration (or a brand new one) gets wiped and recreated from
 // freshSchema — so every schema change from here on should ship with a
 // migration instead of relying on that reset.
-const currentSchemaVersion = "16"
+const currentSchemaVersion = "17"
 
 const freshSchema = `
 CREATE TABLE classes (
@@ -407,6 +407,11 @@ var migrations = map[string]migration{
 		// that events and character versions can point to.
 		statements: append(append([]string{}, worldSchemaStatements...), wikiTriggerSQL("faction")),
 	},
+	"16": {
+		to: "17",
+		// Free-form lore articles in the wiki (lore.go).
+		statements: append(append([]string{}, loreSchemaStatements...), wikiTriggerSQL("lore")),
+	},
 }
 
 // worldSchemaStatements create what schema 16 added. They run after the
@@ -451,6 +456,7 @@ func applyMigration(db *sql.DB, m migration) error {
 // tablesInDependencyOrder lists every app-owned table, children before
 // parents, so dropping them in this order never trips a foreign key.
 var tablesInDependencyOrder = []string{
+	"lore_articles",
 	"faction_members",
 	"factions",
 	"character_relations",
@@ -557,7 +563,7 @@ func ensureSchema(db *sql.DB) error {
 	if _, err := db.Exec(freshSchema); err != nil {
 		return fmt.Errorf("create schema: %w", err)
 	}
-	for _, stmt := range worldSchemaStatements {
+	for _, stmt := range append(append([]string{}, worldSchemaStatements...), loreSchemaStatements...) {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("create schema: %w", err)
 		}

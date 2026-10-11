@@ -8,13 +8,33 @@
           · {{ $tn('{n} written', '{n} written', writtenCount) }}
         </p>
       </div>
-      <button v-if="items.length" type="button" class="btn btn-ghost" :title="$t('Open an article at random')" @click="openRandom">
-        {{ $t('Random article') }}
-      </button>
+      <div class="head-actions">
+        <button v-if="items.length" type="button" class="btn btn-ghost" :title="$t('Open an article at random')" @click="openRandom">
+          {{ $t('Random article') }}
+        </button>
+        <button type="button" class="btn btn-primary" :title="$t('A free-form page for gods, history, magic, languages or anything else')" @click="openNew">
+          {{ $t('New article') }}
+        </button>
+      </div>
     </header>
 
+    <div v-if="newOpen" class="overlay" @click.self="newOpen = false">
+      <form class="modal is-small glass-panel panel-solid" @submit.prevent="createArticle">
+        <h2>{{ $t('New article') }}</h2>
+        <label class="field">
+          <span>{{ $t('Title') }}</span>
+          <input ref="newTitleEl" v-model="newTitle" type="text" maxlength="120" required />
+        </label>
+        <p v-if="newError" class="error-banner">{{ newError }}</p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" @click="newOpen = false">{{ $t('Cancel') }}</button>
+          <button type="submit" class="btn btn-primary" :disabled="creating || !newTitle.trim()">{{ $t('Create') }}</button>
+        </div>
+      </form>
+    </div>
+
     <p class="intro">
-      {{ $t('Every character, location, event and asset already has an article here. Open one to add to it; deleting the original deletes its article too.') }}
+      {{ $t('Every character, location, event and asset already has an article here; open one to add to it, and deleting the original deletes its article too. New article adds a free-form page for anything else.') }}
     </p>
 
     <div class="controls">
@@ -91,7 +111,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import IconImage from '../components/IconImage.vue'
 import { TYPE_ORDER, TYPE_PLURALS, TYPE_LABELS, wikiApi, wikiPath } from '../wiki'
@@ -105,6 +125,36 @@ const loadError = ref('')
 const search = ref('')
 const filter = ref('')
 const writtenOnly = ref(false)
+
+// A new lore article: named here, then written on its own page.
+const newOpen = ref(false)
+const newTitle = ref('')
+const newError = ref('')
+const creating = ref(false)
+const newTitleEl = ref(null)
+
+async function openNew() {
+  newTitle.value = ''
+  newError.value = ''
+  newOpen.value = true
+  await nextTick()
+  newTitleEl.value?.focus()
+}
+
+async function createArticle() {
+  creating.value = true
+  newError.value = ''
+  try {
+    const fd = new FormData()
+    fd.append('name', newTitle.value.trim())
+    const { id } = await wikiApi.saveLore(null, fd)
+    router.push({ path: wikiPath('lore', id), query: { edit: '1' } })
+  } catch (e) {
+    newError.value = e.message
+  } finally {
+    creating.value = false
+  }
+}
 
 const writtenCount = computed(() => items.value.filter((i) => i.written).length)
 
@@ -150,6 +200,12 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.head-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .recent-list {
   list-style: none;
   margin: 0;

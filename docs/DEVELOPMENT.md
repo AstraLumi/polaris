@@ -85,6 +85,12 @@ types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard
   HTML); `node frontend/tests/markdown.test.mjs` covers it. Adding an article
   kind: a `wikiTypeDef`, its facts in `loadSourceFacts`, its labels in
   `wiki.js`, and a migration creating its trigger.
+  Lore articles (`backend/lore.go`, schema 17) are the one kind with no
+  source: `lore_articles` holds only a name and picture, created from the
+  wiki home ("New article"); the text is ordinary wiki text (introduction,
+  trivia, sections, infobox) and their Related list is what they link to.
+  `components/WikiLinkPanel.vue` is the shared "Link to an article" picker
+  (the Markdown editor and the infobox value rows use it).
 - Look and feel: every page shares one layout (`.page`), one set of form
   controls, one modal style and one set of colour variables, all in
   `frontend/src/style.css`. Colour themes (Polaris default, Obsidian,
@@ -137,7 +143,8 @@ types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard
 - Schema version 12. Upgrading keeps all data: 8 -> 9 auto-links old Born in /
   Nation text that matches a location name; 9 -> 10 replaces the unused
   placeholder events tables (carrying over any rows they held); 10 -> 11 adds
-  `classes.icon_path`; 11 -> 12 adds the gear tables.
+  `classes.icon_path`; 11 -> 12 adds the gear tables. The current schema is
+  17 (16 -> 17 adds lore articles); see `migrations` in `backend/db.go`.
 
 ## Data on disk
 

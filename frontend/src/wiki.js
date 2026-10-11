@@ -8,7 +8,7 @@ import { mapPath } from './navigation'
 // refers to by key; tr() marks them for translation.
 
 export const TYPE_ORDER = [
-  'character', 'location', 'faction', 'event', 'class', 'subclass', 'specialization', 'race', 'body_type', 'spell', 'gear',
+  'character', 'location', 'faction', 'event', 'class', 'subclass', 'specialization', 'race', 'body_type', 'spell', 'gear', 'lore',
 ]
 
 export const TYPE_LABELS = {
@@ -23,6 +23,7 @@ export const TYPE_LABELS = {
   body_type: tr('Body type'),
   spell: tr('Spell'),
   gear: tr('Gear'),
+  lore: tr('Lore'),
 }
 
 export const TYPE_PLURALS = {
@@ -37,6 +38,7 @@ export const TYPE_PLURALS = {
   body_type: tr('Body types'),
   spell: tr('Spells'),
   gear: tr('Gear'),
+  lore: tr('Lore'),
 }
 
 // The fixed markdown boxes (which ones an article has comes from the server).
@@ -113,6 +115,7 @@ export const GROUP_LABELS = {
   factions_here: tr('Factions based here'),
   relations: tr('Relations'),
   classes: tr('Classes'),
+  links_to: tr('Links to'),
 }
 
 // Text that already exists on the sheet or event and is shown read-only.
@@ -152,6 +155,9 @@ export const SERVER_MESSAGES = [
   tr('invalid request'),
   tr('failed to save the article'),
   tr('failed to load the article'),
+  tr('the article needs a title'),
+  tr("that title can't be used"),
+  tr('failed to delete the article'),
 ]
 
 async function request(path, options, fallback) {
@@ -169,6 +175,11 @@ export const wikiApi = {
       { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) },
       tr('failed to save the article'),
     ),
+  // Lore articles (free-form pages): create with id null, or rename and set
+  // the picture. FormData: name, picture, remove_picture.
+  saveLore: (id, formData) =>
+    request(id ? `/lore/${id}` : '/lore', { method: id ? 'PUT' : 'POST', body: formData }, tr('failed to save the article')),
+  deleteLore: (id) => request(`/lore/${id}`, { method: 'DELETE' }, tr('failed to delete the article')),
 }
 
 // Same rules as resolveWikiLink in backend/wiki.go: [[Name]], or

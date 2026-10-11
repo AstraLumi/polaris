@@ -34,60 +34,16 @@
     <div v-if="preview && modelValue.trim()" class="md md-preview" :style="{ minHeight: previewHeight }" @click="onPreviewClick" v-html="renderMarkdown(modelValue, resolve)"></div>
     <p v-else-if="preview" class="md-preview empty" :style="{ minHeight: previewHeight }">{{ $t('Nothing to preview yet.') }}</p>
 
-    <!-- ------------------------------------------ link to an article -->
-    <Teleport to="body">
-    <div v-if="linkOpen" class="overlay" @click.self="closeLinkPanel">
-      <form class="modal is-small glass-panel panel-solid link-panel" @submit.prevent="pick(matches[active])">
-        <h2>{{ $t('Link to an article') }}</h2>
-        <label class="field">
-          <span>{{ $t('Link text') }}</span>
-          <input v-model="linkText" type="text" maxlength="200" :placeholder="$t('Leave empty to show the article name')" />
-        </label>
-        <label class="field">
-          <span>{{ $t('Article') }}</span>
-          <input
-            ref="searchEl"
-            v-model="query"
-            type="search"
-            autocomplete="off"
-            :placeholder="$t('Type a name to search the wiki')"
-            role="combobox"
-            aria-autocomplete="list"
-            :aria-expanded="matches.length > 0"
-            aria-controls="md-link-results"
-            @keydown.down.prevent="moveActive(1)"
-            @keydown.up.prevent="moveActive(-1)"
-          />
-        </label>
-        <ul v-if="matches.length" id="md-link-results" class="results" role="listbox">
-          <li v-for="(m, i) in matches" :key="m.type + m.id" role="option" :aria-selected="i === active">
-            <button type="button" class="result" :class="{ active: i === active }" @mouseenter="active = i" @click="pick(m)">
-              <span class="thumb"><IconImage :src="m.picture" :name="m.name" alt="" /></span>
-              <span class="r-name" data-tip-overflow>{{ m.name }}</span>
-              <span class="r-kind">{{ $t(TYPE_LABELS[m.type]) }}</span>
-            </button>
-          </li>
-        </ul>
-        <p v-else class="no-results">
-          {{ query.trim() ? $t('No article has that name.') : $t('Start typing to see matching articles.') }}
-        </p>
-        <div class="modal-actions">
-          <button type="button" class="btn btn-ghost" @click="closeLinkPanel">{{ $t('Cancel') }}</button>
-          <button type="submit" class="btn btn-primary" :disabled="!matches.length">{{ $t('Insert link') }}</button>
-        </div>
-      </form>
-    </div>
-    </Teleport>
+    <WikiLinkPanel v-if="linkOpen" :items="items" :resolve="resolve" :text="linkStart" @pick="pick" @close="closeLinkPanel" />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import IconImage from './IconImage.vue'
+import WikiLinkPanel from './WikiLinkPanel.vue'
 import { renderMarkdown } from '../markdown'
-import { wrapInline, toggleLines, codeBlock, table, rule, webLink, searchArticles, wikiLinkMarkup } from '../markdownEdit'
-import { TYPE_LABELS } from '../wiki'
+import { wrapInline, toggleLines, codeBlock, table, rule, webLink } from '../markdownEdit'
 import { t } from '../i18n'
 
 // A textarea for wiki-style Markdown with a formatting toolbar, a preview and
@@ -185,35 +141,17 @@ function onPreviewClick(e) {
   window.open(router.resolve(a.getAttribute('href')).href, '_blank', 'noopener')
 }
 
-// ---- the link panel ----
+// ---- the link panel (WikiLinkPanel.vue) ----
 
 const linkOpen = ref(false)
-const linkText = ref('')
-const query = ref('')
-const active = ref(0)
-const searchEl = ref(null)
+const linkStart = ref('')
 let range = [0, 0]
 
-const matches = computed(() => searchArticles(props.items, query.value))
-watch(matches, () => (active.value = 0))
-
-async function openLinkPanel() {
+function openLinkPanel() {
   const [text, from, to] = sel()
   range = [from, to]
-  const picked = text.slice(from, to).replace(/\s+/g, ' ').trim()
-  // A selected [[link]] or line break isn't a useful starting point.
-  const usable = picked && !/[[\]]/.test(picked) && picked.length <= 200 ? picked : ''
-  linkText.value = usable
-  query.value = usable
+  linkStart.value = text.slice(from, to)
   linkOpen.value = true
-  await nextTick()
-  searchEl.value?.focus()
-  searchEl.value?.select()
-}
-
-function moveActive(by) {
-  const n = matches.value.length
-  if (n) active.value = (active.value + by + n) % n
 }
 
 async function closeLinkPanel() {
@@ -223,9 +161,7 @@ async function closeLinkPanel() {
   area.value?.setSelectionRange(range[0], range[1])
 }
 
-async function pick(item) {
-  if (!item) return
-  const insert = wikiLinkMarkup(item, linkText.value, props.resolve)
+async function pick(insert) {
   linkOpen.value = false
   await nextTick()
   const at = range[0] + insert.length
@@ -374,85 +310,5 @@ async function pick(item) {
   font-style: italic;
   color: var(--text-faint);
 }
-
-/* ---- link panel ---- */
-
-.link-panel .field {
-  margin-bottom: 0.75rem;
-}
-
-.results {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-height: 16rem;
-  overflow-y: auto;
-  border: 1px solid var(--glass-border);
-  border-radius: 8px;
-}
-
-.result {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  width: 100%;
-  padding: 0.4rem 0.6rem;
-  border: none;
-  background: none;
-  color: var(--text-primary);
-  font-family: 'Manrope', sans-serif;
-  font-size: 0.88rem;
-  text-align: left;
-  cursor: pointer;
-}
-
-.result.active {
-  background: color-mix(in srgb, var(--line) 22%, transparent);
-}
-
-.thumb {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.7rem;
-  height: 1.7rem;
-  overflow: hidden;
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.06);
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
-.thumb :deep(img) {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.thumb :deep(svg) {
-  width: 70%;
-  height: 70%;
-}
-
-.r-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.r-kind {
-  flex: none;
-  font-size: 0.74rem;
-  color: var(--text-faint);
-}
-
-.no-results {
-  margin: 0;
-  padding: 0.6rem 0;
-  font-size: 0.85rem;
-  color: var(--text-faint);
-}
 </style>
+

@@ -32,6 +32,8 @@ has its own SQLite database, so it runs comfortably on a small home server.
   add the lore on top: markdown boxes (history, personality, geography and so
   on), your own sections and infobox rows, `[[links]]` between articles and a
   "What links here" list. Delete something and its article goes with it.
+  Free-form lore articles (gods, history, magic, languages…) can be added
+  too, with their own picture and sections.
 - **Calendar, events and timeline**: define your own calendar (months per year,
   days per month), link events with tags, and view them on a timeline drawn to
   scale, filtered by person or place.

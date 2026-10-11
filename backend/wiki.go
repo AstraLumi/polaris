@@ -13,9 +13,9 @@ import (
 	"unicode/utf8"
 )
 
-// The wiki has no pages of its own. Every character, location, event, class,
-// subclass, specialization, race, body type, spell and piece of gear is
-// already an article; this file reads the facts straight from those tables and
+// The wiki builds its pages from the story. Every character, location, event,
+// class, subclass, specialization, race, body type, spell and piece of gear is
+// already an article, and lore articles (lore.go) are the free-form ones; this file reads the facts straight from those tables and
 // stores only what the user adds on top (wiki_entries and its two child
 // tables). Deleting the source deletes the extras too, through the triggers
 // that wikiSchemaStatements creates (the source tables can't have a real
@@ -81,6 +81,12 @@ var wikiTypes = []wikiTypeDef{
 	{Key: "gear", Table: "gear", IDCol: "id",
 		Select: `SELECT id, name, COALESCE(icon_path, '') FROM gear`,
 		Fields: []string{"appearance", "lore", "origin", "trivia"}},
+	// Free-form pages: everything beyond the introduction and trivia is the
+	// user's own sections. Last, so a lore page never takes over a [[link]]
+	// that already pointed at a character or place of the same name.
+	{Key: "lore", Table: "lore_articles", IDCol: "id",
+		Select: `SELECT id, name, COALESCE(picture_path, '') FROM lore_articles`,
+		Fields: []string{"trivia"}},
 }
 
 func wikiTypeFor(key string) (wikiTypeDef, bool) {
@@ -657,6 +663,11 @@ func loadWikiArticle(db *sql.DB, t wikiTypeDef, id int64) (*wikiArticle, error) 
 		return nil, err
 	}
 
+	// A lore page has nothing in the story behind it, so its related list is
+	// what it links to.
+	if t.Key == "lore" {
+		a.addGroup("links_to", wikiOutlinks(db, a))
+	}
 	a.Backlinks = wikiBacklinks(db, t.Key, id)
 	return a, nil
 }
@@ -725,6 +736,45 @@ func wikiNameIndex(items []wikiListItem) map[string][]wikiRef {
 		idx[k] = append(idx[k], wikiRef{Type: it.Type, ID: it.ID, Name: it.Name})
 	}
 	return idx
+}
+
+// wikiOutlinks lists the articles an article's own text links to, once each,
+// by name.
+func wikiOutlinks(db *sql.DB, a *wikiArticle) []wikiRef {
+	out := []wikiRef{}
+	items, err := listWikiItems(db)
+	if err != nil {
+		return out
+	}
+	index := wikiNameIndex(items)
+	texts := []string{a.Summary}
+	for _, v := range a.Fields {
+		texts = append(texts, v)
+	}
+	for _, s := range a.Sections {
+		texts = append(texts, s.Title, s.Body)
+	}
+	for _, r := range a.Infobox {
+		texts = append(texts, r.Value)
+	}
+	seen := map[string]bool{a.Type + ":" + strconv.FormatInt(a.ID, 10): true}
+	for _, p := range texts {
+		for _, m := range wikiLinkRe.FindAllStringSubmatch(p, -1) {
+			ref := resolveWikiLink(m[1], index)
+			if ref == nil {
+				continue
+			}
+			k := ref.Type + ":" + strconv.FormatInt(ref.ID, 10)
+			if !seen[k] {
+				seen[k] = true
+				out = append(out, *ref)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
+	})
+	return out
 }
 
 // wikiBacklinks lists the articles whose wiki text links to the given one.
