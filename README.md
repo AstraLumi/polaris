@@ -188,6 +188,12 @@ functions (`min`, `max`, `round`, `clamp`, `curve`, …). For example:
 
 > HP = 10 + **VIT** × 10 + **Level** × 2
 
+Bonuses from classes, races and gear are added on their own, as the table
+above says. To decide yourself how one counts, use its block (**Class bonus**,
+**Race bonus**, **Gear bonus**, …): it holds the bonus as typed on the asset,
+and a formula that uses it takes that bonus over, for example
+HP = 10 + **VIT** × 10 + **Race bonus** × **Level** × 2.
+
 Each stat can also have a unit, a number of decimals, a lowest and highest
 value, and a multiplier (Carry Limit uses one: the stronger the character,
 the more they carry). A preview shows what every formula gives for a sample

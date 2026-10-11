@@ -60,7 +60,9 @@ types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard
   `stat_settings`. Categories are fixed: primary stats are points plus
   bonuses, the rest are calculated by formula in dependency order (a stat may
   read another; loops are refused). A formula reading `[base]` gives the stat
-  a typed box on the sheet; typed numbers and points are stored by key in
+  a typed box on the sheet; one reading `[race_bonus]` (or class, subclass,
+  specialization, body_type, gear) takes that source's bonus over instead of
+  it being added on its own. Typed numbers and points are stored by key in
   `character_special_bases`. Bonuses (`stat_modifiers`) count per level for
   Base Stats from assets and flat otherwise (`scalingSQL`). Formulas are text
   (`10 + [vit] * 10`), checked on save (`compile`), and edited as blocks

@@ -4,6 +4,13 @@ What changed in each version of Polaris. The same notes are on the
 [Releases](https://github.com/AstraLumi/polaris/releases) page. Versions are
 Major.Minor.Bugfix: new features raise Minor, fixes raise Bugfix.
 
+## 2.0.2 (2026-10-11)
+
+### Added
+
+- Stat formulas can use the bonuses from classes, subclasses, specializations, races, body types and gear: Settings → Stats has a block for each (Class bonus, Race bonus, …). A formula that uses one decides how that bonus counts, for example `Race bonus × Level × 2`, instead of it being added on its own. Bonuses a formula doesn't use are added as before.
+- The stats preview in Settings has an "Each bonus" sample, to see how the bonuses come out.
+
 ## 2.0.1 (2026-10-11)
 
 **Upgrade:** stories are upgraded to database schema 23 the first time they are opened (if 2.0.0 couldn't upgrade them). This can't be undone, so export your stories first.

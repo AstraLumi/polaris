@@ -95,7 +95,7 @@ func (s *statSystem) typed(key string) bool {
 
 // pointsFor is how many points a character can spend on primary stats.
 func (s *statSystem) pointsFor(in statInputs) int {
-	return int(math.Round(s.points.eval(in.env(nil, ""))))
+	return int(math.Round(s.points.eval(in.env(nil, "", nil))))
 }
 
 // statIssue is one problem that stops a stat system from being saved.
@@ -163,7 +163,7 @@ func (s *statSystem) compile() []statIssue {
 		}
 		for _, r := range f.refs {
 			switch {
-			case r == "base":
+			case perStatInput(r):
 				if !allowBase {
 					add(key, field, "unknown_value", r)
 				}
@@ -238,9 +238,12 @@ type statInputs struct {
 }
 
 // env is what a formula sees while calculating stat key: the inputs, [base]
-// for that stat, and every stat in done.
-func (in statInputs) env(done map[string]float64, key string) func(string) float64 {
+// and the bonuses (by source_type) for that stat, and every stat in done.
+func (in statInputs) env(done map[string]float64, key string, bonuses map[string]float64) func(string) float64 {
 	return func(name string) float64 {
+		if src, ok := bonusInputs[name]; ok {
+			return bonuses[src]
+		}
 		switch name {
 		case "level":
 			return in.Level
@@ -260,7 +263,9 @@ func (in statInputs) env(done map[string]float64, key string) func(string) float
 // calculate works out every stat. Bonuses (stat_modifiers rows matching
 // sources) are added to a stat's own value, then the stat's multiplier and
 // any multiplier bonuses apply to the total; the result is kept within
-// min/max and rounded to the stat's decimals.
+// min/max and rounded to the stat's decimals. A formula that reads a bonus
+// block ([race_bonus]) takes that source's bonus over: it reads the number as
+// typed on the asset, and the bonus isn't added on its own as well.
 func (s *statSystem) calculate(in statInputs, rows []modifierRow, sources []modifierSource) map[string]float64 {
 	out := map[string]float64{}
 
@@ -270,16 +275,22 @@ func (s *statSystem) calculate(in statInputs, rows []modifierRow, sources []modi
 	for _, k := range s.keys("primary") {
 		additive[k] = in.Values[k]
 	}
-	applyModifiers(rows, sources, in.Level, additive, multiplier)
+	applyModifiers(rows, sources, in.Level, additive, multiplier, nil)
 	for k, v := range resolveFinal(additive, multiplier) {
 		out[k] = v
 	}
 
 	for _, d := range s.derived {
-		env := in.env(out, d.Key)
+		taken := map[string]bool{}
+		for name, src := range bonusInputs {
+			if s.formulas[d.Key].reads(name) || s.mults[d.Key].reads(name) {
+				taken[src] = true
+			}
+		}
+		env := in.env(out, d.Key, bonusesFor(rows, sources, d.Key))
 		additive := map[string]float64{d.Key: s.formulas[d.Key].eval(env)}
 		multiplier := map[string]float64{d.Key: s.mults[d.Key].eval(env)}
-		applyModifiers(rows, sources, in.Level, additive, multiplier)
+		applyModifiers(rows, sources, in.Level, additive, multiplier, taken)
 		v := finite(additive[d.Key] * (1 + multiplier[d.Key]))
 		if d.Min != nil {
 			v = math.Max(v, *d.Min)
@@ -600,6 +611,9 @@ type statPreviewRequest struct {
 		Height float64            `json:"height"`
 		Weight float64            `json:"weight"`
 		Values map[string]float64 `json:"values"`
+		// Bonus the sample gets from each source (class, race, gear, ...) to
+		// every calculated stat.
+		Bonus float64 `json:"bonus"`
 	} `json:"sample"`
 }
 
@@ -633,10 +647,29 @@ func previewStatSystemHandler(w http.ResponseWriter, r *http.Request) {
 	if in.Values == nil {
 		in.Values = map[string]float64{}
 	}
+	// The sample bonus as if it came from one of each kind of asset, counted
+	// the way real bonuses are (per level for Base Stats, but not from gear).
+	var rows []modifierRow
+	var sources []modifierSource
+	if req.Sample.Bonus != 0 {
+		for _, src := range bonusInputs {
+			sources = append(sources, modifierSource{src, sql.NullInt64{Int64: 1, Valid: true}})
+			for _, d := range s.Stats {
+				if d.Category == "primary" {
+					continue
+				}
+				scaling := "flat"
+				if d.Category == "base" && src != "item" {
+					scaling = "per_level"
+				}
+				rows = append(rows, modifierRow{sourceType: src, sourceID: 1, targetStat: d.Key, scaling: scaling, value: req.Sample.Bonus})
+			}
+		}
+	}
 	writeJSON(w, map[string]any{
 		"issues": issues,
 		"points": s.pointsFor(in),
-		"values": s.calculate(in, nil, nil),
+		"values": s.calculate(in, rows, sources),
 	})
 }
 

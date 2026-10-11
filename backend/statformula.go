@@ -25,8 +25,26 @@ import (
 // a negative number and the like give 0, so a formula can't break a sheet.
 
 // formulaInputs are the values every formula can read besides stats. [base]
-// is the number typed on the sheet for the stat being calculated.
-var formulaInputs = []string{"level", "age", "height", "weight", "base"}
+// is the number typed on the sheet for the stat being calculated; the bonus
+// inputs (bonusInputs) are what each kind of asset gives to it.
+var formulaInputs = append([]string{"level", "age", "height", "weight", "base"}, bonusInputNames()...)
+
+// bonusInputs maps a bonus block to the stat_modifiers source_type it reads:
+// [race_bonus] is the bonus the character's race gives the stat being
+// calculated. A formula that reads one takes that bonus over, so it is no
+// longer added on its own (see statSystem.calculate).
+var bonusInputs = map[string]string{
+	"class_bonus":          "class",
+	"subclass_bonus":       "subclass",
+	"specialization_bonus": "specialization",
+	"race_bonus":           "race",
+	"body_type_bonus":      "body_type",
+	"gear_bonus":           "item",
+}
+
+func bonusInputNames() []string {
+	return []string{"class_bonus", "subclass_bonus", "specialization_bonus", "race_bonus", "body_type_bonus", "gear_bonus"}
+}
 
 func isFormulaInput(name string) bool {
 	for _, n := range formulaInputs {
@@ -35,6 +53,13 @@ func isFormulaInput(name string) bool {
 		}
 	}
 	return false
+}
+
+// perStatInput: an input that only means something for one stat ([base] and
+// the bonuses), so the points formula can't read it.
+func perStatInput(name string) bool {
+	_, bonus := bonusInputs[name]
+	return name == "base" || bonus
 }
 
 // formulaFuncs are the functions a formula can call, with the fewest and

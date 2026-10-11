@@ -96,6 +96,19 @@ export const FORMULA_INPUTS = [
   { key: 'base', label: tr('Typed value'), about: tr('A number typed on the character sheet for this stat. Using it gives the stat a box on the sheet.') },
 ]
 
+// The bonus each kind of asset gives to the stat being calculated, as typed
+// on the asset. A formula that uses one decides how that bonus counts, so it
+// is no longer added on its own (backend/statformula.go bonusInputs).
+export const FORMULA_BONUSES = [
+  { key: 'class_bonus', label: tr('Class bonus') },
+  { key: 'subclass_bonus', label: tr('Subclass bonus') },
+  { key: 'specialization_bonus', label: tr('Specialization bonus') },
+  { key: 'race_bonus', label: tr('Race bonus') },
+  { key: 'body_type_bonus', label: tr('Body type bonus') },
+  { key: 'gear_bonus', label: tr('Gear bonus') },
+]
+export const BONUS_ABOUT = tr('The bonus to this stat, as typed on the asset (not multiplied by level). Once a formula uses it, that bonus is no longer added on its own: the formula decides how it counts.')
+
 export const FORMULA_FUNCTIONS = [
   { name: 'min', about: tr('min(a, b, …): the smallest of the values.') },
   { name: 'max', about: tr('max(a, b, …): the largest of the values.') },

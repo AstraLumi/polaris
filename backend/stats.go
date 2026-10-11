@@ -84,9 +84,13 @@ func loadModifierRows(db *sql.DB) ([]modifierRow, error) {
 // applyModifiers adds every matching modifier row into additive/multiplierDelta,
 // but ONLY for target_stat keys already present in additive — this is what
 // scopes a single set of modifier rows to the stats being worked out in one
-// pass, without a query per stat.
-func applyModifiers(rows []modifierRow, sources []modifierSource, level float64, additive, multiplierDelta map[string]float64) {
+// pass, without a query per stat. Flat and per-level rows from a source in
+// taken are left out: the stat's formula reads them itself.
+func applyModifiers(rows []modifierRow, sources []modifierSource, level float64, additive, multiplierDelta map[string]float64, taken map[string]bool) {
 	for _, row := range rows {
+		if taken[row.sourceType] && row.scaling != "multiplier" {
+			continue
+		}
 		// How many of the character's sources this row belongs to — normally
 		// 0 or 1, but the same gear piece can be worn in two slots.
 		times := 0.0
@@ -110,6 +114,24 @@ func applyModifiers(rows []modifierRow, sources []modifierSource, level float64,
 			additive[row.targetStat] += row.value * times
 		}
 	}
+}
+
+// bonusesFor adds up, per source_type, the flat and per-level bonuses the
+// character's sources give to stat key, as typed (per-level ones not yet
+// multiplied by the level): what the formula bonus blocks read.
+func bonusesFor(rows []modifierRow, sources []modifierSource, key string) map[string]float64 {
+	out := map[string]float64{}
+	for _, row := range rows {
+		if row.targetStat != key || row.scaling == "multiplier" {
+			continue
+		}
+		for _, s := range sources {
+			if s.kind == row.sourceType && s.id.Valid && s.id.Int64 == row.sourceID {
+				out[row.sourceType] += row.value
+			}
+		}
+	}
+	return out
 }
 
 func resolveFinal(additive, multiplierDelta map[string]float64) map[string]float64 {

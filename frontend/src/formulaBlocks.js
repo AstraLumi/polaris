@@ -4,8 +4,12 @@
 // backend/statformula.go) and edited as a row of blocks in Settings → Stats.
 // These read the text into blocks and write it back.
 
-// Formula inputs (stats.js FORMULA_INPUTS); no stat can take these keys.
-export const RESERVED_KEYS = ['level', 'age', 'height', 'weight', 'base']
+// Formula inputs (stats.js FORMULA_INPUTS and FORMULA_BONUSES); no stat can
+// take these keys.
+export const RESERVED_KEYS = [
+  'level', 'age', 'height', 'weight', 'base',
+  'class_bonus', 'subclass_bonus', 'specialization_bonus', 'race_bonus', 'body_type_bonus', 'gear_bonus',
+]
 
 // Text → blocks: { type: 'num', text } | { type: 'ref', key } |
 // { type: 'fn', name } (the function with its opening bracket) | { type: 'op', op }.

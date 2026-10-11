@@ -35,6 +35,10 @@
             <span>{{ $t('Each typed value') }}</span>
             <input v-model.number="sample.typed" type="number" step="any" />
           </label>
+          <label class="field" :title="$t('As if the class, subclass, specialization, race, body type and gear each gave this much to every calculated stat.')">
+            <span>{{ $t('Each bonus') }}</span>
+            <input v-model.number="sample.bonus" type="number" step="any" />
+          </label>
         </div>
       </div>
     </section>
@@ -208,7 +212,7 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { t, tn } from '../i18n'
 import { statSystemApi } from '../api'
 import {
-  STAT_CATEGORIES, FORMULA_INPUTS, applyStatSystem, statsIn, statName, statShort, readsBase, formatStat,
+  STAT_CATEGORIES, FORMULA_INPUTS, FORMULA_BONUSES, BONUS_ABOUT, applyStatSystem, statsIn, statName, statShort, readsBase, formatStat,
   keyFromName, renameRef, issueText,
 } from '../stats'
 import { useUnsavedGuard, useSaveShortcut } from '../navigation'
@@ -235,7 +239,7 @@ const open = ref('') // the stat being edited
 const active = ref('formula') // which formula of it has the toolbar
 const multiplierOpen = ref('')
 
-const sample = reactive({ level: 10, age: 18, height: 170, weight: 70, points: 5, typed: 0 })
+const sample = reactive({ level: 10, age: 18, height: 170, weight: 70, points: 5, typed: 0, bonus: 0 })
 const preview = ref({ issues: [], points: 0, values: {} })
 const serverIssues = ref([]) // from the last save, until the draft changes
 
@@ -273,11 +277,12 @@ const pointsValues = computed(() => [
   { label: t('Character'), items: FORMULA_INPUTS.filter((i) => i.key !== 'base').map(inputItem) },
 ])
 
-// A calculated stat can read the character, its own typed value, every
-// primary stat and every other calculated stat.
+// A calculated stat can read the character, its own typed value and
+// bonuses, every primary stat and every other calculated stat.
 function valuesFor(stat) {
   return [
     { label: t('Character'), items: FORMULA_INPUTS.map(inputItem) },
+    { label: t('Bonuses'), items: FORMULA_BONUSES.map((b) => ({ key: b.key, label: t(b.label), title: t(BONUS_ABOUT), input: true })) },
     ...STAT_CATEGORIES.map((c) => ({
       label: t(c.label),
       items: statsIn(c.id, draft.stats)
@@ -319,7 +324,7 @@ async function runPreview() {
   try {
     const result = await statSystemApi.preview(
       { points_formula: draft.points_formula, stats: draft.stats },
-      { level: sample.level || 1, age: sample.age || 0, height: sample.height || 0, weight: sample.weight || 0, values },
+      { level: sample.level || 1, age: sample.age || 0, height: sample.height || 0, weight: sample.weight || 0, values, bonus: sample.bonus || 0 },
     )
     if (n === seq) preview.value = { issues: result.issues || [], points: result.points, values: result.values || {} }
   } catch (err) {

@@ -337,3 +337,37 @@ func TestMigrationAddsTheStatSystem(t *testing.T) {
 		t.Error("character_build should be gone")
 	}
 }
+
+// A formula that reads a bonus block takes that bonus over: it gets the
+// number as typed, and the bonus isn't added on its own too. Bonuses from
+// sources the formula doesn't read are added as usual.
+func TestBonusBlocks(t *testing.T) {
+	sys := statSystem{PointsFormula: "[level]", Stats: []statDef{
+		{Key: "attack", Category: "base", Name: "Attack", Formula: "10 + [race_bonus] * 3"},
+		{Key: "luck", Category: "special", Name: "Luck", Formula: "[class_bonus] / 2"},
+	}}
+	if issues := sys.compile(); len(issues) > 0 {
+		t.Fatal(issueCodes(issues))
+	}
+	src := func(kind string) modifierSource { return modifierSource{kind, sql.NullInt64{Int64: 1, Valid: true}} }
+	rows := []modifierRow{
+		{sourceType: "race", sourceID: 1, targetStat: "attack", scaling: "per_level", value: 2},
+		{sourceType: "class", sourceID: 1, targetStat: "attack", scaling: "per_level", value: 1},
+		{sourceType: "class", sourceID: 1, targetStat: "luck", scaling: "flat", value: 4},
+		{sourceType: "item", sourceID: 1, targetStat: "luck", scaling: "flat", value: 1},
+	}
+	got := sys.calculate(statInputs{Level: 5, Values: map[string]float64{}}, rows, []modifierSource{src("race"), src("class"), src("item")})
+	// Attack: 10 + 2*3 from the formula, plus the class's 1 per level (5).
+	if got["attack"] != 21 {
+		t.Errorf("attack = %v, want 21", got["attack"])
+	}
+	// Luck: 4/2 from the formula, plus the gear's 1.
+	if got["luck"] != 3 {
+		t.Errorf("luck = %v, want 3", got["luck"])
+	}
+
+	bad := statSystem{PointsFormula: "[level] + [race_bonus]"}
+	if codes := issueCodes(bad.compile()); codes != "/points/unknown_value" {
+		t.Errorf("points formula reading a bonus: %q", codes)
+	}
+}
