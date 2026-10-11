@@ -41,6 +41,15 @@
         </button>
       </div>
       <div class="toggles">
+        <label class="check" :title="$t('Only the articles within a few connections of the one picked with Find or Show in graph')">
+          {{ $t('Around it') }}
+          <select v-model.number="depth" class="depth" :disabled="!selected && !pendingFocus">
+            <option :value="0">{{ $t('Everything') }}</option>
+            <option :value="1">{{ $tn('{n} step', '{n} steps', 1) }}</option>
+            <option :value="2">{{ $tn('{n} step', '{n} steps', 2) }}</option>
+            <option :value="3">{{ $tn('{n} step', '{n} steps', 3) }}</option>
+          </select>
+        </label>
         <label class="check" :title="$t('Connections the story makes by itself: members, relations, places, classes…')">
           <input v-model="showStory" type="checkbox" /> <span class="line-key is-story"></span>{{ $t('Story connections') }}
         </label>
@@ -124,6 +133,14 @@ const hiddenTypes = ref(new Set())
 const showStory = ref(true)
 const showLinks = ref(true)
 const hideLonely = ref(false)
+// ?depth=N: only what lies within N connections of the focused article;
+// ?types=character,location: start with only those kinds shown.
+const depth = ref([1, 2, 3].includes(Number(route.query.depth)) ? Number(route.query.depth) : 0)
+const pendingFocus = typeof route.query.focus === 'string' ? route.query.focus : ''
+if (typeof route.query.types === 'string' && route.query.types) {
+  const only = new Set(route.query.types.split(','))
+  hiddenTypes.value = new Set(TYPE_ORDER.filter((tp) => !only.has(tp)))
+}
 
 const wrapEl = ref(null)
 const canvasEl = ref(null)
@@ -164,6 +181,22 @@ function rebuild() {
   let list = data.value.nodes.filter((n) => !hiddenTypes.value.has(n.type))
   const keys = new Set(list.map(keyOf))
   let raw = data.value.edges.filter((e) => edgeOn(e) && keys.has(e.a) && keys.has(e.b))
+  const around = depth.value > 0 ? selected.value?.key || pendingFocus : ''
+  if (around && keys.has(around)) {
+    const near = new Set([around])
+    let frontier = new Set([around])
+    for (let d = 0; d < depth.value && frontier.size; d++) {
+      const next = new Set()
+      for (const e of raw) {
+        if (frontier.has(e.a) && !near.has(e.b)) next.add(e.b)
+        if (frontier.has(e.b) && !near.has(e.a)) next.add(e.a)
+      }
+      for (const k of next) near.add(k)
+      frontier = next
+    }
+    list = list.filter((n) => near.has(keyOf(n)))
+    raw = raw.filter((e) => near.has(e.a) && near.has(e.b))
+  }
   if (hideLonely.value) {
     const linked = new Set(raw.flatMap((e) => [e.a, e.b]))
     list = list.filter((n) => linked.has(keyOf(n)))
@@ -201,6 +234,11 @@ function rebuild() {
 }
 
 watch([hiddenTypes, showStory, showLinks, hideLonely], rebuild)
+watch(depth, async () => {
+  rebuild()
+  await nextTick()
+  setTimeout(() => fit(true), 250)
+})
 
 const nameOptions = computed(() => [...new Set((data.value?.nodes || []).map((n) => n.name))].sort((a, b) => a.localeCompare(b)))
 
@@ -508,6 +546,11 @@ function placeCard(e) {
 
 function focusNode(n) {
   selected.value = n
+  if (depth.value > 0) {
+    rebuild()
+    setTimeout(() => fit(true), 250)
+    return
+  }
   goTo(n.x, n.y, Math.max(view.k, 1.4), true)
 }
 
@@ -552,13 +595,10 @@ onMounted(async () => {
   rebuild()
   // Settle most of the layout before the first picture, so it doesn't jump.
   for (let i = 0; i < 400 && !sim.cool; i++) sim.tick()
-  const focus = typeof route.query.focus === 'string' ? nodes.find((n) => n.key === route.query.focus) : null
-  if (focus) {
-    selected.value = focus
-    goTo(focus.x, focus.y, 1.4, false)
-  } else {
-    fit()
-  }
+  const focus = pendingFocus ? nodes.find((n) => n.key === pendingFocus) : null
+  if (focus) selected.value = focus
+  if (focus && !depth.value) goTo(focus.x, focus.y, 1.4, false)
+  else fit()
 })
 
 onBeforeUnmount(() => {
@@ -651,6 +691,13 @@ onBeforeUnmount(() => {
   font-size: 0.78rem;
   color: var(--text-muted);
   cursor: pointer;
+}
+
+.depth {
+  width: auto;
+  min-height: 0;
+  padding: 0.15rem 1.8rem 0.15rem 0.4rem;
+  font-size: 0.76rem;
 }
 
 .line-key {

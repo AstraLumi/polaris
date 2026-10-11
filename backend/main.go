@@ -187,6 +187,7 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 
 	// Relations between characters, and a character's relations + factions.
 	mux.HandleFunc("GET /api/characters/{id}/connections", characterConnectionsHandler(db))
+	mux.HandleFunc("GET /api/characters/{id}/family", characterFamilyHandler(db))
 	mux.HandleFunc("POST /api/relations", createRelationHandler(db))
 	mux.HandleFunc("PUT /api/relations/{id}", updateRelationHandler(db))
 	mux.HandleFunc("DELETE /api/relations/{id}", deleteRelationHandler(db))

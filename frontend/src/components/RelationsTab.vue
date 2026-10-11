@@ -5,7 +5,19 @@
     <section>
       <div class="section-head">
         <h3>{{ $t('Relations') }}</h3>
-        <button type="button" class="btn btn-ghost small no-print" @click="openForm(null)">{{ $t('Add relation') }}</button>
+        <span class="head-links no-print">
+          <RouterLink :to="`/characters/${characterId}/family`" class="btn btn-ghost small" :title="$t('Parents, children, siblings and partners, as a tree')">
+            {{ $t('Family tree') }}
+          </RouterLink>
+          <RouterLink
+            :to="{ path: '/wiki/graph', query: { focus: 'character:' + characterId, depth: 1, types: 'character' } }"
+            class="btn btn-ghost small"
+            :title="$t('Everyone this character is connected to, on the graph')"
+          >
+            {{ $t('Relationship web') }}
+          </RouterLink>
+          <button type="button" class="btn btn-ghost small" @click="openForm(null)">{{ $t('Add relation') }}</button>
+        </span>
       </div>
       <p v-if="!relations.length" class="empty">{{ $t('No relations yet.') }}</p>
       <ul v-else class="rows">
@@ -151,6 +163,12 @@ watch(() => props.characterId, load, { immediate: true })
 </script>
 
 <style scoped>
+.head-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
 .relations-tab {
   display: flex;
   flex-direction: column;

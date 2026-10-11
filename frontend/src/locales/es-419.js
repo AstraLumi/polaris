@@ -22,6 +22,7 @@ export default {
   "Add location": "Agregar ubicación",
   "Add one to make it available on characters.": "Agrega uno para que esté disponible en los personajes.",
   "Add one to start attaching stat bonuses to it.": "Agrega uno para empezar a asociarle bonificaciones de atributos.",
+  "Add parents, children, siblings or partners in the Relations tab of the character, and they appear here.": "Agrega padres, hijos, hermanos o parejas en la pestaña Relaciones del personaje y aparecerán aquí.",
   "Add race": "Agregar raza",
   "Add specialization": "Agregar especialización",
   "Add spell": "Agregar hechizo",

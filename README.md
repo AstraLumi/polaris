@@ -36,6 +36,8 @@ has its own SQLite database, so it runs comfortably on a small home server.
   too, with their own picture and sections, and dates that put them on the
   timeline. Hovering a link to an article shows a preview of it, and a graph
   view shows every article and how they all connect.
+- **Family trees**: each character's parents, children, siblings and
+  partners drawn as a tree, and a relationship web on the graph.
 - **Calendar, events and timeline**: define your own calendar (months per year,
   days per month), link events with tags, and view them on a timeline drawn to
   scale, filtered by person or place.

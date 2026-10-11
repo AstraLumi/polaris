@@ -31,6 +31,9 @@
           <RouterLink :to="{ path: '/timeline', query: { person: data.character_id, match: 'highlight' } }" class="btn btn-ghost">
             {{ $t('Timeline') }}
           </RouterLink>
+          <RouterLink :to="`/characters/${data.character_id}/family`" class="btn btn-ghost" :title="$t('Parents, children, siblings and partners, as a tree')">
+            {{ $t('Family tree') }}
+          </RouterLink>
           <RouterLink :to="`/characters/${data.character_id}/versions`" class="btn btn-ghost">
             {{ $t('Edit') }}
           </RouterLink>

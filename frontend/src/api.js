@@ -539,9 +539,15 @@ void [
   tr('failed to save the chapter'), tr('failed to delete the chapter'), tr('chapter not found'),
   tr('failed to load chapters'), tr('failed to save the volume'), tr('failed to delete the volume'),
   tr('volume not found'), tr('failed to save the order'), tr('invalid request'), tr('failed to load relations'),
+  tr('failed to load the family'), tr('character not found'),
 ]
 
 const request = eventRequest
+
+// Everyone joined to a character by parent, sibling, spouse or partner
+// relations (backend/family.go).
+export const fetchFamily = (characterId) =>
+  request(`/characters/${characterId}/family`, undefined, 'failed to load the family')
 
 export const fetchConnections = (characterId) =>
   request(`/characters/${characterId}/connections`, undefined, 'failed to load relations')

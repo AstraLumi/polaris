@@ -3,6 +3,7 @@ import Home from './views/Home.vue'
 import Characters from './views/Characters.vue'
 import CharacterView from './views/CharacterView.vue'
 import VersionList from './views/VersionList.vue'
+import FamilyTree from './views/FamilyTree.vue'
 import VersionEdit from './views/VersionEdit.vue'
 import VersionCompare from './views/VersionCompare.vue'
 import CharacterAssets from './views/CharacterAssets.vue'
@@ -29,6 +30,7 @@ const routes = [
   { path: '/', name: 'home', component: Home, meta: { title: tr('Home') } },
   { path: '/characters', name: 'characters', component: Characters, meta: { title: tr('Characters') } },
   { path: '/characters/:id', name: 'character-view', component: CharacterView, meta: { title: tr('Characters') }, props: true },
+  { path: '/characters/:id/family', name: 'family-tree', component: FamilyTree, meta: { title: tr('Family tree') }, props: true },
   { path: '/characters/:id/versions', name: 'version-list', component: VersionList, meta: { title: tr('Versions') }, props: true },
   {
     path: '/characters/:id/compare',

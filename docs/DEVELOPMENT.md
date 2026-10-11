@@ -99,7 +99,13 @@ types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard
   own connections (the same facts and related lists the articles show) and
   the text's [[links]] separately, and `graphLayout.js` is the force layout
   (`node frontend/tests/graphLayout.test.mjs`). `?focus=<type>:<id>` opens it
-  centred on one article.
+  centred on one article; `&depth=N` keeps only what lies within N
+  connections of it and `&types=a,b` starts with only those kinds shown.
+- Family tree (`/characters/:id/family`, `views/FamilyTree.vue`): everyone
+  joined to a character by parent, sibling, spouse and partner relations
+  (`backend/family.go`), laid out in generation rows by `familyLayout.js`
+  (`node frontend/tests/familyLayout.test.mjs`). For a parent relation,
+  `from_id` is the parent.
   `components/WikiLinkPanel.vue` is the shared "Link to an article" picker
   (the Markdown editor and the infobox value rows use it).
 - Look and feel: every page shares one layout (`.page`), one set of form
