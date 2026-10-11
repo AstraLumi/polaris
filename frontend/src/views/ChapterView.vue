@@ -28,10 +28,10 @@
               </select>
             </label>
           </div>
-          <label class="field">
-            <span>{{ $t('Notes') }}</span>
-            <textarea v-model="draft.notes" rows="14" :placeholder="$t('What happens, threads to pick up, anything you want to remember. Markdown and [[links]] work as in the wiki.')"></textarea>
-          </label>
+          <div class="field">
+            <label for="chapter-notes">{{ $t('Notes') }}</label>
+            <MarkdownEditor id="chapter-notes" v-model="draft.notes" :rows="14" :items="wikiItems" :resolve="resolver" :placeholder="$t('What happens, threads to pick up, anything you want to remember. Markdown and [[links]] work as in the wiki.')" />
+          </div>
           <p v-if="saveError" class="error-banner">{{ saveError }}</p>
           <div class="edit-actions">
             <button type="button" class="btn btn-danger" @click="confirmOpen = true">{{ $t('Delete') }}</button>
@@ -111,6 +111,7 @@ import { wikiApi, makeLinkResolver } from '../wiki'
 import { pageTitle, useUnsavedGuard, useSaveShortcut } from '../navigation'
 import BackLink from '../components/BackLink.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import MarkdownEditor from '../components/MarkdownEditor.vue'
 
 const props = defineProps({ id: { type: String, required: true } })
 const route = useRoute()

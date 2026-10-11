@@ -107,18 +107,18 @@
           <!-- ------------------------------------------- the editor -->
           <form v-else class="editor" @submit.prevent="save">
             <p class="hint">
-              {{ $t('Text uses Markdown: **bold**, *italic*, - lists, > quotes, | tables |. Link to other articles with [[Name]], or [[Name|shown text]]. If two articles share a name, write [[class:Name]] (character, location, event, class, subclass, specialization, race, body type, spell, gear).') }}
+              {{ $t('Format text with the buttons above each box, or type Markdown. Use “Link to article” to link to another page of the wiki.') }}
             </p>
 
-            <label class="field">
-              <span>{{ $t('Introduction') }}</span>
-              <textarea id="f-summary" v-model="draft.summary" rows="5" :placeholder="$t('A few sentences that open the article.')"></textarea>
-            </label>
+            <div class="field">
+              <label for="f-summary">{{ $t('Introduction') }}</label>
+              <MarkdownEditor id="f-summary" v-model="draft.summary" :items="items" :resolve="resolver" :placeholder="$t('A few sentences that open the article.')" />
+            </div>
 
-            <label v-for="k in article.field_keys" :key="k" class="field">
-              <span>{{ $t(FIELD_LABELS[k]) }}</span>
-              <textarea :id="`f-${k}`" v-model="draft.fields[k]" rows="5"></textarea>
-            </label>
+            <div v-for="k in article.field_keys" :key="k" class="field">
+              <label :for="`f-${k}`">{{ $t(FIELD_LABELS[k]) }}</label>
+              <MarkdownEditor :id="`f-${k}`" v-model="draft.fields[k]" :items="items" :resolve="resolver" />
+            </div>
 
             <div class="custom-head">
               <h2>{{ $t('Extra sections') }}</h2>
@@ -132,7 +132,7 @@
                 <button type="button" class="btn btn-ghost small" :disabled="i === draft.sections.length - 1" :aria-label="$t('Move down')" @click="move(draft.sections, i, 1)">↓</button>
                 <button type="button" class="btn btn-danger small" @click="draft.sections.splice(i, 1)">{{ $t('Remove') }}</button>
               </div>
-              <textarea v-model="s.body" rows="5" :aria-label="$t('Section text')"></textarea>
+              <MarkdownEditor v-model="s.body" :items="items" :resolve="resolver" :aria-label="$t('Section text')" />
             </div>
 
             <div class="editor-actions">
@@ -203,6 +203,7 @@ import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import IconImage from '../components/IconImage.vue'
 import BackLink from '../components/BackLink.vue'
+import MarkdownEditor from '../components/MarkdownEditor.vue'
 import { pageTitle, useUnsavedGuard, useSaveShortcut, viewPicture } from '../navigation'
 import { renderMarkdown } from '../markdown'
 import { fullDate, dateParts } from '../calendar'
@@ -554,85 +555,7 @@ useSaveShortcut(() => editing.value && !saving.value && save())
   color: var(--text-faint);
 }
 
-/* ---- rendered markdown ---- */
-
-.md {
-  font-size: 0.95rem;
-  line-height: 1.65;
-  overflow-wrap: anywhere;
-}
-
-.md :deep(p) {
-  margin: 0 0 0.85rem;
-}
-
-.md :deep(h3),
-.md :deep(h4),
-.md :deep(h5),
-.md :deep(h6) {
-  margin: 1.1rem 0 0.4rem;
-}
-
-.md :deep(ul),
-.md :deep(ol) {
-  margin: 0 0 0.85rem;
-  padding-left: 1.5rem;
-}
-
-.md :deep(blockquote) {
-  margin: 0 0 0.85rem;
-  padding: 0.1rem 0 0.1rem 1rem;
-  border-left: 3px solid var(--glass-border);
-  color: var(--text-muted);
-}
-
-.md :deep(code) {
-  padding: 0.05rem 0.35rem;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.07);
-  font-size: 0.88em;
-}
-
-.md :deep(pre) {
-  margin: 0 0 0.85rem;
-  padding: 0.7rem 0.9rem;
-  overflow-x: auto;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.md :deep(pre code) {
-  padding: 0;
-  background: none;
-}
-
-.md :deep(hr) {
-  border: 0;
-  border-top: 1px solid var(--glass-border);
-  margin: 1rem 0;
-}
-
-.md :deep(table) {
-  border-collapse: collapse;
-  margin: 0 0 0.85rem;
-  font-size: 0.9rem;
-}
-
-.md :deep(th),
-.md :deep(td) {
-  padding: 0.35rem 0.7rem;
-  border: 1px solid var(--glass-border);
-}
-
-.md :deep(th) {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.md :deep(.wikilink.is-missing) {
-  color: var(--danger-text);
-  border-bottom: 1px dashed var(--danger-text);
-  cursor: help;
-}
+/* Rendered Markdown itself is styled in style.css (.md). */
 
 .md.inline :deep(p) {
   margin: 0;
@@ -722,11 +645,6 @@ useSaveShortcut(() => editing.value && !saving.value && save())
   margin: 0 0 1rem;
   font-size: 0.82rem;
   color: var(--text-muted);
-}
-
-.editor textarea {
-  resize: vertical;
-  min-height: 6rem;
 }
 
 .custom-head {
