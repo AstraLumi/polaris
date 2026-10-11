@@ -341,6 +341,7 @@ export default {
   "Races": "Razas",
   "Recently edited": "Editados recientemente",
   "Regions": "Regiones",
+  "Relations belong to the character, not to one version, and are saved as soon as you add or change them.": "Las relaciones pertenecen al personaje, no a una versión, y se guardan en cuanto las añades o cambias.",
   "Remove": "Quitar",
   "Remove picture": "Quitar imagen",
   "Remove {name}": "Quitar {name}",

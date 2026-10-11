@@ -79,6 +79,9 @@
         <button class="tab-button" :class="{ 'is-active': tab === 'spells' }" @click="tab = 'spells'">
           {{ $t('Spells') }}
         </button>
+        <button class="tab-button" :class="{ 'is-active': tab === 'relations' }" @click="tab = 'relations'">
+          {{ $t('Relations') }}
+        </button>
       </div>
 
       <section v-if="tab === 'story'" class="story-tab glass-panel">
@@ -192,6 +195,11 @@
         <p class="preview-note">{{ $t('Spell changes are saved with the Save button below, like everything else.') }}</p>
       </section>
 
+      <section v-else-if="tab === 'relations'" class="gear-tab-wrap glass-panel">
+        <RelationsTab :character-id="Number(id)" :character-name="characterName" />
+        <p class="preview-note">{{ $t('Relations belong to the character, not to one version, and are saved as soon as you add or change them.') }}</p>
+      </section>
+
       <p v-if="saveError" class="error-banner save-error">{{ saveError }}</p>
 
       <div class="save-bar">
@@ -214,6 +222,7 @@ import DateField from '../components/DateField.vue'
 import LocationSelect from '../components/LocationSelect.vue'
 import GearTab from '../components/GearTab.vue'
 import SpellsTab from '../components/SpellsTab.vue'
+import RelationsTab from '../components/RelationsTab.vue'
 import BackLink from '../components/BackLink.vue'
 import ChapterSelect from '../components/ChapterSelect.vue'
 import { STATUSES } from '../characterStatus'
@@ -234,6 +243,7 @@ const pictureFile = ref(null)
 const existingPicturePath = ref('')
 const assignedSpells = ref([])
 const equippedGear = ref({})
+const characterName = ref('')
 const catalogs = ref({ classes: [], subclasses: [], specializations: [], races: [], bodyTypes: [] })
 const locationOptions = ref([])
 
@@ -426,6 +436,7 @@ async function load() {
     equippedGear.value = data.gear || {}
     existingPicturePath.value = data.picture_path
     pageTitle.value = data.name
+    characterName.value = data.name
     snapshot = formState()
   } catch (err) {
     loadError.value = t("Couldn't load this version. Try refreshing.")
