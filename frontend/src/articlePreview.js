@@ -23,7 +23,10 @@ export function plainText(md) {
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
     .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+[.)])\s+/gm, '')
     .replace(/^\s*\|?\s*:?-{2,}.*$/gm, ' ')
-    .replace(/[|*_~`]+/g, ' ')
+    .replace(/\|/g, ' ')
+    // Emphasis marks go; an underscore inside a word (snake_case) stays.
+    .replace(/(\*\*|~~|[*`])(?=\S)|(?<=\S)(\*\*|~~|[*`])/g, '')
+    .replace(/(?<![A-Za-z0-9])_+|_+(?![A-Za-z0-9])/g, '')
     .replace(/\s+/g, ' ')
     .trim()
 }

@@ -61,6 +61,15 @@ const side = layoutFamily(
 const gap = Math.abs(side.pos.get(7).x - side.pos.get(5).x)
 assert.ok(gap <= 2 * CARD_W + 80, `sibling placed ${gap}px from her sister`)
 
+// Born to one couple, adopted by another: a line from each couple.
+const adopted = layoutFamily(
+  people(1, 2, 3, 4, 5),
+  [L(1, 2, 'spouse'), L(3, 4, 'spouse'), L(1, 5, 'parent'), L(2, 5, 'parent'), L(3, 5, 'parent'), L(4, 5, 'parent')],
+  5,
+)
+assert.deepEqual(adopted.families.map((f) => f.parents.join('+')).sort(), ['1+2', '3+4'])
+assert.ok(adopted.families.every((f) => f.children.join() === '5'))
+
 // Impossible data (each the other's parent) still lays out.
 const loop = layoutFamily(people(1, 2), [L(1, 2, 'parent'), L(2, 1, 'parent')], 1)
 assert.ok(Number.isFinite(loop.pos.get(2).x))

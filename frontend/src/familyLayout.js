@@ -217,14 +217,21 @@ export function layoutFamily(people, links, root) {
     c.adjacent = ib >= 0 && Math.abs(ia - ib) === 1
   }
 
-  // Children grouped by their (known) parents.
+  // Children grouped by their (known) parents. A child with more than one
+  // pair of parents (born to one couple, adopted by another) hangs from
+  // each couple: partners among a child's parents pair up, the rest stand
+  // alone.
   const families = new Map()
   for (const p of people) {
-    const ps = [...parents.get(p.id)].sort((a, b) => a - b)
-    if (!ps.length) continue
-    const key = ps.join(',')
-    if (!families.has(key)) families.set(key, { parents: ps, children: [] })
-    families.get(key).children.push(p.id)
+    const left = [...parents.get(p.id)].sort((a, b) => a - b)
+    while (left.length) {
+      const a = left.shift()
+      const i = left.findIndex((b) => partners.get(a).has(b))
+      const group = i >= 0 ? [a, left.splice(i, 1)[0]] : [a]
+      const key = group.join(',')
+      if (!families.has(key)) families.set(key, { parents: group, children: [] })
+      families.get(key).children.push(p.id)
+    }
   }
   for (const f of families.values()) f.children.sort((a, b) => pos.get(a).x - pos.get(b).x)
 

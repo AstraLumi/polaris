@@ -133,8 +133,12 @@ const cx = (id) => box(id).x + CARD_W / 2
 
 // Parents to children: down from the parents (from the middle of a couple's
 // line), along a bar, and down into each child.
-const connectors = computed(() =>
-  tree.value.families.map((f) => {
+// Two families whose bars would overlap (a child born to one couple and
+// adopted by another, say) get bars at different heights, so each line can
+// be followed.
+const connectors = computed(() => {
+  const placed = [] // { top, from, to, level } of bars already drawn
+  return tree.value.families.map((f) => {
     let ox
     let oy
     const [a, b] = f.parents
@@ -147,13 +151,18 @@ const connectors = computed(() =>
       oy = Math.max(...f.parents.map((p) => box(p).y)) + CARD_H
     }
     const top = Math.min(...f.children.map((c) => box(c).y))
-    const barY = top - 28
     const xs = f.children.map(cx)
-    let d = `M ${ox} ${oy} V ${barY} M ${Math.min(ox, ...xs)} ${barY} H ${Math.max(ox, ...xs)}`
+    const from = Math.min(ox, ...xs)
+    const to = Math.max(ox, ...xs)
+    let level = 0
+    while (placed.some((p) => p.top === top && p.level === level && from <= p.to + 4 && to >= p.from - 4)) level++
+    placed.push({ top, from, to, level })
+    const barY = top - 28 - level * 14
+    let d = `M ${ox} ${oy} V ${barY} M ${from} ${barY} H ${to}`
     for (const c of f.children) d += ` M ${cx(c)} ${barY} V ${box(c).y}`
     return d
-  }),
-)
+  })
+})
 
 const coupleLines = computed(() =>
   tree.value.couples.map((c) => {

@@ -1,10 +1,10 @@
 # Polaris
 
-Polaris is a self-hosted campaign and character tracker for writers, game
-masters and worldbuilders. It keeps everything about a story in one place
-that you own: characters and how they change over time, their stats, gear and
-spells, a hex map, a custom calendar, events, a timeline and a wiki that
-writes itself from all of it.
+Polaris is a self-hosted organizer for writing stories. It keeps everything
+about a story in one place that you own: characters and how they change over
+the chapters, who they are to each other, the map, the calendar and history
+of the world, and a wiki that writes itself from all of it. It grew out of
+writing LitRPG, so characters also have levels, stats, gear and spells.
 
 Polaris is a single Go program with the web interface built in. Each story
 has its own SQLite database, so it runs comfortably on a small home server.
@@ -15,68 +15,38 @@ has its own SQLite database, so it runs comfortably on a small home server.
 
 ## Features
 
-- **Characters**: tags, version history (compare any two versions side by side),
-  alive / missing / dead status, automatically computed stats, a paper-doll
-  gear tab, a spell list and a printable sheet.
-- **Relations and factions**: who is whose parent, mentor, rival and so on,
-  read correctly from both sides, starting and ending at a chapter or date so
-  each version of a character shows the relations of its own time. Every
-  kingdom on the map is a faction too. Factions (guilds,
-  orders, houses) can sit inside one another, have a headquarters on the map
-  and members with ranks.
-- **Character Assets**: classes, subclasses, specializations, races, body
-  types, gear and spells, each of which can grant stat bonuses.
-- **Map**: a paintable hex map with major locations you can inspect, brush
-  sizes, and undo.
-- **Wiki**: every character, location, faction, event, class, race, spell and
-  piece of gear automatically gets an article, so there are no pages to create. Its
-  infobox and related lists are read live from the rest of your story, and you
-  add the lore on top: markdown boxes (history, personality, geography and so
-  on), your own sections and infobox rows, `[[links]]` between articles and a
-  "What links here" list. Delete something and its article goes with it.
-  Free-form lore articles (gods, history, magic, languages…) can be added
-  too, with their own picture and sections, and dates that put them on the
-  timeline. Hovering a link to an article shows a preview of it, and a graph
-  view shows every article and how they all connect.
-- **Family trees**: each character's parents, children, siblings and
-  partners drawn as a tree, and a relationship web on the graph.
-- **Galleries**: any wiki article can hold captioned pictures, viewed full
-  size one after another.
-- **Calendar**: every event, birth and founding, a month at a time in the
-  story's own calendar.
-- **Calendar, events and timeline**: define your own calendar (months per year,
-  days per month), link events with tags, and view them on a timeline drawn to
-  scale, filtered by person or place.
-- **Chapters**: chapters grouped into volumes, each with your notes and the
-  events and character changes that happen in it.
-- **Search**: Ctrl+K finds any character, place, faction, event, asset or
-  chapter.
-- **Multiple stories**: each story is fully separate and can be exported to
-  and imported from a `.zip` file. The story list shows when each was last
-  exported.
-- **Languages**: English, Português (Brasil), Español (España) and Español
-  (Latinoamérica). Only the interface is translated, never your own content.
-- **Themes**: five colour themes, chosen per device. Works on phones too.
+- **Characters** change over the story in versions (renames, new classes,
+  a new status), which you can compare side by side. Each has tags, computed
+  stats, a gear paper-doll, a spell list and a printable sheet.
+- **Relations and families**: parents, partners, mentors and rivals, each
+  holding from one chapter or date to another, so every version shows the
+  relations of its own time. Family trees are drawn from them. Factions have
+  ranks and can nest, and every kingdom on the map is a faction too.
+- **World**: a paintable hex map of kingdoms, regions, cities and capitals,
+  and Character Assets (classes, races, gear, spells…) that grant stat
+  bonuses.
+- **Time**: your own calendar (months and days), events tied to places,
+  people and chapters, a timeline drawn to scale, a month-by-month calendar
+  view, and chapters grouped into volumes.
+- **Wiki**: every character, place, faction, event and asset already has an
+  article, built live from the story. You add the lore in Markdown with a
+  formatting toolbar, link articles with `[[…]]` (a picker finds them for
+  you) and see a preview when hovering a link. Free-form articles cover
+  gods, history or magic; galleries hold pictures; a character's article
+  has a tab per version; and a graph shows how everything connects.
+- **Everyday**: Ctrl+K search, any number of separate stories with `.zip`
+  export and import, English, Português (BR) and Español (ES and Latin
+  America), five colour themes, and a layout that works on phones.
 
 ## Screenshots
 
-The screenshots use mock data.
+Made with a demo story of invented data.
 
-**Map**: paint kingdoms on the hex map and place towns and landmarks.
-
-![The hex map with four painted kingdoms](docs/screenshots/map.png)
-
-**Character gear**: a paper-doll of equipped gear, with weight and the stat
-bonuses it grants.
-
-![A character's gear tab](docs/screenshots/gear.png)
-
-**Wiki**: an article built from the map and your own text, with an infobox,
-contents and links to other articles.
-
-![A wiki article for a kingdom](docs/screenshots/wiki.png)
-
-![The wiki index](docs/screenshots/wiki-index.png)
+| | |
+|---|---|
+| ![A character's wiki article](docs/screenshots/wiki.png) **Wiki**: an article built from the story, with your text, version tabs and a grouped infobox. | ![The graph of the wiki](docs/screenshots/graph.png) **Graph**: every article and connection; hovering a dot lights up its neighbours. |
+| ![A family tree](docs/screenshots/family.png) **Family tree**: born to one couple, adopted by another. | ![The timeline](docs/screenshots/timeline.png) **Timeline**: one character's life, long gaps coiled up. |
+| ![The hex map](docs/screenshots/map.png) **Map**: kingdoms, regions, cities and capitals. | ![A character sheet](docs/screenshots/character.png) **Character sheet**: stats computed from class, race and gear. |
 
 ## Security
 
