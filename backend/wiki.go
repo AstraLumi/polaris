@@ -561,11 +561,33 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 		} else if isCity {
 			a.addFact("settlement", "City", "word", nil)
 		}
+		// A place with no "belongs to" of its own is part of the kingdom
+		// painted on its hex, as the map shows it.
+		if !parentID.Valid && kind == "minor" {
+			db.QueryRow(`SELECT l.id, l.name FROM locations m
+				JOIN location_hexes h ON h.q = m.q AND h.r = m.r
+				JOIN locations l ON l.id = h.location_id AND l.kind = 'major' AND COALESCE(l.color, '') <> ''
+				WHERE m.id = ? ORDER BY l.id LIMIT 1`, id).Scan(&parentID, &parentName)
+		}
 		a.addFact("part_of", "", "", refOf("location", parentID, parentName))
+		if kind == "major" {
+			var capID sql.NullInt64
+			var capName sql.NullString
+			db.QueryRow(`SELECT c.id, c.name FROM locations c WHERE c.is_capital = 1 AND c.kind = 'minor' AND (c.belongs_to_id = ?1
+				OR (c.belongs_to_id IS NULL AND EXISTS (SELECT 1 FROM location_hexes h WHERE h.location_id = ?1 AND h.q = c.q AND h.r = c.r)))
+				ORDER BY c.id LIMIT 1`, id).Scan(&capID, &capName)
+			a.addFact("capital", "", "", refOf("location", capID, capName))
+		}
 		a.addFact("founded", normalizeStoryDate(founded), "date", nil)
 		a.addSheet("description", desc)
-		a.addGroup("places", queryRefs(db, "location",
-			`SELECT id, name FROM locations WHERE belongs_to_id = ? ORDER BY name COLLATE NOCASE`, id))
+		// Places that say they belong here, and places with no "belongs to"
+		// that sit on this location's hexes.
+		a.addGroup("places", queryRefs(db, "location", `
+			SELECT id, name FROM locations WHERE belongs_to_id = ?1
+			UNION
+			SELECT m.id, m.name FROM locations m JOIN location_hexes h ON h.q = m.q AND h.r = m.r
+			WHERE h.location_id = ?1 AND m.kind = 'minor' AND m.belongs_to_id IS NULL AND m.id <> ?1
+			ORDER BY 2 COLLATE NOCASE`, id))
 		a.addGroup("events_here", queryRefs(db, "event",
 			`SELECT id, name FROM events WHERE location_id = ? AND source_type IS NULL ORDER BY name COLLATE NOCASE`, id))
 		a.addGroup("born_here", queryRefs(db, "character", fmt.Sprintf(wikiMembersSQL, "st.born_in_location_id"), id))

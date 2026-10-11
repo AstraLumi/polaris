@@ -35,6 +35,9 @@ type graphEdge struct {
 type graphPayload struct {
 	Nodes []graphNode `json:"nodes"`
 	Edges []graphEdge `json:"edges"`
+	// Merged maps a node that was folded into another to the one it is now
+	// part of: a kingdom's faction ("faction:3") to the kingdom ("location:1").
+	Merged map[string]string `json:"merged"`
 }
 
 func refKey(typ string, id int64) string { return typ + ":" + strconv.FormatInt(id, 10) }
@@ -89,15 +92,42 @@ func buildWikiGraph(db *sql.DB) (*graphPayload, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := &graphPayload{Nodes: []graphNode{}, Edges: []graphEdge{}}
+	out := &graphPayload{Nodes: []graphNode{}, Edges: []graphEdge{}, Merged: map[string]string{}}
+	// A kingdom's faction (kingdoms.go) is the kingdom on the graph: one node,
+	// with the connections of both.
+	if rows, err := db.Query(`SELECT id, kingdom_id FROM factions WHERE kingdom_id IS NOT NULL`); err == nil {
+		for rows.Next() {
+			var f, k int64
+			if rows.Scan(&f, &k) == nil {
+				out.Merged[refKey("faction", f)] = refKey("location", k)
+			}
+		}
+		rows.Close()
+	}
 	exists := map[string]bool{}
 	for _, it := range items {
-		out.Nodes = append(out.Nodes, graphNode{Type: it.Type, ID: it.ID, Name: it.Name, Picture: it.Picture, Written: it.Written})
 		exists[refKey(it.Type, it.ID)] = true
+	}
+	for k, into := range out.Merged {
+		if !exists[into] {
+			delete(out.Merged, k)
+		}
+	}
+	for _, it := range items {
+		if _, folded := out.Merged[refKey(it.Type, it.ID)]; folded {
+			continue
+		}
+		out.Nodes = append(out.Nodes, graphNode{Type: it.Type, ID: it.ID, Name: it.Name, Picture: it.Picture, Written: it.Written})
 	}
 
 	edges := map[[2]string]*graphEdge{}
 	add := func(a, b string, story bool) {
+		if into, ok := out.Merged[a]; ok {
+			a = into
+		}
+		if into, ok := out.Merged[b]; ok {
+			b = into
+		}
 		if a == b || !exists[a] || !exists[b] {
 			return
 		}

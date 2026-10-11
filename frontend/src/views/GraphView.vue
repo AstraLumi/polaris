@@ -136,7 +136,7 @@ const hideLonely = ref(false)
 // ?depth=N: only what lies within N connections of the focused article;
 // ?types=character,location: start with only those kinds shown.
 const depth = ref([1, 2, 3].includes(Number(route.query.depth)) ? Number(route.query.depth) : 0)
-const pendingFocus = typeof route.query.focus === 'string' ? route.query.focus : ''
+let pendingFocus = typeof route.query.focus === 'string' ? route.query.focus : ''
 if (typeof route.query.types === 'string' && route.query.types) {
   const only = new Set(route.query.types.split(','))
   hiddenTypes.value = new Set(TYPE_ORDER.filter((tp) => !only.has(tp)))
@@ -592,6 +592,8 @@ onMounted(async () => {
     loadError.value = e.message
     return
   }
+  // "Show in graph" on a kingdom's faction finds the kingdom it is drawn as.
+  pendingFocus = data.value.merged?.[pendingFocus] || pendingFocus
   rebuild()
   // Settle most of the layout before the first picture, so it doesn't jump.
   for (let i = 0; i < 400 && !sim.cool; i++) sim.tick()

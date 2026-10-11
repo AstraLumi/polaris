@@ -92,6 +92,7 @@ export const FACT_LABELS = {
   origin: tr('Origin'),
   slot: tr('Slot'),
   settlement: tr('Settlement'),
+  capital: tr('Capital'),
   headquarters: tr('Headquarters'),
 }
 
