@@ -123,6 +123,7 @@ const navItems = [
   { label: tr('Factions'), to: '/factions', tip: tr('Guilds, orders, houses and who belongs to them') },
   { label: tr('Character Assets'), to: '/assets', tip: tr('Classes, races, spells, gear and the rest a character is built from') },
   { label: tr('Timeline'), to: '/timeline', tip: tr('Events, births and foundings, drawn to scale') },
+  { label: tr('Calendar'), to: '/calendar', tip: tr('What happens in each month, day by day') },
   { label: tr('Map'), to: '/map', tip: tr('The hex map of kingdoms and places') },
   { label: tr('Events'), to: '/events', tip: tr('Everything that happens, with dates, places and people') },
   { label: tr('Chapters'), to: '/chapters', tip: tr('Volumes and chapters, with your notes and what happens in each') },

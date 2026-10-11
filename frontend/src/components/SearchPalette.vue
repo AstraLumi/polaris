@@ -70,6 +70,7 @@ const PAGES = [
   { name: tr('Chapters'), path: '/chapters' },
   { name: tr('Character Assets'), path: '/assets' },
   { name: tr('Timeline'), path: '/timeline' },
+  { name: tr('Calendar'), path: '/calendar' },
   { name: tr('Map'), path: '/map' },
   { name: tr('Events'), path: '/events' },
   { name: tr('New event'), path: '/events/new' },

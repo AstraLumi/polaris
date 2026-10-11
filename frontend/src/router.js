@@ -13,6 +13,7 @@ import Events from './views/Events.vue'
 import EventView from './views/EventView.vue'
 import EventEdit from './views/EventEdit.vue'
 import TimelineView from './views/TimelineView.vue'
+import CalendarView from './views/CalendarView.vue'
 import WikiHome from './views/WikiHome.vue'
 import WikiArticle from './views/WikiArticle.vue'
 import GraphView from './views/GraphView.vue'
@@ -50,6 +51,7 @@ const routes = [
   { path: '/map', name: 'map', component: MapView, meta: { title: tr('Map') } },
   { path: '/settings', name: 'settings', component: SettingsView, meta: { title: tr('Settings') } },
   { path: '/timeline', name: 'timeline', component: TimelineView, meta: { title: tr('Timeline') } },
+  { path: '/calendar', name: 'calendar', component: CalendarView, meta: { title: tr('Calendar') } },
   { path: '/events', name: 'events', component: Events, meta: { title: tr('Events') } },
   // 'new' must be declared before ':id' so it isn't read as an event id.
   { path: '/events/new', name: 'event-new', component: EventEdit, meta: { title: tr('New event') } },

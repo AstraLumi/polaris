@@ -12,7 +12,7 @@ import (
 // oldest migration (or a brand new one) gets wiped and recreated from
 // freshSchema — so every schema change from here on should ship with a
 // migration instead of relying on that reset.
-const currentSchemaVersion = "18"
+const currentSchemaVersion = "19"
 
 const freshSchema = `
 CREATE TABLE classes (
@@ -417,6 +417,11 @@ var migrations = map[string]migration{
 		// Tags on characters, and dated infobox rows on lore articles.
 		statements: schema18Statements,
 	},
+	"18": {
+		to: "19",
+		// Picture galleries on wiki articles (wikigallery.go).
+		statements: schema19Statements,
+	},
 }
 
 const characterTagsTableSQL = `CREATE TABLE character_tags (
@@ -483,6 +488,7 @@ var tablesInDependencyOrder = []string{
 	"character_relations",
 	"chapters",
 	"volumes",
+	"wiki_gallery",
 	"wiki_infobox",
 	"wiki_sections",
 	"wiki_entries",
@@ -589,7 +595,7 @@ func ensureSchema(db *sql.DB) error {
 			return fmt.Errorf("create schema: %w", err)
 		}
 	}
-	for _, stmt := range append(append([]string{}, wikiSchemaStatements...), schema18Statements...) {
+	for _, stmt := range append(append(append([]string{}, wikiSchemaStatements...), schema18Statements...), schema19Statements...) {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("create wiki schema: %w", err)
 		}

@@ -159,6 +159,10 @@ export const SERVER_MESSAGES = [
   tr("that title can't be used"),
   tr('failed to delete the article'),
   tr('every dated row needs a readable date'),
+  tr('failed to save the picture'),
+  tr('failed to delete the picture'),
+  tr('pick at least one picture'),
+  tr('picture not found'),
   tr('there is no year 0 — the year before 1 is -1'),
 ]
 
@@ -184,6 +188,26 @@ export const wikiApi = {
   saveLore: (id, formData) =>
     request(id ? `/lore/${id}` : '/lore', { method: id ? 'PUT' : 'POST', body: formData }, tr('failed to save the article')),
   deleteLore: (id) => request(`/lore/${id}`, { method: 'DELETE' }, tr('failed to delete the article')),
+  // An article's gallery (backend/wikigallery.go); each call answers with
+  // the whole gallery as it now is.
+  galleryAdd: (type, id, files) => {
+    const fd = new FormData()
+    for (const f of files) fd.append('pictures', f)
+    return request(`/wiki/${type}/${id}/gallery`, { method: 'POST', body: fd }, tr('failed to save the picture'))
+  },
+  galleryOrder: (type, id, ids) =>
+    request(
+      `/wiki/${type}/${id}/gallery`,
+      { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) },
+      tr('failed to save the order'),
+    ),
+  galleryCaption: (gid, caption) =>
+    request(
+      `/wiki-gallery/${gid}`,
+      { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption }) },
+      tr('failed to save the picture'),
+    ),
+  galleryRemove: (gid) => request(`/wiki-gallery/${gid}`, { method: 'DELETE' }, tr('failed to delete the picture')),
 }
 
 // Same rules as resolveWikiLink in backend/wiki.go: [[Name]], or

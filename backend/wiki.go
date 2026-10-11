@@ -247,6 +247,7 @@ type wikiArticle struct {
 	Sections  []wikiSection     `json:"sections"`
 	Infobox   []wikiInfoRow     `json:"infobox"`
 	Backlinks []wikiRef         `json:"backlinks"`
+	Gallery   []galleryItem     `json:"gallery"`
 	UpdatedAt string            `json:"updated_at"`
 }
 
@@ -624,7 +625,7 @@ func loadWikiArticle(db *sql.DB, t wikiTypeDef, id int64) (*wikiArticle, error) 
 		Type: t.Key, ID: id, FieldKeys: t.Fields,
 		Facts: []wikiFact{}, Groups: []wikiGroup{}, Sheet: []wikiSheet{},
 		Fields: map[string]string{}, Sections: []wikiSection{}, Infobox: []wikiInfoRow{},
-		Backlinks: []wikiRef{},
+		Backlinks: []wikiRef{}, Gallery: []galleryItem{},
 	}
 	if err := db.QueryRow(t.oneSQL(), id).Scan(new(int64), &a.Name, &a.Picture); err != nil {
 		return nil, err
@@ -663,6 +664,7 @@ func loadWikiArticle(db *sql.DB, t wikiTypeDef, id int64) (*wikiArticle, error) 
 			}
 			rows.Close()
 		}
+		a.Gallery = loadGallery(db, entryID)
 	} else if err != sql.ErrNoRows {
 		return nil, err
 	}
@@ -939,11 +941,22 @@ func saveWikiHandler(db *sql.DB) http.HandlerFunc {
 		defer tx.Rollback()
 
 		if p.isEmpty() {
-			// Nothing left to keep: the article is back to just its facts.
-			if _, err := tx.Exec(`DELETE FROM wiki_entries WHERE entity_type = ? AND entity_id = ?`, t.Key, id); err != nil {
-				http.Error(w, "failed to save the article", http.StatusInternalServerError)
-				log.Printf("clear wiki entry: %v", err)
-				return
+			// No text left: the article is back to just its facts, and the
+			// entry goes too unless it still holds gallery pictures.
+			var entryID int64
+			if tx.QueryRow(`SELECT id FROM wiki_entries WHERE entity_type = ? AND entity_id = ?`, t.Key, id).Scan(&entryID) == nil {
+				for _, q := range []string{
+					`DELETE FROM wiki_sections WHERE entry_id = ?1`,
+					`DELETE FROM wiki_infobox WHERE entry_id = ?1`,
+					`UPDATE wiki_entries SET summary = '', fields = '{}', updated_at = datetime('now') WHERE id = ?1`,
+					`DELETE FROM wiki_entries WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM wiki_gallery WHERE entry_id = ?1)`,
+				} {
+					if _, err := tx.Exec(q, entryID); err != nil {
+						http.Error(w, "failed to save the article", http.StatusInternalServerError)
+						log.Printf("clear wiki entry: %v", err)
+						return
+					}
+				}
 			}
 		} else {
 			fields, _ := json.Marshal(p.Fields)

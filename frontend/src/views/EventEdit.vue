@@ -189,6 +189,8 @@ onMounted(async () => {
     const q = route.query.tag
     form.tags = (Array.isArray(q) ? q : q ? [q] : []).filter((t) => typeof t === 'string')
     if (Number(route.query.chapter)) form.chapterId = Number(route.query.chapter)
+    // ?date=DD-MM-YYYY, from the calendar's "New event".
+    if (typeof route.query.date === 'string') form.eventDate = route.query.date
     snapshot = formState()
     loading.value = false
     return

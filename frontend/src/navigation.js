@@ -49,3 +49,8 @@ export const viewedPicture = ref(null) // { src, alt } or null
 export function viewPicture(src, alt = '') {
   if (src) viewedPicture.value = { src, alt }
 }
+
+// Several pictures, viewed one at a time from `index` (a wiki gallery).
+export function viewGallery(list, index = 0) {
+  if (list.length) viewedPicture.value = { ...list[index], list, index }
+}

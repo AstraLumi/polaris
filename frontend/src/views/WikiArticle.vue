@@ -83,6 +83,14 @@
               <div class="md" v-html="md(s.body)"></div>
             </section>
 
+            <section v-if="article.gallery.length" id="sec-gallery" class="part">
+              <h2>
+                {{ $t('Gallery') }}
+                <a href="#" class="edit-link" :title="$t('Add, caption or reorder pictures')" @click.prevent="startEdit('gallery-editor')">[ {{ $t('edit') }} ]</a>
+              </h2>
+              <WikiGallery :type="article.type" :id="article.id" :items="article.gallery" />
+            </section>
+
             <section v-if="article.groups.length" id="sec-related" class="part">
               <h2>{{ $t('Related') }}</h2>
               <div v-for="g in article.groups" :key="g.key" class="group">
@@ -148,6 +156,11 @@
               </div>
               <MarkdownEditor v-model="s.body" :items="items" :resolve="resolver" :aria-label="$t('Section text')" />
             </div>
+
+            <div id="gallery-editor" class="custom-head" tabindex="-1">
+              <h2>{{ $t('Gallery') }}</h2>
+            </div>
+            <WikiGallery v-model:items="article.gallery" :type="article.type" :id="article.id" editable />
 
             <div class="editor-actions">
               <button type="button" class="btn btn-ghost" :disabled="saving" @click="cancelEdit">{{ $t('Cancel') }}</button>
@@ -263,6 +276,7 @@ import MarkdownEditor from '../components/MarkdownEditor.vue'
 import WikiLinkPanel from '../components/WikiLinkPanel.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import DateField from '../components/DateField.vue'
+import WikiGallery from '../components/WikiGallery.vue'
 import { pageTitle, useUnsavedGuard, useSaveShortcut, viewPicture } from '../navigation'
 import { renderMarkdown } from '../markdown'
 import { fullDate, dateParts } from '../calendar'
@@ -313,11 +327,17 @@ const customSections = computed(() =>
   article.value.sections.map((s, i) => ({ id: `sec-custom-${i}`, title: s.title, body: s.body, focus: `s-${i}` })),
 )
 const hasText = computed(
-  () => fieldSections.value.length || customSections.value.length || article.value.infobox.length || sheetSections.value.length,
+  () =>
+    fieldSections.value.length ||
+    customSections.value.length ||
+    article.value.infobox.length ||
+    sheetSections.value.length ||
+    article.value.gallery.length,
 )
 
 const toc = computed(() => {
   const rows = [...sheetSections.value, ...fieldSections.value, ...customSections.value]
+  if (article.value.gallery.length) rows.push({ id: 'sec-gallery', title: t('Gallery') })
   if (article.value.groups.length) rows.push({ id: 'sec-related', title: t('Related') })
   rows.push({ id: 'sec-backlinks', title: t('What links here') })
   return rows

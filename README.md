@@ -38,6 +38,10 @@ has its own SQLite database, so it runs comfortably on a small home server.
   view shows every article and how they all connect.
 - **Family trees**: each character's parents, children, siblings and
   partners drawn as a tree, and a relationship web on the graph.
+- **Galleries**: any wiki article can hold captioned pictures, viewed full
+  size one after another.
+- **Calendar**: every event, birth and founding, a month at a time in the
+  story's own calendar.
 - **Calendar, events and timeline**: define your own calendar (months per year,
   days per month), link events with tags, and view them on a timeline drawn to
   scale, filtered by person or place.

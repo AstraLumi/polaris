@@ -13,7 +13,10 @@
           <template v-else>&nbsp;</template>
         </p>
       </div>
-      <RouterLink to="/events/new" class="btn btn-primary add-btn">{{ $t('New event') }}</RouterLink>
+      <div class="head-actions">
+        <RouterLink to="/calendar" class="btn btn-ghost add-btn" :title="$t('What happens in each month, day by day')">{{ $t('Calendar') }}</RouterLink>
+        <RouterLink to="/events/new" class="btn btn-primary add-btn">{{ $t('New event') }}</RouterLink>
+      </div>
     </header>
 
     <p v-if="loadError" class="error-banner">{{ loadError }}</p>
@@ -535,6 +538,11 @@ onBeforeUnmount(() => {
 
 .add-btn {
   text-decoration: none;
+}
+
+.head-actions {
+  display: flex;
+  gap: 0.5rem;
 }
 
 .loading-hint {

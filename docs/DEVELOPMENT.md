@@ -101,6 +101,15 @@ types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard
   (`node frontend/tests/graphLayout.test.mjs`). `?focus=<type>:<id>` opens it
   centred on one article; `&depth=N` keeps only what lies within N
   connections of it and `&types=a,b` starts with only those kinds shown.
+- Wiki galleries (`backend/wikigallery.go`, schema 19, `components/WikiGallery.vue`):
+  any article can hold captioned pictures (`wiki_gallery`, hanging off the
+  article's `wiki_entries` row, so deleting the source removes them). They
+  save straight away, apart from the article's text; an entry that only holds
+  pictures survives clearing the text. `viewGallery()` opens them in the
+  picture viewer with arrows.
+- Calendar (`/calendar`, `views/CalendarView.vue`): the timeline's points a
+  month at a time, in the story's own calendar (no weeks, so days run in rows
+  of seven). `?y=&m=` is the month shown.
 - Family tree (`/characters/:id/family`, `views/FamilyTree.vue`): everyone
   joined to a character by parent, sibling, spouse and partner relations
   (`backend/family.go`), laid out in generation rows by `familyLayout.js`
@@ -161,8 +170,8 @@ types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard
   Nation text that matches a location name; 9 -> 10 replaces the unused
   placeholder events tables (carrying over any rows they held); 10 -> 11 adds
   `classes.icon_path`; 11 -> 12 adds the gear tables. The current schema is
-  18 (16 -> 17 adds lore articles, 17 -> 18 character tags and dated lore
-  rows); see `migrations` in `backend/db.go`. Character tags
+  19 (16 -> 17 adds lore articles, 17 -> 18 character tags and dated lore
+  rows, 18 -> 19 wiki galleries); see `migrations` in `backend/db.go`. Character tags
   (`character_tags`) belong to the character, not a version.
 
 ## Data on disk
