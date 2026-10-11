@@ -12,7 +12,7 @@
     </span>
     <span class="slot-text">
       <span class="slot-label">{{ $t(slotDef.label) }}</span>
-      <span v-if="gear" class="slot-name">{{ gear.name }}</span>
+      <span v-if="gear" class="slot-name" data-tip-overflow>{{ gear.name }}</span>
       <span v-else class="slot-empty">{{ editable ? $t('Tap to equip') : $t('Empty') }}</span>
       <span v-if="gear" class="slot-meta">{{ formatKg(gear.weight) }}<template v-if="summary"> · {{ summary }}</template></span>
     </span>

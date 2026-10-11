@@ -11,7 +11,7 @@
         <RouterLink v-if="versions.length > 1" :to="`/characters/${id}/compare`" class="btn btn-ghost">
           {{ $t('Compare versions') }}
         </RouterLink>
-        <button class="btn btn-primary" @click="newOpen = true">{{ $t('New version') }}</button>
+        <button class="btn btn-primary" :title="$t('Start a new version as a copy of the current one')" @click="newOpen = true">{{ $t('New version') }}</button>
       </div>
     </header>
 
@@ -45,7 +45,7 @@
           >
             {{ $t('Compare') }}
           </RouterLink>
-          <button v-if="!v.is_current" class="btn btn-ghost small" @click="handleSetCurrent(v.id)">
+          <button v-if="!v.is_current" class="btn btn-ghost small" :title="$t('Make this the version shown on the sheet, the wiki and the timeline')" @click="handleSetCurrent(v.id)">
             {{ $t('Set current') }}
           </button>
           <button

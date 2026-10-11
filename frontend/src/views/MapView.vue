@@ -80,7 +80,7 @@
             @click="toggleActive(m)"
           >
             <span class="chip-dot" :class="{ none: !m.color }" :style="m.color ? { background: m.color } : {}"></span>
-            <span class="chip-name">{{ m.name }}</span>
+            <span class="chip-name" data-tip-overflow>{{ m.name }}</span>
             <button type="button" class="chip-edit" :title="$t('Edit')" @click.stop="editMajor = m">✎</button>
           </div>
           <span v-if="!majors.length" class="chip-empty">{{ $t('No major locations yet') }}</span>

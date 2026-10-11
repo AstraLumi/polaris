@@ -21,12 +21,12 @@
           <IconImage :src="currentStory?.icon || ''" :name="currentStory?.name || ''" />
         </span>
         <span class="story-meta">
-          <span class="story-name">{{ currentStory?.name || '…' }}</span>
+          <span class="story-name" data-tip-overflow>{{ currentStory?.name || '…' }}</span>
           <span class="story-action">{{ $t('Switch story') }}</span>
         </span>
       </router-link>
 
-      <button type="button" class="search-btn" @click="searchOpen = true">
+      <button type="button" class="search-btn" :title="$t('Find any character, place, event or article')" @click="searchOpen = true">
         <span>{{ $t('Search') }}</span>
         <kbd>{{ shortcutLabel }}</kbd>
       </button>
@@ -38,6 +38,7 @@
             :to="item.to"
             class="nav-item"
             active-class="is-active"
+            :title="$t(item.tip)"
           >
             <span class="nav-label">{{ $t(item.label) }}</span>
           </router-link>
@@ -56,6 +57,7 @@
     <SearchPalette v-if="searchOpen" @close="searchOpen = false" />
     <PictureViewer v-if="viewedPicture" :picture="viewedPicture" />
   </div>
+  <TooltipLayer />
 </template>
 
 <script setup>
@@ -67,6 +69,7 @@ import { pageTitle, viewedPicture } from './navigation'
 import PolarisLogo from './components/PolarisLogo.vue'
 import IconImage from './components/IconImage.vue'
 import SearchPalette from './components/SearchPalette.vue'
+import TooltipLayer from './components/TooltipLayer.vue'
 import PictureViewer from './components/PictureViewer.vue'
 import { currentStory } from './stories'
 
@@ -113,16 +116,16 @@ onMounted(() => window.addEventListener('keydown', onKeyDown, true))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown, true))
 
 const navItems = [
-  { label: tr('Home'), to: '/' },
-  { label: tr('Characters'), to: '/characters' },
-  { label: tr('Factions'), to: '/factions' },
-  { label: tr('Character Assets'), to: '/assets' },
-  { label: tr('Timeline'), to: '/timeline' },
-  { label: tr('Map'), to: '/map' },
-  { label: tr('Events'), to: '/events' },
-  { label: tr('Chapters'), to: '/chapters' },
-  { label: tr('Wiki'), to: '/wiki' },
-  { label: tr('Settings'), to: '/settings' },
+  { label: tr('Home'), to: '/', tip: tr('Recent edits and loose ends') },
+  { label: tr('Characters'), to: '/characters', tip: tr('Everyone in the story, with their sheets and versions') },
+  { label: tr('Factions'), to: '/factions', tip: tr('Guilds, orders, houses and who belongs to them') },
+  { label: tr('Character Assets'), to: '/assets', tip: tr('Classes, races, spells, gear and the rest a character is built from') },
+  { label: tr('Timeline'), to: '/timeline', tip: tr('Events, births and foundings, drawn to scale') },
+  { label: tr('Map'), to: '/map', tip: tr('The hex map of kingdoms and places') },
+  { label: tr('Events'), to: '/events', tip: tr('Everything that happens, with dates, places and people') },
+  { label: tr('Chapters'), to: '/chapters', tip: tr('Volumes and chapters, with your notes and what happens in each') },
+  { label: tr('Wiki'), to: '/wiki', tip: tr('An article for everything in the story, with your lore on top') },
+  { label: tr('Settings'), to: '/settings', tip: tr('Calendar, language and colour theme') },
 ]
 </script>
 

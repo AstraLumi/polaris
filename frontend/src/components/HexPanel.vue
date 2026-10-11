@@ -18,7 +18,7 @@
       <ul class="mini-list">
         <li v-for="m in panel.majors" :key="m.id">
           <span class="dot" :class="{ none: !m.color }" :style="m.color ? { background: m.color } : {}"></span>
-          <span class="mini-name">{{ m.name }}</span>
+          <span class="mini-name" data-tip-overflow>{{ m.name }}</span>
           <span class="mini-tag">{{ m.color ? $t('Kingdom') : $t('Major') }}</span>
           <button type="button" class="btn btn-ghost small" @click="$emit('edit-major', m)">{{ $t('Edit') }}</button>
         </li>
@@ -88,7 +88,7 @@
       </p>
       <ul class="mini-list">
         <li v-for="m in unplaced" :key="m.id" class="minor-item">
-          <span class="mini-name">{{ m.name }}</span>
+          <span class="mini-name" data-tip-overflow>{{ m.name }}</span>
           <div class="minor-actions">
             <button type="button" class="btn btn-ghost small" @click="place(m)">{{ $t('Place here') }}</button>
             <button type="button" class="btn btn-ghost small" @click="confirmTarget = m">{{ $t('Delete') }}</button>

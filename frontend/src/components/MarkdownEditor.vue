@@ -63,7 +63,7 @@
           <li v-for="(m, i) in matches" :key="m.type + m.id" role="option" :aria-selected="i === active">
             <button type="button" class="result" :class="{ active: i === active }" @mouseenter="active = i" @click="pick(m)">
               <span class="thumb"><IconImage :src="m.picture" :name="m.name" alt="" /></span>
-              <span class="r-name">{{ m.name }}</span>
+              <span class="r-name" data-tip-overflow>{{ m.name }}</span>
               <span class="r-kind">{{ $t(TYPE_LABELS[m.type]) }}</span>
             </button>
           </li>

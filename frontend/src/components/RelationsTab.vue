@@ -10,7 +10,7 @@
       <p v-if="!relations.length" class="empty">{{ $t('No relations yet.') }}</p>
       <ul v-else class="rows">
         <li v-for="row in rows" :key="row.rel.id" class="row">
-          <RouterLink :to="`/characters/${row.other.id}`" class="avatar">
+          <RouterLink :to="`/characters/${row.other.id}`" class="avatar" :title="row.other.name">
             <IconImage :src="row.other.picture_path" :name="row.other.name" />
           </RouterLink>
           <div class="row-text">
@@ -34,7 +34,7 @@
       <p v-if="!factions.length" class="empty">{{ $t('Not in any faction.') }}</p>
       <ul v-else class="rows">
         <li v-for="f in factions" :key="f.faction_id + f.role + f.since" class="row">
-          <RouterLink :to="wikiPath('faction', f.faction_id)" class="avatar" :style="f.color ? { borderColor: f.color } : {}">
+          <RouterLink :to="wikiPath('faction', f.faction_id)" class="avatar" :title="f.name" :style="f.color ? { borderColor: f.color } : {}">
             <IconImage :src="f.picture_path" :name="f.name" />
           </RouterLink>
           <div class="row-text">

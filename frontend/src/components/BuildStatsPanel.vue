@@ -7,9 +7,9 @@
 
     <div class="stats-grid">
       <div v-for="stat in statList" :key="stat.key" class="stat-box">
-        <span class="stat-label">{{ stat.label }}</span>
+        <span class="stat-label" :title="$t(stat.name)">{{ stat.label }}</span>
         <span class="stat-value">{{ modelValue[stat.key] }}</span>
-        <span v-if="effectiveDelta(stat.key) !== 0" class="stat-effective">
+        <span v-if="effectiveDelta(stat.key) !== 0" class="stat-effective" :title="$t('With bonuses from class, race, body type and gear')">
           → {{ Math.round(primary[stat.key]) }}
         </span>
         <div v-if="editable" class="stat-buttons">
@@ -123,14 +123,14 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'update:specialBases'])
 
 const statList = [
-  { key: 'vit', label: 'VIT' },
-  { key: 'def', label: 'DEF' },
-  { key: 'res', label: 'RES' },
-  { key: 'str', label: 'STR' },
-  { key: 'dex', label: 'DEX' },
-  { key: 'intel', label: 'INT' },
-  { key: 'wis', label: 'WIS' },
-  { key: 'agl', label: 'AGL' },
+  { key: 'vit', label: 'VIT', name: tr('Vitality') },
+  { key: 'def', label: 'DEF', name: tr('Defense') },
+  { key: 'res', label: 'RES', name: tr('Resistance') },
+  { key: 'str', label: 'STR', name: tr('Strength') },
+  { key: 'dex', label: 'DEX', name: tr('Dexterity') },
+  { key: 'intel', label: 'INT', name: tr('Intelligence') },
+  { key: 'wis', label: 'WIS', name: tr('Wisdom') },
+  { key: 'agl', label: 'AGL', name: tr('Agility') },
 ]
 
 const thresholdRows = [

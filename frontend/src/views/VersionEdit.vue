@@ -67,19 +67,19 @@
       </header>
 
       <div class="tab-bar">
-        <button class="tab-button" :class="{ 'is-active': tab === 'story' }" @click="tab = 'story'">
+        <button class="tab-button" :class="{ 'is-active': tab === 'story' }" :title="$t('Who they are: details, description and biography')" @click="tab = 'story'">
           {{ $t('Story') }}
         </button>
-        <button class="tab-button" :class="{ 'is-active': tab === 'build' }" @click="tab = 'build'">
+        <button class="tab-button" :class="{ 'is-active': tab === 'build' }" :title="$t('Level, stats and where their bonuses come from')" @click="tab = 'build'">
           {{ $t('Build') }}
         </button>
-        <button class="tab-button" :class="{ 'is-active': tab === 'gear' }" @click="tab = 'gear'">
+        <button class="tab-button" :class="{ 'is-active': tab === 'gear' }" :title="$t('What they have equipped')" @click="tab = 'gear'">
           {{ $t('Gear') }}
         </button>
-        <button class="tab-button" :class="{ 'is-active': tab === 'spells' }" @click="tab = 'spells'">
+        <button class="tab-button" :class="{ 'is-active': tab === 'spells' }" :title="$t('The spells they know')" @click="tab = 'spells'">
           {{ $t('Spells') }}
         </button>
-        <button class="tab-button" :class="{ 'is-active': tab === 'relations' }" @click="tab = 'relations'">
+        <button class="tab-button" :class="{ 'is-active': tab === 'relations' }" :title="$t('Family, friends, rivals and factions')" @click="tab = 'relations'">
           {{ $t('Relations') }}
         </button>
       </div>

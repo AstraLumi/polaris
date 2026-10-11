@@ -22,7 +22,7 @@
           <li v-for="s in stories" :key="s.id" class="card glass-panel" :class="{ 'is-current': s.id === activeStoryId }">
             <button class="card-open" type="button" @click="openStory(s.id)">
               <span class="card-icon"><IconImage :src="s.icon" :name="s.name" /></span>
-              <span class="card-name">{{ s.name }}</span>
+              <span class="card-name" data-tip-overflow>{{ s.name }}</span>
               <span class="card-meta">
                 <span v-if="s.id === activeStoryId" class="pill">{{ $t('Current') }}</span>
                 {{ $tn('{n} character', '{n} characters', s.characters) }}
@@ -32,8 +32,8 @@
               </span>
             </button>
             <div class="card-actions">
-              <button class="btn btn-ghost small" type="button" @click="formStory = s">{{ $t('Edit') }}</button>
-              <a class="btn btn-ghost small" :href="storyExportUrl(s.id)" download>{{ $t('Export') }}</a>
+              <button class="btn btn-ghost small" type="button" :title="$t('Rename it or change its icon')" @click="formStory = s">{{ $t('Edit') }}</button>
+              <a class="btn btn-ghost small" :href="storyExportUrl(s.id)" download :title="$t('Download the whole story as a .zip, pictures included. Import it to restore.')">{{ $t('Export') }}</a>
               <button class="btn btn-ghost small danger" type="button" @click="toDelete = s">{{ $t('Delete') }}</button>
             </div>
           </li>

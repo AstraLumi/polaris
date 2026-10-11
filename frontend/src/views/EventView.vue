@@ -45,7 +45,7 @@
         <section class="glass-panel block">
           <h2>{{ $t('Tags') }}</h2>
           <div v-if="event.tags.length" class="chips">
-            <RouterLink v-for="t in event.tags" :key="t" :to="{ path: '/events', query: { tag: t } }" class="tag-chip">
+            <RouterLink v-for="t in event.tags" :key="t" :to="{ path: '/events', query: { tag: t } }" class="tag-chip" :title="$t('Only events tagged #{tag}', { tag: t })">
               #{{ t }}
             </RouterLink>
           </div>

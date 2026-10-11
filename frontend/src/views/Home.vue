@@ -56,7 +56,7 @@
           <ul v-if="data.loose_ends.length" class="loose">
             <li v-for="(l, i) in data.loose_ends" :key="i">
               <RouterLink :to="l.kind === 'character' ? `/characters/${l.id}` : { path: '/map', query: { edit: l.id } }" class="loose-row">
-                <strong>{{ l.name }}</strong>
+                <strong data-tip-overflow>{{ l.name }}</strong>
                 <span>{{ $t(l.issue) }}</span>
               </RouterLink>
             </li>

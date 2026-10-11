@@ -64,7 +64,7 @@
             <span class="thumb">
               <IconImage :src="it.picture" :name="it.name" />
             </span>
-            <span class="article-name">{{ it.name }}</span>
+            <span class="article-name" data-tip-overflow>{{ it.name }}</span>
             <span class="recent-meta">{{ $t(TYPE_LABELS[it.type]) }} · {{ timeAgo(it.edited_at) }}</span>
           </RouterLink>
         </li>
@@ -78,11 +78,11 @@
       </h2>
       <ul class="article-list">
         <li v-for="it in g.items" :key="it.id">
-          <RouterLink :to="wikiPath(it.type, it.id)" class="article-link" :class="{ 'is-stub': !it.written }">
+          <RouterLink :to="wikiPath(it.type, it.id)" class="article-link" :class="{ 'is-stub': !it.written }" :title="it.written ? null : $t('Nothing written here yet: only the facts from the story')">
             <span class="thumb">
               <IconImage :src="it.picture" :name="it.name" />
             </span>
-            <span class="article-name">{{ it.name }}</span>
+            <span class="article-name" data-tip-overflow>{{ it.name }}</span>
           </RouterLink>
         </li>
       </ul>

@@ -24,8 +24,8 @@
     </div>
 
     <div class="card-actions">
-      <RouterLink :to="`/characters/${character.id}`" class="btn btn-ghost small">{{ $t('View') }}</RouterLink>
-      <RouterLink :to="`/characters/${character.id}/versions`" class="btn btn-ghost small">{{ $t('Edit') }}</RouterLink>
+      <RouterLink :to="`/characters/${character.id}`" class="btn btn-ghost small" :title="$t('Open the character sheet')">{{ $t('View') }}</RouterLink>
+      <RouterLink :to="`/characters/${character.id}/versions`" class="btn btn-ghost small" :title="$t('Pick a version to edit')">{{ $t('Edit') }}</RouterLink>
     </div>
   </div>
 </template>

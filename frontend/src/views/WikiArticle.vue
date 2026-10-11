@@ -61,7 +61,7 @@
             <section v-for="s in fieldSections" :id="s.id" :key="s.id" class="part">
               <h2>
                 {{ s.title }}
-                <a href="#" class="edit-link" @click.prevent="startEdit(s.focus)">[ {{ $t('edit') }} ]</a>
+                <a href="#" class="edit-link" :title="$t('Edit this section')" @click.prevent="startEdit(s.focus)">[ {{ $t('edit') }} ]</a>
               </h2>
               <div class="md" v-html="md(s.body)"></div>
             </section>
@@ -69,7 +69,7 @@
             <section v-for="s in customSections" :id="s.id" :key="s.id" class="part">
               <h2>
                 {{ s.title }}
-                <a href="#" class="edit-link" @click.prevent="startEdit(s.focus)">[ {{ $t('edit') }} ]</a>
+                <a href="#" class="edit-link" :title="$t('Edit this section')" @click.prevent="startEdit(s.focus)">[ {{ $t('edit') }} ]</a>
               </h2>
               <div class="md" v-html="md(s.body)"></div>
             </section>

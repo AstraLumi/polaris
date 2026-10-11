@@ -26,7 +26,7 @@
           {{ $t('Delete selected ({n})', { n: selectedIds.size }) }}
         </button>
       </template>
-      <button class="btn btn-ghost small" @click="toggleSelectMode">{{ selectMode ? $t('Cancel') : $t('Select several') }}</button>
+      <button class="btn btn-ghost small" :title="selectMode ? null : $t('Pick several to delete at once')" @click="toggleSelectMode">{{ selectMode ? $t('Cancel') : $t('Select several') }}</button>
     </div>
 
     <p v-if="loadError" class="error-banner">{{ loadError }}</p>

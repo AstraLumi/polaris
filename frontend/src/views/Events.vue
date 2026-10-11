@@ -16,7 +16,7 @@
         >
           {{ $t('Delete selected ({n})', { n: selectedIds.size }) }}
         </button>
-        <button v-if="events.length || selectMode" class="btn btn-ghost" @click="toggleSelectMode">
+        <button v-if="events.length || selectMode" class="btn btn-ghost" :title="selectMode ? null : $t('Pick several to delete at once')" @click="toggleSelectMode">
           {{ selectMode ? $t('Cancel') : $t('Select several') }}
         </button>
         <RouterLink :to="newLink" class="btn btn-primary add-btn">{{ $t('New event') }}</RouterLink>
@@ -38,6 +38,7 @@
           type="button"
           class="tag-chip"
           :class="{ 'is-active': activeTag && t.tag.toLowerCase() === activeTag.toLowerCase() }"
+          :title="$t('Only events tagged #{tag}', { tag: t.tag })"
           @click="toggleTag(t.tag)"
         >
           #{{ t.tag }} <span class="count">{{ t.count }}</span>
@@ -87,7 +88,7 @@
           </div>
           <div class="event-main">
             <div class="event-title">
-              <strong>{{ e.name }}</strong>
+              <strong data-tip-overflow>{{ e.name }}</strong>
               <span v-if="e.source_type" class="badge">{{ e.source_type === 'character' ? $t('Birth') : $t('Founding') }}</span>
             </div>
             <div class="meta">

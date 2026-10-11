@@ -93,6 +93,12 @@ types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard
   device. The logo is `frontend/public/logo.svg` (the in-app copy is
   `components/PolarisLogo.vue`, which follows the theme) and the favicon set
   is in `frontend/public/`.
+- Tooltips: one styled tooltip for the whole app
+  (`components/TooltipLayer.vue`, mounted in `App.vue`). Give an element a
+  plain `title` (translated) and it is shown styled; a trailing shortcut such
+  as `(Ctrl+B)` is drawn as keys. Icon-only buttons with an `aria-label` get
+  it as their tooltip, and `data-tip-overflow` shows an element's own text
+  only while it is cut off by an ellipsis.
 - Dates are stored as `DD-MM-YYYY` (year may be negative); a bare year is
   saved as the 1st of the 1st month. The calendar (months per year, days
   per month) is configurable under Settings.

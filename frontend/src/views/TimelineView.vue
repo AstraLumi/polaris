@@ -33,7 +33,7 @@
             @input="onZoom($event.target.value)"
           />
           <span class="ctl-value">{{ Math.round(pxPerYear) }} px/yr</span>
-          <button type="button" class="chip-btn" :class="{ 'is-on': auto }" @click="setAuto">{{ $t('Auto') }}</button>
+          <button type="button" class="chip-btn" :class="{ 'is-on': auto }" :title="$t('Fit the whole timeline to the window')" @click="setAuto">{{ $t('Auto') }}</button>
         </label>
 
         <label class="ctl" :title="$t('A gap between events longer than this becomes a coil instead of empty space. 0 never collapses.')">
