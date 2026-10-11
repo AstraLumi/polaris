@@ -108,7 +108,7 @@
 
       <section v-show="tab === 'relations'" class="gear-tab-wrap glass-panel sheet-part">
         <h2 class="print-only">{{ $t('Relations') }}</h2>
-        <RelationsTab :character-id="data.character_id" :character-name="data.name" />
+        <RelationsTab :character-id="data.character_id" :character-name="data.name" :point="{ chapterId: data.chapter_id, date: data.version_date }" />
       </section>
     </template>
   </div>

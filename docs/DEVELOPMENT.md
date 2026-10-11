@@ -101,6 +101,18 @@ types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard
   (`node frontend/tests/graphLayout.test.mjs`). `?focus=<type>:<id>` opens it
   centred on one article; `&depth=N` keeps only what lies within N
   connections of it and `&types=a,b` starts with only those kinds shown.
+- Story time (`backend/storytime.go`, `frontend/src/storyTime.js`, kept in
+  step): a character version sits at a point (its chapter in story order, and
+  its date); relations start and end at a chapter and/or date, and each
+  version shows the ones that hold at its point. The wiki gives a character
+  one tab of facts and relations per version (`versions` in the article), the
+  written text stays shared; the graph and family tree use every relation.
+- Former names: a character's names in other versions are aliases
+  (`aliases` in the wiki list), so [[links]] and search still find them, and
+  the infobox lists them as "Also known as".
+- Kingdoms and factions (`backend/kingdoms.go`): every kingdom (a coloured
+  major location) has a faction tied by `factions.kingdom_id`, made and kept
+  in step from the map; losing the colour or deleting the kingdom unties it.
 - Wiki galleries (`backend/wikigallery.go`, schema 19, `components/WikiGallery.vue`):
   any article can hold captioned pictures (`wiki_gallery`, hanging off the
   article's `wiki_entries` row, so deleting the source removes them). They
@@ -170,8 +182,9 @@ types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard
   Nation text that matches a location name; 9 -> 10 replaces the unused
   placeholder events tables (carrying over any rows they held); 10 -> 11 adds
   `classes.icon_path`; 11 -> 12 adds the gear tables. The current schema is
-  19 (16 -> 17 adds lore articles, 17 -> 18 character tags and dated lore
-  rows, 18 -> 19 wiki galleries); see `migrations` in `backend/db.go`. Character tags
+  20 (16 -> 17 adds lore articles, 17 -> 18 character tags and dated lore
+  rows, 18 -> 19 wiki galleries, 19 -> 20 relation chapters and kingdom
+  factions; a migration can run Go code afterwards through `after`); see `migrations` in `backend/db.go`. Character tags
   (`character_tags`) belong to the character, not a version.
 
 ## Data on disk

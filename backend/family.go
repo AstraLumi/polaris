@@ -40,7 +40,7 @@ type familyPayload struct {
 }
 
 func characterFamily(db *sql.DB, root int64) (*familyPayload, error) {
-	rows, err := db.Query(`SELECT from_id, to_id, kind, until FROM character_relations ORDER BY id`)
+	rows, err := db.Query(`SELECT from_id, to_id, kind, until, until_chapter_id IS NOT NULL FROM character_relations ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -48,8 +48,12 @@ func characterFamily(db *sql.DB, root int64) (*familyPayload, error) {
 	adj := map[int64][]int{}
 	for rows.Next() {
 		var l familyLink
-		if rows.Scan(&l.From, &l.To, &l.Kind, &l.Until) != nil || !familyKinds[l.Kind] {
+		var endsAtChapter bool
+		if rows.Scan(&l.From, &l.To, &l.Kind, &l.Until, &endsAtChapter) != nil || !familyKinds[l.Kind] {
 			continue
+		}
+		if l.Until == "" && endsAtChapter {
+			l.Until = "chapter"
 		}
 		adj[l.From] = append(adj[l.From], len(all))
 		adj[l.To] = append(adj[l.To], len(all))

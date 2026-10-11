@@ -91,9 +91,10 @@
               <WikiGallery :type="article.type" :id="article.id" :items="article.gallery" />
             </section>
 
-            <section v-if="article.groups.length" id="sec-related" class="part">
+            <section v-if="shownGroups.length" id="sec-related" class="part">
               <h2>{{ $t('Related') }}</h2>
-              <div v-for="g in article.groups" :key="g.key" class="group">
+              <p v-if="shownVersion && !shownVersion.current" class="origin-note">{{ $t('As of {version}', { version: shownVersion.label }) }}</p>
+              <div v-for="g in shownGroups" :key="g.key" class="group">
                 <h3>{{ $t(GROUP_LABELS[g.key]) }}</h3>
                 <ul class="links">
                   <li v-for="(r, i) in g.items" :key="i">
@@ -171,7 +172,23 @@
 
         <!-- ------------------------------------------------ the infobox -->
         <aside class="infobox" :aria-label="$t('Summary box')">
-          <div class="info-title">{{ article.name }}</div>
+          <div class="info-title">{{ shownName }}</div>
+          <div v-if="versionTabs.length" class="version-tabs" role="tablist" :aria-label="$t('Versions')">
+            <button
+              v-for="v in versionTabs"
+              :key="v.id"
+              type="button"
+              role="tab"
+              class="version-tab"
+              :class="{ 'is-on': v.id === shownVersion.id }"
+              :aria-selected="v.id === shownVersion.id"
+              :title="v.label"
+              @click="pickedVersion = v.id"
+            >
+              {{ v.short }}
+            </button>
+          </div>
+          <p v-if="shownVersion" class="version-note">{{ shownVersion.label }}</p>
           <div v-if="editing && isLore" class="info-pic-edit">
             <div class="info-pic">
               <IconImage v-if="shownPicture" :src="shownPicture" :name="draft.name" :alt="draft.name" />
@@ -186,12 +203,12 @@
             </div>
           </div>
           <div
-            v-else-if="article.picture"
+            v-else-if="infoPicture"
             class="info-pic"
-            :class="{ zoomable: article.picture.startsWith('/uploads/') }"
-            @click="article.picture.startsWith('/uploads/') && viewPicture(article.picture, article.name)"
+            :class="{ zoomable: infoPicture.startsWith('/uploads/') }"
+            @click="infoPicture.startsWith('/uploads/') && viewPicture(infoPicture, shownName)"
           >
-            <IconImage :src="article.picture" :name="article.name" :alt="article.name" />
+            <IconImage :src="infoPicture" :name="shownName" :alt="shownName" />
           </div>
           <table>
             <tbody>
@@ -199,7 +216,7 @@
                 <th>{{ $t('Kind') }}</th>
                 <td>{{ $t(TYPE_LABELS[article.type]) }}</td>
               </tr>
-              <tr v-for="f in article.facts" :key="f.key">
+              <tr v-for="f in shownFacts" :key="f.key">
                 <th>{{ $t(FACT_LABELS[f.key]) }}</th>
                 <td>
                   <RouterLink v-if="f.link" :to="wikiPath(f.link.type, f.link.id)">{{ f.link.name }}</RouterLink>
@@ -280,6 +297,7 @@ import WikiGallery from '../components/WikiGallery.vue'
 import { pageTitle, useUnsavedGuard, useSaveShortcut, viewPicture } from '../navigation'
 import { renderMarkdown } from '../markdown'
 import { fullDate, dateParts } from '../calendar'
+import { chapterLabel, loadChapters } from '../chapters'
 import { t } from '../i18n'
 import {
   TYPE_LABELS, FIELD_LABELS, FACT_LABELS, GROUP_LABELS, SHEET_LABELS,
@@ -302,6 +320,29 @@ const saving = ref(false)
 const tocOpen = ref(true)
 const draft = reactive({ name: '', summary: '', fields: {}, sections: [], infobox: [] })
 const isLore = computed(() => article.value?.type === 'lore')
+
+// A character's facts change between versions: the infobox and the related
+// lists can show any of them (the written text is the same for all). Opens
+// on the current version.
+const pickedVersion = ref(null)
+const versionTabs = computed(() =>
+  (article.value?.versions || []).map((v, i) => {
+    const when = (v.chapter_id && chapterLabel(v.chapter_id, { short: true })) || (v.date ? fullDate(v.date) : '') || v.reference
+    return {
+      ...v,
+      short: `${i + 1}${v.current ? ' ★' : ''}`,
+      label: [v.name, when, v.current ? t('current') : ''].filter(Boolean).join(' · '),
+    }
+  }),
+)
+const shownVersion = computed(() => {
+  const tabs = versionTabs.value
+  return tabs.find((v) => v.id === pickedVersion.value) || tabs.find((v) => v.current) || null
+})
+const shownFacts = computed(() => shownVersion.value?.facts ?? article.value.facts)
+const shownGroups = computed(() => shownVersion.value?.groups ?? article.value.groups)
+const shownName = computed(() => shownVersion.value?.name || article.value.name)
+const infoPicture = computed(() => (shownVersion.value ? shownVersion.value.picture : article.value.picture))
 let snapshot = ''
 let keySeq = 0
 
@@ -338,7 +379,7 @@ const hasText = computed(
 const toc = computed(() => {
   const rows = [...sheetSections.value, ...fieldSections.value, ...customSections.value]
   if (article.value.gallery.length) rows.push({ id: 'sec-gallery', title: t('Gallery') })
-  if (article.value.groups.length) rows.push({ id: 'sec-related', title: t('Related') })
+  if (shownGroups.value.length) rows.push({ id: 'sec-related', title: t('Related') })
   rows.push({ id: 'sec-backlinks', title: t('What links here') })
   return rows
 })
@@ -546,6 +587,8 @@ async function deleteArticle() {
 }
 
 watch(() => [props.type, props.id], load, { immediate: true })
+watch(() => [props.type, props.id], () => (pickedVersion.value = null))
+loadChapters()
 
 useUnsavedGuard(dirty)
 useSaveShortcut(() => editing.value && !saving.value && save())
@@ -847,6 +890,40 @@ useSaveShortcut(() => editing.value && !saving.value && save())
 
 .info-row .btn.small {
   padding: 0 0.55rem;
+}
+
+.version-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.5rem 0.6rem 0;
+}
+
+.version-tab {
+  min-width: 2rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.version-tab.is-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.version-note {
+  margin: 0.35rem 0.6rem 0;
+  font-size: 0.74rem;
+  color: var(--text-faint);
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .info-pic-edit .info-pic {

@@ -108,6 +108,7 @@ const entries = computed(() => {
     picture: it.picture,
     path: primaryPath(it.type, it.id),
     wiki: wikiPath(it.type, it.id),
+    aliases: it.aliases || [],
   }))
   // Chapters aren't wiki articles; they have their own page.
   const chapters = chapterIndex.value.chapters.map((c) => ({
@@ -118,7 +119,7 @@ const entries = computed(() => {
     picture: '',
     path: `/chapters/${c.id}`,
   }))
-  return [...things, ...chapters, ...pages].map((e) => ({ ...e, folded: fold(e.name) }))
+  return [...things, ...chapters, ...pages].map((e) => ({ ...e, folded: fold([e.name, ...(e.aliases || [])].join(' ')) }))
 })
 
 // Best first: the name starts with the query, then a word in it does, then

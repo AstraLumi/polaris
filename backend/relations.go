@@ -11,8 +11,9 @@ import (
 
 // Relations link two characters: "Aria is Bram's sister", "Cora is Aria's
 // mentor". A relation belongs to the characters, not to a version, and can
-// have in-story since/until dates (an ally who became a rival is two
-// relations). It is stored once and read from both sides: from_id's side
+// start and end at a chapter and/or an in-story date (an ally who became a
+// rival is two relations); each version shows the ones that hold at its own
+// chapter and date (storytime.go). It is stored once and read from both sides: from_id's side
 // reads the kind's first wording ("Parent of"), to_id's side the second
 // ("Child of").
 
@@ -57,7 +58,14 @@ type relationOut struct {
 	ReverseLabel string `json:"reverse_label"`
 	Since        string `json:"since"`
 	Until        string `json:"until"`
+	SinceChapter *int64 `json:"since_chapter_id"`
+	UntilChapter *int64 `json:"until_chapter_id"`
 	Notes        string `json:"notes"`
+}
+
+// holdsAt reports whether the relation holds at story point p.
+func (r relationOut) holdsAt(p storyPoint, ranks map[int64]int) bool {
+	return holdsAt(p, ranks, r.SinceChapter, r.UntilChapter, r.Since, r.Until)
 }
 
 // wording is the relation as read from character id's side, and whether it
@@ -78,7 +86,7 @@ func (r relationOut) wording(id int64) (text string, builtin bool) {
 
 const relationSelect = `
 	SELECT r.id, r.from_id, fv.name, COALESCE(fv.picture_path, ''), r.to_id, tv.name, COALESCE(tv.picture_path, ''),
-	       r.kind, r.label, r.reverse_label, r.since, r.until, r.notes
+	       r.kind, r.label, r.reverse_label, r.since, r.until, r.notes, r.since_chapter_id, r.until_chapter_id
 	FROM character_relations r
 	JOIN character_versions fv ON fv.character_id = r.from_id AND fv.is_current = 1
 	JOIN character_versions tv ON tv.character_id = r.to_id AND tv.is_current = 1`
@@ -88,10 +96,17 @@ func scanRelations(rows *sql.Rows) []relationOut {
 	out := []relationOut{}
 	for rows.Next() {
 		var r relationOut
+		var since, until sql.NullInt64
 		if err := rows.Scan(&r.ID, &r.FromID, &r.FromName, &r.FromPicture, &r.ToID, &r.ToName, &r.ToPicture,
-			&r.Kind, &r.Label, &r.ReverseLabel, &r.Since, &r.Until, &r.Notes); err != nil {
+			&r.Kind, &r.Label, &r.ReverseLabel, &r.Since, &r.Until, &r.Notes, &since, &until); err != nil {
 			log.Printf("scan relation: %v", err)
 			continue
+		}
+		if since.Valid {
+			r.SinceChapter = &since.Int64
+		}
+		if until.Valid {
+			r.UntilChapter = &until.Int64
 		}
 		r.FromPicture = uploadURL(r.FromPicture)
 		r.ToPicture = uploadURL(r.ToPicture)
@@ -121,6 +136,8 @@ type relationIn struct {
 	ReverseLabel string `json:"reverse_label"`
 	Since        string `json:"since"`
 	Until        string `json:"until"`
+	SinceChapter *int64 `json:"since_chapter_id"`
+	UntilChapter *int64 `json:"until_chapter_id"`
 	Notes        string `json:"notes"`
 }
 
@@ -154,6 +171,18 @@ func (in *relationIn) validate(db *sql.DB) string {
 	}
 	if len(in.Notes) > 4000 {
 		return "that text is too long"
+	}
+	// A chapter that no longer exists is simply dropped.
+	ranks := chapterRanks(db)
+	for _, c := range []**int64{&in.SinceChapter, &in.UntilChapter} {
+		if *c != nil {
+			if _, ok := ranks[**c]; !ok {
+				*c = nil
+			}
+		}
+	}
+	if in.SinceChapter != nil && in.UntilChapter != nil && ranks[*in.UntilChapter] <= ranks[*in.SinceChapter] {
+		return "the end chapter must come after the start chapter"
 	}
 	return validateSpan(db, &in.Since, &in.Until)
 }
@@ -214,8 +243,9 @@ func createRelationHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 		res, err := db.Exec(`INSERT INTO character_relations
-			(from_id, to_id, kind, label, reverse_label, since, until, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			in.FromID, in.ToID, in.Kind, in.Label, in.ReverseLabel, in.Since, in.Until, in.Notes)
+			(from_id, to_id, kind, label, reverse_label, since, until, notes, since_chapter_id, until_chapter_id)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			in.FromID, in.ToID, in.Kind, in.Label, in.ReverseLabel, in.Since, in.Until, in.Notes, in.SinceChapter, in.UntilChapter)
 		if err != nil {
 			log.Printf("create relation: %v", err)
 			http.Error(w, "failed to save the relation", http.StatusInternalServerError)
@@ -243,9 +273,10 @@ func updateRelationHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 		res, err := db.Exec(`UPDATE character_relations
-			SET from_id = ?, to_id = ?, kind = ?, label = ?, reverse_label = ?, since = ?, until = ?, notes = ?
+			SET from_id = ?, to_id = ?, kind = ?, label = ?, reverse_label = ?, since = ?, until = ?, notes = ?,
+				since_chapter_id = ?, until_chapter_id = ?
 			WHERE id = ?`,
-			in.FromID, in.ToID, in.Kind, in.Label, in.ReverseLabel, in.Since, in.Until, in.Notes, id)
+			in.FromID, in.ToID, in.Kind, in.Label, in.ReverseLabel, in.Since, in.Until, in.Notes, in.SinceChapter, in.UntilChapter, id)
 		if err != nil {
 			log.Printf("update relation: %v", err)
 			http.Error(w, "failed to save the relation", http.StatusInternalServerError)

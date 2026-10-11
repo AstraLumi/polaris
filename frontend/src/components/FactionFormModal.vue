@@ -19,8 +19,9 @@
           <div class="top-fields">
             <label class="field">
               <span>{{ $t('Name') }}</span>
-              <input v-model="name" type="text" maxlength="120" required autofocus />
+              <input v-model="name" type="text" maxlength="120" required autofocus :disabled="tiedToKingdom" />
             </label>
+            <p v-if="tiedToKingdom" class="tied-note">{{ $t('This is a kingdom\'s faction: its name and colour come from the map, so change them there.') }}</p>
             <div class="field-row">
               <label class="field">
                 <span>{{ $t('Part of') }}</span>
@@ -35,7 +36,7 @@
           </div>
         </div>
 
-        <div class="field">
+        <div v-if="!tiedToKingdom" class="field">
           <span>{{ $t('Color') }}</span>
           <ColorPicker v-model="color" />
         </div>
@@ -109,6 +110,7 @@ const f = props.faction
 const name = ref(f?.name ?? '')
 const description = ref(f?.description ?? '')
 const color = ref(f?.color ?? '')
+const tiedToKingdom = !!f?.kingdom_id
 const parentId = ref(f?.parent_id ?? null)
 const hqId = ref(f?.hq_location_id ?? null)
 const foundingDate = ref(f?.founding_date ?? '')
@@ -196,6 +198,12 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.tied-note {
+  margin: -0.5rem 0 0.8rem;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
 .top {
   display: flex;
   gap: 1.25rem;

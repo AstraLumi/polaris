@@ -12,7 +12,7 @@ import (
 // oldest migration (or a brand new one) gets wiped and recreated from
 // freshSchema — so every schema change from here on should ship with a
 // migration instead of relying on that reset.
-const currentSchemaVersion = "19"
+const currentSchemaVersion = "20"
 
 const freshSchema = `
 CREATE TABLE classes (
@@ -286,6 +286,9 @@ const eventCharactersTableSQL = `CREATE TABLE event_characters (
 type migration struct {
 	to         string
 	statements []string
+	// after runs once the statements are in, for data changes SQL alone
+	// can't make (optional).
+	after func(*sql.DB) error
 }
 
 // migrations upgrade a database in place, one version at a time, keeping
@@ -422,6 +425,29 @@ var migrations = map[string]migration{
 		// Picture galleries on wiki articles (wikigallery.go).
 		statements: schema19Statements,
 	},
+	"19": {
+		to: "20",
+		// Relations can start and end at a chapter; kingdoms get a faction.
+		statements: schema20Statements,
+		after:      backfillKingdomFactions,
+	},
+}
+
+// schema20Statements create what schema 20 added. The fresh schema runs them
+// after every other table exists.
+var schema20Statements = []string{
+	`ALTER TABLE character_relations ADD COLUMN since_chapter_id INTEGER`,
+	`ALTER TABLE character_relations ADD COLUMN until_chapter_id INTEGER`,
+	`CREATE TRIGGER relations_chapter_unlink AFTER DELETE ON chapters BEGIN
+		UPDATE character_relations SET since_chapter_id = NULL WHERE since_chapter_id = OLD.id;
+		UPDATE character_relations SET until_chapter_id = NULL WHERE until_chapter_id = OLD.id;
+	END`,
+	// The kingdom (a coloured major location) a faction stands for; see kingdoms.go.
+	`ALTER TABLE factions ADD COLUMN kingdom_id INTEGER`,
+	`CREATE UNIQUE INDEX idx_factions_kingdom ON factions(kingdom_id) WHERE kingdom_id IS NOT NULL`,
+	`CREATE TRIGGER factions_kingdom_unlink AFTER DELETE ON locations BEGIN
+		UPDATE factions SET kingdom_id = NULL WHERE kingdom_id = OLD.id;
+	END`,
 }
 
 const characterTagsTableSQL = `CREATE TABLE character_tags (
@@ -570,6 +596,11 @@ func ensureSchema(db *sql.DB) error {
 		if err := applyMigration(db, m); err != nil {
 			return fmt.Errorf("migration %s -> %s: %w", version, m.to, err)
 		}
+		if m.after != nil {
+			if err := m.after(db); err != nil {
+				return fmt.Errorf("migration %s -> %s: %w", version, m.to, err)
+			}
+		}
 		version = m.to
 	}
 
@@ -595,7 +626,7 @@ func ensureSchema(db *sql.DB) error {
 			return fmt.Errorf("create schema: %w", err)
 		}
 	}
-	for _, stmt := range append(append(append([]string{}, wikiSchemaStatements...), schema18Statements...), schema19Statements...) {
+	for _, stmt := range append(append(append(append([]string{}, wikiSchemaStatements...), schema18Statements...), schema19Statements...), schema20Statements...) {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("create wiki schema: %w", err)
 		}

@@ -49,10 +49,14 @@
         </p>
 
         <div class="field-row">
+          <ChapterSelect v-model="sinceChapter" :label="$t('From chapter')" />
+          <ChapterSelect v-model="untilChapter" :label="$t('Until chapter')" />
+        </div>
+        <div class="field-row">
           <DateField v-model="since" :label="$t('Since')" />
           <DateField v-model="until" :label="$t('Until')" />
         </div>
-        <p class="hint">{{ $t('Both optional. A relation that changed (allies who became rivals) can be two relations with dates.') }}</p>
+        <p class="hint">{{ $t('All optional. Each version of a character shows the relations that hold at its own chapter (or date): friends until chapter 5 and adopted from chapter 5 is two relations.') }}</p>
 
         <label class="field">
           <span>{{ $t('Notes') }}</span>
@@ -82,6 +86,7 @@ import { t } from '../i18n'
 import { relationsApi } from '../api'
 import { RELATION_KINDS, relationKind } from '../relations'
 import DateField from './DateField.vue'
+import ChapterSelect from './ChapterSelect.vue'
 
 const props = defineProps({
   me: { type: Object, required: true }, // { id, name }
@@ -99,6 +104,8 @@ const myWording = ref(r ? (meIsFrom.value ? r.label : r.reverse_label) : '')
 const theirWording = ref(r ? (meIsFrom.value ? r.reverse_label : r.label) : '')
 const since = ref(r?.since ?? '')
 const until = ref(r?.until ?? '')
+const sinceChapter = ref(r?.since_chapter_id ?? null)
+const untilChapter = ref(r?.until_chapter_id ?? null)
 const notes = ref(r?.notes ?? '')
 const saving = ref(false)
 const error = ref('')
@@ -132,6 +139,8 @@ async function submit() {
     reverse_label: kind.value === 'custom' ? theirWording.value : '',
     since: since.value,
     until: until.value,
+    since_chapter_id: sinceChapter.value,
+    until_chapter_id: untilChapter.value,
     notes: notes.value,
   }
   try {

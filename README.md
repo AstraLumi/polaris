@@ -19,7 +19,9 @@ has its own SQLite database, so it runs comfortably on a small home server.
   alive / missing / dead status, automatically computed stats, a paper-doll
   gear tab, a spell list and a printable sheet.
 - **Relations and factions**: who is whose parent, mentor, rival and so on,
-  read correctly from both sides, with optional dates. Factions (guilds,
+  read correctly from both sides, starting and ending at a chapter or date so
+  each version of a character shows the relations of its own time. Every
+  kingdom on the map is a faction too. Factions (guilds,
   orders, houses) can sit inside one another, have a headquarters on the map
   and members with ranks.
 - **Character Assets**: classes, subclasses, specializations, races, body

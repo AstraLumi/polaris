@@ -67,6 +67,8 @@ export const FIELD_LABELS = {
 // Infobox rows that come from the story itself.
 export const FACT_LABELS = {
   nickname: tr('Nickname'),
+  also_known_as: tr('Also known as'),
+  kingdom: tr('Kingdom'),
   status: tr('Status'),
   race: tr('Race'),
   gender: tr('Gender'),
@@ -216,11 +218,14 @@ const norm = (s) => s.replace(/_/g, ' ').toLowerCase().split(/\s+/).filter(Boole
 
 export function makeLinkResolver(items) {
   const index = new Map()
-  for (const it of items) {
-    const k = norm(it.name)
+  const add = (name, it) => {
+    const k = norm(name)
     if (!index.has(k)) index.set(k, [])
     index.get(k).push(it)
   }
+  for (const it of items) add(it.name, it)
+  // A character's former names, after every real name (as on the server).
+  for (const it of items) for (const a of it.aliases || []) add(a, it)
   return (inner) => {
     inner = inner.trim()
     const colon = inner.indexOf(':')

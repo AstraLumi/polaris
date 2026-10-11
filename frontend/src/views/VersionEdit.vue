@@ -202,7 +202,7 @@
       </section>
 
       <section v-else-if="tab === 'relations'" class="gear-tab-wrap glass-panel">
-        <RelationsTab :character-id="Number(id)" :character-name="characterName" />
+        <RelationsTab :character-id="Number(id)" :character-name="characterName" :point="{ chapterId: form.chapter_id, date: form.version_date }" />
         <p class="preview-note">{{ $t('Relations belong to the character, not to one version, and are saved as soon as you add or change them.') }}</p>
       </section>
 

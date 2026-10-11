@@ -249,6 +249,24 @@ type wikiArticle struct {
 	Backlinks []wikiRef         `json:"backlinks"`
 	Gallery   []galleryItem     `json:"gallery"`
 	UpdatedAt string            `json:"updated_at"`
+	// Versions is a character's facts as they stand in each of its versions
+	// (the article's own facts are the current version's).
+	Versions []wikiVersion `json:"versions,omitempty"`
+
+	version      int64 // which character version the facts are for; 0 = current
+	allRelations bool  // every relation, not only those holding at that version (the graph)
+}
+
+type wikiVersion struct {
+	ID        int64       `json:"id"`
+	Name      string      `json:"name"`
+	Picture   string      `json:"picture"`
+	Date      string      `json:"date"`
+	Reference string      `json:"reference"`
+	ChapterID *int64      `json:"chapter_id"`
+	Current   bool        `json:"current"`
+	Facts     []wikiFact  `json:"facts"`
+	Groups    []wikiGroup `json:"groups"`
 }
 
 type wikiListItem struct {
@@ -260,6 +278,9 @@ type wikiListItem struct {
 	// EditedAt is when its written text last changed (UTC, SQLite format);
 	// empty for an article nobody has written in.
 	EditedAt string `json:"edited_at,omitempty"`
+	// Aliases are a character's names in its other versions; [[links]] and
+	// search find the character by them too.
+	Aliases []string `json:"aliases,omitempty"`
 }
 
 // pictureURL turns a stored picture or icon into what the frontend expects:
@@ -308,7 +329,40 @@ func listWikiItems(db *sql.DB) ([]wikiListItem, error) {
 		}
 		rows.Close()
 	}
+	aliases := characterAliases(db)
+	for i := range items {
+		if items[i].Type == "character" {
+			items[i].Aliases = aliases[items[i].ID]
+		}
+	}
 	return items, nil
+}
+
+// characterAliases is every character's names from versions other than the
+// current one (once each, leaving out the current name).
+func characterAliases(db *sql.DB) map[int64][]string {
+	out := map[int64][]string{}
+	rows, err := db.Query(`SELECT v.character_id, v.name FROM character_versions v
+		JOIN character_versions c ON c.character_id = v.character_id AND c.is_current = 1
+		WHERE v.is_current = 0 AND lower(trim(v.name)) <> lower(trim(c.name)) ORDER BY v.id`)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	seen := map[string]bool{}
+	for rows.Next() {
+		var id int64
+		var name string
+		if rows.Scan(&id, &name) != nil {
+			continue
+		}
+		k := strconv.FormatInt(id, 10) + ":" + normalizeWikiKey(name)
+		if !seen[k] {
+			seen[k] = true
+			out[id] = append(out[id], name)
+		}
+	}
+	return out
 }
 
 func listWikiHandler(db *sql.DB) http.HandlerFunc {
@@ -389,8 +443,8 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 	id := a.ID
 	switch a.Type {
 	case "character":
-		var nick, gender, birth, bornText, nationText, desc, bio, speech, status string
-		var raceID, bodyID, classID, subID, specID, bornLoc, nationLoc sql.NullInt64
+		var nick, gender, birth, bornText, nationText, desc, bio, speech, status, vname, vdate string
+		var raceID, bodyID, classID, subID, specID, bornLoc, nationLoc, vchapter sql.NullInt64
 		var raceName, bodyName, className, subName, specName, bornName, nationName sql.NullString
 		err := db.QueryRow(`
 			SELECT COALESCE(v.nickname, ''), COALESCE(st.gender, ''), COALESCE(st.birth_date, ''),
@@ -398,7 +452,8 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 			       COALESCE(st.description, ''), COALESCE(st.bio, ''), COALESCE(st.speech_mannerisms, ''),
 			       COALESCE(st.status, 'alive'), st.race_id, r.name, st.body_type_id, b.name,
 			       v.class_id, cl.name, v.subclass_id, sc.name, v.specialization_id, sp.name,
-			       st.born_in_location_id, bl.name, st.nation_location_id, nl.name
+			       st.born_in_location_id, bl.name, st.nation_location_id, nl.name,
+			       v.name, COALESCE(v.version_date, ''), v.chapter_id
 			FROM character_versions v
 			LEFT JOIN character_story st ON st.version_id = v.id
 			LEFT JOIN races r ON r.id = st.race_id
@@ -408,16 +463,26 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 			LEFT JOIN specializations sp ON sp.id = v.specialization_id
 			LEFT JOIN locations bl ON bl.id = st.born_in_location_id
 			LEFT JOIN locations nl ON nl.id = st.nation_location_id
-			WHERE v.character_id = ? AND v.is_current = 1`, id).Scan(
+			WHERE v.character_id = ? AND (v.id = ? OR (? = 0 AND v.is_current = 1))`, id, a.version, a.version).Scan(
 			&nick, &gender, &birth, &bornText, &nationText, &desc, &bio, &speech,
 			&status, &raceID, &raceName, &bodyID, &bodyName,
 			&classID, &className, &subID, &subName, &specID, &specName,
-			&bornLoc, &bornName, &nationLoc, &nationName)
+			&bornLoc, &bornName, &nationLoc, &nationName,
+			&vname, &vdate, &vchapter)
 		if err != nil {
 			log.Printf("wiki character facts: %v", err)
 			return
 		}
+		ranks := chapterRanks(db)
+		point := pointOf(vchapter, vdate, ranks)
 		a.addFact("nickname", nick, "", nil)
+		var others []string
+		for _, n := range append(characterAliases(db)[id], currentName(db, id)) {
+			if n != "" && normalizeWikiKey(n) != normalizeWikiKey(vname) && !containsKey(others, n) {
+				others = append(others, n)
+			}
+		}
+		a.addFact("also_known_as", strings.Join(others, ", "), "", nil)
 		a.addFact("status", statusWord[status], "word", nil)
 		a.addFact("tags", strings.Join(characterTags(db, id), ", "), "", nil)
 		a.addFact("race", "", "", refOf("race", raceID, raceName))
@@ -445,6 +510,9 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 			WHERE ec.character_id = ? AND e.source_type IS NULL ORDER BY e.name COLLATE NOCASE`, id))
 		var rels []wikiRef
 		for _, r := range relationsOf(db, id) {
+			if !a.allRelations && !r.holdsAt(point, ranks) {
+				continue
+			}
 			text, builtin := r.wording(id)
 			other := wikiRef{Type: "character", ID: r.ToID, Name: r.ToName, Note: text, NoteWord: builtin}
 			if r.ToID == id {
@@ -511,6 +579,9 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 		}
 		if f.HQLocationID != nil {
 			a.addFact("headquarters", "", "", &wikiRef{Type: "location", ID: *f.HQLocationID, Name: f.HQName})
+		}
+		if k := kingdomOfFaction(db, id); k != nil {
+			a.addFact("kingdom", "", "", &wikiRef{Type: "location", ID: k.ID, Name: k.Name})
 		}
 		a.addFact("founded", f.FoundingDate, "date", nil)
 		a.addSheet("description", f.Description)
@@ -632,6 +703,9 @@ func loadWikiArticle(db *sql.DB, t wikiTypeDef, id int64) (*wikiArticle, error) 
 	}
 	a.Picture = pictureURL(a.Picture)
 	loadSourceFacts(db, a)
+	if t.Key == "character" {
+		a.Versions = characterWikiVersions(db, id)
+	}
 
 	var entryID int64
 	var fieldsJSON string
@@ -741,7 +815,84 @@ func wikiNameIndex(items []wikiListItem) map[string][]wikiRef {
 		k := normalizeWikiKey(it.Name)
 		idx[k] = append(idx[k], wikiRef{Type: it.Type, ID: it.ID, Name: it.Name})
 	}
+	// Former names come after every real name, so they never take a link
+	// that already points at something else.
+	for _, it := range items {
+		for _, a := range it.Aliases {
+			k := normalizeWikiKey(a)
+			idx[k] = append(idx[k], wikiRef{Type: it.Type, ID: it.ID, Name: it.Name})
+		}
+	}
 	return idx
+}
+
+func currentName(db *sql.DB, characterID int64) string {
+	var n string
+	db.QueryRow(`SELECT name FROM character_versions WHERE character_id = ? AND is_current = 1`, characterID).Scan(&n)
+	return n
+}
+
+func containsKey(list []string, s string) bool {
+	for _, x := range list {
+		if normalizeWikiKey(x) == normalizeWikiKey(s) {
+			return true
+		}
+	}
+	return false
+}
+
+// characterWikiVersions is a character's facts in each version, in story
+// order (by chapter, then date, then when the version was made). Only worth
+// tabs when there is more than one.
+func characterWikiVersions(db *sql.DB, id int64) []wikiVersion {
+	rows, err := db.Query(`SELECT id, name, COALESCE(picture_path, ''), COALESCE(version_date, ''),
+		COALESCE(version_reference, ''), chapter_id, is_current FROM character_versions WHERE character_id = ? ORDER BY id`, id)
+	if err != nil {
+		return nil
+	}
+	var out []wikiVersion
+	var points []storyPoint
+	ranks := chapterRanks(db)
+	for rows.Next() {
+		var v wikiVersion
+		var ch sql.NullInt64
+		if rows.Scan(&v.ID, &v.Name, &v.Picture, &v.Date, &v.Reference, &ch, &v.Current) != nil {
+			continue
+		}
+		if ch.Valid {
+			v.ChapterID = &ch.Int64
+		}
+		v.Picture = uploadURL(v.Picture)
+		out = append(out, v)
+		points = append(points, pointOf(ch, v.Date, ranks))
+	}
+	rows.Close()
+	if len(out) < 2 {
+		return nil
+	}
+	order := make([]int, len(out))
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(x, y int) bool {
+		a, b := points[order[x]], points[order[y]]
+		if a.HasChapter && b.HasChapter && a.Chapter != b.Chapter {
+			return a.Chapter < b.Chapter
+		}
+		if a.Date != "" && b.Date != "" && a.Date != b.Date {
+			return dateBefore(a.Date, b.Date)
+		}
+		return false
+	})
+	sorted := make([]wikiVersion, 0, len(out))
+	for _, i := range order {
+		v := out[i]
+		tmp := &wikiArticle{Type: "character", ID: id, version: v.ID, Facts: []wikiFact{}, Groups: []wikiGroup{}, Sheet: []wikiSheet{}}
+		loadSourceFacts(db, tmp)
+		v.Facts, v.Groups = tmp.Facts, tmp.Groups
+		sorted = append(sorted, v)
+	}
+	return sorted
 }
 
 // wikiOutlinks lists the articles an article's own text links to, once each,

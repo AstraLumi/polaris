@@ -60,22 +60,26 @@ type factionOut struct {
 	ParentName   string          `json:"parent_name"`
 	FoundingDate string          `json:"founding_date"`
 	MemberCount  int             `json:"member_count"`
+	KingdomID    *int64          `json:"kingdom_id"` // the kingdom it stands for (kingdoms.go)
 	Members      []factionMember `json:"members,omitempty"`
 }
 
 const factionSelect = `
 	SELECT f.id, f.name, f.description, COALESCE(f.picture_path, ''), COALESCE(f.color, ''),
 	       f.hq_location_id, COALESCE(l.name, ''), f.parent_id, COALESCE(p.name, ''), f.founding_date,
-	       (SELECT COUNT(*) FROM faction_members m WHERE m.faction_id = f.id)
+	       (SELECT COUNT(*) FROM faction_members m WHERE m.faction_id = f.id), f.kingdom_id
 	FROM factions f
 	LEFT JOIN locations l ON l.id = f.hq_location_id
 	LEFT JOIN factions p ON p.id = f.parent_id`
 
 func scanFaction(s rowScanner) (factionOut, error) {
 	var f factionOut
-	var hq, parent sql.NullInt64
+	var hq, parent, kingdom sql.NullInt64
 	err := s.Scan(&f.ID, &f.Name, &f.Description, &f.PicturePath, &f.Color,
-		&hq, &f.HQName, &parent, &f.ParentName, &f.FoundingDate, &f.MemberCount)
+		&hq, &f.HQName, &parent, &f.ParentName, &f.FoundingDate, &f.MemberCount, &kingdom)
+	if kingdom.Valid {
+		f.KingdomID = &kingdom.Int64
+	}
 	if hq.Valid {
 		f.HQLocationID = &hq.Int64
 	}
@@ -338,6 +342,11 @@ func saveFactionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 		if msg != "" {
 			http.Error(w, msg, http.StatusBadRequest)
 			return
+		}
+
+		// A kingdom's faction takes its name and colour from the map.
+		if k := kingdomOfFaction(db, id); id != 0 && k != nil {
+			f.Name, f.Color = k.Name, k.Color
 		}
 
 		tx, err := db.Begin()

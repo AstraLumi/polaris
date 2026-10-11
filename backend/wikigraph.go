@@ -118,7 +118,7 @@ func buildWikiGraph(db *sql.DB) (*graphPayload, error) {
 
 	// What the story connects.
 	for _, it := range items {
-		a := &wikiArticle{Type: it.Type, ID: it.ID}
+		a := &wikiArticle{Type: it.Type, ID: it.ID, allRelations: true}
 		loadSourceFacts(db, a)
 		from := refKey(it.Type, it.ID)
 		for _, f := range a.Facts {

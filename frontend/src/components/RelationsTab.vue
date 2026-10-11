@@ -21,7 +21,11 @@
       </div>
       <p v-if="!relations.length" class="empty">{{ $t('No relations yet.') }}</p>
       <ul v-else class="rows">
-        <li v-for="row in rows" :key="row.rel.id" class="row">
+        <template v-for="(row, i) in rows" :key="row.rel.id">
+        <li v-if="!row.now && (i === 0 || rows[i - 1].now)" class="other-head">
+          {{ $t('At other points in the story') }}
+        </li>
+        <li class="row" :class="{ 'is-other': !row.now }">
           <RouterLink :to="`/characters/${row.other.id}`" class="avatar" :title="row.other.name">
             <IconImage :src="row.other.picture_path" :name="row.other.name" />
           </RouterLink>
@@ -35,6 +39,7 @@
           </div>
           <button type="button" class="btn btn-ghost small no-print" @click="openForm(row.rel)">{{ $t('Edit') }}</button>
         </li>
+        </template>
       </ul>
     </section>
 
@@ -91,6 +96,8 @@ import { t } from '../i18n'
 import { fetchConnections, fetchCharacterOptions, relationsApi } from '../api'
 import { relationFor } from '../relations'
 import { shortDate } from '../calendar'
+import { chapterIndex, chapterLabel, loadChapters } from '../chapters'
+import { chapterRanks, storyPoint, holdsAt } from '../storyTime'
 import { wikiPath } from '../wiki'
 import IconImage from './IconImage.vue'
 import RelationFormModal from './RelationFormModal.vue'
@@ -99,7 +106,11 @@ import ConfirmDialog from './ConfirmDialog.vue'
 const props = defineProps({
   characterId: { type: Number, required: true },
   characterName: { type: String, required: true },
+  // The version being shown: { chapterId, date }. Relations that hold at it
+  // come first; the rest are listed after, dimmed. Without it, all are equal.
+  point: { type: Object, default: null },
 })
+loadChapters()
 
 const relations = ref([])
 const factions = ref([])
@@ -111,19 +122,34 @@ const confirmTarget = ref(null)
 
 const me = computed(() => ({ id: props.characterId, name: props.characterName }))
 
-function spanText(since, until) {
-  if (since && until) return t('{from} to {to}', { from: shortDate(since) || since, to: shortDate(until) || until })
-  if (since) return t('since {date}', { date: shortDate(since) || since })
-  if (until) return t('until {date}', { date: shortDate(until) || until })
+// An end of a span as text: its chapter if it has one, else its date.
+const end = (chapterId, date) => (chapterId != null && chapterLabel(chapterId, { short: true })) || shortDate(date) || date
+
+function spanText(since, until, sinceCh = null, untilCh = null) {
+  const a = end(sinceCh, since)
+  const b = end(untilCh, until)
+  if (a && b) return t('{from} to {to}', { from: a, to: b })
+  if (a) return t('since {date}', { date: a })
+  if (b) return t('until {date}', { date: b })
   return ''
 }
 
-const rows = computed(() =>
-  relations.value.map((rel) => {
+const ranks = computed(() => chapterRanks(chapterIndex.value.chapters))
+const point = computed(() => (props.point ? storyPoint(props.point.chapterId, props.point.date, ranks.value) : null))
+
+const rows = computed(() => {
+  const list = relations.value.map((rel) => {
     const { other, wording } = relationFor(rel, props.characterId)
-    return { rel, other, wording, span: spanText(rel.since, rel.until) }
-  }),
-)
+    return {
+      rel,
+      other,
+      wording,
+      now: holdsAt(point.value, ranks.value, rel),
+      span: spanText(rel.since, rel.until, rel.since_chapter_id, rel.until_chapter_id),
+    }
+  })
+  return [...list.filter((r) => r.now), ...list.filter((r) => !r.now)]
+})
 
 async function load() {
   error.value = ''
@@ -163,6 +189,21 @@ watch(() => props.characterId, load, { immediate: true })
 </script>
 
 <style scoped>
+.other-head {
+  margin-top: 0.4rem;
+  padding: 0.3rem 0 0.1rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  list-style: none;
+}
+
+.row.is-other {
+  opacity: 0.6;
+}
+
 .head-links {
   display: flex;
   flex-wrap: wrap;

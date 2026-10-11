@@ -28,7 +28,7 @@
             <IconImage :src="f.picture_path" :name="f.name" />
           </span>
           <span class="card-text">
-            <strong>{{ f.name }}</strong>
+            <strong>{{ f.name }} <span v-if="f.kingdom_id" class="kingdom-badge" :title="$t('Tied to the kingdom of the same name on the map')">{{ $t('Kingdom') }}</span></strong>
             <small v-if="f.parent_name">{{ $t('Part of {name}', { name: f.parent_name }) }}</small>
             <small>
               {{ $tn('{n} member', '{n} members', f.member_count) }}<template v-if="f.hq_name"> · {{ f.hq_name }}</template>
@@ -116,6 +116,17 @@ onMounted(load)
 </script>
 
 <style scoped>
+.kingdom-badge {
+  margin-left: 0.35rem;
+  padding: 0.02rem 0.45rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  vertical-align: middle;
+}
+
 .grid {
   display: flex;
   flex-direction: column;

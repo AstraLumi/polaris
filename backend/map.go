@@ -238,6 +238,7 @@ func createMapLocationHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 		id, _ := res.LastInsertId()
+		syncKingdomFaction(db, id)
 		writeMapLocation(w, db, id)
 	}
 }
@@ -342,6 +343,7 @@ func updateMapLocationHandler(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "failed to save", http.StatusInternalServerError)
 			return
 		}
+		syncKingdomFaction(db, id)
 		writeMapLocation(w, db, id)
 	}
 }
