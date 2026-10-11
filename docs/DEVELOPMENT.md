@@ -182,9 +182,11 @@ types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard
   Nation text that matches a location name; 9 -> 10 replaces the unused
   placeholder events tables (carrying over any rows they held); 10 -> 11 adds
   `classes.icon_path`; 11 -> 12 adds the gear tables. The current schema is
-  20 (16 -> 17 adds lore articles, 17 -> 18 character tags and dated lore
+  21 (16 -> 17 adds lore articles, 17 -> 18 character tags and dated lore
   rows, 18 -> 19 wiki galleries, 19 -> 20 relation chapters and kingdom
-  factions; a migration can run Go code afterwards through `after`); see `migrations` in `backend/db.go`. Character tags
+  factions, 20 -> 21 merges duplicated specializations and makes them unique;
+  a migration can run Go code inside its transaction through `before` and
+  afterwards through `after`); see `migrations` in `backend/db.go`. Character tags
   (`character_tags`) belong to the character, not a version.
 
 ## Data on disk

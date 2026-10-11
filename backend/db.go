@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"slices"
 )
 
 // Bump this whenever the schema changes. If there's an entry in
@@ -12,7 +13,7 @@ import (
 // oldest migration (or a brand new one) gets wiped and recreated from
 // freshSchema — so every schema change from here on should ship with a
 // migration instead of relying on that reset.
-const currentSchemaVersion = "20"
+const currentSchemaVersion = "21"
 
 const freshSchema = `
 CREATE TABLE classes (
@@ -286,6 +287,9 @@ const eventCharactersTableSQL = `CREATE TABLE event_characters (
 type migration struct {
 	to         string
 	statements []string
+	// before runs inside the migration's transaction ahead of the
+	// statements, for data fixes SQL alone can't make (optional).
+	before func(*sql.Tx) error
 	// after runs once the statements are in, for data changes SQL alone
 	// can't make (optional).
 	after func(*sql.DB) error
@@ -431,6 +435,12 @@ var migrations = map[string]migration{
 		statements: schema20Statements,
 		after:      backfillKingdomFactions,
 	},
+	"20": {
+		to: "21",
+		// Specializations were copied on every save (specdedupe.go).
+		before:     dedupeSpecializations,
+		statements: schema21Statements,
+	},
 }
 
 // schema20Statements create what schema 20 added. The fresh schema runs them
@@ -486,6 +496,12 @@ func applyMigration(db *sql.DB, m migration) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return err
+	}
+	if m.before != nil {
+		if err := m.before(tx); err != nil {
+			tx.Rollback()
+			return err
+		}
 	}
 	for _, stmt := range m.statements {
 		if _, err := tx.Exec(stmt); err != nil {
@@ -626,7 +642,8 @@ func ensureSchema(db *sql.DB) error {
 			return fmt.Errorf("create schema: %w", err)
 		}
 	}
-	for _, stmt := range append(append(append(append([]string{}, wikiSchemaStatements...), schema18Statements...), schema19Statements...), schema20Statements...) {
+	later := [][]string{wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements}
+	for _, stmt := range slices.Concat(later...) {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("create wiki schema: %w", err)
 		}

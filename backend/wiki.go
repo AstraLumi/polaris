@@ -443,7 +443,8 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 	id := a.ID
 	switch a.Type {
 	case "character":
-		var nick, gender, birth, bornText, nationText, desc, bio, speech, status, vname, vdate string
+		var nick, gender, birth, bornText, nationText, desc, bio, speech, status, vname, vdate, blood, humanBirth string
+		var age sql.NullFloat64
 		var raceID, bodyID, classID, subID, specID, bornLoc, nationLoc, vchapter sql.NullInt64
 		var raceName, bodyName, className, subName, specName, bornName, nationName sql.NullString
 		err := db.QueryRow(`
@@ -453,7 +454,8 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 			       COALESCE(st.status, 'alive'), st.race_id, r.name, st.body_type_id, b.name,
 			       v.class_id, cl.name, v.subclass_id, sc.name, v.specialization_id, sp.name,
 			       st.born_in_location_id, bl.name, st.nation_location_id, nl.name,
-			       v.name, COALESCE(v.version_date, ''), v.chapter_id
+			       v.name, COALESCE(v.version_date, ''), v.chapter_id,
+			       COALESCE(st.blood_type, ''), COALESCE(st.human_birth_date, ''), st.age
 			FROM character_versions v
 			LEFT JOIN character_story st ON st.version_id = v.id
 			LEFT JOIN races r ON r.id = st.race_id
@@ -468,7 +470,7 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 			&status, &raceID, &raceName, &bodyID, &bodyName,
 			&classID, &className, &subID, &subName, &specID, &specName,
 			&bornLoc, &bornName, &nationLoc, &nationName,
-			&vname, &vdate, &vchapter)
+			&vname, &vdate, &vchapter, &blood, &humanBirth, &age)
 		if err != nil {
 			log.Printf("wiki character facts: %v", err)
 			return
@@ -487,11 +489,16 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 		a.addFact("tags", strings.Join(characterTags(db, id), ", "), "", nil)
 		a.addFact("race", "", "", refOf("race", raceID, raceName))
 		a.addFact("gender", gender, "", nil)
+		if age.Valid {
+			a.addFact("age", strconv.FormatFloat(age.Float64, 'f', -1, 64), "", nil)
+		}
+		a.addFact("blood_type", blood, "", nil)
 		a.addFact("body_type", "", "", refOf("body_type", bodyID, bodyName))
 		a.addFact("class", "", "", refOf("class", classID, className))
 		a.addFact("subclass", "", "", refOf("subclass", subID, subName))
 		a.addFact("specialization", "", "", refOf("specialization", specID, specName))
 		a.addFact("born", normalizeStoryDate(birth), "date", nil)
+		a.addFact("human_birth_date", normalizeStoryDate(humanBirth), "date", nil)
 		if l := refOf("location", bornLoc, bornName); l != nil {
 			a.addFact("born_in", "", "", l)
 		} else {

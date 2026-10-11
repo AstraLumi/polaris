@@ -316,7 +316,7 @@ func createSpecializationHandler(db *sql.DB) http.HandlerFunc {
 		res, err := tx.Exec(`INSERT INTO specializations (class_id, name) VALUES (?, ?)`, payload.ClassID, name)
 		if err != nil {
 			tx.Rollback()
-			http.Error(w, "failed to create specialization", http.StatusBadRequest)
+			http.Error(w, "that class already has a specialization with that name", http.StatusBadRequest)
 			return
 		}
 		id, _ := res.LastInsertId()
@@ -361,7 +361,7 @@ func updateSpecializationHandler(db *sql.DB) http.HandlerFunc {
 			name, payload.ClassID, id,
 		); err != nil {
 			tx.Rollback()
-			http.Error(w, "failed to update specialization", http.StatusBadRequest)
+			http.Error(w, "that class already has a specialization with that name", http.StatusBadRequest)
 			return
 		}
 		var specID int64

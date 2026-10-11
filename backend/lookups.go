@@ -34,23 +34,31 @@ func upsertBodyType(db *sql.DB, name string) (sql.NullInt64, error) {
 
 // upsertClassScopedLookup handles specializations, which are "a name,
 // scoped to exactly one class" — no class means no specialization to
-// attach it to, so it's silently skipped rather than erroring.
+// attach it to, so it's silently skipped rather than erroring. An existing
+// one (any capitalisation) is reused: it looks first, rather than relying
+// on INSERT OR IGNORE, which made a copy on every save before schema 21
+// gave the table its unique index.
 func upsertClassScopedLookup(db *sql.DB, table string, classID sql.NullInt64, name string) (sql.NullInt64, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || !classID.Valid {
 		return sql.NullInt64{}, nil
 	}
-	if _, err := db.Exec(
-		`INSERT OR IGNORE INTO `+table+` (class_id, name) VALUES (?, ?)`,
-		classID.Int64, name,
-	); err != nil {
-		return sql.NullInt64{}, err
+	find := func() (int64, error) {
+		var id int64
+		err := db.QueryRow(
+			`SELECT id FROM `+table+` WHERE class_id = ? AND name = ? COLLATE NOCASE ORDER BY id LIMIT 1`,
+			classID.Int64, name,
+		).Scan(&id)
+		return id, err
 	}
-	var id int64
-	if err := db.QueryRow(
-		`SELECT id FROM `+table+` WHERE class_id = ? AND name = ?`,
-		classID.Int64, name,
-	).Scan(&id); err != nil {
+	id, err := find()
+	if err == sql.ErrNoRows {
+		if _, err := db.Exec(`INSERT OR IGNORE INTO `+table+` (class_id, name) VALUES (?, ?)`, classID.Int64, name); err != nil {
+			return sql.NullInt64{}, err
+		}
+		id, err = find()
+	}
+	if err != nil {
 		return sql.NullInt64{}, err
 	}
 	return sql.NullInt64{Int64: id, Valid: true}, nil
