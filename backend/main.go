@@ -203,6 +203,12 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	mux.HandleFunc("DELETE /api/relations/{id}", deleteRelationHandler(db))
 
 	// Factions (with their members in the same request).
+	mux.HandleFunc("GET /api/creatures", listCreaturesHandler(db))
+	mux.HandleFunc("GET /api/creatures/{id}", getCreatureHandler(db))
+	mux.HandleFunc("POST /api/creatures", saveCreatureHandler(db, uploadsDir))
+	mux.HandleFunc("PUT /api/creatures/{id}", saveCreatureHandler(db, uploadsDir))
+	mux.HandleFunc("DELETE /api/creatures/{id}", deleteCreatureHandler(db, uploadsDir))
+
 	mux.HandleFunc("GET /api/factions", listFactionsHandler(db))
 	mux.HandleFunc("GET /api/factions/{id}", getFactionHandler(db))
 	mux.HandleFunc("POST /api/factions", saveFactionHandler(db, uploadsDir))

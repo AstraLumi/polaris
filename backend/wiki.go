@@ -14,7 +14,8 @@ import (
 )
 
 // The wiki builds its pages from the story. Every character, location, event,
-// class, subclass, specialization, race, body type, spell and piece of gear is
+// class, subclass, specialization, race, body type, spell, piece of gear and
+// creature is
 // already an article, and lore articles (lore.go) are the free-form ones; this file reads the facts straight from those tables and
 // stores only what the user adds on top (wiki_entries and its two child
 // tables). Deleting the source deletes the extras too, through the triggers
@@ -81,6 +82,9 @@ var wikiTypes = []wikiTypeDef{
 	{Key: "gear", Table: "gear", IDCol: "id",
 		Select: `SELECT id, name, COALESCE(icon_path, '') FROM gear`,
 		Fields: []string{"appearance", "lore", "origin", "trivia"}},
+	{Key: "creature", Table: "creatures", IDCol: "id",
+		Select: `SELECT id, name, COALESCE(picture_path, '') FROM creatures`,
+		Fields: []string{"appearance", "behavior", "habitat", "lore", "trivia"}},
 	// Free-form pages: everything beyond the introduction and trivia is the
 	// user's own sections. Last, so a lore page never takes over a [[link]]
 	// that already pointed at a character or place of the same name.
@@ -616,6 +620,8 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 			`SELECT id, name FROM races WHERE kingdom_id = ? ORDER BY name COLLATE NOCASE`, id))
 		a.addGroup("native_specializations", queryRefs(db, "specialization",
 			`SELECT id, name FROM specializations WHERE kingdom_id = ? ORDER BY name COLLATE NOCASE`, id))
+		a.addGroup("creatures_here", queryRefs(db, "creature",
+			`SELECT id, name FROM creatures WHERE region_id = ? ORDER BY name COLLATE NOCASE`, id))
 		a.addGroup("factions_here", queryRefs(db, "faction",
 			`SELECT id, name FROM factions WHERE hq_location_id = ? ORDER BY name COLLATE NOCASE`, id))
 
@@ -737,10 +743,27 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 		a.addSheet("description", desc)
 
 	case "gear":
-		var slot string
-		if db.QueryRow(`SELECT slot FROM gear WHERE id = ?`, id).Scan(&slot) == nil {
+		var slot, desc string
+		if db.QueryRow(`SELECT slot, COALESCE(description, '') FROM gear WHERE id = ?`, id).Scan(&slot, &desc) == nil {
 			a.addFact("slot", slot, "", nil)
+			a.addSheet("description", desc)
 		}
+
+	case "creature":
+		var kind, desc string
+		var lo, hi, region sql.NullInt64
+		var regionName sql.NullString
+		if db.QueryRow(`SELECT c.kind, c.level_min, c.level_max, c.region_id, l.name, COALESCE(c.description, '')
+			FROM creatures c LEFT JOIN locations l ON l.id = c.region_id WHERE c.id = ?`, id).
+			Scan(&kind, &lo, &hi, &region, &regionName, &desc) == nil {
+			a.addFact("type", creatureKindWord[kind], "word", nil)
+			a.addFact("level", levelRange(lo, hi), "", nil)
+			a.addFact("native_to", "", "", refOf("location", region, regionName))
+			a.addSheet("description", desc)
+		}
+		a.addGroup("related_creatures", queryRefs(db, "creature", `SELECT c.id, c.name FROM creature_links k
+			JOIN creatures c ON c.id = CASE WHEN k.a_id = ?1 THEN k.b_id ELSE k.a_id END
+			WHERE k.a_id = ?1 OR k.b_id = ?1 ORDER BY c.name COLLATE NOCASE`, id))
 	}
 }
 

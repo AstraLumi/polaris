@@ -119,6 +119,7 @@ const TYPE_COLORS = {
   body_type: '#a8c38a',
   spell: '#5ec8e8',
   gear: '#c8a27a',
+  creature: '#d98f5c',
   lore: '#f0a0c8',
 }
 

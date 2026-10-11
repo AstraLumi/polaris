@@ -23,8 +23,8 @@ has its own SQLite database, so it runs comfortably on a small home server.
   relations of its own time. Family trees are drawn from them. Factions have
   ranks and can nest, and every kingdom on the map is a faction too.
 - **World**: a paintable hex map of kingdoms, regions, cities and capitals,
-  and Character Assets (classes, races, gear, spells…) that grant stat
-  bonuses.
+  a bestiary of the monsters, animals and constructs that live there, and
+  Character Assets (classes, races, gear, spells…) that grant stat bonuses.
 - **Time**: your own calendar (months and days), events tied to places,
   people and chapters, a timeline drawn to scale, a month-by-month calendar
   view, and chapters grouped into volumes.

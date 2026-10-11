@@ -8,7 +8,7 @@ import { mapPath } from './navigation'
 // refers to by key; tr() marks them for translation.
 
 export const TYPE_ORDER = [
-  'character', 'location', 'faction', 'event', 'class', 'subclass', 'specialization', 'race', 'body_type', 'spell', 'gear', 'lore',
+  'character', 'location', 'faction', 'event', 'class', 'subclass', 'specialization', 'race', 'body_type', 'spell', 'gear', 'creature', 'lore',
 ]
 
 export const TYPE_LABELS = {
@@ -23,6 +23,7 @@ export const TYPE_LABELS = {
   body_type: tr('Body type'),
   spell: tr('Spell'),
   gear: tr('Gear'),
+  creature: tr('Creature'),
   lore: tr('Lore'),
 }
 
@@ -38,6 +39,7 @@ export const TYPE_PLURALS = {
   body_type: tr('Body types'),
   spell: tr('Spells'),
   gear: tr('Gear'),
+  creature: tr('Creatures'),
   lore: tr('Lore'),
 }
 
@@ -62,6 +64,8 @@ export const FIELD_LABELS = {
   notes: tr('Notes'),
   usage: tr('Usage'),
   origin: tr('Origin'),
+  behavior: tr('Behaviour'),
+  habitat: tr('Habitat'),
 }
 
 // Infobox rows that come from the story itself.
@@ -91,6 +95,7 @@ export const FACT_LABELS = {
   source: tr('Source'),
   origin: tr('Origin'),
   native_to: tr('Native to'),
+  level: tr('Level'),
   slot: tr('Slot'),
   settlement: tr('Settlement'),
   capital: tr('Capital'),
@@ -111,6 +116,7 @@ export const FACT_GROUPS = [
 export const WORD_LABELS = [
   tr('Kingdom'), tr('Major location'), tr('Minor location'), tr('Capital'), tr('City'),
   tr('Alive'), tr('Missing'), tr('Dead'),
+  tr('Monster'), tr('Animal'), tr('Construct'),
 ]
 
 // Related lists.
@@ -124,6 +130,8 @@ export const GROUP_LABELS = {
   spells_from: tr('Spells from here'),
   native_races: tr('Races native here'),
   native_specializations: tr('Specializations native here'),
+  creatures_here: tr('Creatures native here'),
+  related_creatures: tr('Related creatures'),
   subclasses: tr('Subclasses'),
   specializations: tr('Specializations'),
   spells: tr('Spells'),
@@ -152,6 +160,7 @@ export function sourcePath(type, id) {
   if (type === 'event') return `/events/${id}`
   if (type === 'location') return mapPath(id)
   if (type === 'faction') return '/factions'
+  if (type === 'creature') return '/bestiary'
   return '/assets'
 }
 
@@ -160,6 +169,7 @@ export function sourceLabel(type) {
   if (type === 'event') return t('event page')
   if (type === 'location') return t('map')
   if (type === 'faction') return t('Factions page')
+  if (type === 'creature') return t('Bestiary')
   return t('Character Assets page')
 }
 

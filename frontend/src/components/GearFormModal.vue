@@ -56,6 +56,11 @@
           {{ $t('A glove fits either Glove slot and a ring either Ring slot.') }}
         </p>
 
+        <label class="field">
+          <span>{{ $t('Description') }}</span>
+          <textarea v-model="description" rows="3" :placeholder="$t('What it is, where it comes from, what it does…')"></textarea>
+        </label>
+
         <p class="hint">
           {{ $t('Leave a stat blank to leave it untouched. Every value here is a flat bonus (or penalty, with a minus sign) applied whenever this gear is equipped, whatever the character\'s level.') }}
         </p>
@@ -91,6 +96,7 @@ const emit = defineEmits(['close', 'saved'])
 const name = ref(props.gear?.name ?? '')
 const slot = ref(props.gear?.slot ?? props.defaultSlot ?? '')
 const weight = ref(props.gear?.weight ?? '')
+const description = ref(props.gear?.description ?? '')
 const modifiers = ref({ ...(props.gear?.modifiers ?? {}) })
 const iconFile = ref(null)
 const fileUrl = ref('')
@@ -146,7 +152,7 @@ async function submit() {
   error.value = ''
   try {
     const fd = buildGearFormData(
-      { name: name.value.trim(), slot: slot.value, weight: weight.value, modifiers: modifiers.value },
+      { name: name.value.trim(), slot: slot.value, weight: weight.value, modifiers: modifiers.value, description: description.value.trim() },
       iconFile.value,
       iconChoice.value,
     )

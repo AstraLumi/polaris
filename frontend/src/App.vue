@@ -125,6 +125,7 @@ const navItems = [
   { label: tr('Home'), to: '/', tip: tr('Recent edits and loose ends') },
   { label: tr('Characters'), to: '/characters', tip: tr('Everyone in the story, with their sheets and versions') },
   { label: tr('Factions'), to: '/factions', tip: tr('Guilds, orders, houses and who belongs to them') },
+  { label: tr('Bestiary'), to: '/bestiary', tip: tr('The monsters, animals and constructs of the world') },
   { label: tr('Character Assets'), to: '/assets', tip: tr('Classes, races, spells, gear and the rest a character is built from') },
   { label: tr('Timeline'), to: '/timeline', tip: tr('Events, births and foundings, drawn to scale') },
   { label: tr('Calendar'), to: '/calendar', tip: tr('What happens in each month, day by day') },

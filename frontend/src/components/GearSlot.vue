@@ -39,7 +39,9 @@ const summary = computed(() => {
   if (!b.length) return ''
   return b.length > 2 ? `${b[0].text}, ${b[1].text} +${b.length - 2}` : b.map((x) => x.text).join(', ')
 })
-const tip = computed(() => (props.gear ? [props.gear.name, ...bonuses.value.map((b) => b.text)].join('\n') : ''))
+const tip = computed(() =>
+  props.gear ? [props.gear.name, ...bonuses.value.map((b) => b.text), props.gear.description].filter(Boolean).join('\n') : '',
+)
 </script>
 
 <style scoped>

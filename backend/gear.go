@@ -76,13 +76,15 @@ type gearDetail struct {
 	Slot      string             `json:"slot"`
 	IconPath  string             `json:"icon_path"`
 	Modifiers map[string]float64 `json:"modifiers"`
+	// What it is and what it does, in the writer's words.
+	Description string `json:"description"`
 }
 
 // queryGear loads gear (optionally filtered by a WHERE suffix) together with
 // each piece's modifiers.
 func queryGear(db *sql.DB, suffix string, args ...any) ([]gearDetail, error) {
 	rows, err := db.Query(
-		`SELECT g.id, g.name, g.weight, g.slot, COALESCE(g.icon_path, '') FROM gear g `+suffix, args...)
+		`SELECT g.id, g.name, g.weight, g.slot, COALESCE(g.icon_path, ''), COALESCE(g.description, '') FROM gear g `+suffix, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +92,7 @@ func queryGear(db *sql.DB, suffix string, args ...any) ([]gearDetail, error) {
 	byID := map[int64]*gearDetail{}
 	for rows.Next() {
 		var g gearDetail
-		if err := rows.Scan(&g.ID, &g.Name, &g.Weight, &g.Slot, &g.IconPath); err != nil {
+		if err := rows.Scan(&g.ID, &g.Name, &g.Weight, &g.Slot, &g.IconPath, &g.Description); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -217,10 +219,11 @@ func getGearHandler(db *sql.DB) http.HandlerFunc {
 }
 
 type gearInput struct {
-	name      string
-	weight    float64
-	slot      string
-	modifiers map[string]float64
+	name        string
+	description string
+	weight      float64
+	slot        string
+	modifiers   map[string]float64
 }
 
 func parseGearForm(r *http.Request) (gearInput, error) {
@@ -231,6 +234,10 @@ func parseGearForm(r *http.Request) (gearInput, error) {
 	in.name = strings.TrimSpace(r.FormValue("name"))
 	if in.name == "" {
 		return in, fmt.Errorf("name is required")
+	}
+	in.description = strings.TrimSpace(r.FormValue("description"))
+	if len(in.description) > 20000 {
+		return in, fmt.Errorf("that text is too long")
 	}
 	in.slot = strings.TrimSpace(r.FormValue("slot"))
 	if !isGearSlotType(in.slot) {
@@ -295,7 +302,7 @@ func createGearHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			http.Error(w, "failed to start transaction", http.StatusInternalServerError)
 			return
 		}
-		res, err := tx.Exec(`INSERT INTO gear (name, weight, slot) VALUES (?, ?, ?)`, in.name, in.weight, in.slot)
+		res, err := tx.Exec(`INSERT INTO gear (name, weight, slot, description) VALUES (?, ?, ?, ?)`, in.name, in.weight, in.slot, nullableString(in.description))
 		if err != nil {
 			tx.Rollback()
 			http.Error(w, "a gear piece with that name may already exist", http.StatusBadRequest)
@@ -345,7 +352,7 @@ func updateGearHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			http.Error(w, "failed to start transaction", http.StatusInternalServerError)
 			return
 		}
-		if _, err := tx.Exec(`UPDATE gear SET name = ?, weight = ?, slot = ? WHERE id = ?`, in.name, in.weight, in.slot, id); err != nil {
+		if _, err := tx.Exec(`UPDATE gear SET name = ?, weight = ?, slot = ?, description = ? WHERE id = ?`, in.name, in.weight, in.slot, nullableString(in.description), id); err != nil {
 			tx.Rollback()
 			http.Error(w, "a gear piece with that name may already exist", http.StatusBadRequest)
 			return

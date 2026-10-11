@@ -380,9 +380,10 @@ export const gearApi = {
   },
 }
 
-export function buildGearFormData({ name, slot, weight, modifiers }, iconFile, iconChoice = '') {
+export function buildGearFormData({ name, slot, weight, modifiers, description }, iconFile, iconChoice = '') {
   const fd = new FormData()
   fd.append('name', name)
+  fd.append('description', description || '')
   fd.append('slot', slot)
   fd.append('weight', weight === null || weight === undefined ? '' : String(weight))
   fd.append('modifiers', JSON.stringify(modifiers || {}))
@@ -559,6 +560,16 @@ export const factionsApi = {
   save: (id, formData) =>
     request(id ? `/factions/${id}` : '/factions', { method: id ? 'PUT' : 'POST', body: formData }, 'failed to save the faction'),
   remove: (id) => request(`/factions/${id}`, { method: 'DELETE' }, 'failed to delete the faction'),
+}
+
+export const creaturesApi = {
+  list: () => request('/creatures', undefined, 'failed to load the bestiary'),
+  get: (id) => request(`/creatures/${id}`, undefined, 'creature not found'),
+  // formData: name, kind, level_min, level_max, region_id, description,
+  // related (JSON ids), and optionally picture / remove_picture.
+  save: (id, formData) =>
+    request(id ? `/creatures/${id}` : '/creatures', { method: id ? 'PUT' : 'POST', body: formData }, 'failed to save the creature'),
+  remove: (id) => request(`/creatures/${id}`, { method: 'DELETE' }, 'failed to delete the creature'),
 }
 
 export const chaptersApi = {

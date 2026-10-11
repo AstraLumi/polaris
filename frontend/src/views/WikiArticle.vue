@@ -231,6 +231,20 @@
             </tbody>
           </table>
 
+          <template v-if="creatureTerritory?.territory.length">
+            <div class="info-sub">{{ $t('Territory') }}</div>
+            <div class="info-territory">
+              <HexTerritory
+                :territory="creatureTerritory.territory"
+                :map-hexes="creatureTerritory.mapHexes"
+                :kind="creatureTerritory.kind"
+                :width="260"
+                :alt="$t('Territory of {name}', { name: shownName })"
+                @open="viewPicture($event, $t('Territory of {name}', { name: shownName }))"
+              />
+            </div>
+          </template>
+
           <template v-if="!editing && article.infobox.length">
             <div class="info-sub">{{ $t('More details') }}</div>
             <table>
@@ -299,6 +313,9 @@ import WikiLinkPanel from '../components/WikiLinkPanel.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import DateField from '../components/DateField.vue'
 import WikiGallery from '../components/WikiGallery.vue'
+import HexTerritory from '../components/HexTerritory.vue'
+import { creaturesApi, mapApi } from '../api'
+import { mapHexesOf } from '../creatures'
 import { pageTitle, useUnsavedGuard, useSaveShortcut, viewPicture } from '../navigation'
 import { renderMarkdown } from '../markdown'
 import { fullDate, dateParts } from '../calendar'
@@ -567,10 +584,24 @@ async function save() {
   }
 }
 
+// A creature's territory on the map, for its picture in the infobox.
+const creatureTerritory = ref(null)
+async function loadTerritory() {
+  creatureTerritory.value = null
+  if (props.type !== 'creature') return
+  try {
+    const [c, map] = await Promise.all([creaturesApi.get(props.id), mapApi.get()])
+    creatureTerritory.value = { territory: c.territory || [], kind: c.kind, mapHexes: mapHexesOf(map) }
+  } catch (e) {
+    // No picture; the article itself still shows.
+  }
+}
+
 async function load() {
   loadError.value = ''
   saveError.value = ''
   article.value = null
+  loadTerritory()
   editing.value = false
   try {
     const [a, list] = await Promise.all([wikiApi.get(props.type, props.id), wikiApi.list()])
@@ -818,6 +849,12 @@ useSaveShortcut(() => editing.value && !saving.value && save())
   font-weight: 700;
   color: #fff;
   background: color-mix(in srgb, var(--line) 62%, var(--surface));
+}
+
+.info-territory {
+  display: flex;
+  justify-content: center;
+  padding: 0.6rem;
 }
 
 .info-title {

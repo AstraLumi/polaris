@@ -67,6 +67,8 @@ var storyOnlyTables = []string{
 	"character_relations", "factions", "faction_members", "volumes", "chapters",
 	// The wiki's free-form articles, and the tags on characters.
 	"lore_articles", "character_tags", "wiki_gallery",
+	// The bestiary lives in the world (creatures are native to map regions).
+	"creatures", "creature_links", "creature_hexes",
 }
 
 func isNullCol(t assetTable, col string) bool {

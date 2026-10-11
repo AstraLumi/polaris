@@ -98,4 +98,8 @@ export default {
   "This stat clashes with another. Remove it and add it again.": "Este atributo choca con otro. Quítalo y vuelve a agregarlo.",
   "Couldn't load the stats. Try refreshing.": "No se pudieron cargar los atributos. Intenta recargar.",
   "Birth date, blood type and Born in belong to the character: changing them here changes them in every version.": "La fecha de nacimiento, el tipo de sangre y Nacido en pertenecen al personaje: cambiarlos aquí los cambia en todas las versiones.",
+  "Add a related creature…": "Agregar una criatura relacionada…",
+  "Couldn't load the bestiary. Try refreshing.": "No se pudo cargar el bestiario. Intenta recargar.",
+  "Painted by hand. Click or drag over hexes to add or remove them.": "Pintado a mano. Haz clic o arrastra sobre los hexágonos para agregarlos o quitarlos.",
+  "Territory: click or drag over hexes to add or remove them": "Territorio: haz clic o arrastra sobre los hexágonos para agregarlos o quitarlos",
 }

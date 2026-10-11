@@ -14,6 +14,7 @@
         <span v-for="b in bonuses" :key="b.key" class="bonus" :class="{ 'is-negative': !b.good }">{{ b.text }}</span>
         <span v-if="!bonuses.length" class="no-bonus">{{ $t('No stat bonuses') }}</span>
       </div>
+      <p v-if="gear.description" class="gear-desc" :title="gear.description">{{ gear.description }}</p>
     </div>
 
     <div v-if="$slots.actions" class="gear-actions">
@@ -79,6 +80,16 @@ const bonuses = computed(() => formatBonuses(props.gear.modifiers))
   color: var(--accent);
   background: var(--accent-soft);
   border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.gear-desc {
+  margin: 0.3rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .gear-meta {

@@ -90,7 +90,9 @@ types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard
     Put its picture/icon columns in `fileCols` so copies keep their images.
 - Wiki (`backend/wiki.go`, `frontend/src/views/Wiki*.vue`, `markdown.js`,
   `wiki.js`): nobody creates wiki pages. Every character, location, event,
-  class, subclass, specialization, race, body type, spell and piece of gear is
+  class, subclass, specialization, race, body type, spell, piece of gear and
+  creature (`backend/creatures.go`, the Bestiary page; its territory is drawn
+  by `components/HexTerritory.vue`) is
   an article, and its infobox and related lists are read live from the source
   tables. Only the extra text is stored (`wiki_entries`: introduction plus the
   fixed markdown fields; `wiki_sections`, `wiki_infobox`: the user's own
