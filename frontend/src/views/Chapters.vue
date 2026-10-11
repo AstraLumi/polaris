@@ -26,7 +26,7 @@
 
     <template v-else>
       <section v-if="loose.length" class="glass-panel block">
-        <ChapterRows :chapters="loose" @move="moveChapter" />
+        <ChapterRows :chapters="loose" @move="moveChapter" @delete="(c) => (confirmChapter = c)" />
       </section>
 
       <section v-for="(v, vi) in idx.volumes" :key="v.id" class="glass-panel block">
@@ -49,7 +49,7 @@
             <button type="button" class="btn btn-ghost small" @click="confirmVolume = v">{{ $t('Delete') }}</button>
           </div>
         </div>
-        <ChapterRows :chapters="chaptersOf(v.id)" @move="moveChapter" />
+        <ChapterRows :chapters="chaptersOf(v.id)" @move="moveChapter" @delete="(c) => (confirmChapter = c)" />
         <button type="button" class="btn btn-ghost small add-here" @click="addChapter(v.id)">{{ $t('Add a chapter to {name}', { name: v.title }) }}</button>
       </section>
     </template>
@@ -61,6 +61,14 @@
       :confirm-label="$t('Delete')"
       @cancel="confirmVolume = null"
       @confirm="removeVolume"
+    />
+    <ConfirmDialog
+      v-if="confirmChapter"
+      :title="$t('Delete {name}?', { name: confirmChapter.title })"
+      :message="$t('Its notes are deleted. Events and character versions that pointed to it are kept, without a chapter.')"
+      :confirm-label="$t('Delete')"
+      @cancel="confirmChapter = null"
+      @confirm="removeChapter"
     />
   </div>
 </template>
@@ -81,6 +89,16 @@ const error = ref('')
 const renaming = ref(null)
 const renameText = ref('')
 const confirmVolume = ref(null)
+const confirmChapter = ref(null)
+
+function removeChapter() {
+  const c = confirmChapter.value
+  confirmChapter.value = null
+  run(async () => {
+    await chaptersApi.remove(c.id)
+    await loadChapters(true)
+  })
+}
 
 const loose = computed(() => idx.value.chapters.filter((c) => !c.volume_id))
 const chaptersOf = (volumeId) => idx.value.chapters.filter((c) => c.volume_id === volumeId)
@@ -88,7 +106,7 @@ const chaptersOf = (volumeId) => idx.value.chapters.filter((c) => c.volume_id ==
 // One list of chapter rows with up/down arrows (within its group).
 const ChapterRows = {
   props: { chapters: Array },
-  emits: ['move'],
+  emits: ['move', 'delete'],
   setup(props, { emit }) {
     return () =>
       props.chapters.length
@@ -106,6 +124,7 @@ const ChapterRows = {
                 ].join('')),
                 h('button', { type: 'button', class: 'btn btn-ghost small', disabled: i === 0, title: t('Move up'), onClick: () => emit('move', c, -1) }, '↑'),
                 h('button', { type: 'button', class: 'btn btn-ghost small', disabled: i === props.chapters.length - 1, title: t('Move down'), onClick: () => emit('move', c, 1) }, '↓'),
+                h('button', { type: 'button', class: 'btn btn-ghost small row-delete', title: t('Delete chapter'), 'aria-label': t('Delete chapter'), onClick: () => emit('delete', c) }, '×'),
               ]),
             ),
           )

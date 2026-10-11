@@ -158,6 +158,8 @@ export const SERVER_MESSAGES = [
   tr('the article needs a title'),
   tr("that title can't be used"),
   tr('failed to delete the article'),
+  tr('every dated row needs a readable date'),
+  tr('there is no year 0 — the year before 1 is -1'),
 ]
 
 async function request(path, options, fallback) {

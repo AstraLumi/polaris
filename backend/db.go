@@ -12,7 +12,7 @@ import (
 // oldest migration (or a brand new one) gets wiped and recreated from
 // freshSchema — so every schema change from here on should ship with a
 // migration instead of relying on that reset.
-const currentSchemaVersion = "17"
+const currentSchemaVersion = "18"
 
 const freshSchema = `
 CREATE TABLE classes (
@@ -412,6 +412,26 @@ var migrations = map[string]migration{
 		// Free-form lore articles in the wiki (lore.go).
 		statements: append(append([]string{}, loreSchemaStatements...), wikiTriggerSQL("lore")),
 	},
+	"17": {
+		to: "18",
+		// Tags on characters, and dated infobox rows on lore articles.
+		statements: schema18Statements,
+	},
+}
+
+const characterTagsTableSQL = `CREATE TABLE character_tags (
+	character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+	tag          TEXT NOT NULL COLLATE NOCASE,
+	PRIMARY KEY (character_id, tag)
+)`
+
+// schema18Statements create what schema 18 added. The fresh schema runs them
+// after the wiki's tables, which the second one changes.
+var schema18Statements = []string{
+	characterTagsTableSQL,
+	// "" for a plain row, "date" for a lore article's dated row (it shows on
+	// the timeline).
+	`ALTER TABLE wiki_infobox ADD COLUMN kind TEXT NOT NULL DEFAULT ''`,
 }
 
 // worldSchemaStatements create what schema 16 added. They run after the
@@ -456,6 +476,7 @@ func applyMigration(db *sql.DB, m migration) error {
 // tablesInDependencyOrder lists every app-owned table, children before
 // parents, so dropping them in this order never trips a foreign key.
 var tablesInDependencyOrder = []string{
+	"character_tags",
 	"lore_articles",
 	"faction_members",
 	"factions",
@@ -568,7 +589,7 @@ func ensureSchema(db *sql.DB) error {
 			return fmt.Errorf("create schema: %w", err)
 		}
 	}
-	for _, stmt := range wikiSchemaStatements {
+	for _, stmt := range append(append([]string{}, wikiSchemaStatements...), schema18Statements...) {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("create wiki schema: %w", err)
 		}

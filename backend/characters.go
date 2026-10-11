@@ -14,21 +14,22 @@ import (
 )
 
 type characterSummary struct {
-	ID           int64   `json:"id"`
-	VersionID    int64   `json:"version_id"`
-	Name         string  `json:"name"`
-	Nickname     string  `json:"nickname"`
-	Level        int     `json:"level"`
-	ClassName    string  `json:"class_name"`
-	ClassIcon    string  `json:"class_icon"`
-	SubclassName string  `json:"subclass_name"`
-	RaceName     string  `json:"race_name"`
-	PicturePath  string  `json:"picture_path"`
-	UpdatedAt    string  `json:"updated_at"`
-	Status       string  `json:"status"`
-	FactionIDs   []int64 `json:"faction_ids"`
-	HP           int     `json:"hp"`
-	MP           int     `json:"mp"`
+	ID           int64    `json:"id"`
+	VersionID    int64    `json:"version_id"`
+	Name         string   `json:"name"`
+	Nickname     string   `json:"nickname"`
+	Level        int      `json:"level"`
+	ClassName    string   `json:"class_name"`
+	ClassIcon    string   `json:"class_icon"`
+	SubclassName string   `json:"subclass_name"`
+	RaceName     string   `json:"race_name"`
+	PicturePath  string   `json:"picture_path"`
+	UpdatedAt    string   `json:"updated_at"`
+	Status       string   `json:"status"`
+	FactionIDs   []int64  `json:"faction_ids"`
+	Tags         []string `json:"tags"`
+	HP           int      `json:"hp"`
+	MP           int      `json:"mp"`
 }
 
 // listCharactersHandler powers the grid. HP/MP shown here go through the
@@ -92,6 +93,18 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 			fr.Close()
 		}
 
+		tagsOf := map[int64][]string{}
+		if tr, err := db.Query(`SELECT character_id, tag FROM character_tags ORDER BY tag COLLATE NOCASE`); err == nil {
+			for tr.Next() {
+				var c int64
+				var t string
+				if tr.Scan(&c, &t) == nil {
+					tagsOf[c] = append(tagsOf[c], t)
+				}
+			}
+			tr.Close()
+		}
+
 		results := []characterSummary{}
 		for _, rr := range raw {
 			c := characterSummary{
@@ -99,6 +112,7 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 				Level: rr.level, ClassName: rr.className, SubclassName: rr.subclassName,
 				RaceName: rr.raceName, UpdatedAt: rr.updatedAt, Status: rr.status,
 				FactionIDs: append([]int64{}, factionsOf[rr.characterID]...),
+				Tags:       append([]string{}, tagsOf[rr.characterID]...),
 				ClassIcon:  uploadURL(rr.classIcon),
 			}
 			if rr.pic != "" {

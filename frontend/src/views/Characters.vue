@@ -43,6 +43,10 @@
         <option value="">{{ $t('Any faction') }}</option>
         <option v-for="f in factionOptions" :key="f.id" :value="String(f.id)">{{ f.name }}</option>
       </select>
+      <select v-if="tagOptions.length" :value="tagFilter" :aria-label="$t('Tag')" @change="setQuery('tag', $event.target.value)">
+        <option value="">{{ $t('Any tag') }}</option>
+        <option v-for="tag in tagOptions" :key="tag" :value="tag">#{{ tag }}</option>
+      </select>
       <select :value="statusFilter" :aria-label="$t('Status')" @change="setQuery('status', $event.target.value)">
         <option value="">{{ $t('Any status') }}</option>
         <option v-for="s in STATUSES" :key="s.key" :value="s.key">{{ $t(s.label) }}</option>
@@ -121,10 +125,11 @@ const classFilter = computed(() => queryText('class'))
 const raceFilter = computed(() => queryText('race'))
 const statusFilter = computed(() => queryText('status'))
 const factionFilter = computed(() => queryText('faction'))
+const tagFilter = computed(() => queryText('tag'))
 const factionOptions = ref([])
 factionsApi.list().then((list) => (factionOptions.value = list)).catch(() => {})
 const sort = computed(() => (SORTS.some((o) => o.key === queryText('sort')) ? queryText('sort') : 'name'))
-const filtering = computed(() => !!(search.value.trim() || classFilter.value || raceFilter.value || statusFilter.value || factionFilter.value))
+const filtering = computed(() => !!(search.value.trim() || classFilter.value || raceFilter.value || statusFilter.value || factionFilter.value || tagFilter.value))
 
 function setQuery(key, value) {
   const query = { ...route.query }
@@ -148,6 +153,12 @@ const distinct = (key) =>
   [...new Set(characters.value.map((c) => c[key]).filter(Boolean))].sort((a, b) => a.localeCompare(b))
 const classOptions = computed(() => distinct('class_name'))
 const raceOptions = computed(() => distinct('race_name'))
+const tagOptions = computed(() => {
+  const seen = new Map()
+  for (const c of characters.value) for (const tag of c.tags || []) seen.set(tag.toLowerCase(), tag)
+  return [...seen.values()].sort((a, b) => a.localeCompare(b))
+})
+const hasTag = (c, tag) => (c.tags || []).some((x) => x.toLowerCase() === tag.toLowerCase())
 
 const shown = computed(() => {
   const words = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean)
@@ -156,7 +167,8 @@ const shown = computed(() => {
     if (raceFilter.value && c.race_name !== raceFilter.value) return false
     if (statusFilter.value && (c.status || 'alive') !== statusFilter.value) return false
     if (factionFilter.value && !(c.faction_ids || []).includes(Number(factionFilter.value))) return false
-    const text = [c.name, c.nickname, c.class_name, c.subclass_name, c.race_name].join(' ').toLowerCase()
+    if (tagFilter.value && !hasTag(c, tagFilter.value)) return false
+    const text = [c.name, c.nickname, c.class_name, c.subclass_name, c.race_name, ...(c.tags || [])].join(' ').toLowerCase()
     return words.every((w) => text.includes(w))
   })
   // The server sends them sorted by name.

@@ -195,7 +195,8 @@
               <tbody>
                 <tr v-for="(r, i) in article.infobox" :key="i">
                   <th>{{ r.label }}</th>
-                  <td class="md inline" v-html="mdInline(r.value)"></td>
+                  <td v-if="r.kind === 'date'">{{ dateText(r.value) }}</td>
+                  <td v-else class="md inline" v-html="mdInline(r.value)"></td>
                 </tr>
               </tbody>
             </table>
@@ -204,7 +205,13 @@
           <template v-if="editing">
             <div class="info-sub">{{ $t('More details') }}</div>
             <div class="info-edit">
-              <div v-for="(r, i) in draft.infobox" :key="r.key" class="info-row">
+              <div v-for="(r, i) in draft.infobox" :key="r.key" class="info-row" :class="{ 'is-date': r.kind === 'date' }">
+                <template v-if="r.kind === 'date'">
+                  <input v-model="r.label" type="text" :placeholder="$t('Label')" :aria-label="$t('Label')" maxlength="120" />
+                  <button type="button" class="btn btn-ghost small" :aria-label="$t('Remove')" @click="draft.infobox.splice(i, 1)">×</button>
+                  <DateField v-model="r.value" :label="$t('Date')" :hint="$t('Shown on the timeline')" class="row-date" />
+                </template>
+                <template v-else>
                 <input v-model="r.label" type="text" :placeholder="$t('Label')" :aria-label="$t('Label')" maxlength="120" />
                 <input :ref="(el) => (valueEls[r.key] = el)" v-model="r.value" type="text" :placeholder="$t('Value')" :aria-label="$t('Value')" maxlength="2000" />
                 <button type="button" class="btn btn-ghost small row-link" :title="$t('Link to another wiki article')" @mousedown.prevent @click="openRowLink(r)">
@@ -214,8 +221,14 @@
                   </svg>
                 </button>
                 <button type="button" class="btn btn-ghost small" :aria-label="$t('Remove')" @click="draft.infobox.splice(i, 1)">×</button>
+                </template>
               </div>
-              <button type="button" class="btn btn-ghost small" @click="addRow">{{ $t('Add row') }}</button>
+              <div class="add-rows">
+                <button type="button" class="btn btn-ghost small" @click="addRow">{{ $t('Add row') }}</button>
+                <button v-if="isLore" type="button" class="btn btn-ghost small" :title="$t('A dated row, such as Founded. The article also appears on the timeline on that date.')" @click="addDateRow">
+                  {{ $t('Add date') }}
+                </button>
+              </div>
             </div>
           </template>
         </aside>
@@ -242,6 +255,7 @@ import BackLink from '../components/BackLink.vue'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 import WikiLinkPanel from '../components/WikiLinkPanel.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import DateField from '../components/DateField.vue'
 import { pageTitle, useUnsavedGuard, useSaveShortcut, viewPicture } from '../navigation'
 import { renderMarkdown } from '../markdown'
 import { fullDate, dateParts } from '../calendar'
@@ -331,7 +345,7 @@ const makeDraft = () => ({
   summary: draft.summary,
   fields: Object.fromEntries(Object.entries(draft.fields).filter(([, v]) => v && v.trim())),
   sections: draft.sections.map((s) => ({ title: s.title, body: s.body })),
-  infobox: draft.infobox.map((r) => ({ label: r.label, value: r.value })),
+  infobox: draft.infobox.map((r) => ({ label: r.label, value: r.value, kind: r.kind || undefined })),
 })
 // A lore article's title and picture are saved apart from its text.
 const draftState = () => JSON.stringify({ ...makeDraft(), name: draft.name })
@@ -407,7 +421,7 @@ function fillDraft() {
   draft.summary = a.summary
   draft.fields = Object.fromEntries(a.field_keys.map((k) => [k, a.fields[k] || '']))
   draft.sections = a.sections.map((s) => ({ key: ++keySeq, title: s.title, body: s.body }))
-  draft.infobox = a.infobox.map((r) => ({ key: ++keySeq, label: r.label, value: r.value }))
+  draft.infobox = a.infobox.map((r) => ({ key: ++keySeq, label: r.label, value: r.value, kind: r.kind || '' }))
   snapshot = draftState()
 }
 
@@ -432,7 +446,9 @@ function cancelEdit() {
 }
 
 const addSection = () => draft.sections.push({ key: ++keySeq, title: '', body: '' })
-const addRow = () => draft.infobox.push({ key: ++keySeq, label: '', value: '' })
+const addRow = () => draft.infobox.push({ key: ++keySeq, label: '', value: '', kind: '' })
+const addDateRow = () => draft.infobox.push({ key: ++keySeq, label: t('Founded'), value: '', kind: 'date' })
+const dateText = (v) => (dateParts(v) ? fullDate(v) : v)
 
 function move(list, i, by) {
   const j = i + by
@@ -775,6 +791,26 @@ useSaveShortcut(() => editing.value && !saving.value && save())
   display: grid;
   grid-template-columns: 1fr 1fr auto auto;
   gap: 0.35rem;
+}
+
+.info-row.is-date {
+  grid-template-columns: 1fr auto;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px dashed var(--glass-border);
+}
+
+.row-date {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.add-rows {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.add-rows .btn {
+  flex: 1;
 }
 
 .row-link svg {

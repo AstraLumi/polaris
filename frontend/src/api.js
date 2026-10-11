@@ -423,6 +423,8 @@ export function buildVersionFormData(form, specialBases, pictureFile, spellIds, 
   if (equippedGear) {
     fd.append('gear', JSON.stringify(Object.fromEntries(Object.entries(equippedGear).map(([slot, g]) => [slot, g.id]))))
   }
+  // The character's tags (shared by all its versions).
+  if (Array.isArray(form.tags)) fd.append('tags', JSON.stringify(form.tags))
   if (pictureFile) fd.append('picture', pictureFile)
   return fd
 }

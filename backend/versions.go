@@ -52,6 +52,7 @@ type storyDetail struct {
 type versionDetail struct {
 	ID                 int64                 `json:"id"`
 	CharacterID        int64                 `json:"character_id"`
+	Tags               []string              `json:"tags"` // the character's, shared by all versions
 	IsCurrent          bool                  `json:"is_current"`
 	VersionDate        string                `json:"version_date"`
 	VersionReference   string                `json:"version_reference"`
@@ -381,7 +382,38 @@ func buildVersionDetail(db *sql.DB, versionID string) (*versionDetail, error) {
 	}
 	d.Computed = computed
 
+	d.Tags = characterTags(db, d.CharacterID)
 	return &d, nil
+}
+
+// characterTags lists a character's tags. They belong to the character, not
+// a version, so every version shows and edits the same ones.
+func characterTags(db *sql.DB, characterID int64) []string {
+	out := []string{}
+	rows, err := db.Query(`SELECT tag FROM character_tags WHERE character_id = ? ORDER BY tag COLLATE NOCASE`, characterID)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var t string
+		if rows.Scan(&t) == nil {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func replaceCharacterTags(tx *sql.Tx, characterID int64, tags []string) error {
+	if _, err := tx.Exec(`DELETE FROM character_tags WHERE character_id = ?`, characterID); err != nil {
+		return err
+	}
+	for _, t := range tags {
+		if _, err := tx.Exec(`INSERT INTO character_tags (character_id, tag) VALUES (?, ?)`, characterID, t); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // loadSpecialBases reads every character_special_bases row for a version
@@ -649,6 +681,29 @@ func updateVersionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 				tx.Rollback()
 				http.Error(w, "failed to update gear", http.StatusInternalServerError)
 				log.Printf("replace version gear: %v", err)
+				return
+			}
+		}
+
+		// tags is a JSON list; they are the character's (see characterTags).
+		if raw := r.Form["tags"]; len(raw) > 0 {
+			var list []string
+			if err := json.Unmarshal([]byte(raw[0]), &list); err != nil {
+				tx.Rollback()
+				http.Error(w, "invalid tag list", http.StatusBadRequest)
+				return
+			}
+			tags, msg := cleanTags(list)
+			if msg != "" {
+				tx.Rollback()
+				http.Error(w, msg, http.StatusBadRequest)
+				return
+			}
+			var characterID int64
+			if err := tx.QueryRow(`SELECT character_id FROM character_versions WHERE id = ?`, versionID).Scan(&characterID); err != nil ||
+				replaceCharacterTags(tx, characterID, tags) != nil {
+				tx.Rollback()
+				http.Error(w, "failed to save changes", http.StatusInternalServerError)
 				return
 			}
 		}

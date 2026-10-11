@@ -58,6 +58,7 @@
     <PictureViewer v-if="viewedPicture" :picture="viewedPicture" />
   </div>
   <TooltipLayer />
+  <LinkPreviewLayer />
 </template>
 
 <script setup>
@@ -70,6 +71,7 @@ import PolarisLogo from './components/PolarisLogo.vue'
 import IconImage from './components/IconImage.vue'
 import SearchPalette from './components/SearchPalette.vue'
 import TooltipLayer from './components/TooltipLayer.vue'
+import LinkPreviewLayer from './components/LinkPreviewLayer.vue'
 import PictureViewer from './components/PictureViewer.vue'
 import { currentStory } from './stories'
 

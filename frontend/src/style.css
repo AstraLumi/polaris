@@ -25,6 +25,7 @@
   --logo-star: #f7f0bd;
   --kind-birth: #a9b8ff;
   --kind-founding: #6cc3b0;
+  --kind-lore: #f0a0c8;
   --line: #7fa6e0; /* the timeline's line */
   --danger: #d0605a;
   --danger-text: #f4aaa3;
@@ -50,6 +51,7 @@
   --logo-star: #f7e6d2;
   --kind-birth: #a99bf0;
   --kind-founding: #5fb3a1;
+  --kind-lore: #e890c0;
   --line: #7fb8e6;
   --danger: #c9584f;
   --danger-text: #f2a89f;
@@ -74,6 +76,7 @@
   --logo-star: #e8f7ee;
   --kind-birth: #e6c47a;
   --kind-founding: #7fb8e6;
+  --kind-lore: #d8a0e8;
   --line: #6fc4a0;
   --danger: #c9584f;
   --danger-text: #f2a89f;
@@ -98,6 +101,7 @@
   --logo-star: #fbe4eb;
   --kind-birth: #f0b36a;
   --kind-founding: #8fb4e6;
+  --kind-lore: #c8b0f0;
   --line: #e48aa0;
   --danger: #d5574f;
   --danger-text: #f6aaa3;
@@ -122,6 +126,7 @@
   --logo-star: #e9f6f7;
   --kind-birth: #b8a9f0;
   --kind-founding: #e6c47a;
+  --kind-lore: #e0a0b8;
   --line: #8aa0b8;
   --danger: #c9584f;
   --danger-text: #f2a89f;

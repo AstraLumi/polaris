@@ -156,6 +156,12 @@
           </label>
         </div>
         <div class="long-fields">
+          <TagInput
+            v-model="form.tags"
+            :suggestions="tagSuggestions"
+            list-id="character-tag-suggestions"
+            :hint="$t('Tags belong to the character, so every version shares them. Filter by them on the Characters page.')"
+          />
           <label class="field long">
             <span>{{ $t('Description') }}</span>
             <textarea v-model="form.description" rows="3"></textarea>
@@ -215,10 +221,11 @@
 <script setup>
 import { reactive, ref, computed, watch, onMounted } from 'vue'
 import { t } from '../i18n'
-import { fetchVersion, updateVersion, buildVersionFormData, fetchCatalogs, fetchLocationOptions, fetchComputePreview, SPECIAL_BASE_KEYS } from '../api'
+import { fetchCharacters, fetchVersion, updateVersion, buildVersionFormData, fetchCatalogs, fetchLocationOptions, fetchComputePreview, SPECIAL_BASE_KEYS } from '../api'
 import BuildStatsPanel from '../components/BuildStatsPanel.vue'
 import ComboBoxField from '../components/ComboBoxField.vue'
 import DateField from '../components/DateField.vue'
+import TagInput from '../components/TagInput.vue'
 import LocationSelect from '../components/LocationSelect.vue'
 import GearTab from '../components/GearTab.vue'
 import SpellsTab from '../components/SpellsTab.vue'
@@ -243,11 +250,21 @@ const pictureFile = ref(null)
 const existingPicturePath = ref('')
 const assignedSpells = ref([])
 const equippedGear = ref({})
+// Every tag already on a character, offered while typing.
+const tagSuggestions = ref([])
+fetchCharacters()
+  .then((list) => {
+    const seen = new Map()
+    for (const c of list) for (const tag of c.tags || []) seen.set(tag.toLowerCase(), tag)
+    tagSuggestions.value = [...seen.values()].sort((a, b) => a.localeCompare(b))
+  })
+  .catch(() => {})
 const characterName = ref('')
 const catalogs = ref({ classes: [], subclasses: [], specializations: [], races: [], bodyTypes: [] })
 const locationOptions = ref([])
 
 const form = reactive({
+  tags: [],
   version_date: '',
   version_reference: '',
   chapter_id: null,
@@ -417,6 +434,7 @@ async function load() {
       birth_date: data.story.birth_date,
       deaths: data.story.deaths,
       status: data.story.status || 'alive',
+      tags: data.tags || [],
       description: data.story.description,
       bio: data.story.bio,
       speech_mannerisms: data.story.speech_mannerisms,

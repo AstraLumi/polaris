@@ -19,6 +19,7 @@
 
 <script setup>
 import { ref, reactive, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { articleOfLink } from '../articlePreview'
 
 // One tooltip for the whole app, mounted once in App.vue. Anything with a
 // `title` gets it (the attribute moves to data-tip so the browser's own
@@ -43,6 +44,8 @@ let hiddenAt = 0
 const hasLetters = (s) => /\p{L}|\p{N}/u.test(s)
 
 function tipOf(start) {
+  // Links to an article get its preview card instead (LinkPreviewLayer).
+  if (articleOfLink(start)) return null
   for (let el = start; el && el.nodeType === 1 && el !== document.body; el = el.parentElement) {
     const title = el.getAttribute('title')
     if (title) {

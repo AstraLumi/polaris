@@ -98,7 +98,7 @@
       </h2>
       <ul class="article-list">
         <li v-for="it in g.items" :key="it.id">
-          <RouterLink :to="wikiPath(it.type, it.id)" class="article-link" :class="{ 'is-stub': !it.written }" :title="it.written ? null : $t('Nothing written here yet: only the facts from the story')">
+          <RouterLink :to="wikiPath(it.type, it.id)" class="article-link" :class="{ 'is-stub': !it.written }">
             <span class="thumb">
               <IconImage :src="it.picture" :name="it.name" />
             </span>

@@ -15,7 +15,7 @@ has its own SQLite database, so it runs comfortably on a small home server.
 
 ## Features
 
-- **Characters**: version history (compare any two versions side by side),
+- **Characters**: tags, version history (compare any two versions side by side),
   alive / missing / dead status, automatically computed stats, a paper-doll
   gear tab, a spell list and a printable sheet.
 - **Relations and factions**: who is whose parent, mentor, rival and so on,
@@ -33,7 +33,8 @@ has its own SQLite database, so it runs comfortably on a small home server.
   on), your own sections and infobox rows, `[[links]]` between articles and a
   "What links here" list. Delete something and its article goes with it.
   Free-form lore articles (gods, history, magic, languages…) can be added
-  too, with their own picture and sections.
+  too, with their own picture and sections, and dates that put them on the
+  timeline. Hovering a link to an article shows a preview of it.
 - **Calendar, events and timeline**: define your own calendar (months per year,
   days per month), link events with tags, and view them on a timeline drawn to
   scale, filtered by person or place.

@@ -228,6 +228,9 @@ type wikiSection struct {
 type wikiInfoRow struct {
 	Label string `json:"label"`
 	Value string `json:"value"`
+	// Kind is "" or "date": a lore article's dated row ("Founded:
+	// 03-01-1200"), which also puts the article on the timeline.
+	Kind string `json:"kind,omitempty"`
 }
 
 type wikiArticle struct {
@@ -415,6 +418,7 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 		}
 		a.addFact("nickname", nick, "", nil)
 		a.addFact("status", statusWord[status], "word", nil)
+		a.addFact("tags", strings.Join(characterTags(db, id), ", "), "", nil)
 		a.addFact("race", "", "", refOf("race", raceID, raceName))
 		a.addFact("gender", gender, "", nil)
 		a.addFact("body_type", "", "", refOf("body_type", bodyID, bodyName))
@@ -650,10 +654,10 @@ func loadWikiArticle(db *sql.DB, t wikiTypeDef, id int64) (*wikiArticle, error) 
 			}
 			rows.Close()
 		}
-		if rows, err := db.Query(`SELECT label, value FROM wiki_infobox WHERE entry_id = ? ORDER BY position`, entryID); err == nil {
+		if rows, err := db.Query(`SELECT label, value, kind FROM wiki_infobox WHERE entry_id = ? ORDER BY position`, entryID); err == nil {
 			for rows.Next() {
 				var r wikiInfoRow
-				if rows.Scan(&r.Label, &r.Value) == nil {
+				if rows.Scan(&r.Label, &r.Value, &r.Kind) == nil {
 					a.Infobox = append(a.Infobox, r)
 				}
 			}
@@ -915,6 +919,18 @@ func (p *wikiSavePayload) clean(t wikiTypeDef) string {
 		if r.Label == "" {
 			return "every info row needs a label"
 		}
+		if r.Kind != "date" || t.Key != "lore" {
+			r.Kind = ""
+		} else {
+			d, ok := parseStoryDate(r.Value)
+			if !ok {
+				return "every dated row needs a readable date"
+			}
+			if d.Year == 0 {
+				return "there is no year 0 — the year before 1 is -1"
+			}
+			r.Value = d.String()
+		}
 		if tooLong(r.Label, maxWikiTitle) || tooLong(r.Value, 2000) {
 			return "that text is too long"
 		}
@@ -994,8 +1010,8 @@ func saveWikiHandler(db *sql.DB) http.HandlerFunc {
 				}
 			}
 			for i, row := range p.Infobox {
-				if _, err := tx.Exec(`INSERT INTO wiki_infobox (entry_id, position, label, value) VALUES (?, ?, ?, ?)`,
-					entryID, i, row.Label, row.Value); err != nil {
+				if _, err := tx.Exec(`INSERT INTO wiki_infobox (entry_id, position, label, value, kind) VALUES (?, ?, ?, ?, ?)`,
+					entryID, i, row.Label, row.Value, row.Kind); err != nil {
 					http.Error(w, "failed to save the article", http.StatusInternalServerError)
 					log.Printf("save wiki infobox: %v", err)
 					return

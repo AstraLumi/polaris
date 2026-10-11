@@ -89,6 +89,11 @@ types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard
   source: `lore_articles` holds only a name and picture, created from the
   wiki home ("New article"); the text is ordinary wiki text (introduction,
   trivia, sections, infobox) and their Related list is what they link to.
+  A lore article's infobox can hold dated rows (`wiki_infobox.kind = 'date'`,
+  schema 18), which put it on the timeline as kind `lore`.
+  Hovering any link to an article shows a preview card
+  (`components/LinkPreviewLayer.vue`, `ArticleCard.vue`, `articlePreview.js`);
+  the tooltip layer leaves those links alone.
   `components/WikiLinkPanel.vue` is the shared "Link to an article" picker
   (the Markdown editor and the infobox value rows use it).
 - Look and feel: every page shares one layout (`.page`), one set of form
@@ -144,7 +149,9 @@ types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard
   Nation text that matches a location name; 9 -> 10 replaces the unused
   placeholder events tables (carrying over any rows they held); 10 -> 11 adds
   `classes.icon_path`; 11 -> 12 adds the gear tables. The current schema is
-  17 (16 -> 17 adds lore articles); see `migrations` in `backend/db.go`.
+  18 (16 -> 17 adds lore articles, 17 -> 18 character tags and dated lore
+  rows); see `migrations` in `backend/db.go`. Character tags
+  (`character_tags`) belong to the character, not a version.
 
 ## Data on disk
 

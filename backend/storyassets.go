@@ -57,8 +57,8 @@ var storyOnlyTables = []string{
 	"wiki_entries", "wiki_sections", "wiki_infobox",
 	// Who is related to whom, the story's factions, and its chapters.
 	"character_relations", "factions", "faction_members", "volumes", "chapters",
-	// The wiki's free-form articles.
-	"lore_articles",
+	// The wiki's free-form articles, and the tags on characters.
+	"lore_articles", "character_tags",
 }
 
 func isNullCol(t assetTable, col string) bool {

@@ -16,12 +16,12 @@ import (
 // description, tags, people, picture and location ride along.
 type timelineNode struct {
 	Key          string        `json:"key"`  // "event:12", "birth:3", "founding:7"
-	Kind         string        `json:"kind"` // "event" | "birth" | "founding"
+	Kind         string        `json:"kind"` // "event" | "birth" | "founding" | "lore"
 	Name         string        `json:"name"`
 	Date         string        `json:"date"`
 	T            float64       `json:"t"`           // days on one number line, see timeValue
 	EventID      *int64        `json:"event_id"`    // the events row, if there is one
-	SourceID     *int64        `json:"source_id"`   // character id (birth) / location id (founding)
+	SourceID     *int64        `json:"source_id"`   // character id (birth) / location id (founding) / lore article id
 	SourceName   string        `json:"source_name"` // that character's or location's own name
 	Description  string        `json:"description"`
 	LocationID   *int64        `json:"location_id"`
@@ -173,6 +173,32 @@ func timelineHandler(db *sql.DB) http.HandlerFunc {
 			out.Nodes = append(out.Nodes, n)
 		}
 		lrow.Close()
+
+		// Lore articles: each dated row in their infobox ("Founded", "Fell").
+		// The row's label rides along as the description.
+		drow, err := db.Query(`SELECT i.id, l.id, l.name, i.label, i.value FROM wiki_infobox i
+			JOIN wiki_entries e ON e.id = i.entry_id AND e.entity_type = 'lore'
+			JOIN lore_articles l ON l.id = e.entity_id
+			WHERE i.kind = 'date'`)
+		if err != nil {
+			http.Error(w, "failed to load timeline", http.StatusInternalServerError)
+			log.Printf("timeline lore dates: %v", err)
+			return
+		}
+		for drow.Next() {
+			var rowID, id int64
+			var name, label, date string
+			if drow.Scan(&rowID, &id, &name, &label, &date) != nil {
+				continue
+			}
+			sid := id
+			n := timelineNode{Key: "lore:" + itoa(rowID), Kind: "lore", Name: name + ": " + label,
+				SourceID: &sid, SourceName: name, Description: label, Tags: []string{}, People: []eventPerson{}}
+			if place(&n, date) {
+				out.Nodes = append(out.Nodes, n)
+			}
+		}
+		drow.Close()
 
 		sort.SliceStable(out.Nodes, func(i, j int) bool {
 			a, b := out.Nodes[i], out.Nodes[j]

@@ -223,6 +223,9 @@
           >
             {{ $t('Open event page') }}
           </RouterLink>
+          <RouterLink v-else-if="selected.kind === 'lore'" :to="wikiPath('lore', selected.source_id)" class="btn btn-primary">
+            {{ $t('Open article') }}
+          </RouterLink>
 
           <template v-else>
             <RouterLink
@@ -255,6 +258,7 @@ import { shortDate, fullDate } from '../calendar'
 import { t, tn } from '../i18n'
 import { layoutTimeline, autoPxPerYear, minimumWidth, DEFAULTS } from '../timelineLayout'
 import { viewPicture, mapPath } from '../navigation'
+import { wikiPath } from '../wiki'
 
 const router = useRouter()
 const route = useRoute()
@@ -329,7 +333,7 @@ function setAuto() {
 
 // ---- Filters (in the URL, so a character page can link to its own life) -------
 
-const KINDS = ['event', 'birth', 'founding']
+const KINDS = ['event', 'birth', 'founding', 'lore']
 const queryText = (k) => (typeof route.query[k] === 'string' ? route.query[k] : '')
 const personId = computed(() => queryText('person'))
 const placeId = computed(() => queryText('place'))
@@ -447,7 +451,7 @@ const labelOffset = (n) => (isUp(n) ? -LANE_OFFSET[n.lane] : LANE_OFFSET[n.lane]
 const stemEnd = (n) => labelOffset(n)
 const labelClass = (n) => (isUp(n) ? 'is-up' : 'is-down')
 
-const kindLabel = (k) => (k === 'birth' ? t('Birth') : k === 'founding' ? t('Founding') : t('Event'))
+const kindLabel = (k) => (k === 'birth' ? t('Birth') : k === 'founding' ? t('Founding') : k === 'lore' ? t('Lore') : t('Event'))
 
 function formatYears(y) {
   const r = Math.round(y)
@@ -647,6 +651,9 @@ onBeforeUnmount(() => {
 .kind-founding {
   background: var(--kind-founding);
 }
+.kind-lore {
+  background: var(--kind-lore);
+}
 
 .note {
   margin: 0 0 1rem;
@@ -725,6 +732,9 @@ onBeforeUnmount(() => {
 }
 .node.kind-founding {
   background: var(--kind-founding);
+}
+.node.kind-lore {
+  background: var(--kind-lore);
 }
 
 .node:hover {

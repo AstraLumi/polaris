@@ -23,6 +23,9 @@
             <span v-if="data.class_icon" class="class-icon"><IconImage :src="data.class_icon" :name="data.class_name" /></span>
             {{ classLine }}
           </p>
+          <p v-if="data.tags && data.tags.length" class="tag-line">
+            <RouterLink v-for="tag in data.tags" :key="tag" :to="{ path: '/characters', query: { tag } }" class="char-tag" :title="$t('Everyone tagged #{tag}', { tag })">#{{ tag }}</RouterLink>
+          </p>
         </div>
         <div class="identity-actions">
           <RouterLink :to="{ path: '/timeline', query: { person: data.character_id, match: 'highlight' } }" class="btn btn-ghost">
@@ -186,6 +189,27 @@ function print() {
 </script>
 
 <style scoped>
+.tag-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.35rem 0 0;
+}
+
+.char-tag {
+  padding: 0.05rem 0.55rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.char-tag:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
 .identity-actions {
   display: flex;
   gap: 0.5rem;
