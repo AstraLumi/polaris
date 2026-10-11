@@ -1,5 +1,5 @@
 <template>
-  <div class="page is-narrow">
+  <div class="page" :class="{ 'is-narrow': tab !== 'stats' }">
     <header class="page-header">
       <div>
         <h1>{{ $t('Settings') }}</h1>
@@ -7,6 +7,19 @@
       </div>
     </header>
 
+    <div class="tab-bar">
+      <button class="tab-button" :class="{ 'is-active': tab === 'general' }" @click="tab = 'general'">
+        {{ $t('General') }}
+      </button>
+      <button class="tab-button" :class="{ 'is-active': tab === 'stats' }" :title="$t('Which stats characters have and how they are calculated')" @click="tab = 'stats'">
+        {{ $t('Stats') }}
+      </button>
+    </div>
+
+    <!-- Both stay mounted, so unsaved stat edits survive a look at General. -->
+    <StatSystemEditor v-show="tab === 'stats'" />
+
+    <div v-show="tab === 'general'">
     <section class="glass-panel card">
       <h2>{{ $t('Language') }}</h2>
       <p class="lede">
@@ -112,6 +125,7 @@
         <dd><a :href="REPO_URL" target="_blank" rel="noopener noreferrer">github.com/AstraLumi/polaris</a></dd>
       </dl>
     </section>
+    </div>
   </div>
 </template>
 
@@ -122,6 +136,11 @@ import { loadCalendar, calendar } from '../calendar'
 import { THEMES, currentTheme, saveTheme } from '../theme'
 import { t, LOCALES, locale, saveLocale } from '../i18n'
 import pkg from '../../package.json'
+import { useRoute } from 'vue-router'
+import StatSystemEditor from '../components/StatSystemEditor.vue'
+
+// ?tab=stats opens the Stats tab (the Build tab links there).
+const tab = ref(useRoute().query.tab === 'stats' ? 'stats' : 'general')
 
 // The version comes from package.json at build time, so it is always the
 // one that was built.

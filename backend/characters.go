@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type characterSummary struct {
@@ -22,32 +22,39 @@ type characterSummary struct {
 	ClassName    string   `json:"class_name"`
 	ClassIcon    string   `json:"class_icon"`
 	SubclassName string   `json:"subclass_name"`
+	SpecName     string   `json:"specialization_name"`
 	RaceName     string   `json:"race_name"`
 	PicturePath  string   `json:"picture_path"`
 	UpdatedAt    string   `json:"updated_at"`
 	Status       string   `json:"status"`
 	FactionIDs   []int64  `json:"faction_ids"`
 	Tags         []string `json:"tags"`
-	HP           int      `json:"hp"`
-	MP           int      `json:"mp"`
+	// The first two Base Stats (HP and MP by default), for the card.
+	Stats []cardStat `json:"stats"`
 }
 
-// listCharactersHandler powers the grid. HP/MP shown here go through the
+type cardStat struct {
+	Name  string  `json:"name"`
+	Value float64 `json:"value"`
+}
+
+// listCharactersHandler powers the grid. The stats shown here go through the
 // same computeStats pipeline as the View/Edit pages (via buildVersionDetail)
 // so they reflect the real formula and any Class/Race/etc. modifiers —
-// not the raw VIT/WIS point-buy values.
+// not the raw point-buy values.
 func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		rows, err := db.Query(`
 			SELECT
 				c.id, v.id, v.name, COALESCE(v.nickname, ''), v.level,
-				COALESCE(cl.name, ''), COALESCE(sc.name, ''),
+				COALESCE(cl.name, ''), COALESCE(sc.name, ''), COALESCE(sp.name, ''),
 				COALESCE(v.picture_path, ''), COALESCE(cl.icon_path, ''),
 				COALESCE(ra.name, ''), v.updated_at, COALESCE(st.status, 'alive')
 			FROM characters c
 			JOIN character_versions v ON v.character_id = c.id AND v.is_current = 1
 			LEFT JOIN classes cl ON cl.id = v.class_id
 			LEFT JOIN subclasses sc ON sc.id = v.subclass_id
+			LEFT JOIN specializations sp ON sp.id = v.specialization_id
 			LEFT JOIN character_story st ON st.version_id = v.id
 			LEFT JOIN races ra ON ra.id = st.race_id
 			ORDER BY v.name COLLATE NOCASE
@@ -59,17 +66,17 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 		}
 
 		type row struct {
-			characterID, versionID                                  int64
-			name, nickname, className, subclassName, pic, classIcon string
-			raceName, updatedAt, status                             string
-			level                                                   int
+			characterID, versionID                                            int64
+			name, nickname, className, subclassName, specName, pic, classIcon string
+			raceName, updatedAt, status                                       string
+			level                                                             int
 		}
 		var raw []row
 		for rows.Next() {
 			var rr row
 			if err := rows.Scan(
 				&rr.characterID, &rr.versionID, &rr.name, &rr.nickname, &rr.level,
-				&rr.className, &rr.subclassName, &rr.pic, &rr.classIcon,
+				&rr.className, &rr.subclassName, &rr.specName, &rr.pic, &rr.classIcon,
 				&rr.raceName, &rr.updatedAt, &rr.status,
 			); err != nil {
 				rows.Close()
@@ -105,11 +112,20 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 			tr.Close()
 		}
 
+		var cardStats []statDef
+		if sys, err := loadStatSystem(db); err == nil {
+			for _, d := range sys.Stats {
+				if d.Category == "base" && len(cardStats) < 2 {
+					cardStats = append(cardStats, d)
+				}
+			}
+		}
+
 		results := []characterSummary{}
 		for _, rr := range raw {
 			c := characterSummary{
 				ID: rr.characterID, VersionID: rr.versionID, Name: rr.name, Nickname: rr.nickname,
-				Level: rr.level, ClassName: rr.className, SubclassName: rr.subclassName,
+				Level: rr.level, ClassName: rr.className, SubclassName: rr.subclassName, SpecName: rr.specName,
 				RaceName: rr.raceName, UpdatedAt: rr.updatedAt, Status: rr.status,
 				FactionIDs: append([]int64{}, factionsOf[rr.characterID]...),
 				Tags:       append([]string{}, tagsOf[rr.characterID]...),
@@ -118,9 +134,11 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 			if rr.pic != "" {
 				c.PicturePath = "/uploads/" + rr.pic
 			}
+			c.Stats = []cardStat{}
 			if detail, err := buildVersionDetail(db, fmt.Sprintf("%d", rr.versionID)); err == nil {
-				c.HP = int(math.Round(detail.Computed.Base.HP))
-				c.MP = int(math.Round(detail.Computed.Base.MP))
+				for _, d := range cardStats {
+					c.Stats = append(c.Stats, cardStat{Name: d.Name, Value: detail.Computed[d.Key]})
+				}
 			} else {
 				log.Printf("listCharacters computeStats for version %d: %v", rr.versionID, err)
 			}
@@ -215,11 +233,6 @@ func createCharacterHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			http.Error(w, "failed to create character story row", http.StatusInternalServerError)
 			return
 		}
-		if _, err := tx.Exec(`INSERT INTO character_build (version_id) VALUES (?)`, versionID); err != nil {
-			tx.Rollback()
-			http.Error(w, "failed to create character build row", http.StatusInternalServerError)
-			return
-		}
 
 		if err := tx.Commit(); err != nil {
 			http.Error(w, "failed to save character", http.StatusInternalServerError)
@@ -245,8 +258,11 @@ func createCharacterHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 
 // savePicture names files after the version they belong to (not the
 // character), since pictures live per-version.
+// savePicture stores a version's picture under a new name every time, so a
+// replaced picture gets a new address and no browser keeps showing the old
+// one from its cache.
 func savePicture(uploadsDir string, versionID string, originalName string, src io.Reader) (string, error) {
-	return saveUpload(uploadsDir, "characters", versionID, originalName, src)
+	return saveUpload(uploadsDir, "characters", fmt.Sprintf("%s-%d", versionID, time.Now().UnixNano()), originalName, src)
 }
 
 // saveUpload writes an uploaded file to uploads/<subdir>/<stem><ext> and

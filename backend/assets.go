@@ -5,26 +5,28 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
-// scalingFor decides how a modifier saved through the asset editor scales:
-// Base Stats (hp/attack/defense/...) scale with the character's level by
-// default — "+10 Attack per level" — everything else is a flat one-time
-// bonus. See perLevelModifierStats in stats.go.
-//
+// How a bonus counts follows its stat's category: Base Stats bonuses from
+// classes, subclasses, specializations, races and body types count once per
+// level ("+10 Attack per level"); everything else is a flat one-time bonus.
 // Gear ("item" modifiers) is always flat, Base Stats included: "+5 Attack"
-// from a sword is +5 however high the level is.
-func scalingFor(sourceType, targetStat string) string {
-	if sourceType != "item" && perLevelModifierStats[targetStat] {
-		return "per_level"
-	}
-	return "flat"
+// from a sword is +5 however high the level is. It is stored per row
+// (per_level/flat), and rescaleModifiers brings every row in step after the
+// stat system changes. "multiplier" rows are left alone.
+const scalingSQL = `CASE WHEN source_type != 'item' AND target_stat IN (SELECT key FROM stat_defs WHERE category = 'base')
+	THEN 'per_level' ELSE 'flat' END`
+
+func rescaleModifiers(tx *sql.Tx) error {
+	_, err := tx.Exec(`UPDATE stat_modifiers SET scaling = ` + scalingSQL + ` WHERE scaling != 'multiplier'`)
+	return err
 }
 
 // loadModifiers reads every stat_modifiers row for one source (e.g. one
 // race) into a flat map, ready to prefill an edit form. Scaling isn't
-// part of the map — scalingFor derives it deterministically from the key,
+// part of the map — it follows from the stat's category (scalingSQL),
 // so there's nothing to lose by not round-tripping it.
 func loadModifiers(db *sql.DB, sourceType string, sourceID int64) (map[string]float64, error) {
 	rows, err := db.Query(
@@ -49,9 +51,9 @@ func loadModifiers(db *sql.DB, sourceType string, sourceID int64) (map[string]fl
 }
 
 // saveModifiers replaces every modifier row for one source with whatever's
-// in values, applying scalingFor per key. Zero/absent entries simply
-// aren't stored — a blank field on the form means "this asset doesn't
-// touch that stat".
+// in values. Zero/absent entries simply aren't stored — a blank field on the
+// form means "this asset doesn't touch that stat" — and neither are stats the
+// story doesn't have.
 func saveModifiers(tx *sql.Tx, sourceType string, sourceID int64, values map[string]float64) error {
 	if _, err := tx.Exec(
 		`DELETE FROM stat_modifiers WHERE source_type = ? AND source_id = ?`,
@@ -64,18 +66,41 @@ func saveModifiers(tx *sql.Tx, sourceType string, sourceID int64, values map[str
 			continue
 		}
 		if _, err := tx.Exec(
-			`INSERT INTO stat_modifiers (source_type, source_id, target_stat, scaling, value) VALUES (?, ?, ?, ?, ?)`,
-			sourceType, sourceID, key, scalingFor(sourceType, key), value,
+			`INSERT INTO stat_modifiers (source_type, source_id, target_stat, scaling, value)
+			 SELECT ?, ?, key, 'flat', ? FROM stat_defs WHERE key = ?`,
+			sourceType, sourceID, value, key,
 		); err != nil {
 			return err
 		}
 	}
-	return nil
+	_, err := tx.Exec(`UPDATE stat_modifiers SET scaling = `+scalingSQL+` WHERE source_type = ? AND source_id = ?`, sourceType, sourceID)
+	return err
 }
 
 type assetPayload struct {
 	Name      string             `json:"name"`
 	Modifiers map[string]float64 `json:"modifiers"`
+	KingdomID *int64             `json:"kingdom_id"` // races only
+}
+
+// kingdomRef is the kingdom a race or specialization is native to: the id
+// sent, when it is a kingdom on the map (a coloured major location).
+func kingdomRef(db *sql.DB, id *int64) sql.NullInt64 {
+	if id == nil {
+		return sql.NullInt64{}
+	}
+	return parseLocationID(db, strconv.FormatInt(*id, 10), true)
+}
+
+// kingdomOf reads the kingdom of one race or specialization.
+func kingdomOf(db *sql.DB, table string, id int64) (*int64, string) {
+	var kid sql.NullInt64
+	var name sql.NullString
+	db.QueryRow(`SELECT t.kingdom_id, l.name FROM `+table+` t LEFT JOIN locations l ON l.id = t.kingdom_id WHERE t.id = ?`, id).Scan(&kid, &name)
+	if !kid.Valid {
+		return nil, ""
+	}
+	return &kid.Int64, name.String
 }
 
 // ---- Simple assets: Classes, Races, Body Types ----------------------------
@@ -88,6 +113,9 @@ type simpleAssetDetail struct {
 	Name      string             `json:"name"`
 	IconPath  string             `json:"icon_path,omitempty"` // classes only
 	Modifiers map[string]float64 `json:"modifiers"`
+	// The kingdom a race is native to (races only).
+	KingdomID   *int64 `json:"kingdom_id"`
+	KingdomName string `json:"kingdom_name"`
 }
 
 func getSimpleAssetHandler(db *sql.DB, table, sourceType string) http.HandlerFunc {
@@ -109,6 +137,9 @@ func getSimpleAssetHandler(db *sql.DB, table, sourceType string) http.HandlerFun
 			var icon sql.NullString
 			db.QueryRow(`SELECT icon_path FROM classes WHERE id = ?`, d.ID).Scan(&icon)
 			d.IconPath = uploadURL(icon.String)
+		}
+		if table == "races" {
+			d.KingdomID, d.KingdomName = kingdomOf(db, table, d.ID)
 		}
 		writeJSON(w, d)
 	}
@@ -139,6 +170,13 @@ func createSimpleAssetHandler(db *sql.DB, table, sourceType string) http.Handler
 			return
 		}
 		id, _ := res.LastInsertId()
+		if table == "races" {
+			if _, err := tx.Exec(`UPDATE races SET kingdom_id = ? WHERE id = ?`, kingdomRef(db, payload.KingdomID), id); err != nil {
+				tx.Rollback()
+				http.Error(w, "failed to save", http.StatusInternalServerError)
+				return
+			}
+		}
 		if err := saveModifiers(tx, sourceType, id, payload.Modifiers); err != nil {
 			tx.Rollback()
 			http.Error(w, "failed to save modifiers", http.StatusInternalServerError)
@@ -180,6 +218,13 @@ func updateSimpleAssetHandler(db *sql.DB, table, sourceType string) http.Handler
 		}
 		var assetID int64
 		tx.QueryRow(`SELECT id FROM `+table+` WHERE id = ?`, id).Scan(&assetID)
+		if table == "races" {
+			if _, err := tx.Exec(`UPDATE races SET kingdom_id = ? WHERE id = ?`, kingdomRef(db, payload.KingdomID), assetID); err != nil {
+				tx.Rollback()
+				http.Error(w, "failed to save", http.StatusInternalServerError)
+				return
+			}
+		}
 		if err := saveModifiers(tx, sourceType, assetID, payload.Modifiers); err != nil {
 			tx.Rollback()
 			http.Error(w, "failed to save modifiers", http.StatusInternalServerError)
@@ -257,6 +302,7 @@ type specializationPayload struct {
 	Name      string             `json:"name"`
 	ClassID   int64              `json:"class_id"`
 	Modifiers map[string]float64 `json:"modifiers"`
+	KingdomID *int64             `json:"kingdom_id"`
 }
 
 type specializationDetail struct {
@@ -265,6 +311,9 @@ type specializationDetail struct {
 	ClassID   int64              `json:"class_id"`
 	ClassName string             `json:"class_name"`
 	Modifiers map[string]float64 `json:"modifiers"`
+	// The kingdom it is native to.
+	KingdomID   *int64 `json:"kingdom_id"`
+	KingdomName string `json:"kingdom_name"`
 }
 
 func getSpecializationHandler(db *sql.DB) http.HandlerFunc {
@@ -287,6 +336,7 @@ func getSpecializationHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 		d.Modifiers = modifiers
+		d.KingdomID, d.KingdomName = kingdomOf(db, "specializations", d.ID)
 		writeJSON(w, d)
 	}
 }
@@ -313,7 +363,7 @@ func createSpecializationHandler(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "failed to start transaction", http.StatusInternalServerError)
 			return
 		}
-		res, err := tx.Exec(`INSERT INTO specializations (class_id, name) VALUES (?, ?)`, payload.ClassID, name)
+		res, err := tx.Exec(`INSERT INTO specializations (class_id, name, kingdom_id) VALUES (?, ?, ?)`, payload.ClassID, name, kingdomRef(db, payload.KingdomID))
 		if err != nil {
 			tx.Rollback()
 			http.Error(w, "that class already has a specialization with that name", http.StatusBadRequest)
@@ -357,8 +407,8 @@ func updateSpecializationHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 		if _, err := tx.Exec(
-			`UPDATE specializations SET name = ?, class_id = ? WHERE id = ?`,
-			name, payload.ClassID, id,
+			`UPDATE specializations SET name = ?, class_id = ?, kingdom_id = ? WHERE id = ?`,
+			name, payload.ClassID, kingdomRef(db, payload.KingdomID), id,
 		); err != nil {
 			tx.Rollback()
 			http.Error(w, "that class already has a specialization with that name", http.StatusBadRequest)

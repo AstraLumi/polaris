@@ -75,8 +75,12 @@ Requirements: Docker with the Compose plugin.
 ```bash
 git clone https://github.com/AstraLumi/polaris.git
 cd polaris
-docker compose up -d --build
+docker compose up -d
 ```
+
+This runs the ready-made image of the latest release
+(`ghcr.io/astralumi/polaris`, for amd64 and arm64). To build it from the code
+in the folder instead, use `docker compose up -d --build`.
 
 Open <http://localhost:8091> and create your first story.
 
@@ -89,6 +93,7 @@ automatically, and git ignores it, so your settings are kept across updates.
 |-------------|-------------|-------------------------------------------------------------------|
 | `BIND_ADDR` | `127.0.0.1` | Host address to listen on. `0.0.0.0` exposes it to your network.  |
 | `HOST_PORT` | `8091`      | Port on the host.                                                 |
+| `POLARIS_VERSION` | `latest` | Release to run, such as `2.0.0`, to stay on it until you change it. |
 
 The application itself reads the following variables. `docker-compose.yml`
 already sets them, so you only need them when
@@ -130,13 +135,16 @@ upgrades the databases says so at the top. Back up first (see above), then run:
 ./scripts/update.sh
 ```
 
-The script pulls the latest code (fast-forward only), rebuilds and restarts
-the container, and removes old images. Doing it by hand is equivalent to:
+The script pulls the latest code (fast-forward only) and image, restarts the
+container, and removes old images. Doing it by hand is equivalent to:
 
 ```bash
 git pull
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
+
+If you build from source, run `./scripts/update.sh --build` instead.
 
 Databases are upgraded automatically on start-up and keep all their data.
 Upgrades are one-way: once upgraded, a database cannot be opened by an older
@@ -157,53 +165,38 @@ DATA_DIR=./data UPLOADS_DIR=./data/uploads ./polaris
 The server listens on port 8091 on **all interfaces**. If the machine is on a
 shared network, restrict access as described under [Security](#security).
 
-## Stat formulas
+## Stats
 
-> [!NOTE]
-> Polaris calculates stats (HP, Attack, Carry Limit, Luck, and the rest) with
-> formulas tuned for the author's own setting and rules. They are not meant
-> to be a general system, and there is no screen for changing them. If you
-> use Polaris for your own world, you will probably want different numbers.
+Which stats characters have, and how each one is calculated, is up to each
+story: open **Settings → Stats**. A new story starts with the stats Polaris
+has always had (VIT, STR, HP, Attack, Luck, Carry Limit and the rest), so
+nothing changes until you change it.
 
-Stats are calculated every time a character is shown and are never stored,
-so changing a formula updates every character at once. It needs no database
-change and puts no data at risk.
+Stats come in five fixed categories, each with its own behaviour:
 
-The calculation runs in two steps:
+| Category | How it works |
+|---|---|
+| **Primary Stats** | Points are spent on them; a character has as many points as the *points to spend* formula gives (by default one per level). Their value is the points plus bonuses. |
+| **Base Stats** | Calculated by formula. Bonuses from classes, subclasses, specializations, races and body types count once per level; gear bonuses count once. |
+| **Special Stats**, **Special Defenses**, **Lifeskills** | Calculated by formula. Every bonus counts once. |
 
-1. **Primary stats.** The 8 points spent on a character (VIT, DEF, RES, STR,
-   DEX, INT, WIS, AGL) plus any bonuses from class, race, gear and so on.
-2. **Everything else** (Base Stats, Special Stats, Special Defenses and
-   Lifeskills) is calculated from those by the formulas in
-   [`backend/stats_formulas.go`](backend/stats_formulas.go). Class, race and
-   gear bonuses are added on top afterwards.
+In each category you can add, remove, rename and reorder stats and change
+their formulas. A formula is built from blocks: values (the character's
+level, age, height, weight, any stat, or a **Typed value** that gives the stat
+a box on the character sheet), numbers, `+ − × ÷ ^` and brackets, and a few
+functions (`min`, `max`, `round`, `clamp`, `curve`, …). For example:
 
-### Using your own formulas
+> HP = 10 + **VIT** × 10 + **Level** × 2
 
-Don't edit `stats_formulas.go`: updates change it. Put your formulas in a
-file of your own instead, which updates never touch:
+Each stat can also have a unit, a number of decimals, a lowest and highest
+value, and a multiplier (Carry Limit uses one: the stronger the character,
+the more they carry). A preview shows what every formula gives for a sample
+character while you edit.
 
-1. Copy `backend/stats_custom.go.example` to `backend/stats_custom.go`. Git
-   ignores that file, so `git pull` and `scripts/update.sh` leave it alone.
-2. In it, list only the stats you want to change. Every stat you leave out
-   keeps its default. For example, 15 HP per point of VIT instead of 10:
-
-   ```go
-   "hp": 10 + in.VIT*15 + in.Level*2,
-   ```
-
-   The example file lists everything a formula can read (`in.STR`,
-   `in.Level`, `in.WeightKG`, numbers typed on the sheet with
-   `in.Base("sanity")`, …) and the name of every stat you can set.
-3. Rebuild: `docker compose up -d --build`. If you have Go installed, run
-   `cd backend && go test ./...` first; it catches typos before they reach
-   the server.
-
-To go back to the defaults, delete `stats_custom.go` and rebuild.
-
-If an update ever changes what formulas can read, your file stops compiling
-and the build error names it. Compare it with `stats_formulas.go`, adjust,
-and rebuild. Your numbers never change silently.
+Stats are calculated every time a character is shown and never stored, so
+saving updates every character at once. Removing a stat also removes what was
+typed for it on character sheets and the bonuses given to it (Polaris asks
+first). Copying another story's Character Assets copies its stats too.
 
 ## Privacy
 

@@ -15,11 +15,12 @@
           <span class="status-badge" :class="'is-' + character.status">{{ statusLabel(character.status) }}</span>
         </p>
         <p v-if="character.nickname" class="nickname">"{{ character.nickname }}"</p>
-        <p class="class-line">
+        <p v-if="classLine" class="class-line">
           <span v-if="character.class_icon" class="class-icon"><IconImage :src="character.class_icon" :name="character.class_name" /></span>
           {{ classLine }}
         </p>
-        <p class="stat-line">{{ character.hp }} HP | {{ character.mp }} MP</p>
+        <p v-if="character.subclass_name" class="class-line">{{ character.subclass_name }}</p>
+        <p v-if="character.stats?.length" class="stat-line">{{ character.stats.map((s) => `${Math.round(s.value)} ${$t(s.name)}`).join(" | ") }}</p>
       </div>
     </div>
 
@@ -45,10 +46,12 @@ defineEmits(['toggle-select'])
 
 const paddedLevel = computed(() => String(props.character.level).padStart(2, '0'))
 
+// Class | Specialization; the subclass has a line of its own.
 const classLine = computed(() => {
-  const { class_name, subclass_name } = props.character
-  if (class_name && subclass_name) return `${class_name} | ${subclass_name}`
-  return class_name || subclass_name || t('Unclassed')
+  const { class_name, specialization_name, subclass_name } = props.character
+  const parts = [class_name, specialization_name].filter(Boolean)
+  if (parts.length) return parts.join(' | ')
+  return subclass_name ? '' : t('Unclassed')
 })
 
 const initials = computed(() =>

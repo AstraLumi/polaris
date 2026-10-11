@@ -1,5 +1,8 @@
+# The two build stages run on the building machine's own platform and the Go
+# compiler targets the image's, so building for ARM needs no emulation.
+
 # --- Stage 1: build the frontend ---
-FROM node:24-alpine AS frontend-build
+FROM --platform=$BUILDPLATFORM node:24-alpine AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
@@ -7,13 +10,15 @@ COPY frontend/ ./
 RUN npm run build
 
 # --- Stage 2: build the Go binary, embedding the compiled frontend ---
-FROM golang:1.27-alpine AS backend-build
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS backend-build
+ARG TARGETOS
+ARG TARGETARCH
 WORKDIR /app/backend
 COPY backend/ ./
 COPY --from=frontend-build /app/frontend/dist ./static
 # go.sum should be committed; if it isn't yet, generate it here.
 RUN if [ ! -f go.sum ]; then go mod tidy; fi \
-    && CGO_ENABLED=0 go build -o polaris .
+    && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o polaris .
 
 # --- Stage 3: minimal runtime image ---
 FROM alpine:3.24

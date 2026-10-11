@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -235,7 +236,7 @@ func parseGearForm(r *http.Request) (gearInput, error) {
 	if !isGearSlotType(in.slot) {
 		return in, fmt.Errorf("choose a slot for this gear")
 	}
-	in.weight = roundTo2(parseFloatDefault(r.FormValue("weight"), 0))
+	in.weight = math.Round(parseFloatDefault(r.FormValue("weight"), 0)*100) / 100
 	if in.weight < 0 {
 		return in, fmt.Errorf("weight can't be negative")
 	}

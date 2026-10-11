@@ -5,104 +5,44 @@
       <span v-if="editable" class="points-badge">{{ $t('Points available: {n}', { n: pointsAvailable }) }}</span>
     </div>
 
-    <div class="stats-grid">
-      <div v-for="stat in statList" :key="stat.key" class="stat-box">
-        <span class="stat-label" :title="$t(stat.name)">{{ stat.label }}</span>
-        <span class="stat-value">{{ modelValue[stat.key] }}</span>
+    <div v-if="primaryStats.length" class="stats-grid" :style="{ '--stat-cols': Math.min(primaryStats.length, 8) }">
+      <div v-for="stat in primaryStats" :key="stat.key" class="stat-box">
+        <span class="stat-label" :title="statName(stat)">{{ statShort(stat) }}</span>
+        <span class="stat-value">{{ points(stat.key) }}</span>
         <span v-if="effectiveDelta(stat.key) !== 0" class="stat-effective" :title="$t('With bonuses from class, race, body type and gear')">
-          → {{ Math.round(primary[stat.key]) }}
+          → {{ Math.round(final(stat.key)) }}
         </span>
         <div v-if="editable" class="stat-buttons">
-          <button
-            class="stat-btn"
-            :disabled="modelValue[stat.key] < 10"
-            @click="adjust(stat.key, -10)"
-          >
-            -10
-          </button>
-          <button
-            class="stat-btn"
-            :disabled="modelValue[stat.key] < 1"
-            @click="adjust(stat.key, -1)"
-          >
-            -1
-          </button>
-          <button class="stat-btn" :disabled="pointsAvailable < 1" @click="adjust(stat.key, 1)">
-            +1
-          </button>
-          <button class="stat-btn" :disabled="pointsAvailable < 10" @click="adjust(stat.key, 10)">
-            +10
-          </button>
+          <button class="stat-btn" :disabled="points(stat.key) < 10" @click="adjust(stat.key, -10)">-10</button>
+          <button class="stat-btn" :disabled="points(stat.key) < 1" @click="adjust(stat.key, -1)">-1</button>
+          <button class="stat-btn" :disabled="pointsAvailable < 1" @click="adjust(stat.key, 1)">+1</button>
+          <button class="stat-btn" :disabled="pointsAvailable < 10" @click="adjust(stat.key, 10)">+10</button>
         </div>
       </div>
     </div>
 
     <div class="derived-grid">
-      <div class="derived-col-stack">
-        <div class="derived-col glass-panel">
-          <h4>{{ $t('Base Stats') }}</h4>
-          <div v-for="row in baseRows" :key="row.label" class="derived-row">
-            <span>{{ $t(row.label) }}</span>
-            <span>{{ row.value }}</span>
+      <div v-for="(stack, i) in stacks" :key="i" class="derived-col-stack">
+        <div v-for="group in stack" :key="group.id" class="derived-col glass-panel">
+          <h4>{{ $t(group.label) }}</h4>
+          <div
+            v-for="stat in group.stats"
+            :key="stat.key"
+            class="derived-row"
+            :class="{ 'is-editable': editable && isTyped(stat) }"
+          >
+            <span>{{ statName(stat) }}</span>
+            <input
+              v-if="editable && isTyped(stat)"
+              class="inline-number"
+              type="number"
+              :step="stepOf(stat)"
+              :value="typedValue(stat)"
+              :aria-label="statName(stat)"
+              @input="updateBase(stat, $event.target.value)"
+            />
+            <span>{{ formatStat(stat, final(stat.key)) }}</span>
           </div>
-        </div>
-
-        <div class="derived-col glass-panel">
-          <h4>{{ $t('Special Stats') }}</h4>
-          <div class="derived-row">
-            <span>{{ $t('Luck') }}</span>
-            <span>{{ special.luck.toFixed(2) }}x</span>
-          </div>
-          <div class="derived-row">
-            <span>{{ $t('Carry Limit') }}</span>
-            <span>{{ special.carry_limit.toFixed(1) }} kg</span>
-          </div>
-          <div class="derived-row">
-            <span>{{ $t('Fall Damage Threshold') }}</span>
-            <span>{{ special.fall_damage_threshold.toFixed(1) }} m</span>
-          </div>
-          <BaseFinalRow
-            v-for="row in thresholdRows"
-            :key="row.key"
-            :label="row.label"
-            :editable="editable"
-            :base-value="specialBases[row.key]"
-            :final-value="special[row.key]"
-            :unit="row.unit"
-            whole-numbers
-            @update:base-value="updateBase(row.key, $event)"
-          />
-        </div>
-      </div>
-
-      <div class="derived-col-stack">
-        <div class="derived-col glass-panel">
-          <h4>{{ $t('Special Defenses') }}</h4>
-          <BaseFinalRow
-            v-for="row in elementalRows"
-            :key="row.key"
-            :label="row.label"
-            :editable="editable"
-            :base-value="specialBases[row.key]"
-            :final-value="elemental[row.finalKey]"
-            unit="x"
-            :decimals="2"
-            @update:base-value="updateBase(row.key, $event)"
-          />
-        </div>
-
-        <div class="derived-col glass-panel">
-          <h4>{{ $t('Lifeskill') }}</h4>
-          <BaseFinalRow
-            v-for="row in lifeskillRows"
-            :key="row.key"
-            :label="row.label"
-            :editable="editable"
-            :base-value="specialBases[row.key]"
-            :final-value="lifeskills[row.key]"
-            whole-numbers
-            @update:base-value="updateBase(row.key, $event)"
-          />
         </div>
       </div>
     </div>
@@ -110,183 +50,57 @@
 </template>
 
 <script setup>
-import { computed, h } from 'vue'
-import { t, tr } from '../i18n'
+import { computed } from 'vue'
+import { STAT_CATEGORIES, statSystem, statsIn, statName, statShort, isTyped, formatStat } from '../stats'
 
+// The Build tab: the story's stats (Settings → Stats) for one version.
 const props = defineProps({
-  modelValue: { type: Object, required: true }, // { vit, def, res, str, dex, intel, wis, agl }
-  computed: { type: Object, required: true }, // { base, special, elemental, lifeskills }
-  specialBases: { type: Object, default: () => ({}) }, // flat map keyed like SPECIAL_BASE_KEYS
-  level: { type: Number, default: 1 },
+  modelValue: { type: Object, required: true }, // points per primary stat
+  computed: { type: Object, required: true }, // every stat's final value, by key
+  specialBases: { type: Object, default: () => ({}) }, // typed values of calculated stats, by key
+  points: { type: Number, default: 0 }, // points the version has to spend
   editable: { type: Boolean, default: false },
 })
 const emit = defineEmits(['update:modelValue', 'update:specialBases'])
 
-const statList = [
-  { key: 'vit', label: 'VIT', name: tr('Vitality') },
-  { key: 'def', label: 'DEF', name: tr('Defense') },
-  { key: 'res', label: 'RES', name: tr('Resistance') },
-  { key: 'str', label: 'STR', name: tr('Strength') },
-  { key: 'dex', label: 'DEX', name: tr('Dexterity') },
-  { key: 'intel', label: 'INT', name: tr('Intelligence') },
-  { key: 'wis', label: 'WIS', name: tr('Wisdom') },
-  { key: 'agl', label: 'AGL', name: tr('Agility') },
-]
+const primaryStats = computed(() => statsIn('primary', statSystem.stats))
 
-const thresholdRows = [
-  { key: 'sanity', label: tr('Sanity'), unit: 'γ' },
-  { key: 'heat_threshold', label: tr('Heat Threshold'), unit: '°C' },
-  { key: 'cold_threshold', label: tr('Cold Threshold'), unit: '°C' },
-]
-
-// finalKey differs from key because the computed.elemental payload uses
-// the same resist_* names as the bases now, but is kept as a separate
-// lookup here in case that ever needs to diverge again.
-const elementalRows = [
-  { key: 'resist_water', finalKey: 'resist_water', label: tr('Water') },
-  { key: 'resist_fire', finalKey: 'resist_fire', label: tr('Fire') },
-  { key: 'resist_wind', finalKey: 'resist_wind', label: tr('Wind') },
-  { key: 'resist_earth', finalKey: 'resist_earth', label: tr('Earth') },
-  { key: 'resist_ice', finalKey: 'resist_ice', label: tr('Ice') },
-  { key: 'resist_thunder', finalKey: 'resist_thunder', label: tr('Thunder') },
-  { key: 'resist_impact', finalKey: 'resist_impact', label: tr('Impact') },
-]
-
-const lifeskillRows = [
-  { key: 'cooking', label: tr('Cooking') },
-  { key: 'crafting', label: tr('Crafting') },
-  { key: 'alchemy', label: tr('Alchemy') },
-  { key: 'hunting', label: tr('Hunting') },
-  { key: 'gathering', label: tr('Gathering') },
-  { key: 'farming', label: tr('Farming') },
-  { key: 'blessing', label: tr('Blessing') },
-  { key: 'enchanting', label: tr('Enchanting') },
-  { key: 'smithing', label: tr('Smithing') },
-]
-
-const pointsAvailable = computed(() => {
-  const spent = statList.reduce((sum, s) => sum + (props.modelValue[s.key] || 0), 0)
-  return props.level - spent
+// Base and Special Stats on the left, Special Defenses and Lifeskills on the
+// right; a category with no stats is left out.
+const stacks = computed(() => {
+  const group = (id) => ({ ...STAT_CATEGORIES.find((c) => c.id === id), stats: statsIn(id, statSystem.stats) })
+  return [
+    [group('base'), group('special')],
+    [group('defense'), group('lifeskill')],
+  ]
+    .map((stack) => stack.filter((g) => g.stats.length))
+    .filter((stack) => stack.length)
 })
+
+const points = (key) => props.modelValue[key] || 0
+const final = (key) => props.computed?.[key] ?? 0
+
+const pointsAvailable = computed(() => props.points - primaryStats.value.reduce((sum, s) => sum + points(s.key), 0))
 
 function adjust(key, delta) {
-  const current = props.modelValue[key] || 0
-  const next = Math.max(0, current + delta)
-  emit('update:modelValue', { ...props.modelValue, [key]: next })
+  emit('update:modelValue', { ...props.modelValue, [key]: Math.max(0, points(key) + delta) })
 }
-
-function updateBase(key, num) {
-  emit('update:specialBases', { ...props.specialBases, [key]: num })
-}
-
-const primary = computed(() => ({
-  vit: props.modelValue.vit ?? 0,
-  def: props.modelValue.def ?? 0,
-  res: props.modelValue.res ?? 0,
-  str: props.modelValue.str ?? 0,
-  dex: props.modelValue.dex ?? 0,
-  intel: props.modelValue.intel ?? 0,
-  wis: props.modelValue.wis ?? 0,
-  agl: props.modelValue.agl ?? 0,
-  ...(props.computed.primary || {}),
-}))
 
 function effectiveDelta(key) {
-  return Math.round(primary.value[key]) - (props.modelValue[key] || 0)
+  return props.computed?.[key] === undefined ? 0 : Math.round(final(key)) - points(key)
 }
 
-const baseRows = computed(() => {
-  const b = props.computed.base || {}
-  return [
-    { label: 'HP', value: Math.round(b.hp ?? 0) },
-    { label: 'MP', value: Math.round(b.mp ?? 0) },
-    { label: tr('Attack'), value: Math.round(b.attack ?? 0) },
-    { label: tr('Potency'), value: Math.round(b.potency ?? 0) },
-    { label: tr('Defense'), value: Math.round(b.defense ?? 0) },
-    { label: tr('Resistance'), value: Math.round(b.resistance ?? 0) },
-    { label: tr('Speed'), value: Math.round(b.speed ?? 0) },
-  ]
-})
+// Whole numbers for stats shown without decimals, else as fine as shown.
+const stepOf = (stat) => (stat.decimals ? String(10 ** -stat.decimals) : '1')
+const typedValue = (stat) => {
+  const v = props.specialBases[stat.key] ?? 0
+  return stat.decimals ? v : Math.round(v)
+}
 
-const special = computed(() => ({
-  luck: 1,
-  carry_limit: 0,
-  fall_damage_threshold: 0,
-  sanity: 0,
-  heat_threshold: 0,
-  cold_threshold: 0,
-  ...(props.computed.special || {}),
-}))
-
-const elemental = computed(() => ({
-  resist_water: 1,
-  resist_fire: 1,
-  resist_wind: 1,
-  resist_earth: 1,
-  resist_ice: 1,
-  resist_thunder: 1,
-  resist_impact: 1,
-  ...(props.computed.elemental || {}),
-}))
-
-const lifeskills = computed(() => ({
-  cooking: 0,
-  crafting: 0,
-  alchemy: 0,
-  hunting: 0,
-  gathering: 0,
-  farming: 0,
-  blessing: 0,
-  enchanting: 0,
-  smithing: 0,
-  ...(props.computed.lifeskills || {}),
-}))
-
-// A single row shared by Special Stats' thresholds, Special Defenses, and
-// Lifeskill: in edit mode it's [label] [editable base input] [final
-// value]; in view mode the input collapses away and it's just
-// [label] [final value] — same shape everything else uses.
-const BaseFinalRow = {
-  props: {
-    label: String,
-    editable: Boolean,
-    baseValue: { type: Number, default: 0 },
-    finalValue: { type: Number, default: 0 },
-    unit: { type: String, default: '' },
-    decimals: { type: Number, default: 1 },
-    wholeNumbers: { type: Boolean, default: false },
-  },
-  emits: ['update:baseValue'],
-  render() {
-    let formatted
-    if (this.unit === 'x') {
-      formatted = `${this.finalValue.toFixed(this.decimals)}x`
-    } else if (this.wholeNumbers) {
-      formatted = `${Math.round(this.finalValue)}${this.unit ? ' ' + this.unit : ''}`
-    } else {
-      formatted = `${this.finalValue.toFixed(this.decimals)}${this.unit ? ' ' + this.unit : ''}`
-    }
-
-    const children = [h('span', t(this.label))]
-    if (this.editable) {
-      children.push(
-        h('input', {
-          class: 'inline-number',
-          type: 'number',
-          step: this.wholeNumbers ? '1' : '0.1',
-          value: this.wholeNumbers ? Math.round(this.baseValue) : this.baseValue,
-          onInput: (e) => {
-            const num = parseFloat(e.target.value)
-            const safe = Number.isNaN(num) ? 0 : num
-            this.$emit('update:baseValue', this.wholeNumbers ? Math.round(safe) : safe)
-          },
-        }),
-      )
-    }
-    children.push(h('span', formatted))
-
-    return h('div', { class: ['derived-row', this.editable && 'is-editable'] }, children)
-  },
+function updateBase(stat, raw) {
+  const num = parseFloat(raw)
+  const safe = Number.isNaN(num) ? 0 : num
+  emit('update:specialBases', { ...props.specialBases, [stat.key]: stat.decimals ? safe : Math.round(safe) })
 }
 </script>
 
@@ -318,7 +132,7 @@ const BaseFinalRow = {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
+  grid-template-columns: repeat(var(--stat-cols, 8), minmax(64px, 1fr));
   gap: 0.5rem;
   margin-bottom: 1.75rem;
   overflow-x: auto;

@@ -101,47 +101,48 @@ export async function setCurrentVersion(versionId) {
   return res.json()
 }
 
-// Mirrors backend/stats.go's target_stat keys, grouped for display in the
-// asset modifier form. Every group here is a flat-modifier target — the
-// same shape used across every asset type, not just Races.
-export const MODIFIER_GROUPS = [
-  {
-    label: tr('Primary Stats'),
-    keys: [
-      ['vit', 'VIT'], ['def', 'DEF'], ['res', 'RES'], ['str', 'STR'],
-      ['dex', 'DEX'], ['intel', 'INT'], ['wis', 'WIS'], ['agl', 'AGL'],
-    ],
+// The stat system (backend/statsystem.go): which stats the story has and
+// their formulas. stats.js keeps the loaded copy every page reads.
+export const statSystemApi = {
+  // The saved system, with how much each stat is in use.
+  async get() {
+    const res = await fetch(`${BASE}/stat-system`)
+    if (!res.ok) throw apiError('failed to load stats')
+    return res.json()
   },
-  {
-    label: tr('Base Stats'),
-    keys: [
-      ['hp', 'HP'], ['mp', 'MP'], ['attack', tr('Attack')], ['potency', tr('Potency')],
-      ['defense', tr('Defense')], ['resistance', tr('Resistance')], ['speed', tr('Speed')],
-    ],
+  async defaults() {
+    const res = await fetch(`${BASE}/stat-system/defaults`)
+    if (!res.ok) throw apiError('failed to load stats')
+    return res.json()
   },
-  {
-    label: tr('Special Stats'),
-    keys: [
-      ['luck', tr('Luck')], ['carry_limit', tr('Carry Limit')], ['fall_damage_threshold', tr('Fall Damage Threshold')],
-      ['sanity', tr('Sanity')], ['heat_threshold', tr('Heat Threshold')], ['cold_threshold', tr('Cold Threshold')],
-    ],
+  // Throws an error carrying .issues (one per problem) when something in it
+  // is wrong.
+  async save(system) {
+    const res = await fetch(`${BASE}/stat-system`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(system),
+    })
+    if (res.status === 422) {
+      const err = apiError('Some formulas need fixing.')
+      err.issues = (await res.json()).issues || []
+      throw err
+    }
+    if (!res.ok) throw apiError((await res.text()).trim() || 'failed to save stats')
+    return res.json()
   },
-  {
-    label: tr('Special Defenses'),
-    keys: [
-      ['resist_water', tr('Water')], ['resist_fire', tr('Fire')], ['resist_wind', tr('Wind')], ['resist_earth', tr('Earth')],
-      ['resist_ice', tr('Ice')], ['resist_thunder', tr('Thunder')], ['resist_impact', tr('Impact')],
-    ],
+  // Checks an unsaved system and works it out for a sample character:
+  // { issues, points, values }.
+  async preview(system, sample) {
+    const res = await fetch(`${BASE}/stat-system/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...system, sample }),
+    })
+    if (!res.ok) throw apiError('failed to load stats')
+    return res.json()
   },
-  {
-    label: tr('Lifeskill'),
-    keys: [
-      ['cooking', tr('Cooking')], ['crafting', tr('Crafting')], ['alchemy', tr('Alchemy')], ['hunting', tr('Hunting')],
-      ['gathering', tr('Gathering')], ['farming', tr('Farming')], ['blessing', tr('Blessing')],
-      ['enchanting', tr('Enchanting')], ['smithing', tr('Smithing')],
-    ],
-  },
-]
+}
 
 // Generic CRUD for asset types that are just "a name plus modifiers"
 // (Classes, Races, Body Types) — same shape, different endpoint.
@@ -152,20 +153,21 @@ function simpleAssetApi(basePath) {
       if (!res.ok) throw apiError(`failed to load ${basePath}`)
       return res.json()
     },
-    async create(name, modifiers) {
+    // extra: more fields for the kinds that have them ({ kingdom_id } for races).
+    async create(name, modifiers, extra = {}) {
       const res = await fetch(`${BASE}/${basePath}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, modifiers }),
+        body: JSON.stringify({ name, modifiers, ...extra }),
       })
       if (!res.ok) throw apiError(await res.text() || `failed to create ${basePath}`)
       return res.json()
     },
-    async update(id, name, modifiers) {
+    async update(id, name, modifiers, extra = {}) {
       const res = await fetch(`${BASE}/${basePath}/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, modifiers }),
+        body: JSON.stringify({ name, modifiers, ...extra }),
       })
       if (!res.ok) throw apiError(await res.text() || `failed to update ${basePath}`)
       return res.json()
@@ -203,20 +205,20 @@ export const specializationsApi = {
     if (!res.ok) throw apiError('failed to load specialization')
     return res.json()
   },
-  async create(name, classId, modifiers) {
+  async create(name, classId, modifiers, kingdomId = null) {
     const res = await fetch(`${BASE}/specializations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, class_id: classId, modifiers }),
+      body: JSON.stringify({ name, class_id: classId, modifiers, kingdom_id: kingdomId }),
     })
     if (!res.ok) throw apiError(await res.text() || 'failed to create specialization')
     return res.json()
   },
-  async update(id, name, classId, modifiers) {
+  async update(id, name, classId, modifiers, kingdomId = null) {
     const res = await fetch(`${BASE}/specializations/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, class_id: classId, modifiers }),
+      body: JSON.stringify({ name, class_id: classId, modifiers, kingdom_id: kingdomId }),
     })
     if (!res.ok) throw apiError(await res.text() || 'failed to update specialization')
     return res.json()
@@ -389,18 +391,11 @@ export function buildGearFormData({ name, slot, weight, modifiers }, iconFile, i
   return fd
 }
 
-// Mirrors backend/stats.go's specialBaseKeys exactly — every stat that
-// has a typed base value, sent as its own form field.
-export const SPECIAL_BASE_KEYS = [
-  'sanity', 'heat_threshold', 'cold_threshold',
-  'resist_water', 'resist_fire', 'resist_wind', 'resist_earth', 'resist_ice', 'resist_thunder', 'resist_impact',
-  'cooking', 'crafting', 'alchemy', 'hunting', 'gathering', 'farming', 'blessing', 'enchanting', 'smithing',
-]
-
 // Builds the multipart form the backend's updateVersionHandler expects out
-// of the flat reactive form object the edit page works with, plus the
-// special-stat bases (a separate flat object keyed by SPECIAL_BASE_KEYS).
-export function buildVersionFormData(form, specialBases, pictureFile, spellIds, equippedGear) {
+// of the flat reactive form object the edit page works with, plus the stats:
+// build (points per primary stat) and specialBases (the typed values of
+// calculated stats), both keyed by stat.
+export function buildVersionFormData(form, build, specialBases, pictureFile, spellIds, equippedGear) {
   const fd = new FormData()
   const fields = [
     'version_date', 'version_reference', 'name', 'nickname', 'level',
@@ -408,14 +403,12 @@ export function buildVersionFormData(form, specialBases, pictureFile, spellIds, 
     'gender', 'race', 'height', 'weight', 'body_type', 'age', 'human_birth_date',
     'blood_type', 'born_in', 'nation', 'born_in_location_id', 'nation_location_id', 'birth_date', 'deaths', 'chapter_id',
     'description', 'bio', 'speech_mannerisms', 'status',
-    'vit', 'def', 'res', 'str', 'dex', 'intel', 'wis', 'agl',
   ]
   for (const field of fields) {
     fd.append(field, form[field] ?? '')
   }
-  for (const key of SPECIAL_BASE_KEYS) {
-    fd.append(key, specialBases[key] ?? 0)
-  }
+  fd.append('build', JSON.stringify(build || {}))
+  fd.append('special_bases', JSON.stringify(specialBases || {}))
   // Omitted entirely when not provided, which tells the backend to leave
   // the character's spells untouched.
   if (Array.isArray(spellIds)) fd.append('spell_ids', JSON.stringify(spellIds))

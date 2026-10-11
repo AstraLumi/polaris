@@ -32,7 +32,9 @@ type storyDetail struct {
 	BodyTypeName   string   `json:"body_type_name"`
 	Age            *float64 `json:"age"`
 	HumanBirthDate string   `json:"human_birth_date"`
-	BloodType      string   `json:"blood_type"`
+	// Blood type, Born in and Birth date are the character's own (the same in
+	// every version), shown with each version's story for convenience.
+	BloodType string `json:"blood_type"`
 	// Born in / Nation link to Map locations. born_in / nation carry the
 	// old free text only while it hasn't been matched to a location.
 	BornIn           string `json:"born_in"`
@@ -66,11 +68,12 @@ type versionDetail struct {
 	SpecializationName string                `json:"specialization_name"`
 	PicturePath        string                `json:"picture_path"`
 	Story              storyDetail           `json:"story"`
-	Build              BuildStats            `json:"build"`
-	SpecialBases       map[string]float64    `json:"special_bases"`
+	Build              map[string]int        `json:"build"`         // points spent on each primary stat
+	SpecialBases       map[string]float64    `json:"special_bases"` // [base] typed for calculated stats
 	Spells             []spellDetail         `json:"spells"`
-	Gear               map[string]gearDetail `json:"gear"` // equipped pieces by equipment slot
-	Computed           ComputedStats         `json:"computed"`
+	Gear               map[string]gearDetail `json:"gear"`     // equipped pieces by equipment slot
+	Computed           map[string]float64    `json:"computed"` // every stat by key, bonuses included
+	Points             int                   `json:"points"`   // points this version has to spend on primary stats
 }
 
 // listVersionsHandler orders the current version first, then the rest by
@@ -190,28 +193,16 @@ func createVersionHandler(db *sql.DB) http.HandlerFunc {
 		if _, err := tx.Exec(`
 			INSERT INTO character_story
 				(version_id, gender, race_id, height, weight, body_type_id,
-				 human_birth_date, blood_type, born_in, nation, born_in_location_id, nation_location_id,
-				 birth_date, deaths, description, bio, speech_mannerisms, status)
+				 human_birth_date, nation, nation_location_id,
+				 deaths, description, bio, speech_mannerisms, status)
 			SELECT ?, gender, race_id, height, weight, body_type_id,
-				human_birth_date, blood_type, born_in, nation, born_in_location_id, nation_location_id,
-				birth_date, deaths,
-				description, bio, speech_mannerisms, status
+				human_birth_date, nation, nation_location_id,
+				deaths, description, bio, speech_mannerisms, status
 			FROM character_story WHERE version_id = ?
 		`, newVersionID, sourceID); err != nil {
 			tx.Rollback()
 			http.Error(w, "failed to clone story data", http.StatusInternalServerError)
 			log.Printf("clone story: %v", err)
-			return
-		}
-
-		if _, err := tx.Exec(`
-			INSERT INTO character_build (version_id, vit, def, res, str, dex, intel, wis, agl)
-			SELECT ?, vit, def, res, str, dex, intel, wis, agl
-			FROM character_build WHERE version_id = ?
-		`, newVersionID, sourceID); err != nil {
-			tx.Rollback()
-			http.Error(w, "failed to clone build data", http.StatusInternalServerError)
-			log.Printf("clone build: %v", err)
 			return
 		}
 
@@ -273,23 +264,21 @@ func buildVersionDetail(db *sql.DB, versionID string) (*versionDetail, error) {
 			v.class_id, v.subclass_id, v.specialization_id,
 			COALESCE(st.gender, ''), COALESCE(r.name, ''), st.height, st.weight, COALESCE(bt.name, ''),
 			st.age,
-			COALESCE(st.human_birth_date, ''), COALESCE(st.blood_type, ''),
-			COALESCE(st.born_in, ''), COALESCE(st.nation, ''), COALESCE(st.birth_date, ''),
-			st.born_in_location_id, COALESCE(bl.name, ''), st.nation_location_id, COALESCE(nl.name, ''),
+			COALESCE(st.human_birth_date, ''), COALESCE(ch.blood_type, ''),
+			COALESCE(ch.born_in, ''), COALESCE(st.nation, ''), COALESCE(ch.birth_date, ''),
+			ch.born_in_location_id, COALESCE(bl.name, ''), st.nation_location_id, COALESCE(nl.name, ''),
 			COALESCE(st.deaths, 0), COALESCE(st.description, ''), COALESCE(st.bio, ''),
-			COALESCE(st.speech_mannerisms, ''), COALESCE(st.status, 'alive'), st.race_id, st.body_type_id, v.chapter_id,
-			COALESCE(b.vit, 0), COALESCE(b.def, 0), COALESCE(b.res, 0), COALESCE(b.str, 0),
-			COALESCE(b.dex, 0), COALESCE(b.intel, 0), COALESCE(b.wis, 0), COALESCE(b.agl, 0)
+			COALESCE(st.speech_mannerisms, ''), COALESCE(st.status, 'alive'), st.race_id, st.body_type_id, v.chapter_id
 		FROM character_versions v
+		JOIN characters ch ON ch.id = v.character_id
 		LEFT JOIN classes cl ON cl.id = v.class_id
 		LEFT JOIN subclasses sc ON sc.id = v.subclass_id
 		LEFT JOIN specializations sp ON sp.id = v.specialization_id
 		LEFT JOIN character_story st ON st.version_id = v.id
 		LEFT JOIN races r ON r.id = st.race_id
 		LEFT JOIN body_types bt ON bt.id = st.body_type_id
-		LEFT JOIN locations bl ON bl.id = st.born_in_location_id
+		LEFT JOIN locations bl ON bl.id = ch.born_in_location_id
 		LEFT JOIN locations nl ON nl.id = st.nation_location_id
-		LEFT JOIN character_build b ON b.version_id = v.id
 		WHERE v.id = ?
 	`, versionID).Scan(
 		&d.ID, &d.CharacterID, &d.IsCurrent, &d.VersionDate, &d.VersionReference,
@@ -303,8 +292,6 @@ func buildVersionDetail(db *sql.DB, versionID string) (*versionDetail, error) {
 		&bornInLoc, &d.Story.BornInName, &nationLoc, &d.Story.NationName,
 		&d.Story.Deaths, &d.Story.Description, &d.Story.Bio,
 		&d.Story.SpeechMannerisms, &d.Story.Status, &raceID, &bodyTypeID, &chapterID,
-		&d.Build.VIT, &d.Build.DEF, &d.Build.RES, &d.Build.STR,
-		&d.Build.DEX, &d.Build.Intel, &d.Build.WIS, &d.Build.AGL,
 	)
 	if err != nil {
 		return nil, err
@@ -333,19 +320,15 @@ func buildVersionDetail(db *sql.DB, versionID string) (*versionDetail, error) {
 		d.Story.Age = &age.Float64
 	}
 
-	// Luck needs an age to work from; a version with no age set yet falls
-	// back to 18 (the neutral point on the curve) rather than defaulting
-	// to 0, which would otherwise read as "newborn" and skew Luck high.
-	ageForCalc := 18.0
-	if age.Valid {
-		ageForCalc = age.Float64
-	}
-
 	specialBases, err := loadSpecialBases(db, d.ID)
 	if err != nil {
 		return nil, err
 	}
-	d.SpecialBases = specialBases
+	sys, err := loadStatSystem(db)
+	if err != nil {
+		return nil, err
+	}
+	d.Build, d.SpecialBases = sys.split(specialBases)
 
 	spells, err := loadVersionSpells(db, d.ID)
 	if err != nil {
@@ -363,11 +346,15 @@ func buildVersionDetail(db *sql.DB, versionID string) (*versionDetail, error) {
 		itemIDs = append(itemIDs, g.ID)
 	}
 
-	computed, err := computeStats(
-		db, d.Level, ageForCalc,
-		resolveOrDefault(height, defaultHeightCM),
-		resolveOrDefault(weight, defaultWeightKG),
-		d.Build, specialBases,
+	in := statInputs{
+		Level:    float64(d.Level),
+		Age:      resolveOrDefault(age, defaultAge),
+		HeightCM: resolveOrDefault(height, defaultHeightCM),
+		WeightKG: resolveOrDefault(weight, defaultWeightKG),
+		Values:   specialBases,
+	}
+	d.Points = sys.pointsFor(in)
+	computed, err := computeStats(db, sys, in,
 		categoryRefs{
 			ClassID:          classID,
 			SubclassID:       subclassID,
@@ -417,8 +404,9 @@ func replaceCharacterTags(tx *sql.Tx, characterID int64, tags []string) error {
 }
 
 // loadSpecialBases reads every character_special_bases row for a version
-// into a plain map. Missing keys are simply absent — Go's zero value for a
-// missing map key (0) is exactly the right default.
+// into a plain map: the points spent on primary stats and the [base] typed
+// for calculated ones, by stat key. Missing keys are simply absent — Go's
+// zero value for a missing map key (0) is exactly the right default.
 func loadSpecialBases(db *sql.DB, versionID int64) (map[string]float64, error) {
 	rows, err := db.Query(`SELECT stat_key, value FROM character_special_bases WHERE version_id = ?`, versionID)
 	if err != nil {
@@ -438,16 +426,32 @@ func loadSpecialBases(db *sql.DB, versionID int64) (map[string]float64, error) {
 	return bases, rows.Err()
 }
 
-// saveSpecialBases replaces every special-base row for a version with
-// whatever's in values. Deleting and re-inserting is simpler than an
-// upsert-per-key loop and this table is tiny (under 20 rows per version).
-func saveSpecialBases(tx *sql.Tx, versionID string, values map[string]float64) error {
+// split sorts a version's typed numbers into the points spent on primary
+// stats and the [base] of calculated stats. Every primary stat is listed, at 0
+// when nothing is spent on it.
+func (s *statSystem) split(values map[string]float64) (map[string]int, map[string]float64) {
+	points, bases := map[string]int{}, map[string]float64{}
+	for _, k := range s.keys("primary") {
+		points[k] = int(values[k])
+	}
+	for k, v := range values {
+		if d := s.def(k); d != nil && d.Category != "primary" {
+			bases[k] = v
+		}
+	}
+	return points, bases
+}
+
+// saveSpecialBases replaces every typed number of a version (points and
+// bases) with whatever's in values, keeping only the story's own stats.
+// Deleting and re-inserting is simpler than an upsert-per-key loop and the
+// table holds a few dozen rows per version.
+func saveSpecialBases(tx *sql.Tx, versionID string, sys *statSystem, values map[string]float64) error {
 	if _, err := tx.Exec(`DELETE FROM character_special_bases WHERE version_id = ?`, versionID); err != nil {
 		return err
 	}
-	for _, key := range specialBaseKeys {
-		v, ok := values[key]
-		if !ok || v == 0 {
+	for key, v := range values {
+		if v == 0 || sys.def(key) == nil {
 			continue // don't bother storing zeros — a missing key already reads as 0
 		}
 		if _, err := tx.Exec(
@@ -491,10 +495,10 @@ func getCurrentVersionHandler(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-// updateVersionHandler saves identity, story, and the 8 primary stats in
-// one request. Points spent (the sum of all 8 stats) can't exceed level —
-// that's checked here as a safety net even though the UI already enforces
-// it while editing.
+// updateVersionHandler saves identity, story, and the typed stats in one
+// request. Points spent on primary stats can't exceed what the stat system's
+// points formula gives — checked here as a safety net even though the UI
+// already enforces it while editing.
 func updateVersionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		versionID := r.PathValue("id")
@@ -524,24 +528,49 @@ func updateVersionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			}
 		}
 
-		build := BuildStats{
-			VIT:   parseIntDefault(r.FormValue("vit"), 0),
-			DEF:   parseIntDefault(r.FormValue("def"), 0),
-			RES:   parseIntDefault(r.FormValue("res"), 0),
-			STR:   parseIntDefault(r.FormValue("str"), 0),
-			DEX:   parseIntDefault(r.FormValue("dex"), 0),
-			Intel: parseIntDefault(r.FormValue("intel"), 0),
-			WIS:   parseIntDefault(r.FormValue("wis"), 0),
-			AGL:   parseIntDefault(r.FormValue("agl"), 0),
-		}
-		if build.Sum() > level {
-			http.Error(w, fmt.Sprintf("stat points spent (%d) exceed level (%d)", build.Sum(), level), http.StatusBadRequest)
+		// build: { primary stat: points }; special_bases: { stat: [base] }.
+		// Either can be left out, keeping what's saved.
+		sys, err := loadStatSystem(db)
+		if err != nil {
+			http.Error(w, "failed to load stats", http.StatusInternalServerError)
 			return
 		}
-
-		specialBaseValues := map[string]float64{}
-		for _, key := range specialBaseKeys {
-			specialBaseValues[key] = parseFloatDefault(r.FormValue(key), 0)
+		vid, _ := strconv.ParseInt(versionID, 10, 64)
+		saved, err := loadSpecialBases(db, vid)
+		if err != nil {
+			http.Error(w, "failed to load stats", http.StatusInternalServerError)
+			return
+		}
+		build, specialBaseValues := sys.split(saved)
+		if raw := r.FormValue("build"); raw != "" && json.Unmarshal([]byte(raw), &build) != nil {
+			http.Error(w, "invalid stats", http.StatusBadRequest)
+			return
+		}
+		if raw := r.FormValue("special_bases"); raw != "" && json.Unmarshal([]byte(raw), &specialBaseValues) != nil {
+			http.Error(w, "invalid stats", http.StatusBadRequest)
+			return
+		}
+		typed := map[string]float64{}
+		for k, v := range specialBaseValues {
+			if d := sys.def(k); d != nil && d.Category != "primary" {
+				typed[k] = v
+			}
+		}
+		spent := 0
+		for _, k := range sys.keys("primary") {
+			build[k] = max(build[k], 0)
+			spent += build[k]
+			typed[k] = float64(build[k])
+		}
+		budget := sys.pointsFor(statInputs{
+			Level:    float64(level),
+			Age:      parseFloatDefault(r.FormValue("age"), defaultAge),
+			HeightCM: parseFloatDefault(r.FormValue("height"), defaultHeightCM),
+			WeightKG: parseFloatDefault(r.FormValue("weight"), defaultWeightKG),
+		})
+		if spent > budget {
+			http.Error(w, fmt.Sprintf("stat points spent (%d) exceed the points available (%d)", spent, budget), http.StatusBadRequest)
+			return
 		}
 
 		bornInLoc := parseLocationID(db, r.FormValue("born_in_location_id"), false)
@@ -601,8 +630,7 @@ func updateVersionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 		_, err = tx.Exec(`
 			UPDATE character_story
 			SET gender = ?, race_id = ?, height = ?, weight = ?, body_type_id = ?, age = ?,
-				human_birth_date = ?, blood_type = ?, born_in = ?, nation = ?, birth_date = ?,
-				born_in_location_id = ?, nation_location_id = ?,
+				human_birth_date = ?, nation = ?, nation_location_id = ?,
 				deaths = ?, description = ?, bio = ?, speech_mannerisms = ?, status = ?
 			WHERE version_id = ?
 		`,
@@ -610,12 +638,8 @@ func updateVersionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			parseNullableFloat(r.FormValue("height")), parseNullableFloat(r.FormValue("weight")), bodyTypeID,
 			parseNullableFloat(r.FormValue("age")),
 			nullableString(normalizeStoryDate(r.FormValue("human_birth_date"))),
-			nullableString(strings.TrimSpace(r.FormValue("blood_type"))),
 			// Typed text only survives while nothing is linked.
-			nullableString(unlinkedText(r.FormValue("born_in"), bornInLoc)),
-			nullableString(unlinkedText(r.FormValue("nation"), nationLoc)),
-			nullableString(normalizeStoryDate(r.FormValue("birth_date"))),
-			bornInLoc, nationLoc,
+			nullableString(unlinkedText(r.FormValue("nation"), nationLoc)), nationLoc,
 			parseIntDefault(r.FormValue("deaths"), 0),
 			nullableString(r.FormValue("description")),
 			nullableString(r.FormValue("bio")),
@@ -630,19 +654,24 @@ func updateVersionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			return
 		}
 
-		_, err = tx.Exec(`
-			UPDATE character_build
-			SET vit = ?, def = ?, res = ?, str = ?, dex = ?, intel = ?, wis = ?, agl = ?
-			WHERE version_id = ?
-		`, build.VIT, build.DEF, build.RES, build.STR, build.DEX, build.Intel, build.WIS, build.AGL, versionID)
-		if err != nil {
+		// Birth date, blood type and birthplace belong to the character, so
+		// saving them from any version changes them for all.
+		if _, err := tx.Exec(`
+			UPDATE characters SET birth_date = ?, blood_type = ?, born_in = ?, born_in_location_id = ?
+			WHERE id = (SELECT character_id FROM character_versions WHERE id = ?)
+		`,
+			nullableString(normalizeStoryDate(r.FormValue("birth_date"))),
+			nullableString(strings.TrimSpace(r.FormValue("blood_type"))),
+			nullableString(unlinkedText(r.FormValue("born_in"), bornInLoc)), bornInLoc,
+			versionID,
+		); err != nil {
 			tx.Rollback()
-			http.Error(w, "failed to update build", http.StatusInternalServerError)
-			log.Printf("update character_build: %v", err)
+			http.Error(w, "failed to update character", http.StatusInternalServerError)
+			log.Printf("update characters: %v", err)
 			return
 		}
 
-		if err := saveSpecialBases(tx, versionID, specialBaseValues); err != nil {
+		if err := saveSpecialBases(tx, versionID, sys, typed); err != nil {
 			tx.Rollback()
 			http.Error(w, "failed to update special stat bases", http.StatusInternalServerError)
 			log.Printf("save special bases: %v", err)
@@ -715,6 +744,8 @@ func updateVersionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 
 		if file, header, err := r.FormFile("picture"); err == nil {
 			defer file.Close()
+			var oldPath sql.NullString
+			db.QueryRow(`SELECT picture_path FROM character_versions WHERE id = ?`, versionID).Scan(&oldPath)
 			relPath, saveErr := savePicture(uploadsDir, versionID, header.Filename, file)
 			if saveErr != nil {
 				log.Printf("savePicture: %v", saveErr)
@@ -723,6 +754,8 @@ func updateVersionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 				relPath, versionID,
 			); err != nil {
 				log.Printf("update picture_path: %v", err)
+			} else if oldPath.Valid && oldPath.String != relPath {
+				removePicture(uploadsDir, oldPath.String)
 			}
 		}
 
@@ -766,14 +799,13 @@ func deleteVersionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			return
 		}
 
-		if picturePath.Valid && picturePath.String != "" {
-			removePicture(uploadsDir, picturePath.String)
-		}
-
 		if _, err := db.Exec(`DELETE FROM character_versions WHERE id = ?`, versionID); err != nil {
 			http.Error(w, "failed to delete version", http.StatusInternalServerError)
 			log.Printf("delete version: %v", err)
 			return
+		}
+		if picturePath.Valid {
+			removePicture(uploadsDir, picturePath.String)
 		}
 
 		if isCurrent {

@@ -17,6 +17,7 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/familyLayout.test.mjs
     node frontend/tests/dateDigits.test.mjs
     node frontend/tests/storyTime.test.mjs
+    node frontend/tests/formulaBlocks.test.mjs
 
 Run all of these before committing. `backend/static/` is build output (only
 `.gitkeep` is tracked); the tests do not need it.
@@ -44,28 +45,37 @@ Run all of these before committing. `backend/static/` is build output (only
   gaps. Only the interface is translated, never user content.
 - **Built-in icons live in two places that must match:**
   `frontend/src/builtinIcons.js` and the allowlists in `backend/icons.go`.
-- **Stats:** `stat_modifiers` has source types class, subclass, specialization,
-  race, body_type and item (gear). Gear is always flat. `computeStats` is a
-  two-phase pipeline (primary, then derived). The derived formulas live in
-  `backend/stats_formulas.go`; a user's own go in the git-ignored
-  `backend/stats_custom.go` (template: `stats_custom.go.example`). Changing
-  `StatInputs` or the stat keys breaks those files, so keep the example and
-  the README's "Stat formulas" section in step. Never commit
-  `stats_custom.go`.
+- **Stats:** each story defines its own stats and formulas (`stat_defs`,
+  `stat_settings`; `backend/statsystem.go`, edited in Settings → Stats).
+  Nothing in the code may assume a stat key exists: the sheet, bonus forms,
+  compare page and card all read the stat system (`frontend/src/stats.js`).
+  The five categories are fixed and keep their behaviour (primary = points,
+  base = per-level bonuses from assets, gear always flat). Formulas are text
+  parsed by `backend/statformula.go`; `frontend/src/formulaBlocks.js` reads
+  the same syntax as blocks, so change both together. `defaultStatSystem()`
+  must keep giving the pre-2.0 numbers (`TestDefaultStatSystemMatchesTheOldFormulas`).
+  Typed numbers (points and [base]) live in `character_special_bases` by key.
 - **Uploads:** handlers emit `/uploads/<file>`; a rewriter turns that into
   `/uploads/s/<story-id>/<file>`. Uploaded files are served sandboxed with
   `nosniff`. Do not weaken that.
 - Dates are `DD-MM-YYYY`, there is no year 0. They are typed in one box
-  (`components/DateField.vue`) whose digits fill in from the right
-  (`dateDigits.js`); a year alone is emitted as just the year.
+  (`components/DateField.vue`): digits are typed and shown left to right
+  but read from the right, the last four being the year (`dateDigits.js`);
+  a year alone is emitted as just the year.
+- Birth date, blood type and Born in belong to the character (`characters`
+  columns, schema 23), not to a version; the version form edits them for
+  all versions.
 - Any file input must read `e.target.files[0]` *before* clearing the input
   (see `dropFile(keepInput)`), or the picker shows "No file chosen".
 
 ## Deployment
 
-The server pulls from this repo. Deploying is: commit, push, then run the
-update script on the server (`scripts/update.sh` does `git pull` and
-`docker compose up -d --build`). Local configuration lives in an untracked
+The server pulls from this repo. Pushing a `v*` tag makes
+`.github/workflows/release.yml` publish `ghcr.io/astralumi/polaris` (X.Y.Z,
+X.Y, latest; amd64 and arm64). Deploying is: release, then run the update
+script on the server (`scripts/update.sh` does `git pull`, `docker compose
+pull` and `up -d`; `--build` builds from the code instead, needed for changes
+pushed without a release). Local configuration lives in an untracked
 `.env` (see `.env.example`). Never commit `.env`, databases, uploads or
 anything with personal data, and never put personal domains or network
 addresses in tracked files. The repo is meant to be publishable as is.

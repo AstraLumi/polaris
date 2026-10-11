@@ -86,10 +86,7 @@
 
       <section v-if="tab === 'story'" class="story-tab glass-panel">
         <div class="field-grid">
-          <label class="field">
-            <span>{{ $t('Gender') }}</span>
-            <input v-model="form.gender" type="text" />
-          </label>
+          <GenderField v-model="form.gender" class="span-2" />
           <ComboBoxField
             v-model="form.race"
             :label="$t('Race')"
@@ -155,6 +152,7 @@
             <input v-model.number="form.deaths" type="number" min="0" />
           </label>
         </div>
+        <p class="shared-note">{{ $t('Birth date, blood type and Born in belong to the character: changing them here changes them in every version.') }}</p>
         <div class="long-fields">
           <TagInput
             v-model="form.tags"
@@ -182,17 +180,18 @@
           v-model="buildStats"
           :special-bases="specialBases"
           :computed="previewComputed"
-          :level="form.level"
+          :points="previewPoints"
           editable
-          @update:special-bases="mergeSpecialBases"
+          @update:special-bases="specialBases = $event"
         />
         <p class="preview-note">
           {{ $t('Base Stats, Special Stats, and Special Defenses above update a moment after you stop typing — they include bonuses from Class/Subclass/Specialization/Race/Body Type and equipped Gear.') }}
+          <router-link to="/settings?tab=stats">{{ $t('Change the stats and their formulas') }}</router-link>
         </p>
       </section>
 
       <section v-else-if="tab === 'gear'" class="gear-tab-wrap glass-panel">
-        <GearTab v-model="equippedGear" editable :carry-limit="previewComputed.special?.carry_limit || 0" />
+        <GearTab v-model="equippedGear" editable :carry-limit="previewComputed.carry_limit || 0" />
         <p class="preview-note">{{ $t('Gear changes are saved with the Save button below, like everything else.') }}</p>
       </section>
 
@@ -221,10 +220,11 @@
 <script setup>
 import { reactive, ref, computed, watch, onMounted } from 'vue'
 import { t } from '../i18n'
-import { fetchCharacters, fetchVersion, updateVersion, buildVersionFormData, fetchCatalogs, fetchLocationOptions, fetchComputePreview, SPECIAL_BASE_KEYS } from '../api'
+import { fetchCharacters, fetchVersion, updateVersion, buildVersionFormData, fetchCatalogs, fetchLocationOptions, fetchComputePreview } from '../api'
 import BuildStatsPanel from '../components/BuildStatsPanel.vue'
 import ComboBoxField from '../components/ComboBoxField.vue'
 import DateField from '../components/DateField.vue'
+import GenderField from '../components/GenderField.vue'
 import TagInput from '../components/TagInput.vue'
 import LocationSelect from '../components/LocationSelect.vue'
 import GearTab from '../components/GearTab.vue'
@@ -292,49 +292,20 @@ const form = reactive({
   description: '',
   bio: '',
   speech_mannerisms: '',
-  vit: 0,
-  def: 0,
-  res: 0,
-  str: 0,
-  dex: 0,
-  intel: 0,
-  wis: 0,
-  agl: 0,
 })
 
-const buildStats = computed({
-  get: () => ({
-    vit: form.vit, def: form.def, res: form.res, str: form.str,
-    dex: form.dex, intel: form.intel, wis: form.wis, agl: form.agl,
-  }),
-  set: (next) => {
-    form.vit = next.vit
-    form.def = next.def
-    form.res = next.res
-    form.str = next.str
-    form.dex = next.dex
-    form.intel = next.intel
-    form.wis = next.wis
-    form.agl = next.agl
-  },
-})
-
-const specialBases = reactive(
-  Object.fromEntries(SPECIAL_BASE_KEYS.map((key) => [key, 0])),
-)
-
-function mergeSpecialBases(next) {
-  Object.assign(specialBases, next)
-}
+// Points spent per primary stat, and the typed values of calculated stats,
+// both by stat key (the story's own stats, Settings → Stats).
+const buildStats = ref({})
+const specialBases = ref({})
 
 // Recomputes the Build tab's preview from the server, debounced so rapid
 // stat-button clicks don't fire a request per click. This replaced a
 // client-side JS mirror of the formulas that never included
 // stat_modifiers — which was the bug where Race/Class/etc bonuses only
 // showed on the View page, never here.
-const previewComputed = ref({
-  base: {}, special: {}, elemental: {}, lifeskills: {},
-})
+const previewComputed = ref({})
+const previewPoints = ref(0)
 let previewTimer = null
 
 function schedulePreview() {
@@ -344,9 +315,9 @@ function schedulePreview() {
 
 async function refreshPreview() {
   try {
-    previewComputed.value = await fetchComputePreview({
+    const preview = await fetchComputePreview({
       level: form.level || 1,
-      age: form.age === '' || form.age === null ? 18 : Number(form.age),
+      age: form.age === '' || form.age === null ? null : Number(form.age),
       height: form.height === '' || form.height === null ? 0 : Number(form.height),
       weight: form.weight === '' || form.weight === null ? 0 : Number(form.weight),
       class: form.class,
@@ -354,18 +325,19 @@ async function refreshPreview() {
       specialization: form.specialization,
       race: form.race,
       body_type: form.body_type,
-      vit: form.vit, def: form.def, res: form.res, str: form.str,
-      dex: form.dex, intel: form.intel, wis: form.wis, agl: form.agl,
-      special_bases: { ...specialBases },
+      build: buildStats.value,
+      special_bases: specialBases.value,
       gear_ids: Object.values(equippedGear.value).map((g) => g.id),
     })
+    previewComputed.value = preview.computed
+    previewPoints.value = preview.points
   } catch (err) {
     // Keep showing the last known-good preview rather than blanking it.
   }
 }
 
 watch(form, schedulePreview, { deep: true })
-watch(specialBases, schedulePreview, { deep: true })
+watch([buildStats, specialBases], schedulePreview, { deep: true })
 watch(equippedGear, schedulePreview)
 
 const availableSubclasses = computed(() => {
@@ -399,7 +371,7 @@ function onFileChange(e) {
 // load or save.
 let snapshot = ''
 const formState = () =>
-  JSON.stringify([form, specialBases, assignedSpells.value.map((s) => s.id), Object.entries(equippedGear.value).map(([slot, g]) => [slot, g?.id])])
+  JSON.stringify([form, buildStats.value, specialBases.value, assignedSpells.value.map((s) => s.id), Object.entries(equippedGear.value).map(([slot, g]) => [slot, g?.id])])
 const dirty = () => !loading.value && !loadError.value && (formState() !== snapshot || !!pictureFile.value)
 useUnsavedGuard(dirty)
 useSaveShortcut(() => !saving.value && !loading.value && !loadError.value && save())
@@ -438,18 +410,11 @@ async function load() {
       description: data.story.description,
       bio: data.story.bio,
       speech_mannerisms: data.story.speech_mannerisms,
-      vit: data.build.vit,
-      def: data.build.def,
-      res: data.build.res,
-      str: data.build.str,
-      dex: data.build.dex,
-      intel: data.build.intel,
-      wis: data.build.wis,
-      agl: data.build.agl,
     })
-    Object.assign(specialBases, Object.fromEntries(SPECIAL_BASE_KEYS.map((key) => [key, 0])))
-    Object.assign(specialBases, data.special_bases || {})
-    previewComputed.value = data.computed
+    buildStats.value = { ...(data.build || {}) }
+    specialBases.value = { ...(data.special_bases || {}) }
+    previewComputed.value = data.computed || {}
+    previewPoints.value = data.points ?? data.level
     assignedSpells.value = data.spells || []
     equippedGear.value = data.gear || {}
     existingPicturePath.value = data.picture_path
@@ -470,7 +435,8 @@ async function save() {
   try {
     const formData = buildVersionFormData(
       form,
-      specialBases,
+      buildStats.value,
+      specialBases.value,
       pictureFile.value,
       assignedSpells.value.map((s) => s.id),
       equippedGear.value,
@@ -478,6 +444,7 @@ async function save() {
     const updated = await updateVersion(props.versionId, formData)
     existingPicturePath.value = updated.picture_path
     previewComputed.value = updated.computed
+    previewPoints.value = updated.points
     assignedSpells.value = updated.spells || []
     equippedGear.value = updated.gear || {}
     pictureFile.value = null
@@ -500,6 +467,12 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.shared-note {
+  margin: -0.25rem 0 1rem;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
 .status-picker {
   display: flex;
   gap: 0.35rem;

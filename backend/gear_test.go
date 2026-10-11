@@ -27,7 +27,7 @@ func postGear(t *testing.T, h http.Handler, id string, fields map[string]string,
 type versionOut struct {
 	ID       int64                 `json:"id"`
 	Gear     map[string]gearDetail `json:"gear"`
-	Computed ComputedStats         `json:"computed"`
+	Computed map[string]float64    `json:"computed"`
 }
 
 func gearTestSetup(t *testing.T) (http.Handler, storyInfo, int64) {
@@ -128,28 +128,28 @@ func TestGearStatsAreFlatAndStack(t *testing.T) {
 		t.Fatal("a helmet must not fit a ring slot")
 	}
 	// Derived Attack includes 2*STR; STR rose by 2 (glove worn twice), so +4 from that.
-	if d := dressed.Computed.Base.Attack - bare.Computed.Base.Attack; d != 5+4 {
+	if d := dressed.Computed["attack"] - bare.Computed["attack"]; d != 5+4 {
 		t.Errorf("attack diff = %v, want 9 (flat 5 + 4 from the worn-twice glove's STR)", d)
 	}
-	if d := dressed.Computed.Primary.STR - bare.Computed.Primary.STR; d != 2 {
+	if d := dressed.Computed["str"] - bare.Computed["str"]; d != 2 {
 		t.Errorf("same glove in two slots should count twice: STR diff %v", d)
 	}
-	if d := dressed.Computed.Primary.VIT - bare.Computed.Primary.VIT; d != 2 {
+	if d := dressed.Computed["vit"] - bare.Computed["vit"]; d != 2 {
 		t.Errorf("vit diff %v", d)
 	}
-	if d := dressed.Computed.Elemental.Fire - bare.Computed.Elemental.Fire; d < 0.0999 || d > 0.1001 {
+	if d := dressed.Computed["resist_fire"] - bare.Computed["resist_fire"]; d < 0.0999 || d > 0.1001 {
 		t.Errorf("fire resistance diff %v", d)
 	}
-	if d := dressed.Computed.Lifeskills.Cooking - bare.Computed.Lifeskills.Cooking; d != 3 {
+	if d := dressed.Computed["cooking"] - bare.Computed["cooking"]; d != 3 {
 		t.Errorf("lifeskill diff %v", d)
 	}
 
 	// The live preview takes the same pieces.
 	pv := do(t, h, "POST", "/api/s/"+s.ID+"/compute-preview", strings.NewReader(`{"level":10,"gear_ids":[`+idStr(helm.ID)+`]}`), "application/json")
-	var pc ComputedStats
+	var pc struct{ Computed map[string]float64 }
 	json.Unmarshal(pv.Body.Bytes(), &pc)
-	if pc.Primary.VIT != 2 {
-		t.Errorf("preview vit %v", pc.Primary.VIT)
+	if pc.Computed["vit"] != 2 {
+		t.Errorf("preview vit %v", pc.Computed["vit"])
 	}
 
 	// Leaving `gear` out of a save leaves the outfit alone.
@@ -195,7 +195,7 @@ func TestGearStatsAreFlatAndStack(t *testing.T) {
 	if _, ok := gone.Gear["helmet"]; ok {
 		t.Error("deleted gear still equipped")
 	}
-	if gone.Computed.Primary.VIT != bare.Computed.Primary.VIT {
+	if gone.Computed["vit"] != bare.Computed["vit"] {
 		t.Error("deleted gear still gives stats")
 	}
 }

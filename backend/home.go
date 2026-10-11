@@ -103,8 +103,8 @@ func homeHandler(db *sql.DB) http.HandlerFunc {
 		}
 		for _, s := range []spec{
 			{"location", "No founding date", `SELECT id, name FROM locations WHERE kind = 'major' AND color IS NOT NULL AND (founding_date IS NULL OR founding_date = '') ORDER BY name COLLATE NOCASE LIMIT 20`},
-			{"character", "No in-story birth date", `SELECT c.id, v.name FROM characters c JOIN character_versions v ON v.character_id = c.id AND v.is_current = 1 LEFT JOIN character_story st ON st.version_id = v.id WHERE st.birth_date IS NULL OR st.birth_date = '' ORDER BY v.name COLLATE NOCASE LIMIT 20`},
-			{"character", "Birthplace needs a map location", `SELECT c.id, v.name FROM characters c JOIN character_versions v ON v.character_id = c.id AND v.is_current = 1 JOIN character_story st ON st.version_id = v.id WHERE st.born_in_location_id IS NULL AND st.born_in IS NOT NULL AND st.born_in != '' ORDER BY v.name COLLATE NOCASE LIMIT 20`},
+			{"character", "No in-story birth date", `SELECT c.id, v.name FROM characters c JOIN character_versions v ON v.character_id = c.id AND v.is_current = 1 WHERE c.birth_date IS NULL OR c.birth_date = '' ORDER BY v.name COLLATE NOCASE LIMIT 20`},
+			{"character", "Birthplace needs a map location", `SELECT c.id, v.name FROM characters c JOIN character_versions v ON v.character_id = c.id AND v.is_current = 1 WHERE c.born_in_location_id IS NULL AND c.born_in IS NOT NULL AND c.born_in != '' ORDER BY v.name COLLATE NOCASE LIMIT 20`},
 			{"character", "Nation needs a kingdom", `SELECT c.id, v.name FROM characters c JOIN character_versions v ON v.character_id = c.id AND v.is_current = 1 JOIN character_story st ON st.version_id = v.id WHERE st.nation_location_id IS NULL AND st.nation IS NOT NULL AND st.nation != '' ORDER BY v.name COLLATE NOCASE LIMIT 20`},
 		} {
 			lr, err := db.Query(s.q)

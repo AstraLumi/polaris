@@ -69,9 +69,9 @@ func resolveSource(db *sql.DB, sourceType string, sourceID int64) (src eventSour
 	case "character":
 		var name, birth string
 		err := db.QueryRow(`
-			SELECT v.name, COALESCE(st.birth_date, '')
+			SELECT v.name, COALESCE(c.birth_date, '')
 			FROM character_versions v
-			LEFT JOIN character_story st ON st.version_id = v.id
+			JOIN characters c ON c.id = v.character_id
 			WHERE v.character_id = ? AND v.is_current = 1`, sourceID).Scan(&name, &birth)
 		if err != nil {
 			return src, "", false

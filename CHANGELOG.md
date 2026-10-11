@@ -4,6 +4,29 @@ What changed in each version of Polaris. The same notes are on the
 [Releases](https://github.com/AstraLumi/polaris/releases) page. Versions are
 Major.Minor.Bugfix: new features raise Minor, fixes raise Bugfix.
 
+## 2.0.0 (2026-10-11)
+
+**Upgrade:** stories are upgraded to database schema 23 the first time they are opened. This can't be undone, so export your stories first. If you made your own stat formulas in `backend/stats_custom.go`, delete that file before updating (it no longer builds) and make the formulas again under Settings → Stats.
+
+### Added
+
+- **Your own stats.** Settings → Stats sets which stats your characters have and how each one is calculated. In each category (Primary Stats, Base Stats, Special Stats, Special Defenses, Lifeskills) you can add, remove, rename and reorder stats, and change their formulas, units, decimals and limits. Formulas are built from blocks (Level, VIT, numbers, + − × ÷, functions such as min, max and round), a stat can be calculated from another, and a preview shows what each formula gives while you edit. The character sheet, the bonuses of classes, races and gear, the character cards and version comparisons all follow it. Every story starts with the stats Polaris has always had, so nothing changes until you change it.
+- **Ready-made Docker image.** Each release is published as `ghcr.io/astralumi/polaris` (for regular PCs and servers, and ARM boards such as a Raspberry Pi). `docker compose up -d` runs it and `scripts/update.sh` updates to it; `--build` still builds from the code. `POLARIS_VERSION` in `.env` pins a release.
+- Races and specializations can be native to a kingdom. Their wiki articles link it, and the kingdom's article lists them.
+- The calendar marks each character's birthday every year (when the birth date has a day and month), with their age.
+- Gender is picked with three icons (unknown, male, female), with a box for anything else.
+
+### Changed
+
+- Birth date, blood type and birthplace belong to the character instead of each version: changing them in any version changes them for all. Upgrading takes them from the current version (or another one when it has none).
+- Date boxes show the digits in the order you type them (13-02-1456); the last four digits are still the year, so a year alone still works.
+- Character cards show "Class | Specialization", with the subclass on its own line.
+
+### Fixed
+
+- Replacing a character's picture showed the old picture again after saving.
+- Pressing inside a window and letting go outside it no longer closes the window.
+
 ## 1.6.4 (2026-10-11)
 
 ### Changed

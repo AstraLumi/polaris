@@ -17,6 +17,8 @@
           </label>
         </div>
 
+        <LocationSelect v-model="kingdomId" :label="$t('Native to')" :options="locationOptions" kingdom-only />
+
         <p v-if="classes.length === 0" class="hint warning">
           {{ $t('No classes exist yet — add one on the Classes tab first.') }}
         </p>
@@ -42,8 +44,9 @@
 <script setup>
 import { ref } from 'vue'
 import { t } from '../i18n'
-import { specializationsApi } from '../api'
+import { specializationsApi, fetchLocationOptions } from '../api'
 import ModifierForm from './ModifierForm.vue'
+import LocationSelect from './LocationSelect.vue'
 
 const props = defineProps({
   classes: { type: Array, required: true }, // [{id, name}]
@@ -54,6 +57,9 @@ const emit = defineEmits(['close', 'saved'])
 const name = ref(props.specialization?.name ?? '')
 const classId = ref(props.specialization?.class_id ?? '')
 const modifiers = ref({ ...(props.specialization?.modifiers ?? {}) })
+const kingdomId = ref(props.specialization?.kingdom_id ?? null)
+const locationOptions = ref([])
+fetchLocationOptions().then((o) => (locationOptions.value = o))
 const submitting = ref(false)
 const error = ref('')
 
@@ -63,9 +69,9 @@ async function submit() {
   error.value = ''
   try {
     if (props.specialization) {
-      await specializationsApi.update(props.specialization.id, name.value.trim(), classId.value, modifiers.value)
+      await specializationsApi.update(props.specialization.id, name.value.trim(), classId.value, modifiers.value, kingdomId.value)
     } else {
-      await specializationsApi.create(name.value.trim(), classId.value, modifiers.value)
+      await specializationsApi.create(name.value.trim(), classId.value, modifiers.value, kingdomId.value)
     }
     emit('saved')
   } catch (err) {

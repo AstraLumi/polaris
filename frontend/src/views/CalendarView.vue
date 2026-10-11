@@ -108,13 +108,14 @@ import { wikiPath } from '../wiki'
 import { t } from '../i18n'
 
 // The story's calendar, a month at a time: everything the timeline shows
-// (events, births, foundings, dated lore) on the day it happens. The custom
+// (events, births, foundings, dated lore) on the day it happens, and every
+// character's birthday. The custom
 // calendar has no weeks, so the days simply run in rows. The month in view is
 // in the URL (?y=&m=), so going back returns to it.
 
 const COLS = 7
 const MAX_CHIPS = 3
-const KINDS = ['event', 'birth', 'founding', 'lore']
+const KINDS = ['event', 'birth', 'birthday', 'founding', 'lore']
 
 const route = useRoute()
 const router = useRouter()
@@ -141,7 +142,31 @@ const fallback = computed(() => {
   return last ? { year: last.d.year, month: last.d.month } : { year: 1, month: 1 }
 })
 
-const inMonth = computed(() => points.value.filter((n) => n.d.year === year.value && n.d.month === month.value))
+// Every year after a character is born on a known day, their birthday. Only
+// births saved with a day and month count. There is no year 0, so the age
+// skips it.
+const birthdays = computed(() =>
+  points.value
+    .filter((n) => n.kind === 'birth' && n.full_date && n.d.year < year.value)
+    .map((n) => {
+      const age = year.value - n.d.year - (n.d.year < 0 && year.value > 0 ? 1 : 0)
+      return {
+        ...n,
+        key: 'birthday:' + n.source_id,
+        kind: 'birthday',
+        name: t("{name}'s birthday ({age})", { name: n.source_name, age }),
+        date: formatStoryDate({ day: n.d.day, month: n.d.month, year: year.value }),
+        d: { ...n.d, year: year.value },
+        location_name: '',
+      }
+    }),
+)
+
+const inMonth = computed(() =>
+  [...points.value, ...birthdays.value]
+    .filter((n) => n.d.year === year.value && n.d.month === month.value)
+    .sort((a, b) => a.d.day - b.d.day),
+)
 const byDay = computed(() => {
   const out = {}
   for (const n of inMonth.value) (out[n.d.day] ||= []).push(n)
@@ -149,7 +174,7 @@ const byDay = computed(() => {
 })
 const monthCounts = computed(() => {
   const out = {}
-  for (const n of points.value) if (n.d.year === year.value) out[n.d.month] = (out[n.d.month] || 0) + 1
+  for (const n of [...points.value, ...birthdays.value]) if (n.d.year === year.value) out[n.d.month] = (out[n.d.month] || 0) + 1
   return out
 })
 const listed = computed(() => (picked.value ? byDay.value[picked.value] || [] : inMonth.value))
@@ -193,12 +218,12 @@ const goPoint = (n) => n && go(n.d.year, n.d.month)
 
 const newEventDate = computed(() => formatStoryDate({ day: picked.value || 1, month: month.value, year: year.value }))
 
-const kindLabel = (k) => (k === 'birth' ? t('Birth') : k === 'founding' ? t('Founding') : k === 'lore' ? t('Lore') : t('Event'))
+const kindLabel = (k) => (k === 'birth' ? t('Birth') : k === 'birthday' ? t('Birthday') : k === 'founding' ? t('Founding') : k === 'lore' ? t('Lore') : t('Event'))
 
 // Where each kind of point leads, as on the timeline.
 function linkOf(n) {
   if (n.kind === 'event') return `/events/${n.event_id}`
-  if (n.kind === 'birth') return `/characters/${n.source_id}`
+  if (n.kind === 'birth' || n.kind === 'birthday') return `/characters/${n.source_id}`
   if (n.kind === 'lore') return wikiPath('lore', n.source_id)
   return n.event_id ? `/events/${n.event_id}` : mapPath(n.source_id)
 }
@@ -368,6 +393,9 @@ timelineApi
 }
 .kind-birth {
   background: var(--kind-birth);
+}
+.kind-birthday {
+  background: color-mix(in srgb, var(--kind-birth) 50%, transparent);
 }
 .kind-founding {
   background: var(--kind-founding);

@@ -5,9 +5,60 @@ import (
 	"testing"
 )
 
+// rollBackSchema23 turns a fresh database back into schema 22.
+func rollBackSchema23(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, q := range []string{
+		`ALTER TABLE character_story ADD COLUMN blood_type TEXT`,
+		`ALTER TABLE character_story ADD COLUMN born_in TEXT`,
+		`ALTER TABLE character_story ADD COLUMN born_in_location_id INTEGER REFERENCES locations(id) ON DELETE SET NULL`,
+		`ALTER TABLE character_story ADD COLUMN birth_date TEXT`,
+		`ALTER TABLE characters DROP COLUMN birth_date`,
+		`ALTER TABLE characters DROP COLUMN blood_type`,
+		`ALTER TABLE characters DROP COLUMN born_in`,
+		`ALTER TABLE characters DROP COLUMN born_in_location_id`,
+		`ALTER TABLE races DROP COLUMN kingdom_id`,
+		`ALTER TABLE specializations DROP COLUMN kingdom_id`,
+		`UPDATE schema_meta SET value = '22' WHERE key = 'schema_version'`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+}
+
+// rollBackSchema22 turns a fresh database back into schema 21.
+func rollBackSchema22(t *testing.T, db *sql.DB) {
+	t.Helper()
+	rollBackSchema23(t, db)
+	for _, q := range []string{
+		`CREATE TABLE character_build (
+			version_id INTEGER PRIMARY KEY REFERENCES character_versions(id) ON DELETE CASCADE,
+			vit   INTEGER NOT NULL DEFAULT 0,
+			def   INTEGER NOT NULL DEFAULT 0,
+			res   INTEGER NOT NULL DEFAULT 0,
+			str   INTEGER NOT NULL DEFAULT 0,
+			dex   INTEGER NOT NULL DEFAULT 0,
+			intel INTEGER NOT NULL DEFAULT 0,
+			wis   INTEGER NOT NULL DEFAULT 0,
+			agl   INTEGER NOT NULL DEFAULT 0
+		)`,
+		`INSERT INTO character_build (version_id) SELECT id FROM character_versions`,
+		`DELETE FROM character_special_bases WHERE stat_key IN ('vit', 'def', 'res', 'str', 'dex', 'intel', 'wis', 'agl')`,
+		`DROP TABLE stat_defs`,
+		`DROP TABLE stat_settings`,
+		`UPDATE schema_meta SET value = '21' WHERE key = 'schema_version'`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+}
+
 // rollBackSchema21 turns a fresh database back into schema 20.
 func rollBackSchema21(t *testing.T, db *sql.DB) {
 	t.Helper()
+	rollBackSchema22(t, db)
 	for _, q := range []string{
 		`DROP INDEX idx_specializations_class_name`,
 		`UPDATE schema_meta SET value = '20' WHERE key = 'schema_version'`,

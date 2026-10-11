@@ -1,6 +1,6 @@
-// The single-box date input (components/DateField.vue): what's typed is a
-// string of digits that fills in from the right — the last four are the
-// year, the two before them the month, the two before those the day.
+// The single-box date input (components/DateField.vue): the digits are typed
+// and shown left to right as usual, and read from the right: the last four
+// are the year, the two before them the month, the rest the day.
 //   "2" -> year 2, "21456" -> month 2 of 1456, "3021456" -> 3rd of month 2, 1456
 // No dependencies: node frontend/tests/dateDigits.test.mjs
 
@@ -24,14 +24,16 @@ export function partsToDigits({ day, month, year }, bare = false) {
   return String(day).padStart(2, '0') + String(month).padStart(2, '0') + y.padStart(4, '0')
 }
 
-// What the box shows: DD-MM-YYYY with the typed digits in place and the
-// rest as placeholders ("DD-02-1456"). Before year 1: "DD-MM-(-0050)".
-export function displayDigits(digits, negative, labels = { day: 'DD', month: 'MM' }) {
-  if (!digits) return negative ? `${labels.day}-${labels.month}-(-)` : ''
-  const year = digits.slice(-4).padStart(4, '0')
-  const month = digits.length > 4 ? digits.slice(-6, -4).padStart(2, '0') : labels.month
-  const day = digits.length > 6 ? digits.slice(-8, -6).padStart(2, '0') : labels.day
-  return `${day}-${month}-${negative ? `(-${year})` : year}`
+// What the box shows: the digits just as typed, left to right, with dashes
+// put in from the right where the parts split ("2-1456", "13-02-1456"), so
+// typing reads like normal typing. Before year 1: "-50", "02-(-0050)".
+export function displayDigits(digits, negative) {
+  if (!digits) return negative ? '-' : ''
+  const year = digits.slice(-4)
+  const month = digits.length > 4 ? digits.slice(-6, -4) : ''
+  const day = digits.length > 6 ? digits.slice(0, -6) : ''
+  if (!month) return negative ? `-${year}` : year
+  return [day, month, negative ? `(-${year})` : year].filter(Boolean).join('-')
 }
 
 // A pasted or dropped date ("13-02-1456", "13/02/1456", "1456", "-50"), as

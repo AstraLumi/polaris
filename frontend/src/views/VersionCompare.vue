@@ -68,11 +68,13 @@
 // the page can be linked to and survives a reload.
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { t, tr } from '../i18n'
+import { t } from '../i18n'
 import { fetchVersions, fetchVersion } from '../api'
 import { EQUIP_SLOTS } from '../gear'
+import { STAT_CATEGORIES, statSystem, statsIn, statName, statShort } from '../stats'
 import BackLink from '../components/BackLink.vue'
 import { statusLabel } from '../characterStatus'
+import { genderLabel } from '../gender'
 import { chapterLabel, loadChapters } from '../chapters'
 import { pageTitle } from '../navigation'
 
@@ -117,31 +119,24 @@ function row(label, from, to, opts = {}) {
   return { label, from, to, changed, long: !!opts.long, delta: changed && numeric ? to - from : 0 }
 }
 
-const BASE = [
-  ['hp', 'HP'], ['mp', 'MP'], ['attack', tr('Attack')], ['potency', tr('Potency')],
-  ['defense', tr('Defense')], ['resistance', tr('Resistance')], ['speed', tr('Speed')],
-]
-const SPECIAL = [
-  ['luck', tr('Luck'), 2], ['carry_limit', tr('Carry Limit'), 1], ['fall_damage_threshold', tr('Fall Damage Threshold'), 1],
-  ['sanity', tr('Sanity'), 0], ['heat_threshold', tr('Heat Threshold'), 0], ['cold_threshold', tr('Cold Threshold'), 0],
-]
-const ELEMENTS = [
-  ['resist_water', tr('Water')], ['resist_fire', tr('Fire')], ['resist_wind', tr('Wind')], ['resist_earth', tr('Earth')],
-  ['resist_ice', tr('Ice')], ['resist_thunder', tr('Thunder')], ['resist_impact', tr('Impact')],
-]
-const LIFESKILLS = [
-  ['cooking', tr('Cooking')], ['crafting', tr('Crafting')], ['alchemy', tr('Alchemy')], ['hunting', tr('Hunting')],
-  ['gathering', tr('Gathering')], ['farming', tr('Farming')], ['blessing', tr('Blessing')],
-  ['enchanting', tr('Enchanting')], ['smithing', tr('Smithing')],
-]
-const PRIMARY = [['vit', 'VIT'], ['def', 'DEF'], ['res', 'RES'], ['str', 'STR'], ['dex', 'DEX'], ['intel', 'INT'], ['wis', 'WIS'], ['agl', 'AGL']]
+// One group per stat category, with the story's own stats: the points spent
+// on primary stats, every other stat as calculated.
+function statGroups(x, y) {
+  return STAT_CATEGORIES.map((cat) => ({
+    title: t(cat.label),
+    rows: statsIn(cat.id, statSystem.stats).map((d) =>
+      cat.id === 'primary'
+        ? row(statShort(d), x.build?.[d.key] ?? 0, y.build?.[d.key] ?? 0)
+        : row(statName(d), round(x.computed?.[d.key] ?? 0, d.decimals), round(y.computed?.[d.key] ?? 0, d.decimals)),
+    ),
+  }))
+}
 
 const groups = computed(() => {
   const x = a.value
   const y = b.value
   if (!x || !y) return []
   const s = (v) => v.story || {}
-  const c = (v, part, key, d = 0) => round(v.computed?.[part]?.[key] ?? 0, d)
   const spellNames = (v) => (v.spells || []).map((sp) => sp.name).sort((p, q) => p.localeCompare(q))
   const xs = spellNames(x)
   const ys = spellNames(y)
@@ -163,16 +158,13 @@ const groups = computed(() => {
     {
       title: t('Story'),
       rows: [
-        row(t('Gender'), s(x).gender, s(y).gender),
+        row(t('Gender'), genderLabel(s(x).gender), genderLabel(s(y).gender)),
         row(t('Race'), s(x).race_name, s(y).race_name),
         row(t('Height (cm)'), s(x).height, s(y).height),
         row(t('Weight (kg)'), s(x).weight, s(y).weight),
         row(t('Body type'), s(x).body_type_name, s(y).body_type_name),
         row(t('Age'), s(x).age, s(y).age),
-        row(t('Blood type'), s(x).blood_type, s(y).blood_type),
-        row(t('Born in'), s(x).born_in_name || s(x).born_in, s(y).born_in_name || s(y).born_in),
         row(t('Nation'), s(x).nation_name || s(x).nation, s(y).nation_name || s(y).nation),
-        row(t('Birth date (in-story)'), s(x).birth_date, s(y).birth_date),
         row(t('Human birth date'), s(x).human_birth_date, s(y).human_birth_date),
         row(t('Status'), statusLabel(s(x).status), statusLabel(s(y).status)),
         row(t('Deaths'), s(x).deaths, s(y).deaths),
@@ -181,12 +173,7 @@ const groups = computed(() => {
         row(t('Speech mannerisms'), s(x).speech_mannerisms, s(y).speech_mannerisms, { long: true }),
       ],
     },
-    { title: t('Primary Stats'), rows: PRIMARY.map(([k, l]) => row(l, x.build?.[k] ?? 0, y.build?.[k] ?? 0)) },
-    { title: t('Base Stats'), rows: BASE.map(([k, l]) => row(t(l), c(x, 'base', k), c(y, 'base', k))) },
-    { title: t('Special Stats'), rows: SPECIAL.map(([k, l, d]) => row(t(l), c(x, 'special', k, d), c(y, 'special', k, d))) },
-    // Multipliers (1.25x), so two decimals.
-    { title: t('Special Defenses'), rows: ELEMENTS.map(([k, l]) => row(t(l), c(x, 'elemental', k, 2), c(y, 'elemental', k, 2))) },
-    { title: t('Lifeskill'), rows: LIFESKILLS.map(([k, l]) => row(t(l), c(x, 'lifeskills', k), c(y, 'lifeskills', k))) },
+    ...statGroups(x, y),
     { title: t('Gear'), rows: EQUIP_SLOTS.map((sl) => row(t(sl.label), x.gear?.[sl.key]?.name, y.gear?.[sl.key]?.name)) },
     {
       title: t('Spells'),

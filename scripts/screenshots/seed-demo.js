@@ -130,8 +130,8 @@
       born_in_location_id: o.bornIn ? String(places[o.bornIn] || kingdoms[o.bornIn]) : '', nation_location_id: o.nation ? String(kingdoms[o.nation]) : '',
       status: o.status || 'alive', chapter_id: o.chapter ? String(chapters[o.chapter - 1]) : '', description: o.description || '', bio: o.bio || '',
       tags: JSON.stringify(o.tags || []),
-      vit: String(o.stats?.[0] || 0), def: String(o.stats?.[1] || 0), res: String(o.stats?.[2] || 0), str: String(o.stats?.[3] || 0),
-      dex: String(o.stats?.[4] || 0), intel: String(o.stats?.[5] || 0), wis: String(o.stats?.[6] || 0), agl: String(o.stats?.[7] || 0),
+      // Points in the default primary stats, in order.
+      build: JSON.stringify(Object.fromEntries(['vit', 'def', 'res', 'str', 'dex', 'intel', 'wis', 'agl'].map((k, i) => [k, o.stats?.[i] || 0]))),
     })
     if (o.portrait) fd.append('picture', await portrait(...o.portrait))
     return put(`/versions/${vid}`, fd)

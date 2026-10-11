@@ -64,7 +64,7 @@
       <section v-show="tab === 'story'" class="story-tab glass-panel sheet-part">
         <h2 class="print-only">{{ $t('Story') }}</h2>
         <div class="field-grid">
-          <ReadField :label="$t('Gender')" :value="data.story.gender" />
+          <ReadField :label="$t('Gender')" :value="genderLabel(data.story.gender)" />
           <ReadField :label="$t('Race')" :value="data.story.race_name" />
           <ReadField :label="$t('Height (cm)')" :value="data.story.height" />
           <ReadField :label="$t('Weight (kg)')" :value="data.story.weight" />
@@ -91,14 +91,14 @@
           :model-value="data.build"
           :computed="data.computed"
           :special-bases="data.special_bases"
-          :level="data.level"
+          :points="data.points || 0"
           :editable="false"
         />
       </section>
 
       <section v-show="tab === 'gear'" class="gear-tab-wrap glass-panel sheet-part">
         <h2 class="print-only">{{ $t('Gear') }}</h2>
-        <GearTab :model-value="data.gear || {}" :carry-limit="data.computed?.special?.carry_limit || 0" />
+        <GearTab :model-value="data.gear || {}" :carry-limit="data.computed?.carry_limit || 0" />
       </section>
 
       <section v-show="tab === 'spells'" class="gear-tab-wrap glass-panel sheet-part">
@@ -118,6 +118,7 @@
 import IconImage from '../components/IconImage.vue'
 import BackLink from '../components/BackLink.vue'
 import { statusLabel } from '../characterStatus'
+import { genderLabel } from '../gender'
 import { pageTitle, viewPicture } from '../navigation'
 import { ref, computed, watch, h } from 'vue'
 import { t } from '../i18n'

@@ -246,6 +246,8 @@ func TestCopyAssets(t *testing.T) {
 	app.db.Exec(`INSERT INTO characters DEFAULT VALUES`)
 	app.db.Exec(`INSERT INTO spells (name, level, source_type, source_id, origin_location_id) VALUES ('Fireball', 3, 'class', ?, 1)`, cid)
 	app.db.Exec(`INSERT INTO spells (name, icon_path) VALUES ('Spark', 'builtin:bolt')`)
+	app.db.Exec(`INSERT INTO stat_defs (key, category, name, formula) VALUES ('stamina', 'base', 'Stamina', '[hp] / 2')`)
+	app.db.Exec(`UPDATE stat_settings SET value = '[level] * 2' WHERE key = 'points_formula'`)
 
 	b := createStory(t, h, map[string]string{"name": "Beta", "copy_assets_from": a.ID})
 	if got := listNames(t, h, b.ID, "classes"); len(got) != 2 {
@@ -272,6 +274,9 @@ func TestCopyAssets(t *testing.T) {
 	bapp.db.QueryRow(`SELECT COUNT(*) FROM stat_modifiers`).Scan(&n)
 	if n == 0 {
 		t.Fatal("modifiers should be copied")
+	}
+	if sys := statSystemOf(t, bapp.db); sys.def("stamina") == nil || sys.PointsFormula != "[level] * 2" {
+		t.Fatalf("the stat system should be copied: %d stats, points %q", len(sys.Stats), sys.PointsFormula)
 	}
 	var icon string
 	bapp.db.QueryRow(`SELECT icon_path FROM classes WHERE name = 'Mage'`).Scan(&icon)

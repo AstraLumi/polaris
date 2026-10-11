@@ -13,7 +13,8 @@ import (
 // "New story, copying another story's Character Assets" copies the reusable
 // library (classes, subclasses, specializations, races, body types, spells and
 // the stat modifiers attached to them) and nothing about the world itself
-// (characters, events, the map, calendar).
+// (characters, events, the map, calendar). The stat system goes along too, as
+// the bonuses and spells are written against its stats.
 //
 // Adding a table to the schema? Put it in exactly one of the two lists below —
 // TestEveryTableIsClassified fails until you do. The upcoming Gear tab's
@@ -28,15 +29,22 @@ type assetTable struct {
 	// Columns holding an uploaded file's path inside the uploads folder; the
 	// files are copied along with the rows.
 	fileCols []string
+	// replace: a new story already has rows here (its default stat system);
+	// they are dropped so the copy takes their place.
+	replace bool
 }
 
 // Copied, in dependency order (a table comes after every table it references).
 var assetTables = []assetTable{
+	// The stat system: which stats there are and their formulas. Bonuses
+	// below and every character sheet are keyed by these stats.
+	{name: "stat_defs", replace: true},
+	{name: "stat_settings", replace: true},
 	{name: "classes", fileCols: []string{"icon_path"}},
 	{name: "subclasses"},
 	{name: "subclass_classes"},
-	{name: "specializations"},
-	{name: "races"},
+	{name: "specializations", nullCols: []string{"kingdom_id"}},
+	{name: "races", nullCols: []string{"kingdom_id"}},
 	{name: "body_types"},
 	// Modifiers for classes, subclasses, specializations, races, body types —
 	// and, once they exist, items — all point at asset tables, so they travel
@@ -48,7 +56,7 @@ var assetTables = []assetTable{
 
 // Belong to one story's own world; never copied.
 var storyOnlyTables = []string{
-	"characters", "character_versions", "character_story", "character_build",
+	"characters", "character_versions", "character_story",
 	"character_special_bases", "character_spells", "character_gear",
 	"events", "event_tags", "event_characters",
 	"locations", "location_hexes",
@@ -126,6 +134,11 @@ func copyAssets(dst *sql.DB, srcDBPath, srcUploads, dstUploads string) error {
 				sel = append(sel, "NULL")
 			} else {
 				sel = append(sel, quoteIdent(c))
+			}
+		}
+		if t.replace {
+			if _, err := conn.ExecContext(ctx, `DELETE FROM main.`+quoteIdent(t.name)); err != nil {
+				return rollback(err)
 			}
 		}
 		q := fmt.Sprintf(`INSERT INTO main.%s (%s) SELECT %s FROM src.%s`,

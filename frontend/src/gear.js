@@ -3,7 +3,7 @@
 
 import { tr, t } from './i18n'
 import { BUILTIN_PREFIX } from './builtinIcons'
-import { MODIFIER_GROUPS } from './api'
+import { statSystem, statLabel } from './stats'
 
 // What a piece of gear IS. `icon` is the built-in icon shown when the gear has
 // none of its own.
@@ -50,23 +50,14 @@ export function gearIconSrc(gear) {
 
 // ---- Stat bonuses -----------------------------------------------------------
 
-const STAT_ORDER = []
-const STAT_LABELS = {}
-for (const group of MODIFIER_GROUPS) {
-  for (const [key, label] of group.keys) {
-    STAT_ORDER.push(key)
-    STAT_LABELS[key] = label
-  }
-}
-
-export const statLabel = (key) => (STAT_LABELS[key] ? t(STAT_LABELS[key]) : key)
-
 const round = (n) => Math.round(n * 100) / 100
 
 // [{ key, text }] for a { stat: value } map, in the order stats are listed
 // everywhere else, e.g. "+5 Attack".
 export function formatBonuses(modifiers) {
-  return STAT_ORDER.filter((k) => modifiers?.[k])
+  return statSystem.stats
+    .map((s) => s.key)
+    .filter((k) => modifiers?.[k])
     .map((key) => {
       const v = round(modifiers[key])
       return { key, value: v, text: `${v > 0 ? '+' : '\u2212'}${Math.abs(v)} ${statLabel(key)}` }

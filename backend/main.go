@@ -140,6 +140,12 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	mux.HandleFunc("GET /api/settings", getSettingsHandler(db))
 	mux.HandleFunc("PUT /api/settings", updateSettingsHandler(db))
 
+	// The stat system: which stats exist and their formulas (statsystem.go).
+	mux.HandleFunc("GET /api/stat-system", getStatSystemHandler(db))
+	mux.HandleFunc("PUT /api/stat-system", updateStatSystemHandler(db))
+	mux.HandleFunc("GET /api/stat-system/defaults", defaultStatSystemHandler)
+	mux.HandleFunc("POST /api/stat-system/preview", previewStatSystemHandler)
+
 	// Events: single-date happenings that feed the timeline. Tags are the
 	// one linking mechanism; character-options feeds the "involved people"
 	// picker.

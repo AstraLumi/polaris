@@ -9,7 +9,7 @@ import (
 
 type computePreviewRequest struct {
 	Level          int                `json:"level"`
-	Age            float64            `json:"age"`
+	Age            *float64           `json:"age"`
 	Height         float64            `json:"height"`
 	Weight         float64            `json:"weight"`
 	Class          string             `json:"class"`
@@ -17,14 +17,7 @@ type computePreviewRequest struct {
 	Specialization string             `json:"specialization"`
 	Race           string             `json:"race"`
 	BodyType       string             `json:"body_type"`
-	VIT            int                `json:"vit"`
-	DEF            int                `json:"def"`
-	RES            int                `json:"res"`
-	STR            int                `json:"str"`
-	DEX            int                `json:"dex"`
-	Intel          int                `json:"intel"`
-	WIS            int                `json:"wis"`
-	AGL            int                `json:"agl"`
+	Build          map[string]int     `json:"build"` // points per primary stat
 	SpecialBases   map[string]float64 `json:"special_bases"`
 	GearIDs        []int64            `json:"gear_ids"` // equipped pieces, one per occupied slot
 }
@@ -45,6 +38,8 @@ func lookupIDByName(db *sql.DB, table, name string) sql.NullInt64 {
 	return sql.NullInt64{Int64: id, Valid: true}
 }
 
+// computePreviewHandler works out the stats of an unsaved sheet, for the Edit
+// page, along with how many points it has to spend.
 func computePreviewHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req computePreviewRequest
@@ -53,10 +48,7 @@ func computePreviewHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		level := req.Level
-		if level < 1 {
-			level = 1
-		}
+		level := max(req.Level, 1)
 		height := req.Height
 		if height <= 0 {
 			height = defaultHeightCM
@@ -64,6 +56,10 @@ func computePreviewHandler(db *sql.DB) http.HandlerFunc {
 		weight := req.Weight
 		if weight <= 0 {
 			weight = defaultWeightKG
+		}
+		age := defaultAge
+		if req.Age != nil {
+			age = *req.Age
 		}
 
 		refs := categoryRefs{
@@ -75,17 +71,26 @@ func computePreviewHandler(db *sql.DB) http.HandlerFunc {
 			ItemIDs:          req.GearIDs,
 		}
 
-		build := BuildStats{
-			VIT: req.VIT, DEF: req.DEF, RES: req.RES, STR: req.STR,
-			DEX: req.DEX, Intel: req.Intel, WIS: req.WIS, AGL: req.AGL,
+		values := map[string]float64{}
+		for k, v := range req.SpecialBases {
+			values[k] = v
+		}
+		for k, v := range req.Build {
+			values[k] = float64(v)
 		}
 
-		computed, err := computeStats(db, level, req.Age, height, weight, build, req.SpecialBases, refs)
+		sys, err := loadStatSystem(db)
+		if err != nil {
+			http.Error(w, "failed to compute stats", http.StatusInternalServerError)
+			return
+		}
+		in := statInputs{Level: float64(level), Age: age, HeightCM: height, WeightKG: weight, Values: values}
+		computed, err := computeStats(db, sys, in, refs)
 		if err != nil {
 			http.Error(w, "failed to compute stats", http.StatusInternalServerError)
 			return
 		}
 
-		writeJSON(w, computed)
+		writeJSON(w, map[string]any{"computed": computed, "points": sys.pointsFor(in)})
 	}
 }

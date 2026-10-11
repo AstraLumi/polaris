@@ -1,16 +1,16 @@
 <template>
   <div class="modifier-form">
-    <div v-for="group in MODIFIER_GROUPS" :key="group.label" class="modifier-group">
+    <div v-for="group in groups" :key="group.id" class="modifier-group">
       <h4>{{ $t(group.label) }}</h4>
       <div class="modifier-grid">
-        <label v-for="[key, label] in group.keys" :key="key" class="modifier-field">
-          <span>{{ $t(label) }}</span>
+        <label v-for="s in group.stats" :key="s.key" class="modifier-field">
+          <span :title="statName(s)">{{ statShort(s) }}</span>
           <input
             type="number"
             step="0.1"
-            :value="modelValue[key] ?? ''"
+            :value="modelValue[s.key] ?? ''"
             placeholder="0"
-            @input="update(key, $event.target.value)"
+            @input="update(s.key, $event.target.value)"
           />
         </label>
       </div>
@@ -19,7 +19,13 @@
 </template>
 
 <script setup>
-import { MODIFIER_GROUPS } from '../api'
+import { computed } from 'vue'
+import { STAT_CATEGORIES, statSystem, statsIn, statName, statShort } from '../stats'
+
+// One group per category, with the story's own stats (Settings → Stats).
+const groups = computed(() =>
+  STAT_CATEGORIES.map((c) => ({ ...c, stats: statsIn(c.id, statSystem.stats) })).filter((g) => g.stats.length),
+)
 
 const props = defineProps({
   modelValue: { type: Object, required: true }, // flat { target_stat: value }

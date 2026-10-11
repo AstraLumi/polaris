@@ -79,7 +79,7 @@ func characterFamily(db *sql.DB, root int64) (*familyPayload, error) {
 
 	out := &familyPayload{Root: root, People: []familyPerson{}, Links: []familyLink{}}
 	prow, err := db.Query(`
-		SELECT c.id, v.name, COALESCE(v.picture_path, ''), COALESCE(st.birth_date, ''), COALESCE(st.status, 'alive')
+		SELECT c.id, v.name, COALESCE(v.picture_path, ''), COALESCE(c.birth_date, ''), COALESCE(st.status, 'alive')
 		FROM characters c
 		JOIN character_versions v ON v.character_id = c.id AND v.is_current = 1
 		LEFT JOIN character_story st ON st.version_id = v.id`)

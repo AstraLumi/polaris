@@ -2,20 +2,20 @@
 import assert from 'node:assert/strict'
 import { digitsToParts, partsToDigits, displayDigits, parsePasted, MAX_DIGITS } from '../src/dateDigits.js'
 
-// Typing fills in from the right.
+// Digits show as typed, split into parts from the right.
 const shown = (d, neg = false) => displayDigits(d, neg)
 assert.equal(shown(''), '')
-assert.equal(shown('2'), 'DD-MM-0002')
-assert.equal(shown('21'), 'DD-MM-0021')
-assert.equal(shown('214'), 'DD-MM-0214')
-assert.equal(shown('2145'), 'DD-MM-2145')
-assert.equal(shown('21456'), 'DD-02-1456')
-assert.equal(shown('121456'), 'DD-12-1456')
-assert.equal(shown('3021456'), '03-02-1456')
+assert.equal(shown('2'), '2')
+assert.equal(shown('21'), '21')
+assert.equal(shown('2145'), '2145')
+assert.equal(shown('21456'), '2-1456')
+assert.equal(shown('121456'), '12-1456')
+assert.equal(shown('3021456'), '3-02-1456')
 assert.equal(shown('13021456'), '13-02-1456')
-assert.equal(shown('50', true), 'DD-MM-(-0050)')
-assert.equal(shown('', true), 'DD-MM-(-)')
-assert.equal(displayDigits('21456', false, { day: 'DD', month: 'MM' }), 'DD-02-1456')
+assert.equal(shown('01010007'), '01-01-0007', 'a saved date keeps its zeros')
+assert.equal(shown('50', true), '-50')
+assert.equal(shown('', true), '-')
+assert.equal(shown('020050', true), '02-(-0050)')
 assert.equal(MAX_DIGITS, 8)
 
 assert.equal(digitsToParts(''), null)

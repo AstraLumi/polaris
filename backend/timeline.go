@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 )
@@ -29,6 +30,9 @@ type timelineNode struct {
 	PicturePath  string        `json:"picture_path"`
 	Tags         []string      `json:"tags"`
 	People       []eventPerson `json:"people"`
+	// FullDate: a birth saved with its day and month, not just a year, so the
+	// calendar can mark the birthday every year.
+	FullDate bool `json:"full_date,omitempty"`
 }
 
 type timelinePayload struct {
@@ -117,13 +121,12 @@ func timelineHandler(db *sql.DB) http.HandlerFunc {
 			out.Nodes = append(out.Nodes, n)
 		}
 
-		// Births: only each character's current version counts. The in-story
-		// birth date doesn't change between versions, so one per character.
+		// Births: the in-story birth date belongs to the character (it doesn't
+		// change between versions), so one per character, named as it is now.
 		crow, err := db.Query(`
-			SELECT c.id, v.name, COALESCE(st.birth_date, '')
+			SELECT c.id, v.name, COALESCE(c.birth_date, '')
 			FROM characters c
-			JOIN character_versions v ON v.character_id = c.id AND v.is_current = 1
-			LEFT JOIN character_story st ON st.version_id = v.id`)
+			JOIN character_versions v ON v.character_id = c.id AND v.is_current = 1`)
 		if err != nil {
 			http.Error(w, "failed to load timeline", http.StatusInternalServerError)
 			log.Printf("timeline births: %v", err)
@@ -141,6 +144,7 @@ func timelineHandler(db *sql.DB) http.HandlerFunc {
 			if !place(&n, normalizeStoryDate(birth)) {
 				continue
 			}
+			n.FullDate = dayMonthRE.MatchString(birth)
 			if er, ok := details["character:"+itoa(id)]; ok {
 				withDetails(&n, er)
 			}
@@ -214,3 +218,7 @@ func timelineHandler(db *sql.DB) http.HandlerFunc {
 		writeJSON(w, out)
 	}
 }
+
+// dayMonthRE: a date written with its day and month ("15-03-1024"), not a
+// bare year.
+var dayMonthRE = regexp.MustCompile(`^\s*\d{1,3}-\d{1,3}-`)

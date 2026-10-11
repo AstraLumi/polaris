@@ -399,7 +399,7 @@ const wikiMembersSQL = `SELECT c.id, v.name FROM characters c
 	JOIN character_story st ON st.version_id = v.id
 	WHERE %s = ? ORDER BY v.name COLLATE NOCASE`
 
-// Same, for the columns that live on the version itself.
+// Same, for the columns that live on the version or on the character.
 const wikiVersionMembersSQL = `SELECT c.id, v.name FROM characters c
 	JOIN character_versions v ON v.character_id = c.id AND v.is_current = 1
 	WHERE %s = ? ORDER BY v.name COLLATE NOCASE`
@@ -425,6 +425,14 @@ func (a *wikiArticle) addFact(key, value, kind string, link *wikiRef) {
 	a.Facts = append(a.Facts, wikiFact{Key: key, Value: value, Kind: kind, Link: link})
 }
 
+// addNativeKingdom adds the kingdom a race or specialization is native to.
+func (a *wikiArticle) addNativeKingdom(db *sql.DB, table string, id int64) {
+	var kid sql.NullInt64
+	var name sql.NullString
+	db.QueryRow(`SELECT l.id, l.name FROM `+table+` t JOIN locations l ON l.id = t.kingdom_id WHERE t.id = ?`, id).Scan(&kid, &name)
+	a.addFact("native_to", "", "", refOf("location", kid, name))
+}
+
 func (a *wikiArticle) addGroup(key string, items []wikiRef) {
 	if len(items) > 0 {
 		a.Groups = append(a.Groups, wikiGroup{Key: key, Items: items})
@@ -448,22 +456,23 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 		var raceID, bodyID, classID, subID, specID, bornLoc, nationLoc, vchapter sql.NullInt64
 		var raceName, bodyName, className, subName, specName, bornName, nationName sql.NullString
 		err := db.QueryRow(`
-			SELECT COALESCE(v.nickname, ''), COALESCE(st.gender, ''), COALESCE(st.birth_date, ''),
-			       COALESCE(st.born_in, ''), COALESCE(st.nation, ''),
+			SELECT COALESCE(v.nickname, ''), COALESCE(st.gender, ''), COALESCE(ch.birth_date, ''),
+			       COALESCE(ch.born_in, ''), COALESCE(st.nation, ''),
 			       COALESCE(st.description, ''), COALESCE(st.bio, ''), COALESCE(st.speech_mannerisms, ''),
 			       COALESCE(st.status, 'alive'), st.race_id, r.name, st.body_type_id, b.name,
 			       v.class_id, cl.name, v.subclass_id, sc.name, v.specialization_id, sp.name,
-			       st.born_in_location_id, bl.name, st.nation_location_id, nl.name,
+			       ch.born_in_location_id, bl.name, st.nation_location_id, nl.name,
 			       v.name, COALESCE(v.version_date, ''), v.chapter_id,
-			       COALESCE(st.blood_type, ''), COALESCE(st.human_birth_date, ''), st.age
+			       COALESCE(ch.blood_type, ''), COALESCE(st.human_birth_date, ''), st.age
 			FROM character_versions v
+			JOIN characters ch ON ch.id = v.character_id
 			LEFT JOIN character_story st ON st.version_id = v.id
 			LEFT JOIN races r ON r.id = st.race_id
 			LEFT JOIN body_types b ON b.id = st.body_type_id
 			LEFT JOIN classes cl ON cl.id = v.class_id
 			LEFT JOIN subclasses sc ON sc.id = v.subclass_id
 			LEFT JOIN specializations sp ON sp.id = v.specialization_id
-			LEFT JOIN locations bl ON bl.id = st.born_in_location_id
+			LEFT JOIN locations bl ON bl.id = ch.born_in_location_id
 			LEFT JOIN locations nl ON nl.id = st.nation_location_id
 			WHERE v.character_id = ? AND (v.id = ? OR (? = 0 AND v.is_current = 1))`, id, a.version, a.version).Scan(
 			&nick, &gender, &birth, &bornText, &nationText, &desc, &bio, &speech,
@@ -488,7 +497,16 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 		a.addFact("status", statusWord[status], "word", nil)
 		a.addFact("tags", strings.Join(characterTags(db, id), ", "), "", nil)
 		a.addFact("race", "", "", refOf("race", raceID, raceName))
-		a.addFact("gender", gender, "", nil)
+		// Male and Female are the app's own words (shown translated); any
+		// other gender is the writer's text.
+		switch strings.ToLower(strings.TrimSpace(gender)) {
+		case "male":
+			a.addFact("gender", "Male", "word", nil)
+		case "female":
+			a.addFact("gender", "Female", "word", nil)
+		default:
+			a.addFact("gender", gender, "", nil)
+		}
 		if age.Valid {
 			a.addFact("age", strconv.FormatFloat(age.Float64, 'f', -1, 64), "", nil)
 		}
@@ -590,10 +608,14 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 			ORDER BY 2 COLLATE NOCASE`, id))
 		a.addGroup("events_here", queryRefs(db, "event",
 			`SELECT id, name FROM events WHERE location_id = ? AND source_type IS NULL ORDER BY name COLLATE NOCASE`, id))
-		a.addGroup("born_here", queryRefs(db, "character", fmt.Sprintf(wikiMembersSQL, "st.born_in_location_id"), id))
+		a.addGroup("born_here", queryRefs(db, "character", fmt.Sprintf(wikiVersionMembersSQL, "c.born_in_location_id"), id))
 		a.addGroup("nation_members", queryRefs(db, "character", fmt.Sprintf(wikiMembersSQL, "st.nation_location_id"), id))
 		a.addGroup("spells_from", queryRefs(db, "spell",
 			`SELECT id, name FROM spells WHERE origin_location_id = ? ORDER BY name COLLATE NOCASE`, id))
+		a.addGroup("native_races", queryRefs(db, "race",
+			`SELECT id, name FROM races WHERE kingdom_id = ? ORDER BY name COLLATE NOCASE`, id))
+		a.addGroup("native_specializations", queryRefs(db, "specialization",
+			`SELECT id, name FROM specializations WHERE kingdom_id = ? ORDER BY name COLLATE NOCASE`, id))
 		a.addGroup("factions_here", queryRefs(db, "faction",
 			`SELECT id, name FROM factions WHERE hq_location_id = ? ORDER BY name COLLATE NOCASE`, id))
 
@@ -678,11 +700,13 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 		db.QueryRow(`SELECT c.id, c.name FROM specializations s JOIN classes c ON c.id = s.class_id WHERE s.id = ?`, id).
 			Scan(&classID, &className)
 		a.addFact("class", "", "", refOf("class", classID, className))
+		a.addNativeKingdom(db, "specializations", id)
 		a.addGroup("spells", queryRefs(db, "spell",
 			`SELECT id, name FROM spells WHERE source_type = 'specialization' AND source_id = ? ORDER BY name COLLATE NOCASE`, id))
 		a.addGroup("members", queryRefs(db, "character", fmt.Sprintf(wikiVersionMembersSQL, "v.specialization_id"), id))
 
 	case "race":
+		a.addNativeKingdom(db, "races", id)
 		a.addGroup("members", queryRefs(db, "character", fmt.Sprintf(wikiMembersSQL, "st.race_id"), id))
 
 	case "body_type":

@@ -65,6 +65,7 @@
 import { ref, watch, onMounted, onBeforeUnmount, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
 import { loadCalendar } from './calendar'
+import { loadStatSystem } from './stats'
 import { t, tr } from './i18n'
 import { pageTitle, viewedPicture } from './navigation'
 import PolarisLogo from './components/PolarisLogo.vue'
@@ -89,7 +90,10 @@ const searchOpen = ref(false)
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
 const shortcutLabel = isMac ? '⌘K' : 'Ctrl K'
 
-onMounted(loadCalendar)
+onMounted(() => {
+  loadCalendar()
+  loadStatSystem()
+})
 
 // "Aria · Characters · My Story · Polaris", most specific first.
 watchEffect(() => {

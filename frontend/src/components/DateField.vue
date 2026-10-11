@@ -11,7 +11,7 @@
       spellcheck="false"
       :value="shown"
       :placeholder="$t('DD-MM-YYYY')"
-      :title="$t('Digits fill in from the right: the last four are the year, then the month, then the day. Type - for a year before 1.')"
+      :title="$t('Type the date as digits, day first: 13021456 is 13-02-1456. A year alone is fine; the last four digits are always the year. Type - for a year before 1.')"
       @beforeinput="onBeforeInput"
       @focus="focused = true"
       @blur="onBlur"
@@ -77,7 +77,7 @@ watch(
   { immediate: true },
 )
 
-const shown = computed(() => displayDigits(digits.value, negative.value, { day: t('DD'), month: t('MM') }))
+const shown = computed(() => displayDigits(digits.value, negative.value))
 
 const problem = computed(() => {
   const p = digitsToParts(digits.value, negative.value)
@@ -137,7 +137,7 @@ function onBeforeInput(e) {
     }
     for (const ch of text) {
       if (ch >= '0' && ch <= '9') {
-        if (digits.value.length < MAX_DIGITS && !(digits.value === '' && ch === '0')) digits.value += ch
+        if (digits.value.length < MAX_DIGITS) digits.value += ch
       } else if (ch === '-' && type === 'insertText') {
         negative.value = !negative.value
       }

@@ -92,4 +92,10 @@ export default {
   "Add relation": "Agregar relación",
   "Manage factions": "Administrar facciones",
   "Couldn't load factions. Try refreshing.": "No se pudieron cargar las facciones. Intenta recargar.",
+  "Add a multiplier": "Agregar un multiplicador",
+  "Add stat": "Agregar atributo",
+  "Add Typed value to the formula to get a box on the character sheet for typing this stat.": "Agrega Valor escrito a la fórmula para tener una casilla en la ficha del personaje donde escribir este atributo.",
+  "This stat clashes with another. Remove it and add it again.": "Este atributo choca con otro. Quítalo y vuelve a agregarlo.",
+  "Couldn't load the stats. Try refreshing.": "No se pudieron cargar los atributos. Intenta recargar.",
+  "Birth date, blood type and Born in belong to the character: changing them here changes them in every version.": "La fecha de nacimiento, el tipo de sangre y Nacido en pertenecen al personaje: cambiarlos aquí los cambia en todas las versiones.",
 }

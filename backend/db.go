@@ -13,7 +13,7 @@ import (
 // oldest migration (or a brand new one) gets wiped and recreated from
 // freshSchema — so every schema change from here on should ship with a
 // migration instead of relying on that reset.
-const currentSchemaVersion = "21"
+const currentSchemaVersion = "23"
 
 const freshSchema = `
 CREATE TABLE classes (
@@ -441,6 +441,17 @@ var migrations = map[string]migration{
 		before:     dedupeSpecializations,
 		statements: schema21Statements,
 	},
+	"21": {
+		to: "22",
+		// Stats and their formulas are the story's own (statsystem.go).
+		statements: schema22Statements,
+	},
+	"22": {
+		to: "23",
+		// Birth date, blood type and birthplace move to the character; races
+		// and specializations get a native kingdom.
+		statements: schema23Statements,
+	},
 }
 
 // schema20Statements create what schema 20 added. The fresh schema runs them
@@ -537,6 +548,8 @@ var tablesInDependencyOrder = []string{
 	"event_characters",
 	"event_tags",
 	"stat_modifiers",
+	"stat_defs",
+	"stat_settings",
 	"character_gear",
 	"character_spells",
 	"character_special_bases",
@@ -642,7 +655,7 @@ func ensureSchema(db *sql.DB) error {
 			return fmt.Errorf("create schema: %w", err)
 		}
 	}
-	later := [][]string{wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements}
+	later := [][]string{wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements}
 	for _, stmt := range slices.Concat(later...) {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("create wiki schema: %w", err)
@@ -659,4 +672,40 @@ func ensureSchema(db *sql.DB) error {
 
 	log.Printf("schema reset complete, now at version %s", currentSchemaVersion)
 	return nil
+}
+
+// schema23Statements create what schema 23 added. The fresh schema runs them
+// too.
+//
+// Birth date, blood type and birthplace belong to the character, not to a
+// version: they never change over the story. Each character takes them from
+// the first of its versions that has them, the current one first.
+var schema23Statements = slices.Concat(
+	[]string{
+		`ALTER TABLE characters ADD COLUMN birth_date TEXT`,
+		`ALTER TABLE characters ADD COLUMN blood_type TEXT`,
+		`ALTER TABLE characters ADD COLUMN born_in TEXT`,
+		`ALTER TABLE characters ADD COLUMN born_in_location_id INTEGER REFERENCES locations(id) ON DELETE SET NULL`,
+	},
+	moveToCharacterSQL("birth_date", "blood_type", "born_in", "born_in_location_id"),
+	[]string{
+		`ALTER TABLE character_story DROP COLUMN birth_date`,
+		`ALTER TABLE character_story DROP COLUMN blood_type`,
+		`ALTER TABLE character_story DROP COLUMN born_in`,
+		`ALTER TABLE character_story DROP COLUMN born_in_location_id`,
+		// The kingdom a race or specialization is native to.
+		`ALTER TABLE races ADD COLUMN kingdom_id INTEGER REFERENCES locations(id) ON DELETE SET NULL`,
+		`ALTER TABLE specializations ADD COLUMN kingdom_id INTEGER REFERENCES locations(id) ON DELETE SET NULL`,
+	},
+)
+
+func moveToCharacterSQL(cols ...string) []string {
+	var out []string
+	for _, c := range cols {
+		out = append(out, fmt.Sprintf(`UPDATE characters SET %[1]s = (
+			SELECT st.%[1]s FROM character_versions v JOIN character_story st ON st.version_id = v.id
+			WHERE v.character_id = characters.id AND st.%[1]s IS NOT NULL AND st.%[1]s != ''
+			ORDER BY v.is_current DESC, v.id LIMIT 1)`, c))
+	}
+	return out
 }

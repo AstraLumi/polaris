@@ -19,6 +19,14 @@
           <input v-model="name" type="text" required autofocus />
         </label>
 
+        <LocationSelect
+          v-if="kind === 'race'"
+          v-model="kingdomId"
+          :label="$t('Native to')"
+          :options="locationOptions"
+          kingdom-only
+        />
+
         <p class="hint">
           {{ text.hint }}
         </p>
@@ -43,6 +51,8 @@ import { ref, computed, onBeforeUnmount } from 'vue'
 import { t } from '../i18n'
 import ModifierForm from './ModifierForm.vue'
 import IconImage from './IconImage.vue'
+import LocationSelect from './LocationSelect.vue'
+import { fetchLocationOptions } from '../api'
 
 const props = defineProps({
   kind: { type: String, required: true }, // "class" | "race" | "body type"
@@ -83,6 +93,10 @@ const text = computed(() => {
 
 const name = ref(props.asset?.name ?? '')
 const modifiers = ref({ ...(props.asset?.modifiers ?? {}) })
+// Races: the kingdom they're native to.
+const kingdomId = ref(props.asset?.kingdom_id ?? null)
+const locationOptions = ref([])
+if (props.kind === 'race') fetchLocationOptions().then((o) => (locationOptions.value = o))
 const submitting = ref(false)
 const error = ref('')
 
@@ -129,9 +143,10 @@ async function submit() {
   submitting.value = true
   error.value = ''
   try {
+    const extra = props.kind === 'race' ? { kingdom_id: kingdomId.value } : {}
     const saved = props.asset
-      ? await props.api.update(props.asset.id, name.value.trim(), modifiers.value)
-      : await props.api.create(name.value.trim(), modifiers.value)
+      ? await props.api.update(props.asset.id, name.value.trim(), modifiers.value, extra)
+      : await props.api.create(name.value.trim(), modifiers.value, extra)
     if (props.withIcon) {
       if (iconFile.value) await props.api.setIcon(saved.id, iconFile.value)
       else if (iconRemoved.value && props.asset?.icon_path) await props.api.clearIcon(saved.id)

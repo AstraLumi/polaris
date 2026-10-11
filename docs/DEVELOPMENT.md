@@ -38,8 +38,10 @@ Production-style build into the Go binary:
     node frontend/tests/timelineLayout.test.mjs   # timeline geometry, no deps
     node frontend/tests/markdown.test.mjs         # the wiki's markdown renderer
     node frontend/tests/i18n.check.mjs            # every UI string translated in every language
+    node frontend/tests/formulaBlocks.test.mjs    # stat formulas read and written as blocks
 
-CI (`.github/workflows/ci.yml`) runs the same checks.
+CI (`.github/workflows/ci.yml`) runs the same checks. Pushing a `v*` tag
+publishes the Docker image (`.github/workflows/release.yml`).
 
 ## Adding or changing the database
 
@@ -51,6 +53,21 @@ migration; add a new one and a test (see `TestMigrationAddsGearTables`).
 
 Characters, Character Assets (classes, subclasses, specializations, races, body
 types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard.
+
+- Stats (`backend/statsystem.go`, `statformula.go`, `stats.go`; schema 22):
+  each story defines its stats in `stat_defs` (key, category, name, formula,
+  multiplier, unit, decimals, min/max) and the points formula in
+  `stat_settings`. Categories are fixed: primary stats are points plus
+  bonuses, the rest are calculated by formula in dependency order (a stat may
+  read another; loops are refused). A formula reading `[base]` gives the stat
+  a typed box on the sheet; typed numbers and points are stored by key in
+  `character_special_bases`. Bonuses (`stat_modifiers`) count per level for
+  Base Stats from assets and flat otherwise (`scalingSQL`). Formulas are text
+  (`10 + [vit] * 10`), checked on save (`compile`), and edited as blocks
+  (`components/FormulaEditor.vue`, `formulaBlocks.js`) under Settings → Stats
+  (`components/StatSystemEditor.vue`), which previews them through
+  `POST /api/stat-system/preview`. The frontend reads the system from
+  `stats.js`; nothing may assume a particular stat exists.
 
 - Stories: the app holds any number of separate stories. Each has its own
   SQLite file and uploads folder, so characters, map, events, assets and
