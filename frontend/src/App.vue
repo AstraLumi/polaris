@@ -127,6 +127,7 @@ const navItems = [
   { label: tr('Events'), to: '/events', tip: tr('Everything that happens, with dates, places and people') },
   { label: tr('Chapters'), to: '/chapters', tip: tr('Volumes and chapters, with your notes and what happens in each') },
   { label: tr('Wiki'), to: '/wiki', tip: tr('An article for everything in the story, with your lore on top') },
+  { label: tr('Graph'), to: '/wiki/graph', tip: tr('Every wiki article and how they connect') },
   { label: tr('Settings'), to: '/settings', tip: tr('Calendar, language and colour theme') },
 ]
 </script>

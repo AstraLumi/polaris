@@ -74,6 +74,7 @@ const PAGES = [
   { name: tr('Events'), path: '/events' },
   { name: tr('New event'), path: '/events/new' },
   { name: tr('Wiki'), path: '/wiki' },
+  { name: tr('Graph'), path: '/wiki/graph' },
   { name: tr('Settings'), path: '/settings' },
   { name: tr('Switch story'), path: '/stories' },
 ]

@@ -9,6 +9,9 @@
         </p>
       </div>
       <div class="head-actions">
+        <RouterLink v-if="items.length" to="/wiki/graph" class="btn btn-ghost" :title="$t('Every wiki article and how they connect')">
+          {{ $t('Graph') }}
+        </RouterLink>
         <button v-if="items.length" type="button" class="btn btn-ghost" :title="$t('Open an article at random')" @click="openRandom">
           {{ $t('Random article') }}
         </button>

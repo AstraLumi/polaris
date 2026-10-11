@@ -13,6 +13,7 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/timelineLayout.test.mjs
     node frontend/tests/markdown.test.mjs
     node frontend/tests/markdownEdit.test.mjs
+    node frontend/tests/graphLayout.test.mjs
 
 Run all of these before committing. `backend/static/` is build output (only
 `.gitkeep` is tracked); the tests do not need it.

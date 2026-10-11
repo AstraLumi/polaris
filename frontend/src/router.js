@@ -14,6 +14,7 @@ import EventEdit from './views/EventEdit.vue'
 import TimelineView from './views/TimelineView.vue'
 import WikiHome from './views/WikiHome.vue'
 import WikiArticle from './views/WikiArticle.vue'
+import GraphView from './views/GraphView.vue'
 import StoryPicker from './views/StoryPicker.vue'
 import Factions from './views/Factions.vue'
 import Chapters from './views/Chapters.vue'
@@ -56,6 +57,7 @@ const routes = [
   { path: '/chapters', name: 'chapters', component: Chapters, meta: { title: tr('Chapters') } },
   { path: '/chapters/:id', name: 'chapter', component: ChapterView, meta: { title: tr('Chapters') }, props: true },
   { path: '/wiki', name: 'wiki', component: WikiHome, meta: { title: tr('Wiki') } },
+  { path: '/wiki/graph', name: 'wiki-graph', component: GraphView, meta: { title: tr('Graph') } },
   { path: '/wiki/:type/:id', name: 'wiki-article', component: WikiArticle, meta: { title: tr('Wiki') }, props: true },
 ]
 

@@ -94,6 +94,12 @@ types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard
   Hovering any link to an article shows a preview card
   (`components/LinkPreviewLayer.vue`, `ArticleCard.vue`, `articlePreview.js`);
   the tooltip layer leaves those links alone.
+  The graph view (`/wiki/graph`, `views/GraphView.vue`) draws every article
+  and every connection on a canvas: `backend/wikigraph.go` lists the story's
+  own connections (the same facts and related lists the articles show) and
+  the text's [[links]] separately, and `graphLayout.js` is the force layout
+  (`node frontend/tests/graphLayout.test.mjs`). `?focus=<type>:<id>` opens it
+  centred on one article.
   `components/WikiLinkPanel.vue` is the shared "Link to an article" picker
   (the Markdown editor and the infobox value rows use it).
 - Look and feel: every page shares one layout (`.page`), one set of form

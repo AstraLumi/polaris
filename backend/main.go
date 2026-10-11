@@ -158,6 +158,7 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	// Wiki: an article for everything in the story, with the user's own
 	// text layered on top (see wiki.go).
 	mux.HandleFunc("GET /api/wiki", listWikiHandler(db))
+	mux.HandleFunc("GET /api/wiki/graph", wikiGraphHandler(db))
 	mux.HandleFunc("GET /api/wiki/{type}/{id}", getWikiHandler(db))
 	mux.HandleFunc("PUT /api/wiki/{type}/{id}", saveWikiHandler(db))
 	mux.HandleFunc("POST /api/lore", saveLoreHandler(db, uploadsDir))

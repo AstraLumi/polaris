@@ -13,6 +13,13 @@
         </div>
         <div class="actions">
           <template v-if="!editing">
+            <RouterLink
+              :to="{ path: '/wiki/graph', query: { focus: article.type + ':' + article.id } }"
+              class="btn btn-ghost small"
+              :title="$t('This article and everything it connects to, on the graph')"
+            >
+              {{ $t('Show in graph') }}
+            </RouterLink>
             <button class="btn btn-primary small" @click="startEdit()">{{ $t('Edit') }}</button>
           </template>
           <template v-else>

@@ -170,6 +170,8 @@ async function request(path, options, fallback) {
 
 export const wikiApi = {
   list: () => request('/wiki', undefined, tr('failed to load the wiki')),
+  // Every article and every connection between two (backend/wikigraph.go).
+  graph: () => request('/wiki/graph', undefined, tr('failed to load the graph')),
   get: (type, id) => request(`/wiki/${type}/${id}`, undefined, tr('failed to load the article')),
   save: (type, id, payload) =>
     request(

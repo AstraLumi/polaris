@@ -794,45 +794,7 @@ func wikiBacklinks(db *sql.DB, typ string, id int64) []wikiRef {
 		names[it.Type+":"+strconv.FormatInt(it.ID, 10)] = wikiRef{Type: it.Type, ID: it.ID, Name: it.Name}
 	}
 
-	texts := map[int64][]string{} // entry id -> everything written in it
-	owner := map[int64]string{}
-	rows, err := db.Query(`SELECT id, entity_type, entity_id, summary, fields FROM wiki_entries`)
-	if err != nil {
-		return out
-	}
-	for rows.Next() {
-		var eid, ent int64
-		var et, summary, fields string
-		if rows.Scan(&eid, &et, &ent, &summary, &fields) != nil {
-			continue
-		}
-		owner[eid] = et + ":" + strconv.FormatInt(ent, 10)
-		texts[eid] = append(texts[eid], summary)
-		var m map[string]string
-		if json.Unmarshal([]byte(fields), &m) == nil {
-			for _, v := range m {
-				texts[eid] = append(texts[eid], v)
-			}
-		}
-	}
-	rows.Close()
-	for _, q := range []string{
-		`SELECT entry_id, title || char(10) || body FROM wiki_sections`,
-		`SELECT entry_id, value FROM wiki_infobox`,
-	} {
-		rows, err := db.Query(q)
-		if err != nil {
-			continue
-		}
-		for rows.Next() {
-			var eid int64
-			var s string
-			if rows.Scan(&eid, &s) == nil {
-				texts[eid] = append(texts[eid], s)
-			}
-		}
-		rows.Close()
-	}
+	texts, owner := wikiTexts(db)
 
 	self := typ + ":" + strconv.FormatInt(id, 10)
 	seen := map[string]bool{}
