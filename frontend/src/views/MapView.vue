@@ -163,6 +163,8 @@ import { themeRgba } from '../theme'
 import { HEX_SIZE, SQRT3, CORNERS, keyOf, hexCenter, pixelToHex, hexLine, hexesWithin } from '../hexMath'
 import { rowsToPole, latitudeRow, latitudeOf, zoneOf, zoneLines, formatLatitude } from '../planet'
 import { realmLabel } from '../worldMap'
+import { drawDot, drawCity, drawCapital, lighten } from '../mapMarkers'
+import { TIERS, areaFontPx } from '../planetLabels'
 import MapHoverPane from '../components/MapHoverPane.vue'
 import HexPanel from '../components/HexPanel.vue'
 import MajorLocationModal from '../components/MajorLocationModal.vue'
@@ -487,106 +489,6 @@ function markerRadius(rank, z) {
   return Math.max(MARKER[rank].rad, (MARKER[rank].minPx * compact(z)) / z)
 }
 
-function drawDot(ctx, cx, cy, rad, z) {
-  ctx.beginPath()
-  ctx.arc(cx, cy, rad, 0, Math.PI * 2)
-  ctx.fillStyle = themeRgba('--accent')
-  ctx.fill()
-  ctx.strokeStyle = themeRgba('--surface', 0.95)
-  ctx.lineWidth = 1.5 / z
-  ctx.stroke()
-}
-
-// A city: a dark medallion with a little castle in the accent colour.
-function drawCity(ctx, cx, cy, r, z) {
-  ctx.beginPath()
-  ctx.arc(cx, cy, r, 0, Math.PI * 2)
-  ctx.fillStyle = themeRgba('--surface', 0.96)
-  ctx.fill()
-  ctx.strokeStyle = themeRgba('--accent')
-  ctx.lineWidth = Math.max(1.4, r * z * 0.11) / z
-  ctx.stroke()
-
-  const u = (r * 0.62) / 6 // the castle is drawn on a 12 x 11 grid
-  ctx.save()
-  ctx.translate(cx, cy + u * 0.4)
-  ctx.scale(u, u)
-  ctx.beginPath()
-  ctx.moveTo(-6, 5.5)
-  ctx.lineTo(-6, -5.5)
-  ctx.lineTo(-3.6, -5.5)
-  ctx.lineTo(-3.6, -3.4)
-  ctx.lineTo(-1.2, -3.4)
-  ctx.lineTo(-1.2, -5.5)
-  ctx.lineTo(1.2, -5.5)
-  ctx.lineTo(1.2, -3.4)
-  ctx.lineTo(3.6, -3.4)
-  ctx.lineTo(3.6, -5.5)
-  ctx.lineTo(6, -5.5)
-  ctx.lineTo(6, 5.5)
-  ctx.closePath()
-  ctx.fillStyle = themeRgba('--accent')
-  ctx.fill()
-  // The gate.
-  ctx.beginPath()
-  ctx.moveTo(-1.7, 5.5)
-  ctx.lineTo(-1.7, 1.6)
-  ctx.arc(0, 1.6, 1.7, Math.PI, 0)
-  ctx.lineTo(1.7, 5.5)
-  ctx.closePath()
-  ctx.fillStyle = themeRgba('--surface', 0.96)
-  ctx.fill()
-  ctx.restore()
-}
-
-// A capital: a glowing four-pointed star (like the Polaris logo) rising out of
-// a ring, larger than anything else on the map.
-function drawCapital(ctx, cx, cy, R, z) {
-  const glow = ctx.createRadialGradient(cx, cy, R * 0.2, cx, cy, R * 2.1)
-  glow.addColorStop(0, themeRgba('--accent', 0.38))
-  glow.addColorStop(1, themeRgba('--accent', 0))
-  ctx.beginPath()
-  ctx.arc(cx, cy, R * 2.1, 0, Math.PI * 2)
-  ctx.fillStyle = glow
-  ctx.fill()
-
-  ctx.beginPath()
-  ctx.arc(cx, cy, R * 0.56, 0, Math.PI * 2)
-  ctx.fillStyle = themeRgba('--surface', 0.92)
-  ctx.fill()
-  ctx.strokeStyle = themeRgba('--accent')
-  ctx.lineWidth = Math.max(1.4, R * z * 0.07) / z
-  ctx.stroke()
-
-  const star = (len, waist, rot) => {
-    ctx.save()
-    ctx.translate(cx, cy)
-    ctx.rotate(rot)
-    ctx.beginPath()
-    ctx.moveTo(0, -len)
-    ctx.quadraticCurveTo(waist, -waist, len, 0)
-    ctx.quadraticCurveTo(waist, waist, 0, len)
-    ctx.quadraticCurveTo(-waist, waist, -len, 0)
-    ctx.quadraticCurveTo(-waist, -waist, 0, -len)
-    ctx.closePath()
-    ctx.restore()
-  }
-  star(R, R * 0.13, 0)
-  ctx.fillStyle = themeRgba('--accent')
-  ctx.fill()
-  ctx.strokeStyle = themeRgba('--surface', 0.95)
-  ctx.lineWidth = 1.4 / z
-  ctx.stroke()
-  star(R * 0.5, R * 0.1, Math.PI / 4)
-  ctx.fillStyle = themeRgba('--accent', 0.85)
-  ctx.fill()
-
-  ctx.beginPath()
-  ctx.arc(cx, cy, R * 0.1, 0, Math.PI * 2)
-  ctx.fillStyle = themeRgba('--surface')
-  ctx.fill()
-}
-
 function drawMinorMarker(ctx, spot, z) {
   const { x: cx, y: cy, rank, count } = spot
   const rad = markerRadius(rank, z)
@@ -614,6 +516,41 @@ function roundRect(ctx, x, y, w, h, r) {
 
 // Labels, most important first. A capital's label is always drawn; the rest
 // are skipped when they would land on a label that is already there.
+// The hex sharing the edge between corners i and i+1 (pointy-top, CORNERS).
+const HEX_SIDES = [[1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]]
+
+// Each kingdom's, region's and ocean's name at the middle of its hexes,
+// while zoomed out (planetLabels.js tiers).
+function drawAreaNames(ctx, z, inView) {
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.lineJoin = 'round'
+  for (const m of majors.value) {
+    if (!m.color) continue
+    const hexes = hexesOf(m.id)
+    if (!hexes.length) continue
+    let x = 0
+    let y = 0
+    for (const h of hexes) {
+      x += h.x
+      y += h.y
+    }
+    x /= hexes.length
+    y /= hexes.length
+    if (!inView(x, y)) continue
+    const px = areaFontPx(hexes.length)
+    ctx.font = `700 ${px / z}px Fraunces, 'Times New Roman', serif`
+    if ('letterSpacing' in ctx) ctx.letterSpacing = `${1.5 / z}px`
+    const text = m.name.toUpperCase()
+    ctx.lineWidth = 4 / z
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)'
+    ctx.strokeText(text, x, y)
+    ctx.fillStyle = lighten(m.color, 0.45)
+    ctx.fillText(text, x, y)
+  }
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px'
+}
+
 function drawMinorLabels(ctx, spots, z, screenSize) {
   const placed = []
   const free = (r) => !placed.some((p) => r.x < p.x + p.w && r.x + r.w > p.x && r.y < p.y + p.h && r.y + r.h > p.y)
@@ -788,24 +725,43 @@ function draw() {
     }
   }
 
-  // 2. Kingdom fills, batched per color.
+  // 2. Kingdom and region fills, batched per color. An ocean leaves its
+  //    water unpainted: its territory gets an outline in its colour.
+  const oceanColors = new Set(majors.value.filter((m) => m.color && m.realm === 'ocean').map((m) => m.color))
   const groups = new Map()
+  const oceans = new Map()
   for (const h of painted.values()) {
     if (!inView(h.x, h.y)) continue
-    let g = groups.get(h.color)
+    const into = oceanColors.has(h.color) ? oceans : groups
+    let g = into.get(h.color)
     if (!g) {
       g = []
-      groups.set(h.color, g)
+      into.set(h.color, g)
     }
-    g.push(h.x, h.y)
+    g.push(h)
   }
-  for (const [color, pts] of groups) {
+  for (const [color, list] of groups) {
     ctx.beginPath()
-    for (let i = 0; i < pts.length; i += 2) addHexPath(ctx, pts[i], pts[i + 1], HEX_SIZE)
+    for (const h of list) addHexPath(ctx, h.x, h.y, HEX_SIZE)
     ctx.fillStyle = color
     ctx.fill()
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)'
     ctx.lineWidth = 1 / z
+    ctx.stroke()
+  }
+  for (const [color, list] of oceans) {
+    ctx.beginPath()
+    for (const h of list) {
+      HEX_SIDES.forEach(([dq, dr], i) => {
+        if (painted.get(keyOf(h.q + dq, h.r + dr))?.color === color) return
+        const [ax, ay] = CORNERS[i]
+        const [bx, by] = CORNERS[(i + 1) % 6]
+        ctx.moveTo(h.x + ax * HEX_SIZE, h.y + ay * HEX_SIZE)
+        ctx.lineTo(h.x + bx * HEX_SIZE, h.y + by * HEX_SIZE)
+      })
+    }
+    ctx.strokeStyle = color
+    ctx.lineWidth = 2 / z
     ctx.stroke()
   }
 
@@ -854,6 +810,7 @@ function draw() {
   const spots = minorSpots.filter((spot) => inView(spot.x, spot.y))
   for (const spot of spots) drawMinorMarker(ctx, spot, z)
   drawMinorLabels(ctx, spots, z, screenSize)
+  if (screenSize < TIERS.areaUntil) drawAreaNames(ctx, z, inView)
 
   // 6. Selected and hovered hex.
   if (selectedHex.value) {

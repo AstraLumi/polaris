@@ -14,6 +14,8 @@
         :selected="selectedCell"
         :outlined="outlined"
         :focus="homeCell"
+        :areas="areas"
+        :borders="borders"
         @hover="onHover"
         @select="onSelect"
         @paint-start="onPaintStart"
@@ -29,6 +31,8 @@
         :version="version"
         :markers="markers"
         :lines="lines"
+        :areas="areas"
+        :borders="borders"
         @hover="onHover"
       />
 
@@ -135,7 +139,8 @@ import { useRoute } from 'vue-router'
 import { t, tr } from '../i18n'
 import { planetApi, mapApi } from '../api'
 import { worldMap, PROJECTIONS, realmLabel, applyMapSettings } from '../worldMap'
-import { PlanetGrid, latLon } from '../planetGrid'
+import { PlanetGrid, latLon, middleCell } from '../planetGrid'
+import { areaFontPx } from '../planetLabels'
 import { formatLatitude, zoneOf } from '../planet'
 import PlanetGlobe from '../components/PlanetGlobe.vue'
 import PlanetFlatMap from '../components/PlanetFlatMap.vue'
@@ -286,13 +291,36 @@ function coloredOf(ids) {
   return null
 }
 
-// What colour a cell is: its kingdom's (or region's or ocean's), land when
-// something without a colour is there, or '' for the open sea.
+// What colour a cell is: its kingdom's or region's, land when something
+// without a colour is there, or '' for the sea. An ocean leaves its water
+// as it is; its territory is outlined instead (borders).
 function colorOf(cell) {
   const ids = cellMembers.get(cell)
-  if (ids && ids.length) return coloredOf(ids)?.color || LAND
+  if (ids && ids.length) {
+    const owner = coloredOf(ids)
+    if (owner) return owner.realm === 'ocean' ? '' : owner.color
+    return LAND
+  }
   return minorsByCell.has(cell) ? LAND : ''
 }
+
+// Each kingdom's, region's and ocean's name, at the middle of its land.
+const areas = computed(() => {
+  version.value // eslint-disable-line no-unused-expressions
+  return majors.value
+    .filter((m) => m.color)
+    .map((m) => {
+      const cells = cellsOf(m.id)
+      return { key: m.id, name: m.name, color: m.color, cell: middleCell(grid, cells), size: areaFontPx(cells.length) }
+    })
+    .filter((a) => a.cell != null)
+})
+
+// Oceans are drawn as the outline of their water.
+const borders = computed(() => {
+  version.value // eslint-disable-line no-unused-expressions
+  return majors.value.filter((m) => m.color && m.realm === 'ocean').map((m) => ({ color: m.color, cells: cellsOf(m.id) }))
+})
 
 // ---- Loading -------------------------------------------------------------------------
 async function load() {

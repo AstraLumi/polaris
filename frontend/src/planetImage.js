@@ -52,6 +52,28 @@ export class ProjectedCells {
     return r
   }
 
+  // The outline of a set of cells in projected coordinates: [[x, y], [x, y]]
+  // segments, each cell's edge k−1→k being the one it shares with
+  // neighbour k (planetGrid.js corners). Poles are left out.
+  edges(cells) {
+    // Cached by the list itself: the views redraw every frame while panning.
+    this.edgeCache ||= new WeakMap()
+    const hit = this.edgeCache.get(cells)
+    if (hit) return hit
+    const set = cells instanceof Set ? cells : new Set(cells)
+    const out = []
+    for (const c of set) {
+      if (c < 2) continue
+      const around = this.grid.neighbors(c)
+      const m = around.length
+      for (const ring of this.rings(c)) {
+        for (let k = 0; k < m; k++) if (!set.has(around[k])) out.push([ring[(k - 1 + m) % m], ring[k]])
+      }
+    }
+    this.edgeCache.set(cells, out)
+    return out
+  }
+
   // Where a cell's centre lands.
   point(cell) {
     const [lat, lon] = latLon(this.grid.center(cell))

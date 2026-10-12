@@ -19,7 +19,7 @@
         <li v-for="m in panel.majors" :key="m.id">
           <span class="dot" :class="{ none: !m.color }" :style="m.color ? { background: m.color } : {}"></span>
           <span class="mini-name" data-tip-overflow>{{ m.name }}</span>
-          <span class="mini-tag">{{ m.color ? $t('Kingdom') : $t('Major') }}</span>
+          <span class="mini-tag">{{ m.color ? $t(realmLabel(m.realm)) : $t('Major') }}</span>
           <button type="button" class="btn btn-ghost small" @click="$emit('edit-major', m)">{{ $t('Edit') }}</button>
         </li>
       </ul>
@@ -114,6 +114,7 @@
 import { t } from '../i18n'
 import { ref, watch } from 'vue'
 import ConfirmDialog from './ConfirmDialog.vue'
+import { realmLabel } from '../worldMap'
 import DateField from './DateField.vue'
 
 const props = defineProps({

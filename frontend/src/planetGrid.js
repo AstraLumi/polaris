@@ -200,3 +200,33 @@ export function frequencyFor(planetKm, hexKm) {
 }
 
 export const hexKmOf = (planetKm, n) => ((planetKm / (2 * Math.PI)) * Math.atan(2)) / n
+
+// The outline of a set of cells: every edge between a cell in it and one out
+// of it, as [corner, corner] pairs on the unit sphere. A cell's edge between
+// corners k−1 and k is the one it shares with neighbour k.
+export function territoryEdges(grid, cells) {
+  const set = cells instanceof Set ? cells : new Set(cells)
+  const out = []
+  for (const c of set) {
+    const around = grid.neighbors(c)
+    const corners = grid.corners(c, around)
+    const m = around.length
+    for (let k = 0; k < m; k++) if (!set.has(around[k])) out.push([corners[(k - 1 + m) % m], corners[k]])
+  }
+  return out
+}
+
+// The middle of a set of cells: the cell under their average direction.
+export function middleCell(grid, cells) {
+  if (!cells.length) return null
+  const step = Math.max(1, Math.floor(cells.length / 4000))
+  const sum = [0, 0, 0]
+  for (let k = 0; k < cells.length; k += step) {
+    const v = grid.center(cells[k])
+    sum[0] += v[0]
+    sum[1] += v[1]
+    sum[2] += v[2]
+  }
+  const len = Math.hypot(...sum)
+  return len > 1e-9 ? grid.cellAt([sum[0] / len, sum[1] / len, sum[2] / len]) : cells[0]
+}

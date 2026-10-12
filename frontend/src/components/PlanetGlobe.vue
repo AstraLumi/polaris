@@ -11,13 +11,17 @@
       @contextmenu.prevent
     ></canvas>
     <div class="labels" aria-hidden="true">
-      <span
-        v-for="l in labels"
-        :key="l.key"
-        class="label"
-        :class="'rank-' + l.rank"
-        :style="{ transform: `translate(${l.x}px, ${l.y}px) translate(-50%, 6px)` }"
-      >{{ l.name }}</span>
+      <template v-for="l in labels" :key="l.key">
+        <span
+          v-if="l.kind === 'area'"
+          class="area-name"
+          :style="{ transform: `translate(${l.x}px, ${l.y}px) translate(-50%, -50%)`, fontSize: l.size + 'px', '--area': l.color }"
+        >{{ l.name }}</span>
+        <div v-else class="marker" :style="{ transform: `translate(${l.x}px, ${l.y}px) translate(-50%, ${-l.icon / 2}px)` }">
+          <img :src="markerIcon(l.rank, l.icon)" :width="l.icon" :height="l.icon" alt="" />
+          <span v-if="l.named" class="label" :class="'rank-' + l.rank">{{ l.name }}</span>
+        </div>
+      </template>
     </div>
     <p v-if="building" class="building">{{ $t('Building the planet…') }}</p>
   </div>
@@ -27,14 +31,20 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { PlanetGrid, cellsWithin, normalize } from '../planetGrid'
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js'
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js'
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
+import { PlanetGrid, cellsWithin, normalize, territoryEdges } from '../planetGrid'
+import { pickLabels } from '../planetLabels'
+import { markerIcon } from '../mapMarkers'
 
 // The planet drawn in 3D: every cell of the grid (planetGrid.js) coloured by
 // colorOf, with an outline once cells are big enough on screen. Drag to turn
 // it, scroll to zoom. With the paint or erase tool a drag paints instead
 // (hold Space to turn it): the component works out the cells under the
 // brush and emits them; the parent decides what painting means and calls
-// recolor. Places are markers, cities and capitals are labelled.
+// recolor. Places are markers; names show by zoom (planetLabels.js), the
+// names of kingdoms, regions and oceans at the middle of their land.
 const props = defineProps({
   frequency: { type: Number, required: true },
   // cell -> '#rrggbb', or '' for open sea
@@ -52,6 +62,10 @@ const props = defineProps({
   outlined: { type: Array, default: () => [] },
   // A cell to face when the globe is first drawn.
   focus: { type: Number, default: null },
+  // Territory names: [{ key, name, color, cell (their middle), size (px) }]
+  areas: { type: Array, default: () => [] },
+  // Territories drawn as an outline only (oceans): [{ color, cells }]
+  borders: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['hover', 'select', 'paint-start', 'paint', 'paint-end'])
 
@@ -68,7 +82,7 @@ const COLUMNS = 2048 // the colour texture's width
 let grid = null
 let renderer, scene, camera, controls
 let globe, colorTex, colorData, globeMat
-let markerPoints = null
+let borderGroup = null
 let lineGroup = null
 let hoverLine = null
 let selectLine = null
@@ -239,18 +253,29 @@ const markerColor = () => {
   return new THREE.Color(v || '#e6c06a')
 }
 
-function buildMarkers() {
-  if (markerPoints) {
-    scene.remove(markerPoints)
-    markerPoints.geometry.dispose()
+// Oceans and the like: the edge of their territory, in their colour.
+function buildBorders() {
+  if (borderGroup) {
+    scene.remove(borderGroup)
+    borderGroup.traverse((o) => {
+      o.geometry?.dispose()
+      o.material?.dispose?.()
+    })
   }
-  const pts = props.markers.filter((m) => m.cell != null && m.cell < grid.count)
-  const pos = new Float32Array(pts.length * 3)
-  pts.forEach((m, k) => pos.set(grid.center(m.cell).map((x) => x * 1.003), k * 3))
-  const geo = new THREE.BufferGeometry()
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
-  markerPoints = new THREE.Points(geo, new THREE.PointsMaterial({ color: markerColor(), size: 7, sizeAttenuation: false }))
-  scene.add(markerPoints)
+  borderGroup = new THREE.Group()
+  for (const b of props.borders) {
+    const pts = []
+    for (const [a, c] of territoryEdges(grid, b.cells.filter((x) => x < grid.count))) {
+      for (const v of [a, c]) pts.push(v[0] * 1.0012, v[1] * 1.0012, v[2] * 1.0012)
+    }
+    if (!pts.length) continue
+    // Plain WebGL lines are one pixel wide; these keep a width on screen.
+    const geo = new LineSegmentsGeometry().setPositions(pts)
+    const mat = new LineMaterial({ color: b.color, linewidth: 2.5 })
+    mat.resolution.set(renderer.domElement.width, renderer.domElement.height)
+    borderGroup.add(new LineSegments2(geo, mat))
+  }
+  scene.add(borderGroup)
   requestRender()
 }
 
@@ -301,7 +326,8 @@ function requestRender() {
 
 function render() {
   raf = 0
-  if (!renderer) return
+  // Not built yet (the grid is made a moment after mounting).
+  if (!renderer || !globeMat) return
   const dist = camera.position.length()
   globeMat.uniforms.uLight.value.copy(camera.position).normalize()
   // Outlines once a cell is about 7 pixels across.
@@ -313,23 +339,28 @@ function render() {
   placeLabels(dist, cellPx)
 }
 
-// Labels for capitals always, cities closer in, other places closest, on
-// the side facing the camera.
+// Markers and names on the side facing the camera, by zoom (planetLabels.js).
 function placeLabels(dist, cellPx) {
   const w = renderer.domElement.clientWidth
   const h = renderer.domElement.clientHeight
   const eye = camera.position.clone().normalize()
-  const out = []
-  for (const m of props.markers) {
-    if (m.cell == null || m.cell >= grid.count) continue
-    if (m.rank < 2 && cellPx < (m.rank === 1 ? 4 : 14)) continue
-    const p = new THREE.Vector3(...grid.center(m.cell))
-    if (p.dot(eye) < 0.25) continue
+  const onScreen = (cell, limit) => {
+    if (cell == null || cell >= grid.count) return null
+    const p = new THREE.Vector3(...grid.center(cell))
+    if (p.dot(eye) < limit) return null
     p.multiplyScalar(1.003).project(camera)
-    out.push({ key: m.cell + ':' + m.name, name: m.name, rank: m.rank, x: ((p.x + 1) / 2) * w, y: ((1 - p.y) / 2) * h })
-    if (out.length >= 200) break
+    return [((p.x + 1) / 2) * w, ((1 - p.y) / 2) * h]
   }
-  labels.value = out
+  const candidates = []
+  for (const a of props.areas) {
+    const at = onScreen(a.cell, 0.35)
+    if (at) candidates.push({ kind: 'area', key: 'a:' + a.key, name: a.name, x: at[0], y: at[1], size: a.size, color: a.color })
+  }
+  for (const m of props.markers) {
+    const at = onScreen(m.cell, 0.2)
+    if (at) candidates.push({ kind: 'marker', key: m.cell + ':' + m.name, name: m.name, rank: m.rank, x: at[0], y: at[1] })
+  }
+  labels.value = pickLabels(candidates, cellPx)
 }
 
 function resize() {
@@ -338,6 +369,7 @@ function resize() {
   const w = el.clientWidth
   const h = el.clientHeight
   renderer.setSize(w, h, false)
+  borderGroup?.traverse((o) => o.material?.resolution?.set(renderer.domElement.width, renderer.domElement.height))
   camera.aspect = w / Math.max(1, h)
   camera.updateProjectionMatrix()
   requestRender()
@@ -487,7 +519,7 @@ function rebuild() {
     grid = new PlanetGrid(props.frequency)
     buildGlobe()
     buildLines()
-    buildMarkers()
+    buildBorders()
     drawSelected()
     drawOutlined()
     building.value = false
@@ -524,7 +556,8 @@ onBeforeUnmount(() => {
 
 watch(() => props.frequency, rebuild)
 watch(() => props.version, recolorAll)
-watch(() => props.markers, () => grid && buildMarkers(), { deep: true })
+watch(() => [props.markers, props.areas], requestRender)
+watch(() => props.borders, () => grid && buildBorders())
 watch(() => props.lines, () => grid && buildLines(), { deep: true })
 watch(() => props.selected, () => grid && drawSelected())
 watch(() => props.outlined, () => grid && drawOutlined())
@@ -575,6 +608,39 @@ defineExpose({ recolor, focusOn })
   font-size: 0.7rem;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.marker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.marker img {
+  display: block;
+}
+
+.marker .label {
+  position: static;
+  margin-top: -2px;
+}
+
+.area-name {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: color-mix(in srgb, var(--area) 55%, #ffffff);
+  font-family: 'Fraunces', serif;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-shadow:
+    0 0 3px rgba(0, 0, 0, 0.9),
+    0 0 8px rgba(0, 0, 0, 0.6);
 }
 
 .label.rank-2 {

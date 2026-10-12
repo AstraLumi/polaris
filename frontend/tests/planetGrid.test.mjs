@@ -1,7 +1,7 @@
 // The planet's grid and projections; mirrors backend/planetgrid_test.go.
 // No dependencies: node frontend/tests/planetGrid.test.mjs
 import assert from 'node:assert/strict'
-import { PlanetGrid, fromLatLon, frequencyFor, cellsWithin } from '../src/planetGrid.js'
+import { PlanetGrid, fromLatLon, frequencyFor, cellsWithin, territoryEdges, middleCell } from '../src/planetGrid.js'
 import { projectionOf } from '../src/projection.js'
 
 const rad = (d) => (d * Math.PI) / 180
@@ -38,4 +38,9 @@ for (const id of ['equirectangular', 'mercator', 'mollweide', 'robinson']) {
   }
   assert.equal(p.inverse(10, 0), null, `${id}: off the map`)
 }
+// A hexagon on its own has six edges; with a neighbour, the two share one.
+const lone = 100
+assert.equal(territoryEdges(g5, [lone]).length, 6)
+assert.equal(territoryEdges(g5, [lone, g5.neighbors(lone)[0]]).length, 10)
+assert.equal(middleCell(g5, cellsWithin(g5, lone, 2)), lone, 'the middle of a patch is its centre')
 console.log('planetGrid: ok')

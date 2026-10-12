@@ -17,6 +17,8 @@ import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { PlanetGrid, fromLatLon } from '../planetGrid'
 import { projectionOf } from '../projection'
 import { ProjectedCells, drawPlanet, mapBounds, byColor } from '../planetImage'
+import { pickLabels } from '../planetLabels'
+import { drawDot, drawCity, drawCapital, lighten } from '../mapMarkers'
 
 // The planet laid flat in a projection, to look at only: drag to move,
 // scroll to zoom, hover a cell to see what is there. Painting happens on the
@@ -30,6 +32,9 @@ const props = defineProps({
   version: { type: Number, default: 0 },
   markers: { type: Array, default: () => [] },
   lines: { type: Object, default: null },
+  // As PlanetGlobe: territory names, and oceans drawn as outlines.
+  areas: { type: Array, default: () => [] },
+  borders: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['hover'])
 
@@ -81,28 +86,59 @@ function draw() {
     cells: byColor(props.cells, props.colorOf),
     lines: props.lines,
     land: (c, sx, sy) => {
-      // Places: dots, capitals bigger, labelled once there is room.
-      c.fillStyle = css('--accent', '#e6c06a')
-      c.font = '600 11px Manrope, sans-serif'
-      c.textAlign = 'center'
-      c.textBaseline = 'top'
-      c.lineJoin = 'round'
+      // Oceans: the outline of their water.
+      for (const border of props.borders) {
+        c.beginPath()
+        for (const [[x0, y0], [x1, y1]] of projected.edges(border.cells)) {
+          c.moveTo(sx(x0), sy(y0))
+          c.lineTo(sx(x1), sy(y1))
+        }
+        c.strokeStyle = border.color
+        c.lineWidth = 1.5
+        c.stroke()
+      }
+      // Names and markers by zoom, as on the globe (planetLabels.js).
       const cellPx = view.scale * (Math.atan(2) / grid.n)
+      const inView = (x, y) => x > -40 && x < size.w + 40 && y > -40 && y < size.h + 40
+      const candidates = []
+      for (const a of props.areas) {
+        const [x, y] = projected.point(a.cell)
+        if (inView(sx(x), sy(y))) candidates.push({ kind: 'area', key: a.key, name: a.name, x: sx(x), y: sy(y), size: a.size, color: a.color })
+      }
       for (const m of props.markers) {
         if (m.cell == null || m.cell >= grid.count) continue
         const [x, y] = projected.point(m.cell)
-        const r = m.rank === 2 ? 4.5 : m.rank === 1 ? 3.5 : 2.5
-        c.beginPath()
-        c.arc(sx(x), sy(y), r, 0, Math.PI * 2)
-        c.fill()
-        if (m.rank === 2 || (m.rank === 1 && cellPx > 3) || cellPx > 12) {
-          c.lineWidth = 3
-          c.strokeStyle = css('--surface', '#10131c')
-          c.strokeText(m.name, sx(x), sy(y) + r + 2)
-          c.fillStyle = css('--text-primary', '#fff')
-          c.fillText(m.name, sx(x), sy(y) + r + 2)
-          c.fillStyle = css('--accent', '#e6c06a')
+        if (inView(sx(x), sy(y))) candidates.push({ kind: 'marker', key: m.cell, name: m.name, rank: m.rank, x: sx(x), y: sy(y) })
+      }
+      c.lineJoin = 'round'
+      c.textAlign = 'center'
+      for (const l of pickLabels(candidates, cellPx).reverse()) {
+        if (l.kind === 'area') {
+          c.font = `700 ${l.size}px Fraunces, 'Times New Roman', serif`
+          if ('letterSpacing' in c) c.letterSpacing = '1.5px'
+          c.textBaseline = 'middle'
+          c.lineWidth = 4
+          c.strokeStyle = 'rgba(0, 0, 0, 0.75)'
+          c.strokeText(l.name.toUpperCase(), l.x, l.y)
+          c.fillStyle = lighten(l.color, 0.45)
+          c.fillText(l.name.toUpperCase(), l.x, l.y)
+          if ('letterSpacing' in c) c.letterSpacing = '0px'
+          continue
         }
+        const r = l.icon / 2
+        if (l.rank === 2) drawCapital(c, l.x, l.y, r / 2.1, 1)
+        else if (l.rank === 1) drawCity(c, l.x, l.y, r - 1, 1)
+        else drawDot(c, l.x, l.y, r - 1, 1)
+        if (!l.named) continue
+        c.font = `${l.rank === 2 ? 700 : 600} ${l.rank === 2 ? 12 : 11}px Manrope, sans-serif`
+        c.textBaseline = 'top'
+        c.lineWidth = 3
+        c.strokeStyle = css('--surface', '#10131c')
+        const ty = l.y + (l.rank === 2 ? r * 0.55 : r) + 2
+        const text = l.rank === 2 ? l.name.toUpperCase() : l.name
+        c.strokeText(text, l.x, ty)
+        c.fillStyle = l.rank === 2 ? css('--accent', '#e6c06a') : css('--text-primary', '#fff')
+        c.fillText(text, l.x, ty)
       }
     },
   })
@@ -185,7 +221,7 @@ onMounted(() => {
 onBeforeUnmount(() => resizeObserver?.disconnect())
 
 watch(() => [props.frequency, props.projection], prepare)
-watch(() => [props.version, props.cells, props.markers, props.lines], schedule, { deep: false })
+watch(() => [props.version, props.cells, props.markers, props.lines, props.areas, props.borders], schedule, { deep: false })
 
 defineExpose({ fit: () => (fit(), schedule()) })
 </script>
