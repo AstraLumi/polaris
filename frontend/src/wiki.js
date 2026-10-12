@@ -121,6 +121,8 @@ export const FACT_LABELS = {
   eccentricity: tr('Eccentricity'),
   closest: tr('Closest'),
   axial_tilt: tr('Axial tilt'),
+  rings: tr('Rings'),
+  dyson: tr('Dyson sphere'),
   day_length: tr('Day length'),
   farthest: tr('Farthest'),
   system: tr('Solar system'),
@@ -153,7 +155,7 @@ export const WORD_LABELS = [
   tr('Region'), tr('Ocean'),
   tr('Star'), tr('Planet'), tr('Moon'), tr('Rocky'), tr('Gas giant'), tr('Ocean world'), tr('The world of the map'),
   tr('Yellow dwarf (like the Sun)'), tr('Red giant'), tr('White dwarf'), tr('Brown dwarf'), tr('Neutron star'), tr('Black hole'),
-  tr('Tectonic plate'), tr('Mountain range'), tr('Ocean depth'),
+  tr('Tectonic plate'), tr('Mountain range'), tr('Ocean depth'), tr('Inside a Dyson sphere'),
 ]
 
 // A 'words' value: several of the words above, joined by '|'.

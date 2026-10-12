@@ -74,6 +74,18 @@ var schema35Statements = []string{
 
 const maxDayHours = 1e6
 
+// schema36Statements create what schema 36 added: rings round a planet
+// (inner and outer edge, in the planet's radii, 0 for none, and their
+// colour), and a star closed in a Dyson sphere (dark, giving no light).
+var schema36Statements = []string{
+	`ALTER TABLE celestial_bodies ADD COLUMN ring_inner REAL NOT NULL DEFAULT 0`,
+	`ALTER TABLE celestial_bodies ADD COLUMN ring_outer REAL NOT NULL DEFAULT 0`,
+	`ALTER TABLE celestial_bodies ADD COLUMN ring_color TEXT`,
+	`ALTER TABLE celestial_bodies ADD COLUMN dyson INTEGER NOT NULL DEFAULT 0`,
+}
+
+const maxRingRadii = 20
+
 // The classes a star can be. Their realistic ranges live with the physics
 // (frontend/src/stars.js); here a star only has to be one of them.
 var starClasses = map[string]bool{
@@ -113,10 +125,16 @@ type celestialBody struct {
 	AxialTilt float64 `json:"axial_tilt"`
 	DayHours  float64 `json:"day_hours"`
 	// The grid of its own map, once painted (bodymaps.go); nil without one.
-	MapFrequency *int   `json:"map_frequency"`
-	Color        string `json:"color"`
-	IsMain       bool   `json:"is_main"`
-	Sort         int    `json:"sort"`
+	MapFrequency *int `json:"map_frequency"`
+	// Rings (planets): edges in the planet's radii, 0 for none.
+	RingInner float64 `json:"ring_inner"`
+	RingOuter float64 `json:"ring_outer"`
+	RingColor string  `json:"ring_color"`
+	// A star inside a Dyson sphere.
+	Dyson  bool   `json:"dyson"`
+	Color  string `json:"color"`
+	IsMain bool   `json:"is_main"`
+	Sort   int    `json:"sort"`
 	// Stars only.
 	StarClass    string   `json:"star_class"`
 	TemperatureK *float64 `json:"temperature_k"`
@@ -153,7 +171,7 @@ func loadSolarSystem(db *sql.DB) (solarSystem, error) {
 	out.Bodies = []celestialBody{}
 	rows, err := db.Query(`SELECT id, parent_id, kind, name, body_type, radius_km, orbit_km, phase, COALESCE(color, ''), is_main, sort,
 		COALESCE(star_class, ''), temperature_k, mass_kg, free_values, eccentricity, periapsis,
-		axial_tilt, day_hours, map_frequency
+		axial_tilt, day_hours, map_frequency, ring_inner, ring_outer, COALESCE(ring_color, ''), dyson
 		FROM celestial_bodies ORDER BY sort, id`)
 	if err != nil {
 		return out, err
@@ -166,7 +184,7 @@ func loadSolarSystem(db *sql.DB) (solarSystem, error) {
 		var freq sql.NullInt64
 		if err := rows.Scan(&b.ID, &parent, &b.Kind, &b.Name, &b.BodyType, &b.RadiusKm, &orbit, &b.Phase, &b.Color, &b.IsMain, &b.Sort,
 			&b.StarClass, &temp, &mass, &b.FreeValues, &b.Eccentricity, &b.Periapsis,
-			&b.AxialTilt, &b.DayHours, &freq); err != nil {
+			&b.AxialTilt, &b.DayHours, &freq, &b.RingInner, &b.RingOuter, &b.RingColor, &b.Dyson); err != nil {
 			return out, err
 		}
 		if temp.Valid {
@@ -298,6 +316,22 @@ func checkBody(db *sql.DB, b *celestialBody, id int64) string {
 	if !(b.DayHours > 0 && b.DayHours <= maxDayHours) {
 		return "a day must last more than 0 hours"
 	}
+	// Rings are a planet's; a Dyson sphere is a star's.
+	if b.Kind != "planet" || b.RingOuter == 0 {
+		b.RingInner, b.RingOuter, b.RingColor = 0, 0, ""
+	} else {
+		if !(b.RingInner >= 1 && b.RingOuter > b.RingInner && b.RingOuter <= maxRingRadii) {
+			return "rings run from the planet's surface outwards: inner edge at least 1 radius, outer edge beyond it, at most 20"
+		}
+		ringColor, ok := normalizeColor(b.RingColor)
+		if !ok {
+			return "invalid color"
+		}
+		b.RingColor = ringColor
+	}
+	if b.Kind != "star" {
+		b.Dyson = false
+	}
 	if !(b.Eccentricity >= 0 && b.Eccentricity <= maxEccentricity) {
 		return "the eccentricity must be between 0 and 0.95"
 	}
@@ -418,20 +452,22 @@ func writeBody(db *sql.DB, b *celestialBody, id int64) error {
 	color := nullableString(b.Color)
 	if id == 0 {
 		res, err := tx.Exec(`INSERT INTO celestial_bodies (parent_id, kind, name, body_type, radius_km, orbit_km, phase, color, is_main,
-				star_class, temperature_k, mass_kg, free_values, eccentricity, periapsis, axial_tilt, day_hours, sort)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM celestial_bodies))`,
+				star_class, temperature_k, mass_kg, free_values, eccentricity, periapsis, axial_tilt, day_hours,
+				ring_inner, ring_outer, ring_color, dyson, sort)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM celestial_bodies))`,
 			b.ParentID, b.Kind, b.Name, b.BodyType, b.RadiusKm, b.OrbitKm, b.Phase, color, b.IsMain,
-			nullableString(b.StarClass), b.TemperatureK, b.MassKg, b.FreeValues, b.Eccentricity, b.Periapsis, b.AxialTilt, b.DayHours)
+			nullableString(b.StarClass), b.TemperatureK, b.MassKg, b.FreeValues, b.Eccentricity, b.Periapsis, b.AxialTilt, b.DayHours,
+			b.RingInner, b.RingOuter, nullableString(b.RingColor), b.Dyson)
 		if err != nil {
 			return err
 		}
 		b.ID, _ = res.LastInsertId()
 	} else if _, err := tx.Exec(`UPDATE celestial_bodies SET name = ?, body_type = ?, radius_km = ?, orbit_km = ?, phase = ?, color = ?, is_main = ?,
 			star_class = ?, temperature_k = ?, mass_kg = ?, free_values = ?, eccentricity = ?, periapsis = ?,
-			axial_tilt = ?, day_hours = ?
+			axial_tilt = ?, day_hours = ?, ring_inner = ?, ring_outer = ?, ring_color = ?, dyson = ?
 		WHERE id = ?`, b.Name, b.BodyType, b.RadiusKm, b.OrbitKm, b.Phase, color, b.IsMain,
 		nullableString(b.StarClass), b.TemperatureK, b.MassKg, b.FreeValues, b.Eccentricity, b.Periapsis,
-		b.AxialTilt, b.DayHours, id); err != nil {
+		b.AxialTilt, b.DayHours, b.RingInner, b.RingOuter, nullableString(b.RingColor), b.Dyson, id); err != nil {
 		return err
 	}
 	return tx.Commit()

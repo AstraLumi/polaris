@@ -81,6 +81,8 @@ export function fitToClass(star) {
 // How bright a star is, in Suns: its surface times its temperature to the
 // fourth (Stefan–Boltzmann). A black hole gives no light of its own.
 export function luminosity(star) {
+  // Closed in a Dyson sphere, none of it gets out.
+  if (star.dyson) return 0
   const t = star.temperature_k || 0
   if (!(t > 0) || !(star.radius_km > 0)) return 0
   const r = star.radius_km * 1000

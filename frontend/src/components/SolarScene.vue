@@ -23,7 +23,7 @@ import { sceneRadius, sceneDistance, scenePositions, sceneOrbitPath, bodyColor }
 import { orbitLimits } from '../orbits'
 import { habitableZone } from '../stars'
 import { createGlobeMesh } from '../three/globeMesh'
-import { createStar, createPlanetMaterial, createAtmosphere, createClouds } from '../three/bodyShaders'
+import { createStar, createPlanetMaterial, createAtmosphere, createClouds, createRings } from '../three/bodyShaders'
 import { cloudCoverage, genericCloudCover, mainPlanetCloudCover } from '../climate'
 import { loadSkyDome, disposeSkyDome } from '../three/skyDome'
 
@@ -72,7 +72,8 @@ let bodyGroup = null // everything rebuilt when the bodies change
 const meshes = new Map() // body id -> { body, mesh, spin, orbit (trail, round its parent) }
 let follow = null // { id, last: Vector3 }
 let stars = [] // three/bodyShaders.js stars, their coronas facing the camera
-let sunLit = [] // materials told where the star is each frame (planets, air, clouds)
+let sunLit = [] // materials told where the star is each frame (planets, air, clouds, rings)
+let rings = [] // { material, id }: told where their planet is, for its shadow
 let cloudMaterials = [] // told the time, so clouds drift
 let markerGroup = null // the habitable zone and the gravity limits
 let limitsAround = null // the id of the body the limits are drawn round
@@ -110,6 +111,7 @@ function buildBodies() {
   meshes.clear()
   stars = []
   sunLit = []
+  rings = []
   cloudMaterials = []
   const byId = new Map(props.bodies.map((b) => [b.id, b]))
   for (const b of props.bodies) {
@@ -117,7 +119,7 @@ function buildBodies() {
     let mesh
     const globe = b.kind !== 'star' ? globeViews.get(b.id) : null
     if (b.kind === 'star') {
-      const star = createStar(r, colorOf(b), b.star_class === 'black_hole')
+      const star = createStar(r, colorOf(b), { blackHole: b.star_class === 'black_hole', dyson: !!b.dyson })
       stars.push(star)
       mesh = star.group
     } else if (globe) {
@@ -149,6 +151,13 @@ function buildBodies() {
           spin.add(clouds)
         }
       }
+      // Rings lie in the equator: they tilt with the planet, but don't spin.
+      if (b.kind === 'planet' && b.ring_outer > b.ring_inner && b.ring_inner >= 1) {
+        const ring = createRings(r, b.ring_inner, b.ring_outer, b.ring_color || ringColor(b))
+        sunLit.push(ring.material)
+        rings.push({ material: ring.material, id: b.id })
+        tilt.add(ring)
+      }
       tilt.add(spin)
       tilt.add(axisLine(r))
       holder.add(tilt)
@@ -169,7 +178,9 @@ function buildBodies() {
   place()
 }
 
-// ---- Air and clouds ----------------------------------------------------------------------
+// ---- Air, clouds and rings ---------------------------------------------------------------
+// Rings with no colour of their own take a pale dusty tint of the planet's.
+const ringColor = (b) => new THREE.Color(colorOf(b)).lerp(new THREE.Color('#e8dcc0'), 0.6).getStyle()
 const AIR = { rocky: '#7fb2ff', ocean: '#6fc8ff' }
 const atmosphereColor = (b) => AIR[b.body_type] || new THREE.Color(colorOf(b)).lerp(new THREE.Color('#ffffff'), 0.35).getStyle()
 
@@ -397,7 +408,24 @@ function render() {
     const local = g.mesh.worldToLocal(sun.clone())
     g.material.uniforms.uLight.value.copy(local.normalize())
   }
-  for (const m of sunLit) m.uniforms.uSun.value.copy(sun)
+  // Inside a Dyson sphere the star gives no light.
+  const power = star?.dyson ? 0 : 1
+  for (const m of sunLit) {
+    m.uniforms.uSun.value.copy(sun)
+    m.uniforms.uPower.value = power
+  }
+  for (const g of globeViews.values()) g.material.uniforms.uPower.value = power
+  for (const ring of rings) ring.material.uniforms.uPlanet.value.copy(positions.get(ring.id) ?? sun)
+  // A black hole bends the light of the sky behind it.
+  if (skyMesh) {
+    const lens = skyMesh.material.uniforms
+    if (star?.star_class === 'black_hole') {
+      const toHole = sun.clone().sub(camera.position)
+      const dist = toHole.length()
+      lens.uLensDir.value.copy(toHole.normalize())
+      lens.uLensE.value = Math.atan((sceneRadius(star) * 3) / Math.max(dist, 1e-6))
+    } else lens.uLensE.value = 0
+  }
   // Clouds drift with the clock (slowly: a turn of the pattern is years).
   for (const m of cloudMaterials) m.uniforms.uTime.value = (props.days % 100000) * 0.004
   const time = performance.now() / 1000

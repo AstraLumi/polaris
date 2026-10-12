@@ -143,6 +143,28 @@ func TestEllipticalOrbits(t *testing.T) {
 	}
 }
 
+// Planets can have rings; stars can be closed in a Dyson sphere; neither
+// the other way round.
+func TestRingsAndDysonSpheres(t *testing.T) {
+	_, h := newTestServer(t)
+	st := createStory(t, h, map[string]string{"name": "Rings"})
+	base := "/api/s/" + st.ID + "/solar"
+	_, s := solarSave(t, h, "POST", base+"/bodies", `{"kind":"star","name":"Sol","body_type":"star","radius_km":696000,"temperature_k":5772,"mass_kg":1.989e30,"dyson":true,"ring_inner":2,"ring_outer":3}`)
+	if b := s.Bodies[0]; !b.Dyson || b.RingOuter != 0 {
+		t.Errorf("star: %+v", b)
+	}
+	star := idStr(s.Bodies[0].ID)
+	_, s = solarSave(t, h, "POST", base+"/bodies", `{"kind":"planet","name":"Saturn","body_type":"gas","radius_km":58000,"orbit_km":1.4e9,"ring_inner":1.2,"ring_outer":2.3,"ring_color":"#D8C8A0","dyson":true,"parent_id":`+star+`}`)
+	if b := s.Bodies[1]; b.RingInner != 1.2 || b.RingOuter != 2.3 || b.RingColor != "#d8c8a0" || b.Dyson {
+		t.Errorf("planet: %+v", b)
+	}
+	for _, bad := range []string{`"ring_inner":0.5,"ring_outer":2`, `"ring_inner":2,"ring_outer":1.5`, `"ring_inner":2,"ring_outer":40`} {
+		if rec, _ := solarSave(t, h, "POST", base+"/bodies", `{"kind":"planet","name":"X","body_type":"gas","radius_km":58000,"orbit_km":1.4e9,`+bad+`,"parent_id":`+star+`}`); rec.Code != 400 {
+			t.Errorf("%s: %d", bad, rec.Code)
+		}
+	}
+}
+
 // An older story gets the empty table.
 func TestMigrationAddsSolarTable(t *testing.T) {
 	mgr, _ := newTestServer(t)

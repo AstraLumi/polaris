@@ -37,13 +37,14 @@ uniform vec3 uLight;
 uniform float uGrid;
 uniform float uAmbient;
 uniform float uTwilight;
+uniform float uPower;
 varying vec3 vColor;
 varying float vEdge;
 varying vec3 vNormal;
 void main() {
   float d = dot(vNormal, uLight);
   float lit = uTwilight > 0.0 ? smoothstep(-uTwilight, uTwilight * 3.0, d) * (0.3 + 0.7 * max(d, 0.0)) : max(d, 0.0);
-  float light = uAmbient + (1.0 - uAmbient) * lit;
+  float light = uAmbient + (1.0 - uAmbient) * lit * uPower;
   vec3 c = vColor * light;
   float line = smoothstep(0.84, 0.96, vEdge) * uGrid;
   gl_FragColor = vec4(mix(c, c * 0.5, line), 1.0);
@@ -103,6 +104,7 @@ export function createGlobeMesh(grid, colorOf, { ambient = 0.6, twilight = 0 } =
       uGrid: { value: 0 },
       uAmbient: { value: ambient },
       uTwilight: { value: twilight },
+      uPower: { value: 1 },
     },
   })
   const mesh = new THREE.Mesh(geo, material)

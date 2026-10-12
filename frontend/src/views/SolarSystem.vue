@@ -167,10 +167,19 @@
                   <option v-for="t in typesFor(draft.kind)" :key="t" :value="t">{{ $t(TYPE_LABELS[t]) }}</option>
                 </select>
               </label>
-              <label class="field color-field">
+              <div class="field color-field">
                 <span>{{ $t('Colour') }}</span>
-                <input :value="draft.color || bodyColor(draft)" type="color" @input="draft.color = $event.target.value" />
-              </label>
+                <div class="color-row">
+                  <input :value="draft.color || bodyColor(draft)" type="color" :aria-label="$t('Colour')" @input="draft.color = $event.target.value" />
+                  <button
+                    type="button"
+                    class="btn btn-ghost small"
+                    :class="{ 'is-auto': !draft.color }"
+                    :title="draft.kind === 'star' ? $t('The colour of its temperature') : $t('The colour of its type')"
+                    @click="draft.color = ''"
+                  >{{ draft.color ? $t('Auto') : $t('Auto ✓') }}</button>
+                </div>
+              </div>
             </div>
             <label v-if="draft.kind !== 'star'" class="field">
               <span>{{ $t('Radius (km)') }}</span>
@@ -236,6 +245,30 @@
               <input v-model="draft.is_main" type="checkbox" />
               <span>{{ $t('The main planet: the one on the map') }}</span>
             </label>
+            <label v-if="draft.kind === 'star'" class="check-field" :title="$t('A shell built round the star to catch all its light: it goes dark, and so do its planets.')">
+              <input v-model="draft.dyson" type="checkbox" />
+              <span>{{ $t('Inside a Dyson sphere') }}</span>
+            </label>
+            <template v-if="draft.kind === 'planet'">
+              <label class="check-field">
+                <input :checked="draft.ring_outer > 0" type="checkbox" @change="toggleRings($event.target.checked)" />
+                <span>{{ $t('Rings') }}</span>
+              </label>
+              <div v-if="draft.ring_outer > 0" class="field-row">
+                <label class="field">
+                  <span>{{ $t('Inner edge (× radius)') }}</span>
+                  <input v-model.number="draft.ring_inner" type="number" min="1" max="20" step="0.05" />
+                </label>
+                <label class="field">
+                  <span>{{ $t('Outer edge (× radius)') }}</span>
+                  <input v-model.number="draft.ring_outer" type="number" min="1" max="20" step="0.05" />
+                </label>
+                <label class="field color-field">
+                  <span>{{ $t('Ring colour') }}</span>
+                  <input :value="draft.ring_color || '#d8ccb0'" type="color" @input="draft.ring_color = $event.target.value" />
+                </label>
+              </div>
+            </template>
 
             <dl v-if="facts" class="facts">
               <dt>{{ $t('Mass') }}</dt>
@@ -673,6 +706,11 @@ function addMoon() {
   })
 }
 
+// Rings start like Saturn's: from 1.2 to 2.3 times the planet's radius.
+function toggleRings(on) {
+  Object.assign(draft.value, on ? { ring_inner: 1.2, ring_outer: 2.3 } : { ring_inner: 0, ring_outer: 0, ring_color: '' })
+}
+
 // ---- Moving bodies -----------------------------------------------------------------------
 // The 2D editor moves a body as it is dragged, and saves it when let go.
 function onMove({ id, orbit_km, phase }) {
@@ -1095,6 +1133,21 @@ const problem = computed(() => {
 .color-field input {
   height: var(--control-h);
   padding: 0.15rem;
+}
+
+.color-row {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.color-row input {
+  flex: 1;
+  min-width: 2.5rem;
+}
+
+.color-row .is-auto {
+  color: var(--accent);
 }
 
 .hint {

@@ -285,6 +285,12 @@ func celestialFacts(db *sql.DB, a *wikiArticle) {
 	if b.IsMain {
 		a.addFact("world", "The world of the map", "word", nil)
 	}
+	if b.Dyson {
+		a.addFact("dyson", "Inside a Dyson sphere", "word", nil)
+	}
+	if b.RingOuter > 0 {
+		a.addFact("rings", strconv.FormatFloat(b.RingInner, 'g', 3, 64)+"–"+strconv.FormatFloat(b.RingOuter, 'g', 3, 64)+" ×", "", nil)
+	}
 	if b.Kind != "star" {
 		a.addFact("axial_tilt", strconv.FormatFloat(b.AxialTilt, 'g', 4, 64)+"°", "", nil)
 		a.addFact("day_length", strconv.FormatFloat(b.DayHours, 'g', 4, 64)+" h", "", nil)
