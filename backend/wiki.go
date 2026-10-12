@@ -96,6 +96,11 @@ var wikiTypes = []wikiTypeDef{
 	{Key: "celestial_body", Table: "celestial_bodies", IDCol: "id", OwnTrigger: true,
 		Select: `SELECT id, name, '' FROM celestial_bodies`,
 		Fields: []string{"appearance", "geography", "history", "lore", "trivia"}},
+	// The planet's layers (planetlayers.go): tectonic plates, mountain
+	// ranges, ocean depths.
+	{Key: "map_feature", Table: "map_features", IDCol: "id", OwnTrigger: true,
+		Select: `SELECT id, name, '' FROM map_features`,
+		Fields: []string{"geography", "history", "lore", "trivia"}},
 	// Free-form pages: everything beyond the introduction and trivia is the
 	// user's own sections. Last, so a lore page never takes over a [[link]]
 	// that already pointed at a character or place of the same name.
@@ -597,6 +602,7 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 			}
 		}
 		a.addFact("type", word, "word", nil)
+		locationLayerFacts(db, a, kind)
 		if isCapital {
 			a.addFact("settlement", "Capital", "word", nil)
 		} else if isCity {
@@ -779,6 +785,9 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 
 	case "solar_system":
 		solarSystemFacts(db, a)
+
+	case "map_feature":
+		featureFacts(db, a)
 
 	case "creature":
 		var kind, desc string

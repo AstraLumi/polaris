@@ -128,7 +128,11 @@
         @edit="editMajor = $event"
         @new="newMajorOpen = true"
         @closed="listClosed = $event"
-      />
+      >
+        <template #footer>
+          <PlanetSwitch />
+        </template>
+      </MajorLocationList>
     </div>
 
     <MajorLocationModal
@@ -164,6 +168,7 @@ import { drawDot, drawCity, drawCapital, lighten } from '../mapMarkers'
 import { TIERS, areaFontPx } from '../planetLabels'
 import MapHoverPane from '../components/MapHoverPane.vue'
 import MajorLocationList from '../components/MajorLocationList.vue'
+import PlanetSwitch from '../components/PlanetSwitch.vue'
 import HexPanel from '../components/HexPanel.vue'
 import MajorLocationModal from '../components/MajorLocationModal.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'

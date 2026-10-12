@@ -104,14 +104,34 @@
       />
 
       <MajorLocationList
-        :majors="majors"
-        :active-id="activeId"
-        @pick="toggleActive"
-        @edit="editMajor = $event"
-        @new="newMajorOpen = true"
+        :majors="onLayer ? layerFeatures : majors"
+        :active-id="onLayer ? activeFeatureId : activeId"
+        :title="onLayer ? layerInfo.label : undefined"
+        :empty-text="onLayer ? tr('Nothing drawn on this layer yet') : undefined"
+        :groups="onLayer ? [{ id: layer, label: layerInfo.label }] : null"
+        :group-of="onLayer ? (f) => f.layer : null"
+        @pick="onListPick"
+        @edit="onListEdit"
+        @new="onListNew"
         @closed="listClosed = $event"
-      />
+      >
+        <template #footer>
+          <LayerPicker v-model="layer" />
+          <PlanetSwitch />
+        </template>
+      </MajorLocationList>
     </div>
+
+    <FeatureModal
+      v-if="featureModal"
+      :layer-id="layer"
+      :feature="featureModal.feature"
+      :save="layers.saveFeature"
+      :remove="layers.removeFeature"
+      @close="featureModal = null"
+      @saved="onFeatureSaved"
+      @deleted="onFeatureDeleted"
+    />
 
     <MajorLocationModal
       v-if="newMajorOpen || editMajor"
@@ -151,6 +171,10 @@ import MapHoverPane from '../components/MapHoverPane.vue'
 import MajorLocationList from '../components/MajorLocationList.vue'
 import HexPanel from '../components/HexPanel.vue'
 import MajorLocationModal from '../components/MajorLocationModal.vue'
+import LayerPicker from '../components/LayerPicker.vue'
+import PlanetSwitch from '../components/PlanetSwitch.vue'
+import FeatureModal from '../components/FeatureModal.vue'
+import { useLayers, layerOf, layerCellColor } from '../planetLayers'
 
 // The map when the story is a planet (backend/planetmap.go): painted on the
 // globe; the flat views are projections to look at. Mirrors MapView.vue
@@ -219,6 +243,58 @@ let minorsByCell = new Map() // cell -> [minor locations], most important first
 let saveChain = Promise.resolve()
 let noticeTimer = null
 
+// ---- Layers ---------------------------------------------------------------------------
+// Plates, mountain ranges and ocean depths are drawn over the map
+// (planetLayers.js); the map shows faintly under them.
+const layer = ref('map')
+const layers = useLayers()
+const onLayer = computed(() => layer.value !== 'map')
+const layerInfo = computed(() => layerOf(layer.value))
+const layerFeatures = computed(() => layers.features.value.filter((f) => f.layer === layer.value))
+const activeFeatureId = ref(null)
+const featureModal = ref(null) // { feature } (null feature for a new one)
+
+watch(layer, async () => {
+  activeFeatureId.value = null
+  try {
+    if (onLayer.value) await layers.ensure()
+  } catch (err) {
+    flash(err.message || t("Couldn't load the layers."))
+  }
+  version.value++
+})
+
+function onListPick(item) {
+  if (!onLayer.value) return toggleActive(item)
+  activeFeatureId.value = activeFeatureId.value === item.id ? null : item.id
+}
+
+function onListEdit(item) {
+  if (onLayer.value) featureModal.value = { feature: item }
+  else editMajor.value = item
+}
+
+function onListNew() {
+  if (onLayer.value) featureModal.value = { feature: null }
+  else newMajorOpen.value = true
+}
+
+function onFeatureSaved(f) {
+  const wasNew = !featureModal.value?.feature
+  featureModal.value = null
+  if (wasNew) {
+    activeFeatureId.value = f.id
+    tool.value = 'paint'
+  }
+  version.value++
+}
+
+function onFeatureDeleted() {
+  featureModal.value = null
+  activeFeatureId.value = null
+  version.value++
+}
+
 const frequency = computed(() => worldMap.planet.frequency)
 const majors = computed(() => locations.value.filter((l) => l.kind === 'major'))
 const unplaced = computed(() => locations.value.filter((l) => l.kind === 'minor' && l.cell == null))
@@ -238,7 +314,8 @@ const markers = computed(() => {
 // Every cell with something on it (for the flat view).
 const coloredCells = computed(() => {
   version.value // eslint-disable-line no-unused-expressions
-  return [...new Set([...cellMembers.keys(), ...minorsByCell.keys()])]
+  const drawn = onLayer.value ? layerFeatures.value.flatMap((f) => layers.cellsOfFeature(f)) : []
+  return [...new Set([...cellMembers.keys(), ...minorsByCell.keys(), ...drawn])]
 })
 
 // The middle of everything painted, for the globe to face when it opens.
@@ -259,6 +336,7 @@ const homeCell = computed(() => {
 
 const outlined = computed(() => {
   version.value // eslint-disable-line no-unused-expressions
+  if (onLayer.value) return []
   const id = focusId.value ?? ((tool.value === 'paint' || tool.value === 'erase') && activeId.value != null && !locMap.get(activeId.value)?.color ? activeId.value : null)
   return id == null ? [] : cellsOf(id)
 })
@@ -277,7 +355,11 @@ function flash(message) {
   noticeTimer = setTimeout(() => notice.value === message && (notice.value = ''), 4500)
 }
 
-const activeName = computed(() => majors.value.find((m) => m.id === activeId.value)?.name ?? '')
+const activeName = computed(() =>
+  onLayer.value
+    ? layerFeatures.value.find((f) => f.id === activeFeatureId.value)?.name ?? ''
+    : majors.value.find((m) => m.id === activeId.value)?.name ?? '',
+)
 const hint = computed(() => {
   if (view.value === 'flat') return t('A projection of the planet, to look at. Paint on the globe.')
   if (tool.value === 'paint') {
@@ -286,8 +368,9 @@ const hint = computed(() => {
       : t('Scroll to zoom · Hold Space to turn the globe · Pick a major location below to paint with')
   }
   if (tool.value === 'erase') {
-    return activeName.value
-      ? t('Scroll to zoom · Hold Space to turn the globe · Erasing {name}', { name: activeName.value })
+    if (activeName.value) return t('Scroll to zoom · Hold Space to turn the globe · Erasing {name}', { name: activeName.value })
+    return onLayer.value
+      ? t('Scroll to zoom · Hold Space to turn the globe · Erasing this layer on a hex')
       : t('Scroll to zoom · Hold Space to turn the globe · Erasing everything on a hex')
   }
   if (tool.value === 'fill') {
@@ -311,12 +394,21 @@ function coloredOf(ids) {
 // without a colour is there, or '' for the sea. An ocean leaves its water
 // as it is; its territory is outlined instead (borders).
 function colorOf(cell) {
-  return cellColor(cellMembers.get(cell), locMap, minorsByCell.has(cell))
+  const base = cellColor(cellMembers.get(cell), locMap, minorsByCell.has(cell))
+  return onLayer.value ? layerCellColor(base, layers.featureAt(layer.value, cell)) : base
 }
 
 // Each kingdom's, region's and ocean's name, at the middle of its land.
 const areas = computed(() => {
   version.value // eslint-disable-line no-unused-expressions
+  if (onLayer.value) {
+    return layerFeatures.value
+      .map((f) => {
+        const cells = layers.cellsOfFeature(f)
+        return { key: 'f' + f.id, name: f.name, color: f.color, cell: middleCell(grid, cells), cells, size: areaFontPx(cells.length) }
+      })
+      .filter((a) => a.cell != null)
+  }
   return majors.value
     .filter((m) => m.color)
     .map((m) => {
@@ -329,6 +421,7 @@ const areas = computed(() => {
 // Oceans are drawn as the outline of their water.
 const borders = computed(() => {
   version.value // eslint-disable-line no-unused-expressions
+  if (onLayer.value) return []
   return majors.value.filter((m) => m.color && m.realm === 'ocean').map((m) => ({ color: m.color, cells: cellsOf(m.id) }))
 })
 
@@ -388,6 +481,8 @@ function belongsToName(m) {
 
 function describeCell(cell) {
   const entries = []
+  const f = onLayer.value ? layers.featureAt(layer.value, cell) : null
+  if (f) entries.push({ type: layerInfo.value.one, name: f.name, color: f.color })
   for (const m of minorsByCell.get(cell) ?? []) {
     entries.push({
       type: m.is_capital ? 'Capital' : m.is_city ? 'City' : 'Location',
@@ -476,6 +571,15 @@ function eraseLocal(c, locId) {
 }
 
 function onPaintStart() {
+  if (onLayer.value) {
+    if (tool.value === 'paint' && activeFeatureId.value == null) {
+      flash(t('Pick one in the list to paint with.'))
+      stroke = null
+      return
+    }
+    stroke = { layer: layer.value, type: tool.value, fid: activeFeatureId.value, before: new Map(), changed: new Set() }
+    return
+  }
   if (tool.value === 'paint' && !locMap.has(activeId.value)) {
     flash(t('Pick a major location in the bar below to paint with.'))
     stroke = null
@@ -484,8 +588,27 @@ function onPaintStart() {
   stroke = { type: tool.value, locId: activeId.value, before: new Map(), changed: new Set() }
 }
 
+// A stroke on a layer: each cell takes the feature, or loses it (any, or
+// only the picked one).
+function paintLayerCells(cells) {
+  const touched = []
+  for (const c of cells) {
+    const now = layers.featureAt(stroke.layer, c)?.id ?? null
+    if (!stroke.before.has(c)) stroke.before.set(c, now)
+    let changed
+    if (stroke.type === 'paint') changed = layers.setLocal(stroke.layer, c, stroke.fid)
+    else changed = (stroke.fid == null || now === stroke.fid) && layers.setLocal(stroke.layer, c, null)
+    if (changed) {
+      stroke.changed.add(c)
+      touched.push(c)
+    }
+  }
+  if (touched.length) globeRef.value?.recolor(touched)
+}
+
 function onPaint(cells) {
   if (!stroke) return
+  if (stroke.layer) return paintLayerCells(cells)
   const touched = []
   for (const c of cells) {
     if (!stroke.before.has(c)) stroke.before.set(c, idsAt(c))
@@ -502,6 +625,16 @@ function onPaintEnd() {
   const s = stroke
   stroke = null
   if (!s || !s.changed.size) return
+  if (s.layer) {
+    const changes = [...s.changed].map((c) => ({ c, before: s.before.get(c), after: layers.featureAt(s.layer, c)?.id ?? null }))
+    pushUndo({ layer: s.layer, cells: changes })
+    version.value++
+    layers.save(s.layer, changes, () => {
+      flash(t("Couldn't save that stroke, so the map was reloaded."))
+      version.value++
+    })
+    return
+  }
   const cells = [...s.changed]
   pushUndo(cells.map((c) => ({ c, before: s.before.get(c), after: idsAt(c) })))
   version.value++
@@ -525,6 +658,17 @@ const bucketAsk = ref(null) // { cells, locId, name }: a big fill waiting for a 
 
 function bucketAt(cell) {
   if (cell == null) return
+  if (onLayer.value) {
+    const f = layerFeatures.value.find((x) => x.id === activeFeatureId.value)
+    if (!f) return flash(t('Pick one in the list to paint with.'))
+    const empty = (c) => !layers.featureAt(layer.value, c)
+    if (!empty(cell)) return flash(t('The bucket only fills empty hexes.'))
+    const { cells, tooBig } = floodFill(cell, { neighbors: (c) => grid.neighbors(c), empty })
+    if (tooBig) return flash(t('That area is too big to fill at once.'))
+    if (cells.length > BUCKET_WARN) bucketAsk.value = { cells, locId: f.id, name: f.name, layer: layer.value }
+    else fill(cells, f.id, layer.value)
+    return
+  }
   const loc = locMap.get(activeId.value)
   if (!loc) {
     flash(t('Pick a major location in the bar below to paint with.'))
@@ -538,14 +682,16 @@ function bucketAt(cell) {
 }
 
 function confirmBucket() {
-  const { cells, locId } = bucketAsk.value
+  const { cells, locId, layer: on } = bucketAsk.value
   bucketAsk.value = null
-  fill(cells, locId)
+  fill(cells, locId, on)
 }
 
 // Painted like one stroke, so Undo takes it back whole.
-function fill(cells, locId) {
-  stroke = { type: 'paint', locId, before: new Map(), changed: new Set() }
+function fill(cells, locId, on = null) {
+  stroke = on
+    ? { layer: on, type: 'paint', fid: locId, before: new Map(), changed: new Set() }
+    : { type: 'paint', locId, before: new Map(), changed: new Set() }
   onPaint(cells)
   onPaintEnd()
 }
@@ -560,7 +706,21 @@ function pushUndo(cells) {
   redoStack.value = []
 }
 
+// A layer's stroke back or forth: each cell to the feature it held.
+function restoreLayer(entry, which) {
+  const known = new Set(layers.features.value.map((f) => f.id))
+  const changes = entry.cells.map((h) => ({ c: h.c, after: known.has(h[which]) ? h[which] : null }))
+  for (const { c, after } of changes) layers.setLocal(entry.layer, c, after)
+  globeRef.value?.recolor(changes.map((h) => h.c))
+  version.value++
+  layers.save(entry.layer, changes, () => {
+    flash(t("Couldn't save that change, so the map was reloaded."))
+    version.value++
+  })
+}
+
 function restore(cells, which) {
+  if (cells.layer) return restoreLayer(cells, which)
   const erase = new Map()
   const paint = new Map()
   const add = (m, id, c) => (m.has(id) ? m.get(id).push(c) : m.set(id, [c]))

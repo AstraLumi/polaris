@@ -79,7 +79,11 @@ Run all of these before committing. `backend/static/` is build output (only
   (`backend/positions.go`) which one counts. The planet's grid and the map
   projections exist twice, in Go (`planetgrid.go`, `projection.go`) and JS
   (`planetGrid.js`, `projection.js`): change both, and keep the shared
-  fixtures in their tests equal. three.js is only loaded with the planet
+  fixtures in their tests equal. The planet's layers (tectonic plates,
+  mountain ranges, ocean depths: `map_features`/`feature_cells`,
+  `backend/planetlayers.go`, `planetLayers.js`) are planet-only, one
+  feature per layer per cell, and must be resampled with everything else
+  when the hex size changes (`resampleLayers`). three.js is only loaded with the planet
   (`MapPage.vue`, `PlanetTerritory.vue` load it lazily); keep it out of the
   main bundle.
 - **The solar system** (`backend/solar.go`, the Solar system tab) keeps

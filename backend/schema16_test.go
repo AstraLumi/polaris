@@ -5,9 +5,25 @@ import (
 	"testing"
 )
 
+// rollBackSchema34 turns a fresh database back into schema 33.
+func rollBackSchema34(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, q := range []string{
+		`DROP TRIGGER wiki_cleanup_map_features`,
+		`DROP TABLE feature_cells`,
+		`DROP TABLE map_features`,
+		`UPDATE schema_meta SET value = '33' WHERE key = 'schema_version'`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+}
+
 // rollBackSchema33 turns a fresh database back into schema 32.
 func rollBackSchema33(t *testing.T, db *sql.DB) {
 	t.Helper()
+	rollBackSchema34(t, db)
 	for _, q := range []string{
 		`ALTER TABLE celestial_bodies DROP COLUMN eccentricity`,
 		`ALTER TABLE celestial_bodies DROP COLUMN periapsis`,

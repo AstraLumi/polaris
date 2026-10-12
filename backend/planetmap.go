@@ -315,7 +315,7 @@ func resamplePlanet(tx *sql.Tx, a, b planetGrid) error {
 			}
 		}
 	}
-	return nil
+	return resampleLayers(tx, a, b)
 }
 
 // ---- The planet's data ---------------------------------------------------------

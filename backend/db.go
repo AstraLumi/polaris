@@ -15,7 +15,7 @@ import (
 // oldest migration (or a brand new one) gets wiped and recreated from
 // freshSchema — so every schema change from here on should ship with a
 // migration instead of relying on that reset.
-const currentSchemaVersion = "33"
+const currentSchemaVersion = "34"
 
 const freshSchema = `
 CREATE TABLE classes (
@@ -506,6 +506,12 @@ var migrations = map[string]migration{
 		// Elliptical orbits (solar.go).
 		statements: schema33Statements,
 	},
+	"33": {
+		to: "34",
+		// The planet's layers: plates, mountain ranges, ocean depths
+		// (planetlayers.go).
+		statements: schema34Statements,
+	},
 }
 
 // schema20Statements create what schema 20 added. The fresh schema runs them
@@ -588,6 +594,8 @@ func applyMigration(db *sql.DB, m migration) error {
 // tablesInDependencyOrder lists every app-owned table, children before
 // parents, so dropping them in this order never trips a foreign key.
 var tablesInDependencyOrder = []string{
+	"feature_cells",
+	"map_features",
 	"body_cells",
 	"solar_systems",
 	"celestial_bodies",
@@ -742,7 +750,7 @@ func ensureSchema(db *sql.DB) error {
 			return fmt.Errorf("create schema: %w", err)
 		}
 	}
-	later := [][]string{wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements, schema24Statements, {gearDescriptionSQL}, schema26Statements, schema27Statements, schema28Statements, schema29Statements, schema30Statements, schema31Statements, schema32Statements, schema33Statements}
+	later := [][]string{wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements, schema24Statements, {gearDescriptionSQL}, schema26Statements, schema27Statements, schema28Statements, schema29Statements, schema30Statements, schema31Statements, schema32Statements, schema33Statements, schema34Statements}
 	for _, stmt := range slices.Concat(later...) {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("create wiki schema: %w", err)

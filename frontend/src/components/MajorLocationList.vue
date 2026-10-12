@@ -4,13 +4,13 @@
       <button type="button" class="fold" :title="closed ? $t('Show the list') : $t('Hide the list')" @click="setClosed(!closed)">
         {{ closed ? '‹' : '›' }}
       </button>
-      <strong v-if="!closed">{{ $t('Major locations') }}</strong>
+      <strong v-if="!closed">{{ $t(title) }}</strong>
       <button v-if="!closed" type="button" class="btn btn-primary small add" @click="$emit('new')">{{ $t('New') }}</button>
     </header>
 
     <template v-if="!closed">
       <input v-if="majors.length > 6" v-model="filter" type="search" class="filter" :placeholder="$t('Find…')" :aria-label="$t('Find a major location')" />
-      <p v-if="!majors.length" class="empty">{{ $t('No major locations yet') }}</p>
+      <p v-if="!majors.length" class="empty">{{ $t(emptyText) }}</p>
 
       <div class="groups">
         <section v-for="g in groups" :key="g.id" class="group">
@@ -35,6 +35,10 @@
           </ul>
         </section>
       </div>
+      <!-- What the map shows (layers, other planets), under the list. -->
+      <div v-if="$slots.footer" class="list-footer">
+        <slot name="footer" />
+      </div>
     </template>
   </aside>
 </template>
@@ -47,9 +51,15 @@ import { tr } from '../i18n'
 // group folding away. Click one to paint with it, ✎ to edit it. Shared by
 // the 2D map and the planet; what is folded (and whether the list is shown
 // at all) is remembered on this device.
+// The planet's layers use it too, for their plates and ranges: title,
+// groups and groupOf say how to list those.
 const props = defineProps({
   majors: { type: Array, default: () => [] },
   activeId: { type: Number, default: null },
+  title: { type: String, default: tr('Major locations') },
+  emptyText: { type: String, default: tr('No major locations yet') },
+  groups: { type: Array, default: null }, // [{ id, label }]
+  groupOf: { type: Function, default: null },
 })
 const emit = defineEmits(['pick', 'edit', 'new', 'closed'])
 
@@ -93,11 +103,12 @@ function setClosed(v) {
   emit('closed', v)
 }
 
-const groupOf = (m) => (m.color ? m.realm || 'kingdom' : 'none')
+const defaultGroupOf = (m) => (m.color ? m.realm || 'kingdom' : 'none')
 const groups = computed(() => {
   const f = filter.value.trim().toLowerCase()
   const list = props.majors.filter((m) => !f || m.name.toLowerCase().includes(f))
-  return GROUPS.map((g) => ({
+  const groupOf = props.groupOf || defaultGroupOf
+  return (props.groups || GROUPS).map((g) => ({
     ...g,
     items: list.filter((m) => groupOf(m) === g.id).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })),
   })).filter((g) => g.items.length)
@@ -274,6 +285,15 @@ ul {
 
 .edit:hover {
   color: var(--text-primary);
+}
+
+.list-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--glass-border);
 }
 
 @media (max-width: 720px) {

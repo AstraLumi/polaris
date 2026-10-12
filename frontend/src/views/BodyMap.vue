@@ -60,6 +60,9 @@
           <input v-model="color" type="color" />
         </label>
       </div>
+      <div class="switch-panel glass-panel panel-solid">
+        <PlanetSwitch />
+      </div>
       <p class="map-hint">{{ hint }}</p>
       <p v-if="notice" class="notice">{{ notice }}</p>
     </div>
@@ -72,6 +75,7 @@ import { t, tr } from '../i18n'
 import { solarApi } from '../api'
 import { skyUrl } from '../worldMap'
 import PlanetGlobe from '../components/PlanetGlobe.vue'
+import PlanetSwitch from '../components/PlanetSwitch.vue'
 
 // A planet's or moon's own map, when it isn't the main planet: a globe to
 // paint in colours, nothing more (no places, borders or wiki links). Its
@@ -197,6 +201,15 @@ function onPaintEnd() {
   display: inline-block;
   border-radius: 50%;
   background: currentColor;
+}
+
+.switch-panel {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  padding: 0.55rem;
+  min-width: 12rem;
+  z-index: 7;
 }
 
 .palette {

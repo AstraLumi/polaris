@@ -519,6 +519,23 @@ void [
   tr('unknown kind of star'), tr('the mass must be more than 0'), tr('the temperature must be between 0 and 1 000 000 000 K'), tr('a solar system can have at most 500 bodies'), tr('body not found'),
 ]
 
+// The planet's layers: plates, mountain ranges, ocean depths
+// (backend/planetlayers.go).
+export const layersApi = {
+  get: () => mapRequest('/planet/layers', undefined, 'failed to load the layers'),
+  create: (f) => mapRequest('/planet/features', jsonBody('POST', f), 'failed to save the feature'),
+  update: (id, f) => mapRequest(`/planet/features/${id}`, jsonBody('PUT', f), 'failed to save the feature'),
+  async remove(id) {
+    const res = await fetch(`${BASE}/planet/features/${id}`, { method: 'DELETE' })
+    if (!res.ok) throw apiError((await res.text()).trim() || 'failed to delete the feature')
+  },
+  paint: (featureId, cells) => mapRequest('/planet/features/paint', jsonBody('POST', { feature_id: featureId, cells }), 'failed to paint'),
+  erase: (layer, cells) => mapRequest('/planet/features/erase', jsonBody('POST', { layer, cells }), 'failed to erase'),
+}
+
+// Messages the layers can send back; listed so they get translated.
+void [tr('unknown layer'), tr('feature not found'), tr('too many features'), tr('feature_id is required')]
+
 export const planetApi = {
   get: () => mapRequest('/planet', undefined, 'failed to load the planet'),
   paint: (locationId, cells) =>

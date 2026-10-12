@@ -122,6 +122,7 @@ const TYPE_COLORS = {
   creature: '#d98f5c',
   solar_system: '#ffd27a',
   celestial_body: '#9fb7ff',
+  map_feature: '#c79a6a',
   lore: '#f0a0c8',
 }
 
