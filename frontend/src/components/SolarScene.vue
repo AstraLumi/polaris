@@ -23,7 +23,8 @@ import { sceneRadius, sceneDistance, scenePositions, sceneOrbitPath, bodyColor }
 import { orbitLimits } from '../orbits'
 import { habitableZone } from '../stars'
 import { createGlobeMesh } from '../three/globeMesh'
-import { createStar, createPlanetMaterial } from '../three/bodyShaders'
+import { createStar, createPlanetMaterial, createAtmosphere, createClouds } from '../three/bodyShaders'
+import { cloudCoverage, genericCloudCover, mainPlanetCloudCover } from '../climate'
 import { loadSkyDome, disposeSkyDome } from '../three/skyDome'
 
 // The solar system in 3D: the star at the centre, each body on its orbit at
@@ -66,11 +67,13 @@ let resizeObserver = null
 let skyMesh = null
 let cancelSky = () => {}
 const globeViews = new Map() // body id -> its map's mesh, built once and moved onto it
+const globeGrids = new Map() // body id -> its map's grid (the main planet's clouds read it)
 let bodyGroup = null // everything rebuilt when the bodies change
 const meshes = new Map() // body id -> { body, mesh, spin, orbit (trail, round its parent) }
 let follow = null // { id, last: Vector3 }
 let stars = [] // three/bodyShaders.js stars, their coronas facing the camera
-let planetMaterials = [] // plain planets' materials, told where the star is
+let sunLit = [] // materials told where the star is each frame (planets, air, clouds)
+let cloudMaterials = [] // told the time, so clouds drift
 let markerGroup = null // the habitable zone and the gravity limits
 let limitsAround = null // the id of the body the limits are drawn round
 
@@ -106,7 +109,8 @@ function buildBodies() {
   bodyGroup = new THREE.Group()
   meshes.clear()
   stars = []
-  planetMaterials = []
+  sunLit = []
+  cloudMaterials = []
   const byId = new Map(props.bodies.map((b) => [b.id, b]))
   for (const b of props.bodies) {
     const r = sceneRadius(b)
@@ -120,8 +124,8 @@ function buildBodies() {
       globe.mesh.scale.setScalar(r)
       mesh = globe.mesh
     } else {
-      const material = createPlanetMaterial(colorOf(b))
-      planetMaterials.push(material)
+      const material = createPlanetMaterial(colorOf(b), { bands: b.body_type === 'gas' })
+      sunLit.push(material)
       mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 32, 16), material)
     }
     // holder (where it is) > tilt (its axis) > spin (its day) > the body.
@@ -133,6 +137,18 @@ function buildBodies() {
       tilt.rotation.x = ((b.axial_tilt || 0) * Math.PI) / 180
       spin = new THREE.Group()
       spin.add(mesh)
+      // Planets have air and (but gas giants) clouds; moons are bare.
+      if (b.kind === 'planet') {
+        const air = createAtmosphere(r, atmosphereColor(b))
+        sunLit.push(air.material)
+        tilt.add(air)
+        const clouds = cloudsFor(b, r)
+        if (clouds) {
+          sunLit.push(clouds.material)
+          cloudMaterials.push(clouds.material)
+          spin.add(clouds)
+        }
+      }
       tilt.add(spin)
       tilt.add(axisLine(r))
       holder.add(tilt)
@@ -153,13 +169,33 @@ function buildBodies() {
   place()
 }
 
+// ---- Air and clouds ----------------------------------------------------------------------
+const AIR = { rocky: '#7fb2ff', ocean: '#6fc8ff' }
+const atmosphereColor = (b) => AIR[b.body_type] || new THREE.Color(colorOf(b)).lerp(new THREE.Color('#ffffff'), 0.35).getStyle()
+
+// The planet's clouds (climate.js): the main planet's from the map's
+// hexes, any other's generic for its type. Null for a cloudless one.
+function cloudsFor(b, r) {
+  const coverage = cloudCoverage(b)
+  if (!(coverage > 0)) return null
+  const grid = b.is_main ? globeGrids.get(b.id) : null
+  if (grid) {
+    const cover = mainPlanetCloudCover({ grid, body: b })
+    return createClouds(r, (dir) => cover(grid.cellAt(dir)))
+  }
+  return createClouds(r, (dir) => genericCloudCover(dir, coverage, b.id))
+}
+
 // ---- Orbit trails -------------------------------------------------------------------------
-// Each orbit is split at its body: the half behind it (where it has been)
-// a thicker line at full strength, the half ahead thin and faint. The path
-// is computed when the orbit changes; the split moves with the body.
+// Each orbit fades round from its body: brightest and thickest just behind
+// it (where it has been), fading all the way round to faint and thin just
+// ahead of it, with no edge in between. The path is computed when the
+// orbit changes; the fade moves with the body. Brightness is drawn as
+// colour on additive lines (lines can't fade their own opacity).
 const TRAIL_STEPS = 128
+const TRAIL_COLOR = new THREE.Color(0xaebfe0)
 const trailMaterial = () => {
-  const m = new LineMaterial({ color: 0xaebfe0, linewidth: 2, transparent: true, opacity: 0.95 })
+  const m = new LineMaterial({ color: 0xffffff, linewidth: 2, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })
   if (renderer) m.resolution.set(renderer.domElement.width, renderer.domElement.height)
   return m
 }
@@ -169,11 +205,21 @@ function makeTrail() {
   group.userData.trail = true
   const ahead = new THREE.Line(
     new THREE.BufferGeometry(),
-    new THREE.LineBasicMaterial({ color: 0x8aa0c8, transparent: true, opacity: 0.22 }),
+    new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
   )
   const behind = new Line2(new LineGeometry(), trailMaterial())
   group.add(ahead, behind)
   return { group, ahead, behind, path: [], periapsis: 0, at: -1 }
+}
+
+// Colours along `count + 1` points, fading from strength a to b.
+function fade(count, a, b) {
+  const out = []
+  for (let k = 0; k <= count; k++) {
+    const t = a + (b - a) * (k / count)
+    out.push(TRAIL_COLOR.r * t, TRAIL_COLOR.g * t, TRAIL_COLOR.b * t)
+  }
+  return out
 }
 
 // The orbit's points, at even steps of the angle from periapsis.
@@ -197,11 +243,14 @@ function splitTrail(trail, rel) {
     for (let k = 0; k <= count; k++) out.push(...trail.path[(from + k + n) % n])
     return out
   }
-  // Orbits run anticlockwise: behind is the lower angles.
+  // Orbits run anticlockwise: behind is the lower angles. The thick half
+  // fades from the far side (0.32) up to the body (1); the thin half goes
+  // on from the body's front (0.12) back up to the far side (0.32).
   trail.behind.geometry.setPositions(pick(at - half, half))
-  trail.behind.computeLineDistances()
+  trail.behind.geometry.setColors(fade(half, 0.32, 1))
   const ahead = pick(at, half)
   trail.ahead.geometry.setAttribute('position', new THREE.Float32BufferAttribute(ahead, 3))
+  trail.ahead.geometry.setAttribute('color', new THREE.Float32BufferAttribute(fade(half, 0.12, 0.32), 3))
   trail.ahead.geometry.computeBoundingSphere()
 }
 
@@ -262,8 +311,11 @@ function buildGlobes() {
     g.dispose()
   }
   globeViews.clear()
+  globeGrids.clear()
   for (const [id, m] of props.globes) {
-    const g = createGlobeMesh(new PlanetGrid(m.frequency), m.colorOf, { ambient: 0.05, twilight: 0.12 })
+    const grid = new PlanetGrid(m.frequency)
+    globeGrids.set(id, grid)
+    const g = createGlobeMesh(grid, m.colorOf, { ambient: 0.05, twilight: 0.12 })
     g.mesh.userData.globe = true
     globeViews.set(id, g)
   }
@@ -345,7 +397,9 @@ function render() {
     const local = g.mesh.worldToLocal(sun.clone())
     g.material.uniforms.uLight.value.copy(local.normalize())
   }
-  for (const m of planetMaterials) m.uniforms.uSun.value.copy(sun)
+  for (const m of sunLit) m.uniforms.uSun.value.copy(sun)
+  // Clouds drift with the clock (slowly: a turn of the pattern is years).
+  for (const m of cloudMaterials) m.uniforms.uTime.value = (props.days % 100000) * 0.004
   const time = performance.now() / 1000
   for (const s of stars) s.faceCamera(camera, time)
   renderer.render(scene, camera)

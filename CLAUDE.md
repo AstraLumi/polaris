@@ -23,6 +23,7 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/planetGrid.test.mjs
     node frontend/tests/bucketFill.test.mjs
     node frontend/tests/orbits.test.mjs
+    node frontend/tests/climate.test.mjs
 
 Run all of these before committing. `backend/static/` is build output (only
 `.gitkeep` is tracked); the tests do not need it.
@@ -99,7 +100,10 @@ Run all of these before committing. `backend/static/` is build output (only
   system; only lazily loaded pages may import them. Planets and moons other
   than the main one have painting-only maps (`body_cells`,
   `backend/bodymaps.go`, `BodyMap.vue`), opened from the Map page's planet
-  switch; the main planet's map is the story's map.
+  switch; the main planet's map is the story's map. Planets' clouds come
+  from `frontend/src/climate.js`; the main planet's through
+  `mainPlanetCloudCover` (one cover per hex), the hook meant to read the
+  wind, mountain, humidity and temperature maps later.
 - **The sky format** (an equirectangular 2:1 picture, top above the north
   pole, middle column above longitude 0, east to the left) is defined twice:
   by `backend/cmd/skygen`, which draws the default sky
