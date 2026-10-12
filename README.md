@@ -23,8 +23,15 @@ has its own SQLite database, so it runs comfortably on a small home server.
   relations of its own time. Family trees are drawn from them. Factions have
   ranks and can nest, and every kingdom on the map is a faction too.
 - **World**: a paintable hex map of kingdoms, regions, cities and capitals,
-  a bestiary of the monsters, animals and constructs that live there, and
-  Character Assets (classes, races, gear, spells…) that grant stat bonuses.
+  and Character Assets (classes, races, gear, spells…) that grant stat
+  bonuses. Races and specializations can be native to a kingdom.
+- **Bestiary**: the monsters, animals and constructs of your world, each
+  with a level range, the place it's native to, a description, a picture and
+  related creatures. A creature's territory follows its place's area, or you
+  paint it hex by hex, and its wiki article shows it as a picture of the map.
+- **Stats your way**: which stats characters have and how each is
+  calculated is up to each story, edited in Settings with formulas built
+  from blocks (see [Stats](#stats)).
 - **Time**: your own calendar (months and days), events tied to places,
   people and chapters, a timeline drawn to scale, a month-by-month calendar
   view, and chapters grouped into volumes.
@@ -47,6 +54,7 @@ Made with a demo story of invented data.
 | ![A character's wiki article](docs/screenshots/wiki.png) **Wiki**: an article built from the story, with your text, version tabs and a grouped infobox. | ![The graph of the wiki](docs/screenshots/graph.png) **Graph**: every article and connection; hovering a dot lights up its neighbours. |
 | ![A family tree](docs/screenshots/family.png) **Family tree**: born to one couple, adopted by another. | ![The timeline](docs/screenshots/timeline.png) **Timeline**: one character's life, long gaps coiled up. |
 | ![The hex map](docs/screenshots/map.png) **Map**: kingdoms, regions, cities and capitals. | ![A character sheet](docs/screenshots/character.png) **Character sheet**: stats computed from class, race and gear. |
+| ![A creature's wiki article](docs/screenshots/bestiary.png) **Bestiary**: a creature's article, with its territory drawn on the map's hexes. | ![The stats settings](docs/screenshots/stats.png) **Stats**: every stat's formula, built from blocks. |
 
 ## Security
 

@@ -112,6 +112,23 @@ try {
   await wait(600)
   await shot('character.png', 1440, 1000)
 
+  // A creature's article, with its territory in the infobox.
+  await go(`/wiki/creature/${ids.wolf}`, 2000, 1440, 1000)
+  await shot('bestiary.png', 1440, 1000)
+
+  // Settings → Stats, with HP's formula open.
+  await go('/settings?tab=stats', 1500, 1440, 1000)
+  await evaluate(`(async () => {
+    const row = [...document.querySelectorAll('.stat-row')].find((r) => r.querySelector('.stat-name')?.textContent.trim() === 'HP')
+    row.click()
+    await new Promise((r) => setTimeout(r, 400))
+    document.querySelector('.stat-item.is-open').scrollIntoView({ block: 'start' })
+    window.scrollBy(0, -150)
+    return 1
+  })()`)
+  await wait(900)
+  await shot('stats.png', 1440, 1000)
+
 } finally {
   ws.close()
   edge.kill()

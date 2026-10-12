@@ -6,10 +6,11 @@ data ("The Ashen Crown"). Needs Node 24+ and Edge or Chrome; no packages.
 - `seed-demo.js` builds the demo story through the API (it runs inside the
   page, so it can draw the pictures on a canvas): a map with four kingdoms,
   ten characters with versions, relations and an adoption, factions, events,
-  chapters, lore and wiki text.
+  chapters, lore, a bestiary and wiki text.
 - `shoot.mjs` starts a headless browser, runs the seed and saves
-  `wiki.png`, `graph.png`, `family.png`, `timeline.png`, `map.png` and
-  `character.png` (1440 wide). Edit it to add or change shots.
+  `wiki.png`, `graph.png`, `family.png`, `timeline.png`, `map.png`,
+  `character.png`, `bestiary.png` and `stats.png` (1440 wide). Edit it to
+  add or change shots.
 
 Run it against a fresh server with throwaway folders, never your real data
 (it adds a story wherever it points):

@@ -222,5 +222,23 @@
   for (const h of [10, 200, 30]) gallery.append('pictures', await landscape(h))
   await post(`/wiki/location/${kingdoms.Aldoria}/gallery`, gallery)
 
-  return { story: story.id, ids: { people, kingdoms, places, chapters, versions, later: later.id } }
+  // The bestiary: creatures native to the kingdoms (their territory is the
+  // kingdom's area), two of them related.
+  const creature = (o) => post('/creatures', form(o))
+  const wolf = await creature({
+    name: 'Ash Wolf', kind: 'animal', level_min: '5', level_max: '12', region_id: String(kingdoms.Aldoria),
+    description: 'Grey-furred pack hunters of the chalk hills, drawn to old fires.', picture: await landscape(28, false),
+  })
+  const golem = await creature({
+    name: 'Cinder Golem', kind: 'construct', level_min: '20', level_max: '20', region_id: String(kingdoms.Eastmarch),
+    description: 'A walking kiln left over from the war, still guarding roads nobody uses.', related: JSON.stringify([wolf.id]),
+  })
+  await creature({ name: 'Mire Wraith', kind: 'monster', level_min: '14', level_max: '22', region_id: String(kingdoms.Velmar), description: 'A drowned voice that leads travellers off the causeways.' })
+  await creature({ name: 'Salt Drake', kind: 'monster', level_min: '30', region_id: String(kingdoms.Saltmere), description: 'Nests in the sea cliffs; sailors pay it in silver.', related: JSON.stringify([golem.id]) })
+  await wput('creature', wolf.id, {
+    summary: 'The **Ash Wolf** hunts the hills of [[Aldoria]] in packs of five or six, and follows smoke the way other wolves follow blood.',
+    fields: { behavior: 'Wary of people, bold around fire. A pack will circle a campfire for a whole night without coming closer.', habitat: 'Chalk hills and the burnt edges of the old forest.' },
+  })
+
+  return { story: story.id, ids: { people, kingdoms, places, chapters, versions, later: later.id, wolf: wolf.id } }
 })()
