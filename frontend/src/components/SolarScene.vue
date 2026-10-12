@@ -23,19 +23,18 @@ import { createGlobeMesh } from '../three/globeMesh'
 import { loadSkyDome, disposeSkyDome } from '../three/skyDome'
 
 // The solar system in 3D: the star at the centre, each body on its orbit at
-// the time `days`, drawn at the squeezed scale of solarScale.js. The main
-// planet wears the map (three/globeMesh.js); the rest are plain spheres in
-// their colour. Click a body to pick it; the camera then follows it. The
-// physics is all in orbits.js: this only draws.
+// the time `days`, drawn at the squeezed scale of solarScale.js. Every
+// planet or moon with a map wears it (three/globeMesh.js): the main one the
+// story's map, the others their own; the rest are plain spheres in their
+// colour. Each spins once a day on its tilted axis (drawn as a thin line).
+// Click a body to pick it; the camera then follows it. The physics is all
+// in orbits.js: this only draws.
 const props = defineProps({
   bodies: { type: Array, default: () => [] },
   days: { type: Number, default: 0 },
   selected: { type: Number, default: null },
-  // The map on the main planet: { frequency, colorOf, version }, or null for
-  // a story whose map is flat.
-  globe: { type: Object, default: null },
-  // The main planet's axial tilt, in degrees.
-  tilt: { type: Number, default: 0 },
+  // The maps the bodies wear: id -> { frequency, colorOf, version }.
+  globes: { type: Map, default: () => new Map() },
   sky: { type: String, default: '' },
   // The markers: the star's habitable zone, and how close and how far the
   // picked body can orbit what it orbits.
@@ -62,7 +61,7 @@ let raf = 0
 let resizeObserver = null
 let skyMesh = null
 let cancelSky = () => {}
-let globeView = null // the map, built once and moved onto the main planet
+const globeViews = new Map() // body id -> its map's mesh, built once and moved onto it
 let bodyGroup = null // everything rebuilt when the bodies change
 const meshes = new Map() // body id -> { body, mesh, orbit (line, round its parent) }
 let follow = null // { id, last: Vector3 }
@@ -72,7 +71,7 @@ let limitsAround = null // the id of the body the limits are drawn round
 // ---- Building ----------------------------------------------------------------------
 function disposeGroup(g) {
   g?.traverse((o) => {
-    if (o === globeView?.mesh) return
+    if (o.userData.globe) return
     o.geometry?.dispose()
     o.material?.dispose?.()
   })
@@ -94,7 +93,7 @@ function orbitLine(radius, points = null) {
 
 function buildBodies() {
   if (bodyGroup) {
-    if (globeView) globeView.mesh.parent?.remove(globeView.mesh)
+    for (const g of globeViews.values()) g.mesh.parent?.remove(g.mesh)
     scene.remove(bodyGroup)
     disposeGroup(bodyGroup)
   }
@@ -104,6 +103,7 @@ function buildBodies() {
   for (const b of props.bodies) {
     const r = sceneRadius(b)
     let mesh
+    const globe = b.kind !== 'star' ? globeViews.get(b.id) : null
     if (b.kind === 'star') {
       mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 48, 24), new THREE.MeshBasicMaterial({ color: colorOf(b) }))
       // A soft glow round it.
@@ -111,32 +111,49 @@ function buildBodies() {
         new THREE.SphereGeometry(r * 1.35, 32, 16),
         new THREE.MeshBasicMaterial({ color: b.star_class === 'black_hole' ? '#ff8c3a' : colorOf(b), transparent: true, opacity: 0.18, depthWrite: false }),
       ))
-    } else if (b.is_main && globeView) {
-      // The map: its north pole tilted away from the orbit's pole.
-      mesh = new THREE.Group()
-      globeView.mesh.scale.setScalar(r)
-      globeView.mesh.rotation.set((props.tilt * Math.PI) / 180, 0, 0)
-      mesh.add(globeView.mesh)
+    } else if (globe) {
+      globe.mesh.scale.setScalar(r)
+      mesh = globe.mesh
     } else {
       mesh = new THREE.Mesh(
         new THREE.SphereGeometry(r, 32, 16),
         new THREE.MeshStandardMaterial({ color: colorOf(b), roughness: 0.9, metalness: 0 }),
       )
     }
-    mesh.userData.id = b.id
-    mesh.traverse((o) => (o.userData.id = b.id))
-    bodyGroup.add(mesh)
+    // holder (where it is) > tilt (its axis) > spin (its day) > the body.
+    const holder = new THREE.Group()
+    let spin = null
+    if (b.kind === 'star') holder.add(mesh)
+    else {
+      const tilt = new THREE.Group()
+      tilt.rotation.x = ((b.axial_tilt || 0) * Math.PI) / 180
+      spin = new THREE.Group()
+      spin.add(mesh)
+      tilt.add(spin)
+      tilt.add(axisLine(r))
+      holder.add(tilt)
+    }
+    holder.traverse((o) => (o.userData.id = b.id))
+    bodyGroup.add(holder)
     let orbit = null
     const parent = byId.get(b.parent_id)
     if (parent && b.orbit_km) {
       orbit = orbitLine(0, sceneOrbitPath(b, parent))
       bodyGroup.add(orbit)
     }
-    meshes.set(b.id, { body: b, mesh, orbit })
+    meshes.set(b.id, { body: b, mesh: holder, spin, orbit })
   }
   scene.add(bodyGroup)
   buildMarkers()
   place()
+}
+
+// A body's axis, through its poles and a little beyond.
+function axisLine(r) {
+  return new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, -r * 1.6), new THREE.Vector3(0, 0, r * 1.6)]),
+    new THREE.LineBasicMaterial({ color: 0xdfe6f5, transparent: true, opacity: 0.35 }),
+  )
 }
 
 // ---- Markers -------------------------------------------------------------------------
@@ -181,14 +198,17 @@ function buildMarkers() {
   scene.add(markerGroup)
 }
 
-function buildGlobe() {
-  if (globeView) {
-    globeView.mesh.parent?.remove(globeView.mesh)
-    globeView.dispose()
-    globeView = null
+// The maps, made again when the set changes (each is many cells).
+function buildGlobes() {
+  for (const g of globeViews.values()) {
+    g.mesh.parent?.remove(g.mesh)
+    g.dispose()
   }
-  if (props.globe) {
-    globeView = createGlobeMesh(new PlanetGrid(props.globe.frequency), props.globe.colorOf, { ambient: 0.06 })
+  globeViews.clear()
+  for (const [id, m] of props.globes) {
+    const g = createGlobeMesh(new PlanetGrid(m.frequency), m.colorOf, { ambient: 0.06 })
+    g.mesh.userData.globe = true
+    globeViews.set(id, g)
   }
   buildBodies()
 }
@@ -198,8 +218,10 @@ const positions = new Map()
 function place() {
   positions.clear()
   for (const [id, p] of scenePositions(props.bodies, props.days, undefined, props.relative)) positions.set(id, new THREE.Vector3(...p))
-  for (const { body, mesh, orbit } of meshes.values()) {
+  for (const { body, mesh, spin, orbit } of meshes.values()) {
     mesh.position.copy(positions.get(body.id))
+    // A turn a day (days are Earth days; day_hours its own).
+    if (spin) spin.rotation.z = (((props.days * 24) / (body.day_hours || 24)) % 1) * 2 * Math.PI
     if (orbit) orbit.position.copy(positions.get(body.parent_id) ?? new THREE.Vector3())
   }
   // The limits ring what the picked body orbits, wherever it is.
@@ -254,10 +276,13 @@ function render() {
   }
   skyMesh?.position.copy(camera.position)
   scene.updateMatrixWorld()
-  // The map is lit by the star: its direction, in the globe's own frame.
-  if (globeView?.mesh.parent) {
-    const local = globeView.mesh.worldToLocal(new THREE.Vector3(0, 0, 0))
-    globeView.material.uniforms.uLight.value.copy(local.normalize())
+  // The maps are lit by the star: its direction, in each globe's own frame.
+  const star = props.bodies.find((b) => b.kind === 'star')
+  const sun = (star && positions.get(star.id)) || new THREE.Vector3()
+  for (const g of globeViews.values()) {
+    if (!g.mesh.parent) continue
+    const local = g.mesh.worldToLocal(sun.clone())
+    g.material.uniforms.uLight.value.copy(local.normalize())
   }
   renderer.render(scene, camera)
   placeLabels()
@@ -333,7 +358,7 @@ onMounted(() => {
   controls = new OrbitControls(camera, canvasEl.value)
   controls.enableDamping = false
   controls.addEventListener('change', requestRender)
-  buildGlobe()
+  buildGlobes()
   frame()
   loadSky()
   resizeObserver = new ResizeObserver(resize)
@@ -348,7 +373,7 @@ onBeforeUnmount(() => {
   controls?.dispose()
   disposeGroup(bodyGroup)
   disposeGroup(markerGroup)
-  globeView?.dispose()
+  for (const g of globeViews.values()) g.dispose()
   if (skyMesh) disposeSkyDome(skyMesh)
   renderer?.dispose()
   renderer = null
@@ -356,12 +381,7 @@ onBeforeUnmount(() => {
 })
 
 watch(() => props.bodies, buildBodies, { deep: true })
-watch(() => props.globe, buildGlobe)
-watch(() => props.globe?.version, () => {
-  globeView?.recolorAll()
-  requestRender()
-})
-watch(() => props.tilt, buildBodies)
+watch(() => props.globes, buildGlobes)
 watch(() => props.days, place)
 watch(() => props.relative, place)
 

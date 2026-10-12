@@ -132,4 +132,5 @@ export default {
   "Couldn't load the solar system. Try refreshing.": "No se pudo cargar el sistema solar. Intenta recargar.",
   "See the whole system": "Ver todo el sistema",
   "Start with the star your world turns round. Then add planets, and moons round them, and pick which planet is the one on the map.": "Empieza por la estrella alrededor de la que gira tu mundo. Luego agrega planetas, y lunas a su alrededor, y elige qué planeta es el del mapa.",
+  "The main planet's tilt and day come from the settings.": "La inclinación y el día del planeta principal vienen de la configuración.",
 }

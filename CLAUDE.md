@@ -91,7 +91,10 @@ Run all of these before committing. `backend/static/` is build output (only
   from size and one density per type, gravity, orbits behind a swappable
   orbit model) and the picture's squeezed scale in `solarScale.js`. Keep
   physics out of the drawing code. The main planet's size is the map's
-  (`planet_km`), never stored twice. The globe mesh and the sky are shared
+  (`planet_km`), its tilt the map's, its day the calendar's hours per day,
+  and its orbit radius follows from the calendar's year and the star's mass
+  (`setMainOrbit` in `solar.go`, which repeats the few lines of physics it
+  needs); none of these is stored on the body. The globe mesh and the sky are shared
   three.js modules (`src/three/`) used by the map's globe and the solar
   system; only lazily loaded pages may import them. Planets and moons other
   than the main one have painting-only maps (`body_cells`,

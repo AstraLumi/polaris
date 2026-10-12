@@ -80,6 +80,10 @@
             <span>{{ $t('Days per month') }}</span>
             <input v-model.number="days" type="number" min="1" :max="400" step="1" />
           </label>
+          <label class="field" :title="$t('How long the world takes to turn once. With the months and days, it sets how long its year round the star is (Solar system).')">
+            <span>{{ $t('Hours per day') }}</span>
+            <input v-model.number="hours" type="number" min="0.01" step="any" />
+          </label>
         </div>
 
         <div class="quarters">
@@ -384,6 +388,7 @@ const REPO_OWNER_URL = 'https://github.com/AstraLumi'
 
 const months = ref(calendar.months_per_year)
 const days = ref(calendar.days_per_month)
+const hours = ref(calendar.hours_per_day)
 const loadError = ref('')
 const saveError = ref('')
 const saving = ref(false)
@@ -392,7 +397,8 @@ const saved = ref(false)
 const valid = computed(
   () =>
     Number.isInteger(months.value) && months.value >= 1 && months.value <= 100 &&
-    Number.isInteger(days.value) && days.value >= 1 && days.value <= 400,
+    Number.isInteger(days.value) && days.value >= 1 && days.value <= 400 &&
+    hours.value > 0 && hours.value <= 100000,
 )
 const uneven = computed(() => valid.value && months.value % 4 !== 0)
 
@@ -646,10 +652,11 @@ const restoring = ref('')
 const RESTORES = {
   calendar: {
     title: tr('Restore the default calendar?'),
-    message: tr('The calendar goes back to 12 months of 30 days and is saved. Dates already saved are not rewritten.'),
+    message: tr('The calendar goes back to 12 months of 30 days of 24 hours and is saved. Dates already saved are not rewritten.'),
     run: () => {
       months.value = 12
       days.value = 30
+      hours.value = 24
       return save()
     },
   },
@@ -697,7 +704,7 @@ async function save() {
   saveError.value = ''
   saved.value = false
   try {
-    await saveSettings({ months_per_year: months.value, days_per_month: days.value })
+    await saveSettings({ months_per_year: months.value, days_per_month: days.value, hours_per_day: hours.value })
     await loadCalendar()
     saved.value = true
     setTimeout(() => (saved.value = false), 2500)
@@ -713,6 +720,7 @@ onMounted(async () => {
     const s = await fetchSettings()
     months.value = s.months_per_year
     days.value = s.days_per_month
+    hours.value = s.hours_per_day || 24
     if (s.seasons) takeSeasons(s.seasons)
     takeMap(s.map)
     takeBloodTypes(s.blood_types)

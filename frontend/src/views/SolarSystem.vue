@@ -19,8 +19,7 @@
         :bodies="liveBodies"
         :days="days"
         :selected="selectedId"
-        :globe="globe"
-        :tilt="main.tilt"
+        :globes="globes"
         :relative="live ? simRelative : null"
         :shapes="live ? shapes : null"
         :show-zone="markers.zone"
@@ -84,7 +83,7 @@
             @click="live = true"
           >{{ $t('Gravity') }}</button>
         </span>
-        <span class="day-label">{{ $t('Day {n}', { n: Math.floor(days).toLocaleString() }) }}</span>
+        <span class="day-label">{{ clockText }}</span>
         <span v-if="live && lagging" class="lag" :title="$t('Too many steps to keep up at this speed; time runs slower')">{{ $t('catching up…') }}</span>
         </template>
       </div>
@@ -185,9 +184,29 @@
             <template v-if="draft.kind !== 'star'">
               <label class="field">
                 <span>{{ $t('Orbit radius (km)') }}</span>
-                <input v-model.number="draft.orbit_km" type="number" min="0.001" step="any" />
-                <small v-if="draft.orbit_km > 0" class="hint">{{ orbitHint(draft) }}</small>
+                <input v-model.number="draft.orbit_km" type="number" min="0.001" step="any" :disabled="draft.is_main" />
+                <small v-if="draft.is_main" class="hint">
+                  {{ $t("Set by the year: gravity carries it round its star in exactly the calendar's year, so it sits where that takes.") }}
+                  <router-link to="/settings#calendar">{{ $t('Change the calendar') }}</router-link>
+                </small>
+                <small v-else-if="draft.orbit_km > 0" class="hint">{{ orbitHint(draft) }}</small>
               </label>
+              <div class="field-row">
+                <label class="field">
+                  <span>{{ $t('Axial tilt (°)') }}</span>
+                  <input v-model.number="draft.axial_tilt" type="number" min="0" max="180" step="any" :disabled="draft.is_main" />
+                </label>
+                <label class="field">
+                  <span>{{ $t('Day length (hours)') }}</span>
+                  <input v-model.number="draft.day_hours" type="number" min="0.01" step="any" :disabled="draft.is_main" />
+                </label>
+              </div>
+              <small v-if="draft.is_main" class="hint spin-hint">
+                {{ $t("The main planet's tilt and day come from the settings.") }}
+                <router-link to="/settings#map">{{ $t('Tilt') }}</router-link> ·
+                <router-link to="/settings#calendar">{{ $t('Day') }}</router-link>
+              </small>
+              <small v-else class="hint spin-hint">{{ $t('Its spin: how far its axis leans from its orbit, and how long one turn takes. Over 90° it turns backwards.') }}</small>
               <label class="field">
                 <span>{{ $t('Starting angle (°)') }}</span>
                 <input v-model.number="draft.phase" type="number" step="any" />
@@ -276,6 +295,7 @@ import { skyUrl, applyMapSettings } from '../worldMap'
 import { planetColorOf } from '../planetColors'
 import { bodyFacts, orbitProblem, systemTree, periapsisOf, apoapsisOf, createGravitySim, positionsAt } from '../orbits'
 import { useUnsavedGuard } from '../navigation'
+import { calendar } from '../calendar'
 import { wikiPath } from '../wiki'
 import SolarScene from '../components/SolarScene.vue'
 import SolarEditor2D from '../components/SolarEditor2D.vue'
@@ -290,6 +310,7 @@ import ConfirmDialog from '../components/ConfirmDialog.vue'
 // One planet is the main one and wears the map.
 
 const SPEEDS = [1, 10, 100, 1000]
+const EARTH_DAY_HOURS = 24
 const TYPE_LABELS = { star: tr('Star'), rocky: tr('Rocky'), gas: tr('Gas giant'), ocean: tr('Ocean world') }
 const EARTH_RADIUS = 6371
 const SUN_RADIUS = 696000
@@ -301,7 +322,9 @@ const ready = ref(false)
 const loadError = ref('')
 const bodies = ref([])
 const main = ref({ radius_km: 0, tilt: 0, globe: false })
-const globe = ref(null) // { frequency, colorOf, version } for the main planet
+// The maps the bodies wear (id -> { frequency, colorOf }): the story's on
+// the main planet, and every other planet's or moon's own, once painted.
+const globes = ref(new Map())
 const selectedId = ref(null)
 const draft = ref(null)
 const saved = ref('')
@@ -384,23 +407,41 @@ function take(system) {
   resetDraft()
 }
 
-async function loadGlobe() {
-  globe.value = null
-  if (!main.value.globe || !bodies.value.some((b) => b.is_main)) return
-  try {
-    const data = await planetApi.get()
-    applyMapSettings(data.settings)
-    globe.value = { frequency: data.settings.planet.frequency, colorOf: planetColorOf(data), version: 0 }
-  } catch {
-    // The planet is drawn plain instead.
+// Which bodies wear a map: made again only when that set changes.
+let globeKey = ''
+async function loadGlobes() {
+  const mainBody = bodies.value.find((b) => b.is_main)
+  const others = bodies.value.filter((b) => !b.is_main && b.kind !== 'star' && b.map_frequency)
+  const key = [main.value.globe && mainBody ? `m${mainBody.id}` : '', ...others.map((b) => `${b.id}:${b.map_frequency}`)].join(',')
+  if (key === globeKey) return
+  globeKey = key
+  const out = new Map()
+  if (main.value.globe && mainBody) {
+    try {
+      const data = await planetApi.get()
+      applyMapSettings(data.settings)
+      out.set(mainBody.id, { frequency: data.settings.planet.frequency, colorOf: planetColorOf(data) })
+    } catch {
+      // Drawn plain instead.
+    }
   }
+  for (const b of others) {
+    try {
+      const m = await solarApi.bodyMap(b.id)
+      const cells = new Map(m.cells)
+      out.set(b.id, { frequency: m.frequency, colorOf: (c) => cells.get(c) || '' })
+    } catch {
+      // Drawn plain instead.
+    }
+  }
+  globes.value = out
 }
 
 onMounted(async () => {
   try {
     take(await solarApi.get())
     ready.value = true
-    loadGlobe()
+    loadGlobes()
   } catch (err) {
     loadError.value = t("Couldn't load the solar system. Try refreshing.")
   }
@@ -414,7 +455,8 @@ let raf = 0
 let last = 0
 function tick(now) {
   if (last) {
-    const next = days.value + ((now - last) / 1000) * speed.value
+    // The speeds count the world's days (the clock runs in Earth days).
+    const next = days.value + ((now - last) / 1000) * speed.value * dayFactor.value
     if (live.value && sim) {
       lagging.value = !sim.advanceTo(next) && !sim.event
       days.value = sim.days
@@ -429,6 +471,19 @@ function tick(now) {
   last = now
   if (playing.value) raf = requestAnimationFrame(tick)
 }
+
+// The clock in the world's calendar when there is a main planet: its days
+// are the calendar's hours long, its years the calendar's months.
+const dayFactor = computed(() => (bodies.value.some((b) => b.is_main) ? (main.value.day_hours || EARTH_DAY_HOURS) / EARTH_DAY_HOURS : 1))
+const clockText = computed(() => {
+  const worldDays = days.value / dayFactor.value
+  const n = Math.floor(worldDays)
+  if (!bodies.value.some((b) => b.is_main) || !(main.value.year_days > 0)) return t('Day {n}', { n: n.toLocaleString() })
+  const perMonth = calendar.days_per_month || 30
+  const year = Math.floor(n / main.value.year_days)
+  const inYear = n - year * main.value.year_days
+  return t('Year {y}, month {m}, day {d}', { y: year + 1, m: Math.floor(inYear / perMonth) + 1, d: (inYear % perMonth) + 1 })
+})
 
 // ---- Instability ---------------------------------------------------------------------------
 // When bodies touch, or (with gravity) one flies off, the clock stops and
@@ -560,9 +615,8 @@ async function run(call) {
   busy.value = true
   saveError.value = ''
   try {
-    const hadMain = bodies.value.find((b) => b.is_main)?.id
     take(await call())
-    if (bodies.value.find((b) => b.is_main)?.id !== hadMain) loadGlobe()
+    loadGlobes()
     return true
   } catch (err) {
     saveError.value = err.message || t("Couldn't save. Try again.")
@@ -621,6 +675,8 @@ function addMoon() {
 function onMove({ id, orbit_km, phase }) {
   const b = tree.value.byId.get(id)
   if (!b) return
+  // The main planet's distance is its year's: only its angle moves.
+  if (b.is_main) orbit_km = b.orbit_km
   b.orbit_km = orbit_km
   b.phase = phase
   if (draft.value?.id === id) Object.assign(draft.value, { orbit_km, phase })
@@ -858,6 +914,11 @@ const problem = computed(() => {
   font-size: 0.76rem;
   color: var(--accent);
   align-self: flex-start;
+}
+
+.spin-hint {
+  display: block;
+  margin: -0.1rem 0 0.4rem;
 }
 
 .ecc {

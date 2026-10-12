@@ -120,6 +120,8 @@ export const FACT_LABELS = {
   orbit_radius: tr('Orbit radius'),
   eccentricity: tr('Eccentricity'),
   closest: tr('Closest'),
+  axial_tilt: tr('Axial tilt'),
+  day_length: tr('Day length'),
   farthest: tr('Farthest'),
   system: tr('Solar system'),
   star: tr('Star'),
@@ -138,7 +140,7 @@ export const FACT_GROUPS = [
   { label: tr('Birth'), keys: ['born', 'born_in', 'nation', 'earth_name', 'human_birth_date'] },
   { label: tr('Abilities'), keys: ['class', 'subclass', 'specialization'] },
   { label: tr('Geography'), keys: ['hemisphere', 'latitude', 'climate_zone', 'plate', 'height', 'depth'] },
-  { label: tr('Orbit'), keys: ['system', 'orbits', 'orbit_radius', 'eccentricity', 'closest', 'farthest'] },
+  { label: tr('Orbit'), keys: ['system', 'orbits', 'orbit_radius', 'eccentricity', 'closest', 'farthest', 'axial_tilt', 'day_length'] },
 ]
 
 // Words the server sends as an infobox value.

@@ -156,3 +156,50 @@ func TestMigrationAddsSolarTable(t *testing.T) {
 		t.Errorf("%v, %+v", err, s)
 	}
 }
+
+// The main planet's year is the calendar's: its distance follows from the
+// year and the star's mass. It takes the map's tilt and the calendar's day.
+func TestMainPlanetYear(t *testing.T) {
+	_, h := newTestServer(t)
+	st := createStory(t, h, map[string]string{"name": "Year"})
+	base := "/api/s/" + st.ID
+	_, s := solarSave(t, h, "POST", base+"/solar/bodies", `{"kind":"star","name":"Sol","body_type":"star","radius_km":696000,"temperature_k":5772,"mass_kg":1.989e30}`)
+	star := s.Bodies[0].ID
+	_, s = solarSave(t, h, "POST", base+"/solar/bodies", `{"kind":"planet","name":"Home","body_type":"rocky","radius_km":6371,"orbit_km":5e9,"axial_tilt":80,"day_hours":3,"is_main":true,"parent_id":`+idStr(star)+`}`)
+	home := s.Bodies[1]
+	// 12 months of 30 days of 24 hours: 360 days, a little inside 1 AU.
+	if au := *home.OrbitKm / 1.496e8; math.Abs(au-0.9904) > 0.002 {
+		t.Errorf("a 360-day year: %.4f AU", au)
+	}
+	if home.DayHours != 24 || home.AxialTilt != s.Main.Tilt || s.Main.YearDays != 360 {
+		t.Errorf("main planet: %+v, main %+v", home, s.Main)
+	}
+	// Longer days make a longer year, farther out; so does a heavier star.
+	if rec := do(t, h, "PUT", base+"/settings", strings.NewReader(`{"months_per_year":12,"days_per_month":30,"hours_per_day":48}`), "application/json"); rec.Code != 200 {
+		t.Fatalf("settings: %d %s", rec.Code, rec.Body.String())
+	}
+	_, s = solarSave(t, h, "PUT", base+"/solar/bodies/"+idStr(star), `{"name":"Sol","body_type":"star","radius_km":696000,"temperature_k":5772,"mass_kg":3.978e30}`)
+	if au := *s.Bodies[1].OrbitKm / 1.496e8; math.Abs(au-0.9904*math.Cbrt(4)*math.Cbrt(2)) > 0.004 {
+		t.Errorf("twice the days and twice the mass: %.4f AU", au)
+	}
+	if s.Bodies[1].DayHours != 48 {
+		t.Errorf("day hours: %v", s.Bodies[1].DayHours)
+	}
+	// Other planets keep their own spin.
+	_, s = solarSave(t, h, "POST", base+"/solar/bodies", `{"kind":"planet","name":"Tilted","body_type":"gas","radius_km":60000,"orbit_km":7e8,"axial_tilt":97.8,"day_hours":17.2,"parent_id":`+idStr(star)+`}`)
+	if b := s.Bodies[2]; b.AxialTilt != 97.8 || b.DayHours != 17.2 {
+		t.Errorf("own spin: %+v", b)
+	}
+	for _, bad := range []string{`"axial_tilt":200`, `"day_hours":-1`} {
+		rec, _ := solarSave(t, h, "POST", base+"/solar/bodies", `{"kind":"planet","name":"X","body_type":"rocky","radius_km":10,"orbit_km":1e8,`+bad+`,"parent_id":`+idStr(star)+`}`)
+		if rec.Code != 400 {
+			t.Errorf("%s: %d", bad, rec.Code)
+		}
+	}
+	// An older page that doesn't send the hours keeps them.
+	do(t, h, "PUT", base+"/settings", strings.NewReader(`{"months_per_year":12,"days_per_month":30}`), "application/json")
+	_, s = solarSave(t, h, "GET", base+"/solar", ``)
+	if s.Main.DayHours != 48 {
+		t.Errorf("hours kept: %v", s.Main.DayHours)
+	}
+}

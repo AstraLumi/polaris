@@ -10,6 +10,8 @@ import { applyBloodTypes } from './bloodTypes'
 export const calendar = reactive({
   months_per_year: 12,
   days_per_month: 30,
+  // How long the world's day is (its spin, and with the rest, its year).
+  hours_per_day: 24,
   // The story's seasons (seasons.js): { seasons, start, hemisphere, unit }.
   seasons: { seasons: [], start: '', hemisphere: 'north', unit: 'C' },
   loaded: false,
@@ -22,6 +24,7 @@ export async function loadCalendar() {
       const data = await res.json()
       calendar.months_per_year = data.months_per_year
       calendar.days_per_month = data.days_per_month
+      calendar.hours_per_day = data.hours_per_day || 24
       if (data.seasons) calendar.seasons = data.seasons
       applyMapSettings(data.map)
       applyBloodTypes(data.blood_types)

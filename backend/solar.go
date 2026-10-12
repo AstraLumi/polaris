@@ -63,6 +63,17 @@ var schema33Statements = []string{
 
 const maxEccentricity = 0.95
 
+// schema35Statements create what schema 35 added: every planet and moon
+// spins, on an axis tilted from its orbit (degrees), once a day (hours). The
+// main planet takes both from the story's settings instead (the map's tilt,
+// the calendar's hours per day).
+var schema35Statements = []string{
+	`ALTER TABLE celestial_bodies ADD COLUMN axial_tilt REAL NOT NULL DEFAULT 0`,
+	`ALTER TABLE celestial_bodies ADD COLUMN day_hours REAL NOT NULL DEFAULT 24`,
+}
+
+const maxDayHours = 1e6
+
 // The classes a star can be. Their realistic ranges live with the physics
 // (frontend/src/stars.js); here a star only has to be one of them.
 var starClasses = map[string]bool{
@@ -98,9 +109,14 @@ type celestialBody struct {
 	// The orbit's shape: eccentricity and periapsis direction (degrees).
 	Eccentricity float64 `json:"eccentricity"`
 	Periapsis    float64 `json:"periapsis"`
-	Color        string  `json:"color"`
-	IsMain       bool    `json:"is_main"`
-	Sort         int     `json:"sort"`
+	// Its spin: the axis's tilt (degrees) and the day's length (hours).
+	AxialTilt float64 `json:"axial_tilt"`
+	DayHours  float64 `json:"day_hours"`
+	// The grid of its own map, once painted (bodymaps.go); nil without one.
+	MapFrequency *int   `json:"map_frequency"`
+	Color        string `json:"color"`
+	IsMain       bool   `json:"is_main"`
+	Sort         int    `json:"sort"`
 	// Stars only.
 	StarClass    string   `json:"star_class"`
 	TemperatureK *float64 `json:"temperature_k"`
@@ -118,6 +134,9 @@ type solarSystem struct {
 		RadiusKm float64 `json:"radius_km"`
 		Tilt     float64 `json:"tilt"`
 		Globe    bool    `json:"globe"`
+		// The calendar: hours in the world's day, days in its year.
+		DayHours float64 `json:"day_hours"`
+		YearDays float64 `json:"year_days"`
 	} `json:"main"`
 }
 
@@ -128,9 +147,13 @@ func loadSolarSystem(db *sql.DB) (solarSystem, error) {
 	out.Main.Tilt = m.Planet.Tilt
 	out.Main.Globe = m.Mode == "3d"
 	out.Name = systemName(db)
+	cal := loadCalendar(db)
+	out.Main.DayHours = cal.HoursPerDay
+	out.Main.YearDays = float64(cal.MonthsPerYear * cal.DaysPerMonth)
 	out.Bodies = []celestialBody{}
 	rows, err := db.Query(`SELECT id, parent_id, kind, name, body_type, radius_km, orbit_km, phase, COALESCE(color, ''), is_main, sort,
-		COALESCE(star_class, ''), temperature_k, mass_kg, free_values, eccentricity, periapsis
+		COALESCE(star_class, ''), temperature_k, mass_kg, free_values, eccentricity, periapsis,
+		axial_tilt, day_hours, map_frequency
 		FROM celestial_bodies ORDER BY sort, id`)
 	if err != nil {
 		return out, err
@@ -140,8 +163,10 @@ func loadSolarSystem(db *sql.DB) (solarSystem, error) {
 		var b celestialBody
 		var parent sql.NullInt64
 		var orbit, temp, mass sql.NullFloat64
+		var freq sql.NullInt64
 		if err := rows.Scan(&b.ID, &parent, &b.Kind, &b.Name, &b.BodyType, &b.RadiusKm, &orbit, &b.Phase, &b.Color, &b.IsMain, &b.Sort,
-			&b.StarClass, &temp, &mass, &b.FreeValues, &b.Eccentricity, &b.Periapsis); err != nil {
+			&b.StarClass, &temp, &mass, &b.FreeValues, &b.Eccentricity, &b.Periapsis,
+			&b.AxialTilt, &b.DayHours, &freq); err != nil {
 			return out, err
 		}
 		if temp.Valid {
@@ -149,6 +174,10 @@ func loadSolarSystem(db *sql.DB) (solarSystem, error) {
 		}
 		if mass.Valid {
 			b.MassKg = &mass.Float64
+		}
+		if freq.Valid {
+			f := int(freq.Int64)
+			b.MapFrequency = &f
 		}
 		if parent.Valid {
 			b.ParentID = &parent.Int64
@@ -158,10 +187,53 @@ func loadSolarSystem(db *sql.DB) (solarSystem, error) {
 		}
 		if b.IsMain {
 			b.RadiusKm = out.Main.RadiusKm
+			b.AxialTilt = out.Main.Tilt
+			b.DayHours = cal.HoursPerDay
 		}
 		out.Bodies = append(out.Bodies, b)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return out, err
+	}
+	setMainOrbit(&out, cal)
+	return out, nil
+}
+
+// The main planet's year is the calendar's, whatever its star: its distance
+// is the one where gravity takes exactly a year to carry it round (Kepler's
+// third law, a³ = G·M·T²/4π²). A heavier star holds it farther out.
+func setMainOrbit(s *solarSystem, cal calendarSettings) {
+	byID := map[int64]*celestialBody{}
+	for i := range s.Bodies {
+		byID[s.Bodies[i].ID] = &s.Bodies[i]
+	}
+	for i := range s.Bodies {
+		b := &s.Bodies[i]
+		if !b.IsMain || b.ParentID == nil {
+			continue
+		}
+		star, ok := byID[*b.ParentID]
+		if !ok {
+			continue
+		}
+		t := cal.yearSeconds()
+		a := math.Cbrt(gravityG*(bodyMass(*star)+bodyMass(*b))*t*t/(4*math.Pi*math.Pi)) / 1000
+		b.OrbitKm = &a
+	}
+}
+
+// The physics of frontend/src/orbits.js, as far as the main planet's year
+// needs it: a star's own mass, else its size times its type's density.
+const gravityG = 6.674e-11
+
+var typeDensity = map[string]float64{"star": 1410, "rocky": 5510, "gas": 1330, "ocean": 3000}
+
+func bodyMass(b celestialBody) float64 {
+	if b.MassKg != nil && *b.MassKg > 0 {
+		return *b.MassKg
+	}
+	r := b.RadiusKm * 1000
+	return typeDensity[b.BodyType] * 4 / 3 * math.Pi * r * r * r
 }
 
 func getSolarHandler(db *sql.DB) http.HandlerFunc {
@@ -217,6 +289,15 @@ func checkBody(db *sql.DB, b *celestialBody, id int64) string {
 	b.Color = color
 	b.Phase = math.Mod(math.Mod(b.Phase, 360)+360, 360)
 	b.Periapsis = math.Mod(math.Mod(b.Periapsis, 360)+360, 360)
+	if b.DayHours == 0 {
+		b.DayHours = 24
+	}
+	if !(b.AxialTilt >= 0 && b.AxialTilt <= 180) {
+		return "the axial tilt must be between 0 and 180 degrees"
+	}
+	if !(b.DayHours > 0 && b.DayHours <= maxDayHours) {
+		return "a day must last more than 0 hours"
+	}
 	if !(b.Eccentricity >= 0 && b.Eccentricity <= maxEccentricity) {
 		return "the eccentricity must be between 0 and 0.95"
 	}
@@ -337,18 +418,20 @@ func writeBody(db *sql.DB, b *celestialBody, id int64) error {
 	color := nullableString(b.Color)
 	if id == 0 {
 		res, err := tx.Exec(`INSERT INTO celestial_bodies (parent_id, kind, name, body_type, radius_km, orbit_km, phase, color, is_main,
-				star_class, temperature_k, mass_kg, free_values, eccentricity, periapsis, sort)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM celestial_bodies))`,
+				star_class, temperature_k, mass_kg, free_values, eccentricity, periapsis, axial_tilt, day_hours, sort)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM celestial_bodies))`,
 			b.ParentID, b.Kind, b.Name, b.BodyType, b.RadiusKm, b.OrbitKm, b.Phase, color, b.IsMain,
-			nullableString(b.StarClass), b.TemperatureK, b.MassKg, b.FreeValues, b.Eccentricity, b.Periapsis)
+			nullableString(b.StarClass), b.TemperatureK, b.MassKg, b.FreeValues, b.Eccentricity, b.Periapsis, b.AxialTilt, b.DayHours)
 		if err != nil {
 			return err
 		}
 		b.ID, _ = res.LastInsertId()
 	} else if _, err := tx.Exec(`UPDATE celestial_bodies SET name = ?, body_type = ?, radius_km = ?, orbit_km = ?, phase = ?, color = ?, is_main = ?,
-			star_class = ?, temperature_k = ?, mass_kg = ?, free_values = ?, eccentricity = ?, periapsis = ?
+			star_class = ?, temperature_k = ?, mass_kg = ?, free_values = ?, eccentricity = ?, periapsis = ?,
+			axial_tilt = ?, day_hours = ?
 		WHERE id = ?`, b.Name, b.BodyType, b.RadiusKm, b.OrbitKm, b.Phase, color, b.IsMain,
-		nullableString(b.StarClass), b.TemperatureK, b.MassKg, b.FreeValues, b.Eccentricity, b.Periapsis, id); err != nil {
+		nullableString(b.StarClass), b.TemperatureK, b.MassKg, b.FreeValues, b.Eccentricity, b.Periapsis,
+		b.AxialTilt, b.DayHours, id); err != nil {
 		return err
 	}
 	return tx.Commit()
