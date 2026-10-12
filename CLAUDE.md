@@ -20,6 +20,7 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/formulaBlocks.test.mjs
     node frontend/tests/seasons.test.mjs
     node frontend/tests/planet.test.mjs
+    node frontend/tests/planetGrid.test.mjs
 
 Run all of these before committing. `backend/static/` is build output (only
 `.gitkeep` is tracked); the tests do not need it.
@@ -67,6 +68,16 @@ Run all of these before committing. `backend/static/` is build output (only
   (`components/DateField.vue`): digits are typed and shown left to right
   but read from the right, the last four being the year (`dateDigits.js`);
   a year alone is emitted as just the year.
+- **The map is 2D only or a planet** (`map_mode`, `backend/planetmap.go`).
+  The 2D tables (`location_hexes`, `locations.q/r`, `creature_hexes`) and
+  the planet's (`planet_cells`, `locations.cell`, `creature_cells`) are kept
+  side by side; anything that reads positions must ask `mapMode`/`spaceOf`
+  (`backend/positions.go`) which one counts. The planet's grid and the map
+  projections exist twice, in Go (`planetgrid.go`, `projection.go`) and JS
+  (`planetGrid.js`, `projection.js`): change both, and keep the shared
+  fixtures in their tests equal. three.js is only loaded with the planet
+  (`MapPage.vue`, `PlanetTerritory.vue` load it lazily); keep it out of the
+  main bundle.
 - Birth date, blood type and Born in belong to the character (`characters`
   columns, schema 23), not to a version; the version form edits them for
   all versions.

@@ -123,7 +123,8 @@
                 <ul class="links">
                   <li v-for="(r, i) in g.items" :key="i">
                     <template v-if="r.note && g.key === 'relations'">{{ (r.note_word ? $t(r.note) : r.note) + ' ' }}</template>
-                    <RouterLink :to="wikiPath(r.type, r.id)">{{ r.name }}</RouterLink>
+                    <RouterLink v-if="r.type" :to="wikiPath(r.type, r.id)">{{ r.name }}</RouterLink>
+                    <span v-else>{{ $t(r.name) }}</span>
                     <span v-if="r.note && g.key !== 'relations'" class="faint"> ({{ r.note_word ? $t(r.note) : r.note }})</span>
                   </li>
                 </ul>
@@ -271,7 +272,21 @@
             </tbody>
           </table>
 
-          <template v-if="creatureTerritory?.territory.length">
+          <template v-if="creatureTerritory?.cells?.length">
+            <div class="info-sub">{{ $t('Territory') }}</div>
+            <div class="info-territory">
+              <PlanetTerritory
+                :cells="creatureTerritory.cells"
+                :land-cells="creatureTerritory.land"
+                :frequency="creatureTerritory.frequency"
+                :kind="creatureTerritory.kind"
+                :width="260"
+                :alt="$t('Territory of {name}', { name: shownName })"
+                @open="viewPicture($event, $t('Territory of {name}', { name: shownName }))"
+              />
+            </div>
+          </template>
+          <template v-else-if="creatureTerritory?.territory?.length">
             <div class="info-sub">{{ $t('Territory') }}</div>
             <div class="info-territory">
               <HexTerritory
@@ -354,8 +369,10 @@ import ConfirmDialog from '../components/ConfirmDialog.vue'
 import DateField from '../components/DateField.vue'
 import WikiGallery from '../components/WikiGallery.vue'
 import HexTerritory from '../components/HexTerritory.vue'
-import { creaturesApi, mapApi } from '../api'
-import { mapHexesOf } from '../creatures'
+import PlanetTerritory from '../components/PlanetTerritory.vue'
+import { worldMap } from '../worldMap'
+import { creaturesApi, mapApi, planetApi } from '../api'
+import { mapHexesOf, planetLandOf } from '../creatures'
 import { pageTitle, useUnsavedGuard, useSaveShortcut, viewPicture } from '../navigation'
 import { renderMarkdown } from '../markdown'
 import { calendar, fullDate, dateParts } from '../calendar'
@@ -654,6 +671,12 @@ async function loadTerritory() {
   creatureTerritory.value = null
   if (props.type !== 'creature') return
   try {
+    // On a planet the picture is the planet's, in the bestiary's projection.
+    if (worldMap.mode === '3d') {
+      const [c, planet] = await Promise.all([creaturesApi.get(props.id), planetApi.get()])
+      creatureTerritory.value = { cells: c.cells || [], kind: c.kind, land: planetLandOf(planet), frequency: planet.settings.planet.frequency }
+      return
+    }
     const [c, map] = await Promise.all([creaturesApi.get(props.id), mapApi.get()])
     creatureTerritory.value = { territory: c.territory || [], kind: c.kind, mapHexes: mapHexesOf(map) }
   } catch (e) {

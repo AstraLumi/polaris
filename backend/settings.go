@@ -40,11 +40,12 @@ type calendarSettings struct {
 type settingsPayload struct {
 	calendarSettings
 	Seasons seasonSettings `json:"seasons"`
+	Map     mapSettings    `json:"map"`
 }
 
 func loadSettingsPayload(db *sql.DB) settingsPayload {
 	cal := loadCalendar(db)
-	return settingsPayload{cal, loadSeasons(db, cal)}
+	return settingsPayload{cal, loadSeasons(db, cal), loadMapSettings(db)}
 }
 
 func readIntSetting(db *sql.DB, key string, fallback, min, max int) int {

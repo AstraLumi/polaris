@@ -7,7 +7,7 @@ import FamilyTree from './views/FamilyTree.vue'
 import VersionEdit from './views/VersionEdit.vue'
 import VersionCompare from './views/VersionCompare.vue'
 import CharacterAssets from './views/CharacterAssets.vue'
-import MapView from './views/MapView.vue'
+import MapPage from './views/MapPage.vue'
 import SettingsView from './views/SettingsView.vue'
 import Events from './views/Events.vue'
 import EventView from './views/EventView.vue'
@@ -49,7 +49,7 @@ const routes = [
     props: true,
   },
   { path: '/assets', name: 'assets', component: CharacterAssets, meta: { title: tr('Character Assets') } },
-  { path: '/map', name: 'map', component: MapView, meta: { title: tr('Map') } },
+  { path: '/map', name: 'map', component: MapPage, meta: { title: tr('Map') } },
   { path: '/settings', name: 'settings', component: SettingsView, meta: { title: tr('Settings') } },
   { path: '/timeline', name: 'timeline', component: TimelineView, meta: { title: tr('Timeline') } },
   { path: '/calendar', name: 'calendar', component: CalendarView, meta: { title: tr('Calendar') } },

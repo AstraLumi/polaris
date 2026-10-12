@@ -94,30 +94,25 @@ func formatLatitude(lat float64) string {
 }
 
 // addPlanetFacts gives a place on the map its hemisphere, latitude (a range
-// for a region) and climate zones, once the equator has been placed.
+// for a region) and climate zones: on the planet in 3D, or from the 2D
+// equator once it has been placed.
 func (a *wikiArticle) addPlanetFacts(db *sql.DB, kind string, id int64) {
-	e := loadEquator(db)
-	if !e.Placed || !(e.rowsToPole() > 0) {
-		return
+	var lats []float64
+	var e mapEquator
+	if mapMode(db) == "3d" {
+		var p planetSettings
+		lats, p = planetLatitudes(db, kind, id)
+		e.Tilt = p.Tilt
+	} else {
+		e = loadEquator(db)
+		if !e.Placed || !(e.rowsToPole() > 0) {
+			return
+		}
+		lats = e.hexLatitudes(db, kind, id)
 	}
-	q := `SELECT q, r FROM location_hexes WHERE location_id = ?`
-	if kind != "major" {
-		q = `SELECT q, r FROM locations WHERE id = ? AND q IS NOT NULL AND r IS NOT NULL`
-	}
-	rows, err := db.Query(q, id)
-	if err != nil {
-		log.Printf("planet facts: %v", err)
-		return
-	}
-	defer rows.Close()
 	lo, hi := math.Inf(1), math.Inf(-1)
 	zones := map[string]bool{}
-	for rows.Next() {
-		var hq, hr int64
-		if rows.Scan(&hq, &hr) != nil {
-			continue
-		}
-		lat := e.latitude(hq, hr)
+	for _, lat := range lats {
 		lo, hi = math.Min(lo, lat), math.Max(hi, lat)
 		zones[e.zone(lat)] = true
 	}
@@ -147,6 +142,28 @@ func (a *wikiArticle) addPlanetFacts(db *sql.DB, kind string, id int64) {
 		}
 	}
 	a.addFact("climate_zone", strings.Join(names, "|"), "words", nil)
+}
+
+// hexLatitudes are the latitudes of a location's 2D hexes.
+func (e mapEquator) hexLatitudes(db *sql.DB, kind string, id int64) []float64 {
+	q := `SELECT q, r FROM location_hexes WHERE location_id = ?`
+	if kind != "major" {
+		q = `SELECT q, r FROM locations WHERE id = ? AND q IS NOT NULL AND r IS NOT NULL`
+	}
+	rows, err := db.Query(q, id)
+	if err != nil {
+		log.Printf("planet facts: %v", err)
+		return nil
+	}
+	defer rows.Close()
+	var out []float64
+	for rows.Next() {
+		var hq, hr int64
+		if rows.Scan(&hq, &hr) == nil {
+			out = append(out, e.latitude(hq, hr))
+		}
+	}
+	return out
 }
 
 func updateEquatorHandler(db *sql.DB) http.HandlerFunc {

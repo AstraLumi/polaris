@@ -178,6 +178,91 @@
       </template>
     </section>
 
+    <section id="map" class="glass-panel card">
+      <h2>{{ $t('Map') }}</h2>
+      <p class="lede">
+        {{ $t('A flat hex map, or a whole planet of hexes you paint on a globe. On a planet, the flat maps are projections of it, and everything that depends on where things are (borders, latitudes, territories) is read from the planet. The 2D map is kept as it is, as a 2D-only version you can go back to or port onto the planet.') }}
+      </p>
+
+      <div class="modes" role="radiogroup" :aria-label="$t('Map type')">
+        <label class="mode" :class="{ 'is-on': mapForm.mode === '2d' }">
+          <input v-model="mapForm.mode" type="radio" value="2d" />
+          <strong>{{ $t('2D only') }}</strong>
+          <span>{{ $t('A flat map of hexes, as before.') }}</span>
+        </label>
+        <label class="mode" :class="{ 'is-on': mapForm.mode === '3d' }">
+          <input v-model="mapForm.mode" type="radio" value="3d" />
+          <strong>{{ $t('3D planet') }}</strong>
+          <span>{{ $t('A globe of hexes, with flat projections to look at.') }}</span>
+        </label>
+      </div>
+
+      <div class="planet-fields">
+        <label class="field">
+          <span>{{ $t('Planet circumference (km)') }}</span>
+          <input v-model.number="mapForm.planet_km" type="number" min="1" step="any" />
+        </label>
+        <label class="field">
+          <span>{{ $t('Hex width (km)') }}</span>
+          <input v-model.number="mapForm.hex_km" type="number" min="0.01" step="any" />
+        </label>
+        <label class="field">
+          <span>{{ $t('Axial tilt (°)') }}</span>
+          <input v-model.number="mapForm.tilt" type="number" min="0" max="90" step="any" />
+        </label>
+        <label class="field">
+          <span>{{ $t('Bestiary territories drawn in') }}</span>
+          <select v-model="mapForm.bestiary_projection">
+            <option v-for="p in PROJECTIONS" :key="p.id" :value="p.id">{{ $t(p.label) }}</option>
+          </select>
+        </label>
+      </div>
+      <p v-if="mapValid" class="note">
+        {{ $t('The planet has {cells} hexes, each about {km} km across.', { cells: planetCells.toLocaleString(), km: planetHexKm }) }}
+        <template v-if="planetFrequency !== savedFrequency && savedFrequency">
+          {{ $t('Changing the hex size moves everything already painted on the planet onto the new hexes.') }}
+        </template>
+        <strong v-if="planetCells > 300000">{{ $t('That many hexes may be slow to draw.') }}</strong>
+      </p>
+
+      <p v-if="mapError" class="error-banner">{{ mapError }}</p>
+      <div class="actions">
+        <button class="btn btn-primary" :disabled="mapSaving || !mapValid" @click="saveMapSettings">
+          {{ mapSaving ? $t('Saving…') : $t('Save map settings') }}
+        </button>
+        <span v-if="mapSaved" class="saved-hint">{{ $t('Saved.') }}</span>
+      </div>
+
+      <div class="port">
+        <h3>{{ $t('Port the 2D map onto the planet') }}</h3>
+        <p class="note">
+          {{ $t('Reads the 2D map as drawn in a projection, with its equator as the planet\'s and its hexes as wide as the 2D map\'s Equator panel says, and copies every painted hex, place and creature territory onto the planet. Whatever is on the planet now is replaced. The 2D map itself is not changed.') }}
+        </p>
+        <div class="port-row">
+          <label class="field">
+            <span>{{ $t('The 2D map is drawn in') }}</span>
+            <select v-model="portProjection">
+              <option v-for="p in PROJECTIONS" :key="p.id" :value="p.id">{{ $t(p.label) }}</option>
+            </select>
+          </label>
+          <button class="btn btn-ghost" :disabled="porting" @click="portOpen = true">
+            {{ porting ? $t('Porting…') : $t('Port the 2D map') }}
+          </button>
+        </div>
+        <p class="note">{{ $t(PROJECTIONS.find((p) => p.id === portProjection)?.blurb || '') }}</p>
+        <p v-if="portDone" class="saved-hint">{{ portDone }}</p>
+      </div>
+    </section>
+
+    <ConfirmDialog
+      v-if="portOpen"
+      :title="$t('Port the 2D map onto the planet?')"
+      :message="$t('Everything painted on the planet, and where its places stand, is replaced by the 2D map.')"
+      :confirm-label="$t('Port the 2D map')"
+      @cancel="portOpen = false"
+      @confirm="portMap"
+    />
+
     <section class="glass-panel card about">
       <h2>{{ $t('About Polaris') }}</h2>
       <dl class="about-list">
@@ -200,7 +285,7 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
-import { fetchSettings, saveSettings, saveSeasons } from '../api'
+import { fetchSettings, saveSettings, saveSeasons, planetApi } from '../api'
 import { loadCalendar, calendar } from '../calendar'
 import { THEMES, currentTheme, saveTheme } from '../theme'
 import { t, tn, LOCALES, locale, saveLocale } from '../i18n'
@@ -208,6 +293,9 @@ import pkg from '../../package.json'
 import { useRoute } from 'vue-router'
 import StatSystemEditor from '../components/StatSystemEditor.vue'
 import DateField from '../components/DateField.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { PROJECTIONS, applyMapSettings } from '../worldMap'
+import { frequencyFor, hexKmOf } from '../planetGrid'
 import { newSeasonId } from '../seasons'
 
 // ?tab=stats opens the Stats tab (the Build tab links there).
@@ -342,6 +430,71 @@ async function saveSeasonSettings() {
   }
 }
 
+// ---- Map: 2D only or a planet ----------------------------------------------------------
+const mapForm = ref({ mode: '2d', planet_km: 40075, hex_km: 50, tilt: 23.44, bestiary_projection: 'equirectangular', show_equator: true, show_zones: false })
+const savedFrequency = ref(0)
+const mapError = ref('')
+const mapSaving = ref(false)
+const mapSaved = ref(false)
+const portProjection = ref('equirectangular')
+const portOpen = ref(false)
+const porting = ref(false)
+const portDone = ref('')
+
+function takeMap(m) {
+  if (!m) return
+  mapForm.value = {
+    mode: m.mode,
+    planet_km: m.planet.planet_km,
+    hex_km: Math.round(m.hex_km * 100) / 100,
+    tilt: m.planet.tilt,
+    bestiary_projection: m.planet.bestiary_projection,
+    show_equator: m.planet.show_equator,
+    show_zones: m.planet.show_zones,
+  }
+  savedFrequency.value = m.planet.frequency
+}
+
+const mapValid = computed(() => {
+  const f = mapForm.value
+  return f.planet_km > 0 && f.hex_km > 0 && f.tilt >= 0 && f.tilt <= 90
+})
+const planetFrequency = computed(() => (mapValid.value ? frequencyFor(mapForm.value.planet_km, mapForm.value.hex_km) : 0))
+const planetCells = computed(() => 10 * planetFrequency.value ** 2 + 2)
+const planetHexKm = computed(() => Math.round(hexKmOf(mapForm.value.planet_km, planetFrequency.value) * 10) / 10)
+
+async function saveMapSettings() {
+  mapSaving.value = true
+  mapError.value = ''
+  mapSaved.value = false
+  try {
+    const m = await planetApi.saveSettings(mapForm.value)
+    takeMap(m)
+    applyMapSettings(m)
+    mapSaved.value = true
+    setTimeout(() => (mapSaved.value = false), 2500)
+  } catch (err) {
+    mapError.value = err.message || t("Couldn't save.")
+  } finally {
+    mapSaving.value = false
+  }
+}
+
+async function portMap() {
+  portOpen.value = false
+  porting.value = true
+  portDone.value = ''
+  mapError.value = ''
+  try {
+    const res = await planetApi.port(portProjection.value)
+    portDone.value = tn('Ported: {n} hex painted on the planet.', 'Ported: {n} hexes painted on the planet.', res.cells)
+  } catch (err) {
+    mapError.value = err.message || t("Couldn't port the map.")
+  } finally {
+    porting.value = false
+  }
+}
+
 async function save() {
   saving.value = true
   saveError.value = ''
@@ -364,6 +517,7 @@ onMounted(async () => {
     months.value = s.months_per_year
     days.value = s.days_per_month
     if (s.seasons) takeSeasons(s.seasons)
+    takeMap(s.map)
   } catch (err) {
     loadError.value = "Couldn't load settings. Try refreshing."
   }
@@ -596,6 +750,78 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-bottom: 1.1rem;
+}
+
+.modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.mode {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.mode:focus-within {
+  outline: 2px solid var(--accent-soft);
+}
+
+.mode.is-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.mode input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mode strong {
+  font-size: 0.92rem;
+}
+
+.mode span {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.planet-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.port {
+  margin-top: 1.5rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--glass-border);
+}
+
+.port h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1rem;
+}
+
+.port-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.port-row .field {
+  flex: 0 1 240px;
 }
 
 .season-fields {

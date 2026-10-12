@@ -32,13 +32,18 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const groups = computed(() => {
-  const kingdoms = props.options.filter((o) => o.kind === 'major' && o.color)
+  // A coloured major location is a kingdom, a region or an ocean (its realm).
+  const realm = (o) => (o.color ? o.realm || 'kingdom' : 'region')
+  const majors = props.options.filter((o) => o.kind === 'major')
+  const kingdoms = majors.filter((o) => realm(o) === 'kingdom')
   if (props.kingdomOnly) return kingdoms.length ? [{ label: t('Kingdoms'), items: kingdoms }] : []
-  const regions = props.options.filter((o) => o.kind === 'major' && !o.color)
+  const regions = majors.filter((o) => realm(o) === 'region')
+  const oceans = majors.filter((o) => realm(o) === 'ocean')
   const places = props.options.filter((o) => o.kind === 'minor')
   return [
     { label: t('Kingdoms'), items: kingdoms },
     { label: t('Regions'), items: regions },
+    { label: t('Oceans'), items: oceans },
     { label: t('Locations'), items: places },
   ].filter((g) => g.items.length)
 })

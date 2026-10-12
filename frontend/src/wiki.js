@@ -123,6 +123,7 @@ export const WORD_LABELS = [
   tr('Monster'), tr('Animal'), tr('Construct'),
   tr('Northern hemisphere'), tr('Southern hemisphere'), tr('Both hemispheres'), tr('On the equator'),
   tr('Tropical'), tr('Temperate'), tr('Polar'),
+  tr('Region'), tr('Ocean'),
 ]
 
 // A 'words' value: several of the words above, joined by '|'.
@@ -149,6 +150,7 @@ export const GROUP_LABELS = {
   subfactions: tr('Factions within'),
   factions: tr('Factions'),
   factions_here: tr('Factions based here'),
+  borders: tr('Borders'),
   relations: tr('Relations'),
   classes: tr('Classes'),
   links_to: tr('Links to'),

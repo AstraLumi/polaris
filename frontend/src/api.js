@@ -466,6 +466,19 @@ export const mapApi = {
   saveEquator: (equator) => mapRequest('/map/equator', jsonBody('PUT', equator), 'failed to save the equator'),
 }
 
+// The planet (backend/planetmap.go): its settings, every location, and the
+// cells major locations cover as [location id, cell].
+export const planetApi = {
+  get: () => mapRequest('/planet', undefined, 'failed to load the planet'),
+  paint: (locationId, cells) =>
+    mapRequest('/planet/paint', jsonBody('POST', { location_id: locationId, cells }), 'failed to paint'),
+  erase: (locationId, cells) =>
+    mapRequest('/planet/erase', jsonBody('POST', { location_id: locationId, cells }), 'failed to erase'),
+  port: (projection) => mapRequest('/planet/port', jsonBody('POST', { projection }), 'failed to port the map'),
+  // { mode, planet_km, hex_km, tilt, bestiary_projection, show_equator, show_zones }
+  saveSettings: (s) => mapRequest('/settings/map', jsonBody('PUT', s), 'failed to save the map settings'),
+}
+
 // ---- Events ------------------------------------------------------------------
 
 async function eventRequest(path, options, fallback) {

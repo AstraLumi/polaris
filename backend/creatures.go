@@ -20,7 +20,8 @@ import (
 //
 // Its territory is the map hexes it lives on: by default the area of its
 // region (every hex of a kingdom or region, the one hex of a town), or, once
-// painted by hand (custom_territory), the hexes in creature_hexes.
+// painted by hand (custom_territory), the hexes in creature_hexes. On the
+// planet (planetmap.go) the same, in cells: creature_cells.
 
 var creatureKinds = []string{"monster", "animal", "construct"}
 
@@ -76,6 +77,8 @@ type creatureOut struct {
 	// were painted rather than taken from the region.
 	Territory       [][2]int64 `json:"territory"`
 	CustomTerritory bool       `json:"custom_territory"`
+	// Cells is the territory on the planet.
+	Cells []int64 `json:"cells"`
 }
 
 const creatureSelect = `SELECT c.id, c.name, c.kind, c.level_min, c.level_max, c.region_id, COALESCE(l.name, ''),
@@ -100,7 +103,36 @@ func scanCreature(s rowScanner) (creatureOut, error) {
 	c.PicturePath = uploadURL(c.PicturePath)
 	c.Related = []creatureRef{}
 	c.Territory = [][2]int64{}
+	c.Cells = []int64{}
 	return c, nil
+}
+
+// cellsOf is a creature's territory on the planet: its painted cells, or
+// else its region's.
+func cellsOf(db *sql.DB, c creatureOut) []int64 {
+	out := []int64{}
+	var rows *sql.Rows
+	var err error
+	switch {
+	case c.CustomTerritory:
+		rows, err = db.Query(`SELECT cell FROM creature_cells WHERE creature_id = ? ORDER BY cell`, c.ID)
+	case c.RegionID != nil:
+		rows, err = db.Query(`SELECT cell FROM planet_cells WHERE location_id = ?1
+			UNION SELECT cell FROM locations WHERE id = ?1 AND kind = 'minor' AND cell IS NOT NULL ORDER BY 1`, *c.RegionID)
+	default:
+		return out
+	}
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var x int64
+		if rows.Scan(&x) == nil {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 // territoryOf is the hexes a creature lives on: its painted hexes, or else
@@ -173,6 +205,7 @@ func listCreaturesHandler(db *sql.DB) http.HandlerFunc {
 				c.Related = rel
 			}
 			c.Territory = territoryOf(db, c)
+			c.Cells = cellsOf(db, c)
 			out = append(out, c)
 		}
 		writeJSON(w, out)
@@ -188,6 +221,7 @@ func loadCreature(db *sql.DB, id int64) (creatureOut, error) {
 		c.Related = rel
 	}
 	c.Territory = territoryOf(db, c)
+	c.Cells = cellsOf(db, c)
 	return c, nil
 }
 
@@ -209,13 +243,15 @@ type creatureForm struct {
 	Region                  sql.NullInt64
 	Related                 []int64
 	// Territory: nil leaves it as it is; Follow goes back to the region's
-	// area; otherwise Hexes are painted by hand.
+	// area; otherwise Hexes (2D) or Cells (the planet) are painted by hand.
 	Territory *territoryForm
 }
 
 type territoryForm struct {
-	Follow bool
-	Hexes  [][2]int64
+	Follow   bool
+	Hexes    [][2]int64
+	Cells    []int64
+	OnPlanet bool
 }
 
 func parseLevel(raw string) (sql.NullInt64, bool) {
@@ -276,6 +312,20 @@ func parseCreatureForm(db *sql.DB, r *http.Request, id int64) (creatureForm, str
 		}
 		f.Territory = &territoryForm{Hexes: hexes}
 	}
+	// territory_cells: a JSON list of planet cells.
+	if raw := strings.TrimSpace(r.FormValue("territory_cells")); raw != "" && (f.Territory == nil || !f.Territory.Follow) {
+		var cells []int64
+		count := int64(loadMapSettings(db).Cells)
+		if err := json.Unmarshal([]byte(raw), &cells); err != nil || len(cells) > maxHexBatch {
+			return f, "invalid territory"
+		}
+		for _, c := range cells {
+			if c < 0 || c >= count {
+				return f, "invalid territory"
+			}
+		}
+		f.Territory = &territoryForm{Cells: cells, OnPlanet: true}
+	}
 	return f, ""
 }
 
@@ -298,17 +348,30 @@ func saveCreatureLinks(tx *sql.Tx, id int64, related []int64) error {
 	return nil
 }
 
-// saveTerritory replaces a creature's painted hexes, or drops them so the
-// territory follows its region again.
+// saveTerritory replaces a creature's painted hexes (or, on the planet, its
+// cells; the other map's are kept), or drops both so the territory follows
+// its region again.
 func saveTerritory(tx *sql.Tx, id int64, t territoryForm) error {
-	if _, err := tx.Exec(`DELETE FROM creature_hexes WHERE creature_id = ?`, id); err != nil {
-		return err
+	if t.Follow || !t.OnPlanet {
+		if _, err := tx.Exec(`DELETE FROM creature_hexes WHERE creature_id = ?`, id); err != nil {
+			return err
+		}
+	}
+	if t.Follow || t.OnPlanet {
+		if _, err := tx.Exec(`DELETE FROM creature_cells WHERE creature_id = ?`, id); err != nil {
+			return err
+		}
 	}
 	if _, err := tx.Exec(`UPDATE creatures SET custom_territory = ? WHERE id = ?`, !t.Follow, id); err != nil {
 		return err
 	}
 	if t.Follow {
 		return nil
+	}
+	for _, c := range t.Cells {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO creature_cells (creature_id, cell) VALUES (?, ?)`, id, c); err != nil {
+			return err
+		}
 	}
 	for _, h := range t.Hexes {
 		if _, err := tx.Exec(`INSERT OR IGNORE INTO creature_hexes (creature_id, q, r) VALUES (?, ?, ?)`, id, h[0], h[1]); err != nil {

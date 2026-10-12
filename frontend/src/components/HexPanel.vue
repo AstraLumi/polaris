@@ -3,7 +3,7 @@
     <header class="panel-head">
       <div>
         <h3>{{ $t('Hex') }}</h3>
-        <p class="coords">({{ hex.q }}, {{ hex.r }})</p>
+        <p class="coords">{{ hex.label ?? `(${hex.q}, ${hex.r})` }}</p>
       </div>
       <button type="button" class="icon-btn" :title="$t('Close')" @click="$emit('close')">✕</button>
     </header>
@@ -117,7 +117,7 @@ import ConfirmDialog from './ConfirmDialog.vue'
 import DateField from './DateField.vue'
 
 const props = defineProps({
-  hex: { type: Object, required: true }, // { q, r }
+  hex: { type: Object, required: true }, // { q, r }, or on the planet { cell, label }
   panel: { type: Object, required: true }, // { majors, minors, kingdom }
   allMajors: { type: Array, default: () => [] },
   unplaced: { type: Array, default: () => [] },
@@ -171,7 +171,7 @@ function closeForm() {
 }
 
 // A different hex means a different context; drop any half-filled form.
-watch(() => [props.hex.q, props.hex.r], closeForm)
+watch(() => [props.hex.q, props.hex.r, props.hex.cell], closeForm)
 
 async function run(fn) {
   error.value = ''

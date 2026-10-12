@@ -71,6 +71,8 @@ var storyOnlyTables = []string{
 	"creatures", "creature_links", "creature_hexes",
 	// A region's temperatures per season.
 	"location_climate",
+	// The planet's painted cells.
+	"planet_cells", "creature_cells",
 }
 
 func isNullCol(t assetTable, col string) bool {

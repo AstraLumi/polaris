@@ -561,24 +561,25 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 		a.addGroup("factions", facs)
 
 	case "location":
-		var kind, color, desc, founded string
+		var kind, color, desc, founded, realm string
 		var parentID sql.NullInt64
 		var parentName sql.NullString
 		var isCity, isCapital bool
 		err := db.QueryRow(`
 			SELECT l.kind, COALESCE(l.color, ''), COALESCE(l.description, ''), COALESCE(l.founding_date, ''),
-			       l.belongs_to_id, p.name, l.is_city, l.is_capital
+			       l.belongs_to_id, p.name, l.is_city, l.is_capital, l.realm
 			FROM locations l LEFT JOIN locations p ON p.id = l.belongs_to_id WHERE l.id = ?`, id).Scan(
-			&kind, &color, &desc, &founded, &parentID, &parentName, &isCity, &isCapital)
+			&kind, &color, &desc, &founded, &parentID, &parentName, &isCity, &isCapital, &realm)
 		if err != nil {
 			log.Printf("wiki location facts: %v", err)
 			return
 		}
+		space := spaceOf(db)
 		word := "Minor location"
 		if kind == "major" {
 			word = "Major location"
 			if color != "" {
-				word = "Kingdom"
+				word = realms[realmOf(realm)]
 			}
 		}
 		a.addFact("type", word, "word", nil)
@@ -591,7 +592,7 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 		// painted on its hex, as the map shows it.
 		if !parentID.Valid && kind == "minor" {
 			db.QueryRow(`SELECT l.id, l.name FROM locations m
-				JOIN location_hexes h ON h.q = m.q AND h.r = m.r
+				JOIN `+space.areas+` h ON `+space.on("h", "m")+`
 				JOIN locations l ON l.id = h.location_id AND l.kind = 'major' AND COALESCE(l.color, '') <> ''
 				WHERE m.id = ? ORDER BY l.id LIMIT 1`, id).Scan(&parentID, &parentName)
 		}
@@ -603,9 +604,12 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 			var capID sql.NullInt64
 			var capName sql.NullString
 			db.QueryRow(`SELECT c.id, c.name FROM locations c WHERE c.is_capital = 1 AND c.kind = 'minor' AND (c.belongs_to_id = ?1
-				OR (c.belongs_to_id IS NULL AND EXISTS (SELECT 1 FROM location_hexes h WHERE h.location_id = ?1 AND h.q = c.q AND h.r = c.r)))
+				OR (c.belongs_to_id IS NULL AND EXISTS (SELECT 1 FROM `+space.areas+` h WHERE h.location_id = ?1 AND `+space.on("h", "c")+`)))
 				ORDER BY c.id LIMIT 1`, id).Scan(&capID, &capName)
 			a.addFact("capital", "", "", refOf("location", capID, capName))
+			if color != "" {
+				a.addBorders(db, id)
+			}
 		}
 		a.addFact("founded", normalizeStoryDate(founded), "date", nil)
 		a.addSheet("description", desc)
@@ -614,7 +618,7 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 		a.addGroup("places", queryRefs(db, "location", `
 			SELECT id, name FROM locations WHERE belongs_to_id = ?1
 			UNION
-			SELECT m.id, m.name FROM locations m JOIN location_hexes h ON h.q = m.q AND h.r = m.r
+			SELECT m.id, m.name FROM locations m JOIN `+space.areas+` h ON `+space.on("h", "m")+`
 			WHERE h.location_id = ?1 AND m.kind = 'minor' AND m.belongs_to_id IS NULL AND m.id <> ?1
 			ORDER BY 2 COLLATE NOCASE`, id))
 		a.addGroup("events_here", queryRefs(db, "event",

@@ -63,9 +63,18 @@
                 ? $t('The area of the place it is native to. Click or drag over hexes to paint its own territory instead.')
                 : $t('Pick where it is native to, or click or drag over hexes to paint its territory.') }}
           </p>
-          <HexTerritory v-model:territory="territoryModel" :map-hexes="mapHexes" :kind="kind" editable :width="560" :max-height="320" />
+          <PlanetTerritory
+            v-if="onPlanet"
+            v-model:cells="cellsModel"
+            :land-cells="planetLand"
+            :frequency="worldMap.planet.frequency"
+            :kind="kind"
+            editable
+            :max-height="340"
+          />
+          <HexTerritory v-else v-model:territory="territoryModel" :map-hexes="mapHexes" :kind="kind" editable :width="560" :max-height="320" />
           <div class="territory-actions">
-            <span class="hint">{{ $tn('{n} hex', '{n} hexes', territory.length) }}</span>
+            <span class="hint">{{ $tn('{n} hex', '{n} hexes', onPlanet ? cells.length : territory.length) }}</span>
             <button v-if="customTerritory && regionId != null" type="button" class="btn btn-ghost small" @click="followRegion">
               {{ $t('Back to the area of the place') }}
             </button>
@@ -111,10 +120,12 @@
 <script setup>
 // Creates or edits a creature of the bestiary, its relations included.
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { creaturesApi, fetchLocationOptions, mapApi } from '../api'
-import { CREATURE_KINDS, mapHexesOf, areaOf } from '../creatures'
+import { creaturesApi, fetchLocationOptions, mapApi, planetApi } from '../api'
+import { CREATURE_KINDS, mapHexesOf, areaOf, planetLandOf, planetAreaOf } from '../creatures'
+import { worldMap } from '../worldMap'
 import LocationSelect from './LocationSelect.vue'
 import HexTerritory from './HexTerritory.vue'
+import PlanetTerritory from './PlanetTerritory.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
 
 const props = defineProps({
@@ -145,9 +156,22 @@ const territoryModel = computed({
     customTerritory.value = true
   },
 })
+// On a planet (Settings → Map) the territory is cells, painted on a globe.
+const onPlanet = computed(() => worldMap.mode === '3d')
+const planet = ref(null)
+const planetLand = computed(() => planetLandOf(planet.value))
+const cells = ref(c?.cells ?? [])
+const cellsModel = computed({
+  get: () => cells.value,
+  set: (list) => {
+    cells.value = list
+    customTerritory.value = true
+  },
+})
 function followRegion() {
   customTerritory.value = false
   territory.value = areaOf(map.value, regionId.value)
+  cells.value = planetAreaOf(planet.value, regionId.value)
 }
 watch(regionId, followRegion)
 const locationOptions = ref([])
@@ -199,7 +223,9 @@ async function submit() {
   fd.append('region_id', regionId.value ?? '')
   fd.append('description', description.value)
   fd.append('related', JSON.stringify(related.value))
-  fd.append('territory', customTerritory.value ? JSON.stringify(territory.value) : 'region')
+  if (!customTerritory.value) fd.append('territory', 'region')
+  else if (onPlanet.value) fd.append('territory_cells', JSON.stringify(cells.value))
+  else fd.append('territory', JSON.stringify(territory.value))
   if (pictureFile.value) fd.append('picture', pictureFile.value)
   if (removePicture.value) fd.append('remove_picture', '1')
   try {
@@ -223,7 +249,11 @@ async function remove() {
 }
 
 onMounted(async () => {
-  ;[locationOptions.value, map.value] = await Promise.all([fetchLocationOptions(), mapApi.get().catch(() => null)])
+  ;[locationOptions.value, map.value, planet.value] = await Promise.all([
+    fetchLocationOptions(),
+    mapApi.get().catch(() => null),
+    onPlanet.value ? planetApi.get().catch(() => null) : null,
+  ])
 })
 </script>
 

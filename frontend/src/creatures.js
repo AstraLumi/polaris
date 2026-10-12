@@ -48,3 +48,19 @@ export function areaOf(map, locationId) {
   const l = (map?.locations || []).find((x) => x.id === locationId)
   return l && l.kind === 'minor' && l.q != null && l.r != null ? [[l.q, l.r]] : []
 }
+
+// On the planet (planetApi.get(): { locations, cells: [[location id, cell]] }):
+// every cell something covers, and a place's area, as for the 2D map above.
+export function planetLandOf(planet) {
+  const out = new Set((planet?.cells || []).map(([, c]) => c))
+  for (const l of planet?.locations || []) if (l.kind === 'minor' && l.cell != null) out.add(l.cell)
+  return [...out]
+}
+
+export function planetAreaOf(planet, locationId) {
+  if (locationId == null) return []
+  const cells = (planet?.cells || []).filter(([id]) => id === locationId).map(([, c]) => c)
+  if (cells.length) return cells
+  const l = (planet?.locations || []).find((x) => x.id === locationId)
+  return l && l.kind === 'minor' && l.cell != null ? [l.cell] : []
+}

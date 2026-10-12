@@ -16,8 +16,19 @@
           <span>{{ $t('Color') }}</span>
           <ColorPicker v-model="color" :taken-colors="otherColors" />
           <p class="hint">
-            {{ $t('A colored location is a kingdom: painting with it claims hexes for that color, and a hex belongs to one kingdom at a time. Pick no color (the dashed swatch) for a location that sits inside a kingdom — painting with it marks its hexes without changing the kingdom they belong to.') }}
+            {{ $t('A colored location has borders: painting with it claims hexes for that color, and a hex belongs to one of them at a time. Pick no color (the dashed swatch) for a location that sits inside one — painting with it marks its hexes without changing whose they are.') }}
           </p>
+        </div>
+
+        <div v-if="color" class="field">
+          <span>{{ $t('What it is') }}</span>
+          <div class="realms" role="radiogroup" :aria-label="$t('What it is')">
+            <label v-for="r in REALMS" :key="r.id" class="realm" :class="{ 'is-on': realm === r.id }">
+              <input v-model="realm" type="radio" :value="r.id" />
+              <strong>{{ $t(r.label) }}</strong>
+              <span>{{ $t(r.blurb) }}</span>
+            </label>
+          </div>
         </div>
 
         <label class="field">
@@ -60,6 +71,7 @@ import { mapApi } from '../api'
 import ColorPicker from './ColorPicker.vue'
 import DateField from './DateField.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
+import { REALMS } from '../worldMap'
 
 const props = defineProps({
   location: { type: Object, default: null }, // an existing major location when editing
@@ -71,6 +83,7 @@ const name = ref(props.location?.name ?? '')
 const foundingDate = ref(props.location?.founding_date ?? '')
 const description = ref(props.location?.description ?? '')
 const color = ref(props.location?.color ?? '')
+const realm = ref(props.location?.realm || 'kingdom')
 const saving = ref(false)
 const error = ref('')
 const confirmOpen = ref(false)
@@ -86,6 +99,7 @@ async function submit() {
     kind: 'major',
     name: name.value.trim(),
     color: color.value,
+    realm: realm.value,
     founding_date: foundingDate.value,
     description: description.value,
   }
@@ -130,5 +144,48 @@ async function remove() {
 
 .spacer {
   flex: 1;
+}
+
+.realms {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.5rem;
+}
+
+.realm {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.realm:focus-within {
+  outline: 2px solid var(--accent-soft);
+}
+
+.realm.is-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.realm input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.realm strong {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.realm span {
+  font-size: 0.74rem;
+  line-height: 1.4;
+  color: var(--text-faint);
 }
 </style>

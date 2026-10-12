@@ -14,7 +14,7 @@ import (
 // oldest migration (or a brand new one) gets wiped and recreated from
 // freshSchema — so every schema change from here on should ship with a
 // migration instead of relying on that reset.
-const currentSchemaVersion = "26"
+const currentSchemaVersion = "27"
 
 const freshSchema = `
 CREATE TABLE classes (
@@ -468,6 +468,11 @@ var migrations = map[string]migration{
 		// Temperatures per season for regions (seasons.go).
 		statements: schema26Statements,
 	},
+	"26": {
+		to: "27",
+		// The planet, and kingdoms, regions and oceans (planetmap.go).
+		statements: schema27Statements,
+	},
 }
 
 // schema20Statements create what schema 20 added. The fresh schema runs them
@@ -550,6 +555,8 @@ func applyMigration(db *sql.DB, m migration) error {
 // tablesInDependencyOrder lists every app-owned table, children before
 // parents, so dropping them in this order never trips a foreign key.
 var tablesInDependencyOrder = []string{
+	"planet_cells",
+	"creature_cells",
 	"location_climate",
 	"creature_hexes",
 	"creature_links",
@@ -675,7 +682,7 @@ func ensureSchema(db *sql.DB) error {
 			return fmt.Errorf("create schema: %w", err)
 		}
 	}
-	later := [][]string{wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements, schema24Statements, {gearDescriptionSQL}, schema26Statements}
+	later := [][]string{wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements, schema24Statements, {gearDescriptionSQL}, schema26Statements, schema27Statements}
 	for _, stmt := range slices.Concat(later...) {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("create wiki schema: %w", err)

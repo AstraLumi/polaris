@@ -32,10 +32,15 @@ func kingdomOfFaction(db *sql.DB, factionID int64) *kingdomInfo {
 // creating or tying one when it is a kingdom, untying it when it isn't.
 func syncKingdomFaction(db *sql.DB, id int64) {
 	var kind, name, color string
-	if db.QueryRow(`SELECT kind, name, COALESCE(color, '') FROM locations WHERE id = ?`, id).Scan(&kind, &name, &color) != nil {
+	realm := "kingdom"
+	if db.QueryRow(`SELECT kind, name, COALESCE(color, ''), realm FROM locations WHERE id = ?`, id).Scan(&kind, &name, &color, &realm) != nil &&
+		// Upgrading from before schema 27 (backfillKingdomFactions), there
+		// are no realms yet: every coloured location is a kingdom.
+		db.QueryRow(`SELECT kind, name, COALESCE(color, '') FROM locations WHERE id = ?`, id).Scan(&kind, &name, &color) != nil {
 		return
 	}
-	if kind != "major" || color == "" {
+	// Regions and oceans have no faction.
+	if kind != "major" || color == "" || realm != "kingdom" {
 		if _, err := db.Exec(`UPDATE factions SET kingdom_id = NULL WHERE kingdom_id = ?`, id); err != nil {
 			log.Printf("untie kingdom faction: %v", err)
 		}

@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"regexp"
@@ -27,6 +28,8 @@ type mapLocation struct {
 	BelongsToID  *int64 `json:"belongs_to_id"` // minor locations only; null = automatic
 	IsCity       bool   `json:"is_city"`       // minor locations only
 	IsCapital    bool   `json:"is_capital"`    // minor locations only
+	Realm        string `json:"realm"`         // coloured majors: "kingdom" | "region" | "ocean"
+	Cell         *int64 `json:"cell"`          // minor locations on the planet; null = not placed there
 }
 
 // mapPayload is the whole map in one response: every location, plus every
@@ -39,7 +42,7 @@ type mapPayload struct {
 
 const mapLocationSelect = `
 	SELECT id, kind, name, COALESCE(color, ''), COALESCE(founding_date, ''),
-	       COALESCE(description, ''), q, r, belongs_to_id, is_city, is_capital
+	       COALESCE(description, ''), q, r, belongs_to_id, is_city, is_capital, realm, cell
 	FROM locations
 `
 
@@ -49,9 +52,13 @@ type rowScanner interface {
 
 func scanMapLocation(s rowScanner) (mapLocation, error) {
 	var l mapLocation
-	var q, r, belongs sql.NullInt64
-	if err := s.Scan(&l.ID, &l.Kind, &l.Name, &l.Color, &l.FoundingDate, &l.Description, &q, &r, &belongs, &l.IsCity, &l.IsCapital); err != nil {
+	var q, r, belongs, cell sql.NullInt64
+	if err := s.Scan(&l.ID, &l.Kind, &l.Name, &l.Color, &l.FoundingDate, &l.Description, &q, &r, &belongs, &l.IsCity, &l.IsCapital, &l.Realm, &cell); err != nil {
 		return l, err
+	}
+	if cell.Valid {
+		v := cell.Int64
+		l.Cell = &v
 	}
 	if q.Valid {
 		v := q.Int64
@@ -122,6 +129,24 @@ type mapLocationInput struct {
 	BelongsToID  *int64 `json:"belongs_to_id"`
 	IsCity       bool   `json:"is_city"`
 	IsCapital    bool   `json:"is_capital"`
+	Realm        string `json:"realm"`
+	Cell         *int64 `json:"cell"`
+}
+
+// realmOf is a major location's realm as sent, "kingdom" when unknown.
+func realmOf(s string) string {
+	if _, ok := realms[s]; ok {
+		return s
+	}
+	return "kingdom"
+}
+
+// validCell keeps a cell that is on the planet; anything else is "not placed".
+func validCell(db *sql.DB, c *int64) sql.NullInt64 {
+	if c == nil || *c < 0 || *c >= int64(loadMapSettings(db).Cells) {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: *c, Valid: true}
 }
 
 func optInt(p *int64) sql.NullInt64 {
@@ -197,7 +222,7 @@ func createMapLocationHandler(db *sql.DB) http.HandlerFunc {
 		}
 
 		var color sql.NullString
-		var q, rr, belongs sql.NullInt64
+		var q, rr, belongs, cell sql.NullInt64
 		if in.Kind == "major" {
 			c, ok := normalizeColor(in.Color)
 			if !ok {
@@ -217,7 +242,8 @@ func createMapLocationHandler(db *sql.DB) http.HandlerFunc {
 				color = sql.NullString{String: c, Valid: true}
 			}
 		} else {
-			if in.Q == nil || in.R == nil {
+			cell = validCell(db, in.Cell)
+			if (in.Q == nil || in.R == nil) && !cell.Valid {
 				http.Error(w, "a location needs a hex", http.StatusBadRequest)
 				return
 			}
@@ -226,12 +252,12 @@ func createMapLocationHandler(db *sql.DB) http.HandlerFunc {
 		}
 
 		res, err := db.Exec(
-			`INSERT INTO locations (name, kind, color, founding_date, description, q, r, belongs_to_id, is_city, is_capital)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO locations (name, kind, color, founding_date, description, q, r, belongs_to_id, is_city, is_capital, realm, cell)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			in.Name, in.Kind, color,
 			nullableString(normalizeStoryDate(in.FoundingDate)),
 			nullableString(strings.TrimSpace(in.Description)),
-			q, rr, belongs, in.IsCity && in.Kind == "minor", in.IsCapital && in.Kind == "minor",
+			q, rr, belongs, in.IsCity && in.Kind == "minor", in.IsCapital && in.Kind == "minor", realmOf(in.Realm), cell,
 		)
 		if err != nil {
 			log.Printf("insert location: %v", err)
@@ -251,17 +277,35 @@ func updateMapLocationHandler(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "location not found", http.StatusNotFound)
 			return
 		}
-		var kind string
+		var kind, oldRealm string
 		var oldColor sql.NullString
-		if err := db.QueryRow(`SELECT kind, color FROM locations WHERE id = ?`, id).Scan(&kind, &oldColor); err != nil {
+		var oldQ, oldR, oldCell sql.NullInt64
+		if err := db.QueryRow(`SELECT kind, color, realm, q, r, cell FROM locations WHERE id = ?`, id).Scan(
+			&kind, &oldColor, &oldRealm, &oldQ, &oldR, &oldCell); err != nil {
 			http.Error(w, "location not found", http.StatusNotFound)
 			return
 		}
 
+		var raw map[string]json.RawMessage
 		var in mapLocationInput
-		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+		if err != nil || json.Unmarshal(body, &raw) != nil || json.Unmarshal(body, &in) != nil {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
+		}
+		// A field left out keeps its value: the 2D map doesn't send the
+		// planet's cell, nor the planet the 2D hex.
+		keep := func(key string, old sql.NullInt64, dst **int64) {
+			if _, sent := raw[key]; !sent && old.Valid {
+				v := old.Int64
+				*dst = &v
+			}
+		}
+		keep("q", oldQ, &in.Q)
+		keep("r", oldR, &in.R)
+		keep("cell", oldCell, &in.Cell)
+		if _, sent := raw["realm"]; !sent {
+			in.Realm = oldRealm
 		}
 		in.Name = strings.TrimSpace(in.Name)
 		if in.Name == "" {
@@ -275,7 +319,7 @@ func updateMapLocationHandler(db *sql.DB) http.HandlerFunc {
 
 		// A location's kind never changes; everything else is replaced.
 		var color sql.NullString
-		var q, rr, belongs sql.NullInt64
+		var q, rr, belongs, cell sql.NullInt64
 		newColor := ""
 		if kind == "major" {
 			c, ok := normalizeColor(in.Color)
@@ -298,6 +342,7 @@ func updateMapLocationHandler(db *sql.DB) http.HandlerFunc {
 			}
 		} else {
 			q, rr = optInt(in.Q), optInt(in.R)
+			cell = validCell(db, in.Cell)
 			belongs = validBelongsTo(db, in.BelongsToID)
 		}
 
@@ -309,12 +354,12 @@ func updateMapLocationHandler(db *sql.DB) http.HandlerFunc {
 		if _, err := tx.Exec(
 			`UPDATE locations
 			 SET name = ?, color = ?, founding_date = ?, description = ?, q = ?, r = ?, belongs_to_id = ?,
-			     is_city = ?, is_capital = ?
+			     is_city = ?, is_capital = ?, realm = ?, cell = ?
 			 WHERE id = ?`,
 			in.Name, color,
 			nullableString(normalizeStoryDate(in.FoundingDate)),
 			nullableString(strings.TrimSpace(in.Description)),
-			q, rr, belongs, in.IsCity && kind == "minor", in.IsCapital && kind == "minor", id,
+			q, rr, belongs, in.IsCity && kind == "minor", in.IsCapital && kind == "minor", realmOf(in.Realm), cell, id,
 		); err != nil {
 			tx.Rollback()
 			log.Printf("update location: %v", err)
@@ -331,6 +376,18 @@ func updateMapLocationHandler(db *sql.DB) http.HandlerFunc {
 				 WHERE location_id != ?
 				   AND location_id IN (SELECT id FROM locations WHERE kind = 'major' AND color IS NOT NULL)
 				   AND (q, r) IN (SELECT q, r FROM location_hexes WHERE location_id = ?)`,
+				id, id,
+			); err != nil {
+				tx.Rollback()
+				http.Error(w, "failed to resolve overlapping hexes", http.StatusInternalServerError)
+				log.Printf("resolve overlaps: %v", err)
+				return
+			}
+			if _, err := tx.Exec(
+				`DELETE FROM planet_cells
+				 WHERE location_id != ?
+				   AND location_id IN (SELECT id FROM locations WHERE kind = 'major' AND color IS NOT NULL)
+				   AND cell IN (SELECT cell FROM planet_cells WHERE location_id = ?)`,
 				id, id,
 			); err != nil {
 				tx.Rollback()
@@ -368,6 +425,7 @@ func deleteMapLocationHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 		// Cleared explicitly rather than relying on foreign-key cascades.
 		for _, stmt := range []string{
 			`DELETE FROM location_hexes WHERE location_id = ?`,
+			`DELETE FROM planet_cells WHERE location_id = ?`,
 			`UPDATE locations SET belongs_to_id = NULL WHERE belongs_to_id = ?`,
 			`UPDATE spells SET origin_location_id = NULL WHERE origin_location_id = ?`,
 			`UPDATE events SET location_id = NULL WHERE location_id = ?`,
@@ -507,11 +565,12 @@ type locationOption struct {
 	Name  string `json:"name"`
 	Kind  string `json:"kind"`
 	Color string `json:"color"`
+	Realm string `json:"realm"`
 }
 
 func listLocationOptionsHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		rows, err := db.Query(`SELECT id, name, kind, COALESCE(color, '') FROM locations ORDER BY name COLLATE NOCASE`)
+		rows, err := db.Query(`SELECT id, name, kind, COALESCE(color, ''), realm FROM locations ORDER BY name COLLATE NOCASE`)
 		if err != nil {
 			http.Error(w, "failed to load locations", http.StatusInternalServerError)
 			log.Printf("location options: %v", err)
@@ -521,7 +580,7 @@ func listLocationOptionsHandler(db *sql.DB) http.HandlerFunc {
 		out := []locationOption{}
 		for rows.Next() {
 			var o locationOption
-			if err := rows.Scan(&o.ID, &o.Name, &o.Kind, &o.Color); err != nil {
+			if err := rows.Scan(&o.ID, &o.Name, &o.Kind, &o.Color, &o.Realm); err != nil {
 				http.Error(w, "failed to read locations", http.StatusInternalServerError)
 				return
 			}

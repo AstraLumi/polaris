@@ -6,17 +6,19 @@
         <span class="type">{{ $t(e.type) }}</span>
       </div>
       <h4 class="name">{{ e.name }}</h4>
-      <p v-if="['Location', 'City', 'Capital'].includes(e.type)" class="row">
-        <span>{{ $t('Belongs to') }}</span>
-        <strong>{{ e.belongsTo || $t('No kingdom') }}</strong>
-      </p>
-      <p class="row">
-        <span>{{ $t('Founded') }}</span>
-        <strong>{{ e.founding_date || $t('Unknown') }}</strong>
-      </p>
-      <p class="desc" :class="{ empty: !e.description }">
-        {{ e.description || $t('No description.') }}
-      </p>
+      <template v-if="!e.bare">
+        <p v-if="['Location', 'City', 'Capital'].includes(e.type)" class="row">
+          <span>{{ $t('Belongs to') }}</span>
+          <strong>{{ e.belongsTo || $t('No kingdom') }}</strong>
+        </p>
+        <p class="row">
+          <span>{{ $t('Founded') }}</span>
+          <strong>{{ e.founding_date || $t('Unknown') }}</strong>
+        </p>
+        <p class="desc" :class="{ empty: !e.description }">
+          {{ e.description || $t('No description.') }}
+        </p>
+      </template>
     </div>
   </div>
 </template>
@@ -25,13 +27,15 @@
 import { tr } from '../i18n'
 
 defineProps({
-  // [{ type: 'Kingdom' | 'Major location' | 'Location' | 'City' | 'Capital', name, color, belongsTo,
-  //    founding_date, description }]
+  // [{ type: 'Kingdom' | 'Region' | 'Ocean' | 'Major location' | 'Location' | 'City' | 'Capital', name, color,
+  //    belongsTo, founding_date, description }]; bare: the name alone (the unnamed ocean).
   entries: { type: Array, default: () => [] },
 })
 
 // Entry types arrive from the map and are rendered with $t(e.type).
 tr('Kingdom')
+tr('Region')
+tr('Ocean')
 tr('Major location')
 tr('Location')
 tr('City')
