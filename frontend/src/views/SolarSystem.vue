@@ -309,7 +309,7 @@ import ConfirmDialog from '../components/ConfirmDialog.vue'
 // picture SolarScene.vue; this page keeps the list, the form and the clock.
 // One planet is the main one and wears the map.
 
-const SPEEDS = [1, 10, 100, 1000]
+const SPEEDS = [0.1, 0.5, 1, 10, 100, 1000]
 const EARTH_DAY_HOURS = 24
 const TYPE_LABELS = { star: tr('Star'), rocky: tr('Rocky'), gas: tr('Gas giant'), ocean: tr('Ocean world') }
 const EARTH_RADIUS = 6371

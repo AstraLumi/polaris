@@ -36,11 +36,14 @@ const FRAGMENT = `
 uniform vec3 uLight;
 uniform float uGrid;
 uniform float uAmbient;
+uniform float uTwilight;
 varying vec3 vColor;
 varying float vEdge;
 varying vec3 vNormal;
 void main() {
-  float light = uAmbient + (1.0 - uAmbient) * max(dot(vNormal, uLight), 0.0);
+  float d = dot(vNormal, uLight);
+  float lit = uTwilight > 0.0 ? smoothstep(-uTwilight, uTwilight * 3.0, d) * (0.3 + 0.7 * max(d, 0.0)) : max(d, 0.0);
+  float light = uAmbient + (1.0 - uAmbient) * lit;
   vec3 c = vColor * light;
   float line = smoothstep(0.84, 0.96, vEdge) * uGrid;
   gl_FragColor = vec4(mix(c, c * 0.5, line), 1.0);
@@ -49,7 +52,9 @@ void main() {
 // One fan of triangles per cell: its centre and its corners, each vertex
 // carrying the cell's number (for its colour) and whether it is a corner
 // (for the outline). colorOf(cell) is '#rrggbb', or '' for open sea.
-export function createGlobeMesh(grid, colorOf, { ambient = 0.6 } = {}) {
+// twilight: how wide the soft band between day and night is (0 for a hard
+// edge, as on the map's own globe).
+export function createGlobeMesh(grid, colorOf, { ambient = 0.6, twilight = 0 } = {}) {
   const n = grid.count
   const pos = new Float32Array(n * 7 * 3)
   const cellAttr = new Float32Array(n * 7)
@@ -97,6 +102,7 @@ export function createGlobeMesh(grid, colorOf, { ambient = 0.6 } = {}) {
       uLight: { value: new THREE.Vector3(0, 0, 1) },
       uGrid: { value: 0 },
       uAmbient: { value: ambient },
+      uTwilight: { value: twilight },
     },
   })
   const mesh = new THREE.Mesh(geo, material)

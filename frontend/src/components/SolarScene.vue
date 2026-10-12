@@ -15,11 +15,15 @@
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { Line2 } from 'three/addons/lines/Line2.js'
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js'
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import { PlanetGrid } from '../planetGrid'
 import { sceneRadius, sceneDistance, scenePositions, sceneOrbitPath, bodyColor } from '../solarScale'
 import { orbitLimits } from '../orbits'
 import { habitableZone } from '../stars'
 import { createGlobeMesh } from '../three/globeMesh'
+import { createStar, createPlanetMaterial } from '../three/bodyShaders'
 import { loadSkyDome, disposeSkyDome } from '../three/skyDome'
 
 // The solar system in 3D: the star at the centre, each body on its orbit at
@@ -63,8 +67,10 @@ let skyMesh = null
 let cancelSky = () => {}
 const globeViews = new Map() // body id -> its map's mesh, built once and moved onto it
 let bodyGroup = null // everything rebuilt when the bodies change
-const meshes = new Map() // body id -> { body, mesh, orbit (line, round its parent) }
+const meshes = new Map() // body id -> { body, mesh, spin, orbit (trail, round its parent) }
 let follow = null // { id, last: Vector3 }
+let stars = [] // three/bodyShaders.js stars, their coronas facing the camera
+let planetMaterials = [] // plain planets' materials, told where the star is
 let markerGroup = null // the habitable zone and the gravity limits
 let limitsAround = null // the id of the body the limits are drawn round
 
@@ -99,26 +105,24 @@ function buildBodies() {
   }
   bodyGroup = new THREE.Group()
   meshes.clear()
+  stars = []
+  planetMaterials = []
   const byId = new Map(props.bodies.map((b) => [b.id, b]))
   for (const b of props.bodies) {
     const r = sceneRadius(b)
     let mesh
     const globe = b.kind !== 'star' ? globeViews.get(b.id) : null
     if (b.kind === 'star') {
-      mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 48, 24), new THREE.MeshBasicMaterial({ color: colorOf(b) }))
-      // A soft glow round it.
-      mesh.add(new THREE.Mesh(
-        new THREE.SphereGeometry(r * 1.35, 32, 16),
-        new THREE.MeshBasicMaterial({ color: b.star_class === 'black_hole' ? '#ff8c3a' : colorOf(b), transparent: true, opacity: 0.18, depthWrite: false }),
-      ))
+      const star = createStar(r, colorOf(b), b.star_class === 'black_hole')
+      stars.push(star)
+      mesh = star.group
     } else if (globe) {
       globe.mesh.scale.setScalar(r)
       mesh = globe.mesh
     } else {
-      mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(r, 32, 16),
-        new THREE.MeshStandardMaterial({ color: colorOf(b), roughness: 0.9, metalness: 0 }),
-      )
+      const material = createPlanetMaterial(colorOf(b))
+      planetMaterials.push(material)
+      mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 32, 16), material)
     }
     // holder (where it is) > tilt (its axis) > spin (its day) > the body.
     const holder = new THREE.Group()
@@ -138,14 +142,67 @@ function buildBodies() {
     let orbit = null
     const parent = byId.get(b.parent_id)
     if (parent && b.orbit_km) {
-      orbit = orbitLine(0, sceneOrbitPath(b, parent))
-      bodyGroup.add(orbit)
+      orbit = makeTrail()
+      setTrailPath(orbit, b, parent)
+      bodyGroup.add(orbit.group)
     }
     meshes.set(b.id, { body: b, mesh: holder, spin, orbit })
   }
   scene.add(bodyGroup)
   buildMarkers()
   place()
+}
+
+// ---- Orbit trails -------------------------------------------------------------------------
+// Each orbit is split at its body: the half behind it (where it has been)
+// a thicker line at full strength, the half ahead thin and faint. The path
+// is computed when the orbit changes; the split moves with the body.
+const TRAIL_STEPS = 128
+const trailMaterial = () => {
+  const m = new LineMaterial({ color: 0xaebfe0, linewidth: 2, transparent: true, opacity: 0.95 })
+  if (renderer) m.resolution.set(renderer.domElement.width, renderer.domElement.height)
+  return m
+}
+
+function makeTrail() {
+  const group = new THREE.Group()
+  group.userData.trail = true
+  const ahead = new THREE.Line(
+    new THREE.BufferGeometry(),
+    new THREE.LineBasicMaterial({ color: 0x8aa0c8, transparent: true, opacity: 0.22 }),
+  )
+  const behind = new Line2(new LineGeometry(), trailMaterial())
+  group.add(ahead, behind)
+  return { group, ahead, behind, path: [], periapsis: 0, at: -1 }
+}
+
+// The orbit's points, at even steps of the angle from periapsis.
+function setTrailPath(trail, body, parent, shape = body) {
+  trail.path = sceneOrbitPath({ ...body, ...shape }, parent, TRAIL_STEPS).slice(0, TRAIL_STEPS)
+  trail.periapsis = ((shape.periapsis || 0) * Math.PI) / 180
+  trail.at = -1
+}
+
+// Splits the trail where the body is (rel: its drawn place from its parent).
+function splitTrail(trail, rel) {
+  const n = trail.path.length
+  if (!n) return
+  const nu = Math.atan2(rel.y, rel.x) - trail.periapsis
+  const at = Math.round(((((nu / (2 * Math.PI)) % 1) + 1) % 1) * n) % n
+  if (at === trail.at) return
+  trail.at = at
+  const half = n / 2
+  const pick = (from, count) => {
+    const out = []
+    for (let k = 0; k <= count; k++) out.push(...trail.path[(from + k + n) % n])
+    return out
+  }
+  // Orbits run anticlockwise: behind is the lower angles.
+  trail.behind.geometry.setPositions(pick(at - half, half))
+  trail.behind.computeLineDistances()
+  const ahead = pick(at, half)
+  trail.ahead.geometry.setAttribute('position', new THREE.Float32BufferAttribute(ahead, 3))
+  trail.ahead.geometry.computeBoundingSphere()
 }
 
 // A body's axis, through its poles and a little beyond.
@@ -206,7 +263,7 @@ function buildGlobes() {
   }
   globeViews.clear()
   for (const [id, m] of props.globes) {
-    const g = createGlobeMesh(new PlanetGrid(m.frequency), m.colorOf, { ambient: 0.06 })
+    const g = createGlobeMesh(new PlanetGrid(m.frequency), m.colorOf, { ambient: 0.05, twilight: 0.12 })
     g.mesh.userData.globe = true
     globeViews.set(id, g)
   }
@@ -222,7 +279,11 @@ function place() {
     mesh.position.copy(positions.get(body.id))
     // A turn a day (days are Earth days; day_hours its own).
     if (spin) spin.rotation.z = (((props.days * 24) / (body.day_hours || 24)) % 1) * 2 * Math.PI
-    if (orbit) orbit.position.copy(positions.get(body.parent_id) ?? new THREE.Vector3())
+    if (orbit) {
+      const base = positions.get(body.parent_id) ?? new THREE.Vector3()
+      orbit.group.position.copy(base)
+      splitTrail(orbit, positions.get(body.id).clone().sub(base))
+    }
   }
   // The limits ring what the picked body orbits, wherever it is.
   const limits = markerGroup?.children.find((o) => o.userData.limits)
@@ -284,6 +345,9 @@ function render() {
     const local = g.mesh.worldToLocal(sun.clone())
     g.material.uniforms.uLight.value.copy(local.normalize())
   }
+  for (const m of planetMaterials) m.uniforms.uSun.value.copy(sun)
+  const time = performance.now() / 1000
+  for (const s of stars) s.faceCamera(camera, time)
   renderer.render(scene, camera)
   placeLabels()
 }
@@ -309,6 +373,8 @@ function resize() {
   const w = wrapEl.value.clientWidth
   const h = wrapEl.value.clientHeight
   renderer.setSize(w, h, false)
+  // Thick lines are sized in pixels.
+  for (const { orbit } of meshes.values()) orbit?.behind.material.resolution.set(renderer.domElement.width, renderer.domElement.height)
   camera.aspect = w / Math.max(h, 1)
   camera.updateProjectionMatrix()
   requestRender()
@@ -326,7 +392,9 @@ function onUp(e) {
   const rect = canvasEl.value.getBoundingClientRect()
   const ray = new THREE.Raycaster()
   ray.setFromCamera(new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), camera)
-  const hit = ray.intersectObjects(bodyGroup?.children.filter((o) => o.type !== 'Line') ?? [], true)[0]
+  const hit = ray
+    .intersectObjects(bodyGroup?.children.filter((o) => o.type !== 'Line' && !o.userData.trail) ?? [], true)
+    .find((h) => !h.object.userData.corona)
   if (hit) emit('select', hit.object.userData.id)
 }
 
@@ -391,11 +459,11 @@ function drawShapes() {
   for (const { body, orbit } of meshes.values()) {
     if (!orbit) continue
     const shape = props.shapes ? props.shapes.get(body.id) : body
-    orbit.visible = !!shape
+    orbit.group.visible = !!shape
     if (!shape) continue
-    orbit.geometry.setFromPoints(sceneOrbitPath({ ...body, ...shape }, byId.get(body.parent_id)).map((p) => new THREE.Vector3(...p)))
+    setTrailPath(orbit, body, byId.get(body.parent_id), shape)
   }
-  requestRender()
+  place()
 }
 watch(() => props.shapes, drawShapes)
 watch(() => props.selected, () => {
