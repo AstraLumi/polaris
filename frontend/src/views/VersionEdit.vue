@@ -79,9 +79,6 @@
         <button class="tab-button" :class="{ 'is-active': tab === 'spells' }" :title="$t('The spells they know')" @click="tab = 'spells'">
           {{ $t('Spells') }}
         </button>
-        <button class="tab-button" :class="{ 'is-active': tab === 'relations' }" :title="$t('Family, friends, rivals and factions')" @click="tab = 'relations'">
-          {{ $t('Relations') }}
-        </button>
       </div>
 
       <section v-if="tab === 'story'" class="story-tab glass-panel">
@@ -111,16 +108,6 @@
             <span>{{ $t('Age') }}</span>
             <input v-model.number="form.age" type="number" step="0.1" min="0" />
           </label>
-          <label class="field">
-            <span>{{ $t('Blood type') }}</span>
-            <input v-model="form.blood_type" type="text" />
-          </label>
-          <LocationSelect
-            v-model="form.born_in_location_id"
-            :label="$t('Born in')"
-            :options="locationOptions"
-            :legacy-text="form.born_in"
-          />
           <LocationSelect
             v-model="form.nation_location_id"
             :label="$t('Nation')"
@@ -128,7 +115,6 @@
             :legacy-text="form.nation"
             kingdom-only
           />
-          <DateField v-model="form.birth_date" :label="$t('Birth date (in-story)')" class="span-2" />
           <DateField v-model="form.human_birth_date" :label="$t('Human birth date')" class="span-2" />
           <div class="field">
             <span>{{ $t('Status') }}</span>
@@ -152,14 +138,11 @@
             <input v-model.number="form.deaths" type="number" min="0" />
           </label>
         </div>
-        <p class="shared-note">{{ $t('Birth date, blood type and Born in belong to the character: changing them here changes them in every version.') }}</p>
+        <p class="shared-note">
+          {{ $t('Birth date, blood type, Born in, tags and relations belong to the character, not to one version.') }}
+          <router-link :to="`/characters/${id}/versions`">{{ $t('Edit them with the versions') }}</router-link>
+        </p>
         <div class="long-fields">
-          <TagInput
-            v-model="form.tags"
-            :suggestions="tagSuggestions"
-            list-id="character-tag-suggestions"
-            :hint="$t('Tags belong to the character, so every version shares them. Filter by them on the Characters page.')"
-          />
           <label class="field long">
             <span>{{ $t('Description') }}</span>
             <textarea v-model="form.description" rows="3"></textarea>
@@ -200,10 +183,6 @@
         <p class="preview-note">{{ $t('Spell changes are saved with the Save button below, like everything else.') }}</p>
       </section>
 
-      <section v-else-if="tab === 'relations'" class="gear-tab-wrap glass-panel">
-        <RelationsTab :character-id="Number(id)" :character-name="characterName" :point="{ chapterId: form.chapter_id, date: form.version_date }" />
-        <p class="preview-note">{{ $t('Relations belong to the character, not to one version, and are saved as soon as you add or change them.') }}</p>
-      </section>
 
       <p v-if="saveError" class="error-banner save-error">{{ saveError }}</p>
 
@@ -220,16 +199,14 @@
 <script setup>
 import { reactive, ref, computed, watch, onMounted } from 'vue'
 import { t } from '../i18n'
-import { fetchCharacters, fetchVersion, updateVersion, buildVersionFormData, fetchCatalogs, fetchLocationOptions, fetchComputePreview } from '../api'
+import { fetchVersion, updateVersion, buildVersionFormData, fetchCatalogs, fetchLocationOptions, fetchComputePreview } from '../api'
 import BuildStatsPanel from '../components/BuildStatsPanel.vue'
 import ComboBoxField from '../components/ComboBoxField.vue'
 import DateField from '../components/DateField.vue'
 import GenderField from '../components/GenderField.vue'
-import TagInput from '../components/TagInput.vue'
 import LocationSelect from '../components/LocationSelect.vue'
 import GearTab from '../components/GearTab.vue'
 import SpellsTab from '../components/SpellsTab.vue'
-import RelationsTab from '../components/RelationsTab.vue'
 import BackLink from '../components/BackLink.vue'
 import ChapterSelect from '../components/ChapterSelect.vue'
 import { STATUSES } from '../characterStatus'
@@ -250,21 +227,10 @@ const pictureFile = ref(null)
 const existingPicturePath = ref('')
 const assignedSpells = ref([])
 const equippedGear = ref({})
-// Every tag already on a character, offered while typing.
-const tagSuggestions = ref([])
-fetchCharacters()
-  .then((list) => {
-    const seen = new Map()
-    for (const c of list) for (const tag of c.tags || []) seen.set(tag.toLowerCase(), tag)
-    tagSuggestions.value = [...seen.values()].sort((a, b) => a.localeCompare(b))
-  })
-  .catch(() => {})
-const characterName = ref('')
 const catalogs = ref({ classes: [], subclasses: [], specializations: [], races: [], bodyTypes: [] })
 const locationOptions = ref([])
 
 const form = reactive({
-  tags: [],
   version_date: '',
   version_reference: '',
   chapter_id: null,
@@ -281,12 +247,8 @@ const form = reactive({
   body_type: '',
   age: '',
   human_birth_date: '',
-  blood_type: '',
-  born_in: '',
   nation: '',
-  born_in_location_id: null,
   nation_location_id: null,
-  birth_date: '',
   deaths: 0,
   status: 'alive',
   description: '',
@@ -398,15 +360,10 @@ async function load() {
       body_type: data.story.body_type_name,
       age: data.story.age ?? '',
       human_birth_date: data.story.human_birth_date,
-      blood_type: data.story.blood_type,
-      born_in: data.story.born_in,
       nation: data.story.nation,
-      born_in_location_id: data.story.born_in_location_id,
       nation_location_id: data.story.nation_location_id,
-      birth_date: data.story.birth_date,
       deaths: data.story.deaths,
       status: data.story.status || 'alive',
-      tags: data.tags || [],
       description: data.story.description,
       bio: data.story.bio,
       speech_mannerisms: data.story.speech_mannerisms,
@@ -419,7 +376,6 @@ async function load() {
     equippedGear.value = data.gear || {}
     existingPicturePath.value = data.picture_path
     pageTitle.value = data.name
-    characterName.value = data.name
     snapshot = formState()
   } catch (err) {
     loadError.value = t("Couldn't load this version. Try refreshing.")

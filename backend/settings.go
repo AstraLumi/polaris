@@ -36,16 +36,18 @@ type calendarSettings struct {
 }
 
 // settingsPayload is what GET /api/settings returns: the calendar and its
-// seasons (saved on their own, see seasons.go).
+// seasons (saved on their own, see seasons.go), the map and the blood types.
 type settingsPayload struct {
 	calendarSettings
 	Seasons seasonSettings `json:"seasons"`
 	Map     mapSettings    `json:"map"`
+	// The blood types the character form offers (bloodtypes.go).
+	BloodTypes []bloodType `json:"blood_types"`
 }
 
 func loadSettingsPayload(db *sql.DB) settingsPayload {
 	cal := loadCalendar(db)
-	return settingsPayload{cal, loadSeasons(db, cal), loadMapSettings(db)}
+	return settingsPayload{cal, loadSeasons(db, cal), loadMapSettings(db), loadBloodTypes(db)}
 }
 
 func readIntSetting(db *sql.DB, key string, fallback, min, max int) int {

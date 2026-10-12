@@ -73,6 +73,7 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	mux.HandleFunc("POST /api/characters", createCharacterHandler(db, uploadsDir))
 	mux.HandleFunc("DELETE /api/characters", deleteCharactersHandler(db, uploadsDir))
 	mux.HandleFunc("GET /api/characters/{id}/current", getCurrentVersionHandler(db))
+	mux.HandleFunc("PUT /api/characters/{id}/shared", updateSharedCharacterHandler(db))
 
 	// Lookup catalogs, for the combo-box fields on the character forms.
 	mux.HandleFunc("GET /api/classes", listClassesHandler(db))
@@ -140,6 +141,7 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	mux.HandleFunc("GET /api/settings", getSettingsHandler(db))
 	mux.HandleFunc("PUT /api/settings", updateSettingsHandler(db))
 	mux.HandleFunc("PUT /api/settings/seasons", updateSeasonsHandler(db))
+	mux.HandleFunc("PUT /api/settings/blood-types", updateBloodTypesHandler(db))
 
 	// The stat system: which stats exist and their formulas (statsystem.go).
 	mux.HandleFunc("GET /api/stat-system", getStatSystemHandler(db))

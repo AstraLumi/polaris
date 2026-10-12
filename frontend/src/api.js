@@ -298,6 +298,25 @@ export async function saveSettings(payload) {
   return res.json()
 }
 
+// Messages the blood type and shared character saves can send back
+// (backend/bloodtypes.go, charactershared.go); listed so they get translated.
+void [
+  tr('a story can have at most 64 blood types'), tr('every blood type needs a name'),
+  tr("a blood type's name can be at most 24 characters"), tr("a blood type's note can be at most 600 characters"),
+  tr('a blood type is listed twice'), tr('the blood type is too long'),
+]
+
+// The story's blood types: [{ name, note }].
+export async function saveBloodTypes(list) {
+  const res = await fetch(`${BASE}/settings/blood-types`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(list),
+  })
+  if (!res.ok) throw apiError((await res.text()).trim() || 'failed to save the blood types')
+  return res.json()
+}
+
 export async function saveSeasons(payload) {
   const res = await fetch(`${BASE}/settings/seasons`, {
     method: 'PUT',
@@ -402,6 +421,18 @@ export function buildGearFormData({ name, slot, weight, modifiers, description }
   return fd
 }
 
+// Saves what belongs to the character rather than to one version: birth
+// date, blood type, birthplace and tags. Returns the current version.
+export async function updateSharedCharacter(characterId, payload) {
+  const res = await fetch(`${BASE}/characters/${characterId}/shared`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw apiError((await res.text()).trim() || 'failed to save the character')
+  return res.json()
+}
+
 // Builds the multipart form the backend's updateVersionHandler expects out
 // of the flat reactive form object the edit page works with, plus the stats:
 // build (points per primary stat) and specialBases (the typed values of
@@ -412,7 +443,7 @@ export function buildVersionFormData(form, build, specialBases, pictureFile, spe
     'version_date', 'version_reference', 'name', 'nickname', 'level',
     'class', 'subclass', 'specialization',
     'gender', 'race', 'height', 'weight', 'body_type', 'age', 'human_birth_date',
-    'blood_type', 'born_in', 'nation', 'born_in_location_id', 'nation_location_id', 'birth_date', 'deaths', 'chapter_id',
+    'nation', 'nation_location_id', 'deaths', 'chapter_id',
     'description', 'bio', 'speech_mannerisms', 'status',
   ]
   for (const field of fields) {
@@ -427,8 +458,6 @@ export function buildVersionFormData(form, build, specialBases, pictureFile, spe
   if (equippedGear) {
     fd.append('gear', JSON.stringify(Object.fromEntries(Object.entries(equippedGear).map(([slot, g]) => [slot, g.id]))))
   }
-  // The character's tags (shared by all its versions).
-  if (Array.isArray(form.tags)) fd.append('tags', JSON.stringify(form.tags))
   if (pictureFile) fd.append('picture', pictureFile)
   return fd
 }

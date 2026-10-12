@@ -655,20 +655,32 @@ func updateVersionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 		}
 
 		// Birth date, blood type and birthplace belong to the character, so
-		// saving them from any version changes them for all.
-		if _, err := tx.Exec(`
-			UPDATE characters SET birth_date = ?, blood_type = ?, born_in = ?, born_in_location_id = ?
-			WHERE id = (SELECT character_id FROM character_versions WHERE id = ?)
-		`,
-			nullableString(normalizeStoryDate(r.FormValue("birth_date"))),
-			nullableString(strings.TrimSpace(r.FormValue("blood_type"))),
-			nullableString(unlinkedText(r.FormValue("born_in"), bornInLoc)), bornInLoc,
-			versionID,
-		); err != nil {
-			tx.Rollback()
-			http.Error(w, "failed to update character", http.StatusInternalServerError)
-			log.Printf("update characters: %v", err)
-			return
+		// saving them from any version changes them for all. The version
+		// form no longer sends them (the version list edits them, see
+		// charactershared.go): only those sent are changed.
+		sent := func(k string) bool { _, ok := r.Form[k]; return ok }
+		var sets []string
+		var args []any
+		if sent("birth_date") {
+			sets = append(sets, "birth_date = ?")
+			args = append(args, nullableString(normalizeStoryDate(r.FormValue("birth_date"))))
+		}
+		if sent("blood_type") {
+			sets = append(sets, "blood_type = ?")
+			args = append(args, nullableString(strings.TrimSpace(r.FormValue("blood_type"))))
+		}
+		if sent("born_in") || sent("born_in_location_id") {
+			sets = append(sets, "born_in = ?", "born_in_location_id = ?")
+			args = append(args, nullableString(unlinkedText(r.FormValue("born_in"), bornInLoc)), bornInLoc)
+		}
+		if len(sets) > 0 {
+			if _, err := tx.Exec(`UPDATE characters SET `+strings.Join(sets, ", ")+`
+				WHERE id = (SELECT character_id FROM character_versions WHERE id = ?)`, append(args, versionID)...); err != nil {
+				tx.Rollback()
+				http.Error(w, "failed to update character", http.StatusInternalServerError)
+				log.Printf("update characters: %v", err)
+				return
+			}
 		}
 
 		if err := saveSpecialBases(tx, versionID, sys, typed); err != nil {

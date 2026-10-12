@@ -2,6 +2,7 @@ import { reactive } from 'vue'
 import { t, tr } from './i18n'
 import { STORY_API } from './stories'
 import { applyMapSettings } from './worldMap'
+import { applyBloodTypes } from './bloodTypes'
 
 // The story world's calendar. Loaded once at startup (App.vue) and again
 // whenever Settings saves, so every date input and the timeline agree on
@@ -23,6 +24,7 @@ export async function loadCalendar() {
       calendar.days_per_month = data.days_per_month
       if (data.seasons) calendar.seasons = data.seasons
       applyMapSettings(data.map)
+      applyBloodTypes(data.blood_types)
     }
   } catch (err) {
     // Keep the defaults; date inputs still work.

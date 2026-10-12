@@ -51,6 +51,7 @@
         <div v-if="cat.id === 'primary'" class="points">
           <div class="points-head">
             <span class="points-title">{{ $t('Points to spend') }}</span>
+            <button v-if="canRestore(null, 'points_formula')" type="button" class="link-btn restore-link" @click="askRestore(null, 'points_formula')">{{ $t('Restore default') }}</button>
             <span class="preview-value">{{ $tn('{n} point', '{n} points', preview.points ?? 0) }}</span>
           </div>
           <FormulaEditor
@@ -129,7 +130,10 @@
 
               <template v-if="cat.id !== 'primary'">
                 <div class="formula-field">
-                  <span class="formula-title">{{ $t('Formula') }}</span>
+                  <div class="formula-head">
+                    <span class="formula-title">{{ $t('Formula') }}</span>
+                    <button v-if="canRestore(stat, 'formula')" type="button" class="link-btn restore-link" @click="askRestore(stat, 'formula')">{{ $t('Restore default') }}</button>
+                  </div>
                   <FormulaEditor
                     v-model="stat.formula"
                     :values="valuesFor(stat)"
@@ -142,7 +146,10 @@
                 </div>
 
                 <div v-if="stat.multiplier || multiplierOpen === stat.key" class="formula-field">
-                  <span class="formula-title">{{ $t('Multiplier') }}</span>
+                  <div class="formula-head">
+                    <span class="formula-title">{{ $t('Multiplier') }}</span>
+                    <button v-if="canRestore(stat, 'multiplier')" type="button" class="link-btn restore-link" @click="askRestore(stat, 'multiplier')">{{ $t('Restore default') }}</button>
+                  </div>
                   <p class="note">{{ $t('Optional. The stat, bonuses included, is multiplied by 1 + this: 0.25 makes it 25% higher.') }}</p>
                   <FormulaEditor
                     v-model="stat.multiplier"
@@ -192,13 +199,19 @@
     </template>
     <p v-else-if="!loadError" class="loading-hint">{{ $t('Loading…') }}</p>
 
-    <ConfirmDialog
+    <RestoreDefaultDialog
       v-if="confirming === 'defaults'"
       :title="$t('Back to the defaults?')"
       :message="$t('Every stat and formula is replaced with the ones Polaris starts with. Nothing changes until you save, and saving removes what was typed for, and the bonuses given to, stats that are no longer there.')"
-      :confirm-label="$t('Use the defaults')"
       @cancel="confirming = ''"
       @confirm="useDefaults"
+    />
+    <RestoreDefaultDialog
+      v-if="restoreTarget"
+      :title="$t('Restore the default formula?')"
+      :message="restoreMessage"
+      @cancel="restoreTarget = null"
+      @confirm="restoreFormula"
     />
     <ConfirmDialog
       v-if="confirming === 'remove'"
@@ -222,6 +235,7 @@ import {
 import { useUnsavedGuard, useSaveShortcut } from '../navigation'
 import FormulaEditor from './FormulaEditor.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
+import RestoreDefaultDialog from './RestoreDefaultDialog.vue'
 
 // Settings → Stats: edits the story's stat system (backend/statsystem.go) as
 // a draft, previews it on a sample character while you work, and saves it
@@ -271,7 +285,55 @@ onMounted(async () => {
   } catch (err) {
     loadError.value = t("Couldn't load the stats. Try refreshing.")
   }
+  try {
+    defaults.value = await statSystemApi.defaults()
+  } catch (err) {
+    // Without them, there is nothing to restore a formula to.
+  }
 })
+
+// ---- Restoring one formula --------------------------------------------------
+// The system Polaris starts with: a stat it also has (same key) can have its
+// formula or multiplier put back on its own, into the draft.
+const defaults = ref(null)
+const restoreTarget = ref(null) // { stat, field }, stat null for the points formula
+
+function defaultFor(stat, field) {
+  if (!defaults.value) return null
+  if (!stat) return defaults.value.points_formula || ''
+  const d = (defaults.value.stats || []).find((s) => s.key === stat.key && s.category === stat.category)
+  return d ? d[field] || '' : null
+}
+
+function canRestore(stat, field) {
+  const d = defaultFor(stat, field)
+  if (d === null) return false
+  const now = stat ? stat[field] : draft[field]
+  return (now || '').trim() !== d.trim()
+}
+
+function askRestore(stat, field) {
+  restoreTarget.value = { stat, field }
+}
+
+const restoreMessage = computed(() => {
+  const r = restoreTarget.value
+  if (!r) return ''
+  const formula = defaultFor(r.stat, r.field)
+  const name = r.stat ? statName(r.stat) : t('Points to spend')
+  return formula
+    ? t('{name} goes back to the default: {formula}. Nothing changes until you save the stats.', { name, formula })
+    : t('{name} goes back to the default, which is empty. Nothing changes until you save the stats.', { name })
+})
+
+function restoreFormula() {
+  const { stat, field } = restoreTarget.value
+  restoreTarget.value = null
+  const d = defaultFor(stat, field)
+  if (d === null) return
+  if (stat) stat[field] = d
+  else draft[field] = d
+}
 
 // ---- What formulas can read -------------------------------------------------
 
@@ -502,6 +564,25 @@ async function useDefaults() {
 
 .sample {
   margin-top: 1rem;
+}
+
+.formula-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.link-btn.restore-link {
+  font-size: 0.74rem;
+}
+
+.formula-head .restore-link,
+.points-head .restore-link {
+  margin-left: auto;
+}
+
+.points-head .restore-link {
+  margin-right: 0.75rem;
 }
 
 .sample-title,

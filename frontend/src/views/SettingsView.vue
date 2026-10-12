@@ -105,6 +105,7 @@
             {{ saving ? $t('Saving…') : $t('Save calendar') }}
           </button>
           <span v-if="saved" class="saved-hint">{{ $t('Saved.') }}</span>
+          <button type="button" class="btn btn-ghost small restore-btn" :disabled="saving" @click="restoring = 'calendar'">{{ $t('Restore default') }}</button>
         </div>
       </template>
     </section>
@@ -142,7 +143,6 @@
         <p v-if="!seasonList.length" class="note">{{ $t('No seasons: the calendar shows none.') }}</p>
         <div class="season-add">
           <button type="button" class="btn btn-ghost small" :disabled="seasonList.length >= 24" @click="addSeason">{{ $t('Add season') }}</button>
-          <button type="button" class="btn btn-ghost small" @click="resetSeasons">{{ $t('Reset to the four seasons') }}</button>
         </div>
 
         <template v-if="seasonList.length">
@@ -174,6 +174,7 @@
             {{ seasonSaving ? $t('Saving…') : $t('Save seasons') }}
           </button>
           <span v-if="seasonSaved" class="saved-hint">{{ $t('Saved.') }}</span>
+          <button type="button" class="btn btn-ghost small restore-btn" :disabled="seasonSaving" @click="restoring = 'seasons'">{{ $t('Restore default') }}</button>
         </div>
       </template>
     </section>
@@ -231,6 +232,7 @@
           {{ mapSaving ? $t('Saving…') : $t('Save map settings') }}
         </button>
         <span v-if="mapSaved" class="saved-hint">{{ $t('Saved.') }}</span>
+        <button type="button" class="btn btn-ghost small restore-btn" :disabled="mapSaving" @click="restoring = 'map'">{{ $t('Restore default') }}</button>
       </div>
 
       <div class="port">
@@ -245,8 +247,8 @@
             <button type="button" class="btn btn-ghost small" :disabled="skyBusy" @click="skyInput.click()">
               {{ skyBusy ? $t('Saving…') : $t('Upload your sky') }}
             </button>
-            <button v-if="worldMap.sky_url" type="button" class="btn btn-ghost small" :disabled="skyBusy" @click="resetSky">
-              {{ $t('Use the default sky') }}
+            <button v-if="worldMap.sky_url" type="button" class="btn btn-ghost small" :disabled="skyBusy" @click="restoring = 'sky'">
+              {{ $t('Restore default') }}
             </button>
             <input ref="skyInput" type="file" accept="image/jpeg,image/png" hidden @change="uploadSky" />
           </div>
@@ -281,6 +283,49 @@
       </div>
     </section>
 
+    <section id="blood-types" class="glass-panel card">
+      <h2>{{ $t('Blood types') }}</h2>
+      <p class="lede">
+        {{ $t('The blood types the character form offers, one button each. Add your world\'s own, or remove the ones it doesn\'t have. The note is shown when one is picked; leave it empty on a usual type to show what it is said to mean in Japan.') }}
+      </p>
+
+      <ul class="blood-rows">
+        <li v-for="(b, i) in bloodList" :key="b.uid">
+          <input v-model="b.name" type="text" maxlength="24" class="blood-name" :placeholder="$t('Name')" :aria-label="$t('Name')" />
+          <textarea
+            v-model="b.note"
+            rows="2"
+            maxlength="600"
+            class="blood-note-input"
+            :placeholder="bloodTypeNote({ name: b.name, note: '' }) || $t('A note about this blood type (optional)')"
+            :aria-label="$t('Note')"
+          ></textarea>
+          <button type="button" class="btn btn-danger small" @click="bloodList.splice(i, 1)">{{ $t('Remove') }}</button>
+        </li>
+      </ul>
+      <p v-if="!bloodList.length" class="note">{{ $t('No blood types: the character form offers none.') }}</p>
+      <div class="season-add">
+        <button type="button" class="btn btn-ghost small" :disabled="bloodList.length >= 64" @click="addBloodType">{{ $t('Add blood type') }}</button>
+      </div>
+
+      <p v-if="bloodError" class="error-banner">{{ bloodError }}</p>
+      <div class="actions">
+        <button class="btn btn-primary" :disabled="bloodSaving || !bloodValid" @click="saveBloodTypeList()">
+          {{ bloodSaving ? $t('Saving…') : $t('Save blood types') }}
+        </button>
+        <span v-if="bloodSaved" class="saved-hint">{{ $t('Saved.') }}</span>
+        <button type="button" class="btn btn-ghost small restore-btn" :disabled="bloodSaving" @click="restoring = 'blood'">{{ $t('Restore default') }}</button>
+      </div>
+    </section>
+
+    <RestoreDefaultDialog
+      v-if="restoring"
+      :title="$t(RESTORES[restoring].title)"
+      :message="$t(RESTORES[restoring].message)"
+      @cancel="restoring = ''"
+      @confirm="restore"
+    />
+
     <ConfirmDialog
       v-if="portOpen"
       :title="$t('Port the 2D map onto the planet?')"
@@ -312,10 +357,12 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
-import { fetchSettings, saveSettings, saveSeasons, planetApi } from '../api'
+import { fetchSettings, saveSettings, saveSeasons, saveBloodTypes, planetApi } from '../api'
+import RestoreDefaultDialog from '../components/RestoreDefaultDialog.vue'
+import { applyBloodTypes, bloodTypeNote, DEFAULT_BLOOD_TYPES } from '../bloodTypes'
 import { loadCalendar, calendar } from '../calendar'
 import { THEMES, currentTheme, saveTheme } from '../theme'
-import { t, tn, LOCALES, locale, saveLocale } from '../i18n'
+import { t, tn, tr, LOCALES, locale, saveLocale } from '../i18n'
 import pkg from '../../package.json'
 import { useRoute } from 'vue-router'
 import StatSystemEditor from '../components/StatSystemEditor.vue'
@@ -555,6 +602,96 @@ async function portMap() {
   }
 }
 
+// ---- Blood types ----------------------------------------------------------------
+const bloodList = ref([])
+const bloodError = ref('')
+const bloodSaving = ref(false)
+const bloodSaved = ref(false)
+let bloodUid = 0
+
+function takeBloodTypes(list) {
+  bloodList.value = (list || []).map((b) => ({ uid: ++bloodUid, name: b.name, note: b.note || '' }))
+}
+
+const bloodValid = computed(() => {
+  const names = bloodList.value.map((b) => b.name.trim().toLowerCase())
+  return names.every(Boolean) && new Set(names).size === names.length
+})
+
+function addBloodType() {
+  bloodList.value.push({ uid: ++bloodUid, name: '', note: '' })
+}
+
+async function saveBloodTypeList() {
+  bloodSaving.value = true
+  bloodError.value = ''
+  bloodSaved.value = false
+  try {
+    const list = await saveBloodTypes(bloodList.value.map((b) => ({ name: b.name.trim(), note: b.note.trim() })))
+    takeBloodTypes(list)
+    applyBloodTypes(list)
+    bloodSaved.value = true
+    setTimeout(() => (bloodSaved.value = false), 2500)
+  } catch (err) {
+    bloodError.value = err.message || t("Couldn't save.")
+  } finally {
+    bloodSaving.value = false
+  }
+}
+
+// ---- Restore default ------------------------------------------------------------
+// Each setting with customizations can go back to how Polaris ships it, once
+// the confirmation word is typed (RestoreDefaultDialog). It is saved at once.
+const restoring = ref('')
+const RESTORES = {
+  calendar: {
+    title: tr('Restore the default calendar?'),
+    message: tr('The calendar goes back to 12 months of 30 days and is saved. Dates already saved are not rewritten.'),
+    run: () => {
+      months.value = 12
+      days.value = 30
+      return save()
+    },
+  },
+  seasons: {
+    title: tr('Restore the default seasons?'),
+    message: tr('Your seasons are replaced by winter, spring, summer and fall, a quarter of the year each, and saved.'),
+    run: () => {
+      resetSeasons()
+      hemisphere.value = 'north'
+      unit.value = 'C'
+      return saveSeasonSettings()
+    },
+  },
+  map: {
+    title: tr('Restore the default map settings?'),
+    message: tr('The planet goes back to the size of the Earth, with 50 km hexes and an axial tilt of 23.44°, and is saved. What was painted on the planet moves onto the new hexes. The map type is kept.'),
+    run: () => {
+      mapForm.value = { ...mapForm.value, planet_km: 40075, hex_km: 50, tilt: 23.44, bestiary_projection: 'equirectangular', show_equator: true, show_zones: false }
+      return saveMapSettings()
+    },
+  },
+  sky: {
+    title: tr('Restore the default sky?'),
+    message: tr('Your sky picture is removed and the default sky is used again.'),
+    run: () => resetSky(),
+  },
+  blood: {
+    title: tr('Restore the default blood types?'),
+    message: tr('The list goes back to A, B, AB and O, each Rh+ and Rh−, with the built-in notes, and is saved. Characters keep the blood type they have.'),
+    run: () => {
+      takeBloodTypes(DEFAULT_BLOOD_TYPES)
+      return saveBloodTypeList()
+    },
+  },
+}
+
+function restore() {
+  const which = restoring.value
+  restoring.value = ''
+  RESTORES[which]?.run()
+}
+
 async function save() {
   saving.value = true
   saveError.value = ''
@@ -578,6 +715,7 @@ onMounted(async () => {
     days.value = s.days_per_month
     if (s.seasons) takeSeasons(s.seasons)
     takeMap(s.map)
+    takeBloodTypes(s.blood_types)
   } catch (err) {
     loadError.value = "Couldn't load settings. Try refreshing."
   }
@@ -940,5 +1078,37 @@ onMounted(async () => {
 .saved-hint {
   font-size: 0.82rem;
   color: var(--text-muted);
+}
+
+.restore-btn {
+  margin-left: auto;
+}
+
+.blood-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  list-style: none;
+}
+
+.blood-rows li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.blood-name {
+  flex: 0 0 6.5rem;
+  font-weight: 700;
+}
+
+.blood-note-input {
+  flex: 1 1 14rem;
+  min-width: 0;
+  font-size: 0.82rem;
+  resize: vertical;
 }
 </style>

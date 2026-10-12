@@ -4,61 +4,100 @@
 
     <header class="page-header">
       <div>
-        <h1>{{ $t('Versions') }}</h1>
-        <p class="page-sub">{{ $t('Pick one to edit, or start a new one from the current version.') }}</p>
-      </div>
-      <div class="header-actions">
-        <RouterLink v-if="versions.length > 1" :to="`/characters/${id}/compare`" class="btn btn-ghost">
-          {{ $t('Compare versions') }}
-        </RouterLink>
-        <button class="btn btn-primary" :title="$t('Start a new version as a copy of the current one')" @click="newOpen = true">{{ $t('New version') }}</button>
+        <h1>{{ characterName || $t('Versions') }}</h1>
+        <p class="page-sub">{{ $t('What belongs to the character comes first, shared by every version. Below, pick a version to edit, or start a new one from the current version.') }}</p>
       </div>
     </header>
 
     <p v-if="loadError" class="error-banner">{{ loadError }}</p>
     <p v-else-if="loading" class="loading-hint">{{ $t('Loading…') }}</p>
 
-    <ul v-else class="versions">
-      <li
-        v-for="v in versions"
-        :key="v.id"
-        class="version-row glass-panel"
-        :class="{ 'is-current': v.is_current }"
-      >
-        <RouterLink :to="`/characters/${id}/versions/${v.id}/edit`" class="version-main">
-          <span v-if="v.is_current" class="current-badge">{{ $t('Current') }}</span>
-          <span class="version-name">{{ v.name }}<span v-if="v.nickname"> "{{ v.nickname }}"</span></span>
-          <span class="version-meta">
-            {{ $t('Lv.') }} {{ v.level }}
-            <span v-if="v.class_name"> · {{ v.class_name }}</span>
-            <span v-if="v.version_date"> · {{ v.version_date }}</span>
-            <span v-if="v.version_reference"> · {{ v.version_reference }}</span>
-            <span v-if="v.chapter_id && chapterLabel(v.chapter_id)"> · {{ chapterLabel(v.chapter_id) }}</span>
-          </span>
-        </RouterLink>
-        <div class="version-actions">
-          <RouterLink
-            v-if="!v.is_current && currentVersion"
-            :to="{ path: `/characters/${id}/compare`, query: { a: v.id, b: currentVersion.id } }"
-            class="btn btn-ghost small"
-            :title="$t('Compare with the current version')"
-          >
-            {{ $t('Compare') }}
-          </RouterLink>
-          <button v-if="!v.is_current" class="btn btn-ghost small" :title="$t('Make this the version shown on the sheet, the wiki and the timeline')" @click="handleSetCurrent(v.id)">
-            {{ $t('Set current') }}
-          </button>
-          <button
-            class="btn btn-ghost small"
-            :disabled="versions.length <= 1"
-            :title="versions.length <= 1 ? $t('The only version — delete the character instead') : ''"
-            @click="confirmTarget = v"
-          >
-            {{ $t('Delete') }}
-          </button>
+    <template v-else>
+      <section class="glass-panel shared-panel">
+        <h2>{{ $t('The character') }}</h2>
+        <p class="section-sub">{{ $t('These belong to the character, not to one version: changing them changes them in every version.') }}</p>
+        <div class="field-grid">
+          <DateField v-model="shared.birth_date" :label="$t('Birth date (in-story)')" />
+          <LocationSelect
+            v-model="shared.born_in_location_id"
+            :label="$t('Born in')"
+            :options="locationOptions"
+            :legacy-text="shared.born_in"
+          />
+          <BloodTypePicker v-model="shared.blood_type" class="span-2" />
         </div>
-      </li>
-    </ul>
+        <TagInput
+          v-model="shared.tags"
+          :suggestions="tagSuggestions"
+          list-id="character-tag-suggestions"
+          :hint="$t('Filter by tags on the Characters page.')"
+        />
+        <p v-if="sharedError" class="error-banner">{{ sharedError }}</p>
+        <div class="save-bar">
+          <button class="btn btn-primary" :disabled="sharedSaving || !sharedDirty()" @click="saveShared">
+            {{ sharedSaving ? $t('Saving…') : $t('Save changes') }}
+          </button>
+          <span v-if="sharedSaved" class="saved-hint">{{ $t('Saved.') }}</span>
+        </div>
+      </section>
+
+      <div class="section-head">
+        <h2>{{ $t('Versions') }}</h2>
+        <div class="header-actions">
+          <RouterLink v-if="versions.length > 1" :to="`/characters/${id}/compare`" class="btn btn-ghost small">
+            {{ $t('Compare versions') }}
+          </RouterLink>
+          <button class="btn btn-primary small" :title="$t('Start a new version as a copy of the current one')" @click="newOpen = true">{{ $t('New version') }}</button>
+        </div>
+      </div>
+
+      <ul class="versions">
+        <li
+          v-for="v in versions"
+          :key="v.id"
+          class="version-row glass-panel"
+          :class="{ 'is-current': v.is_current }"
+        >
+          <RouterLink :to="`/characters/${id}/versions/${v.id}/edit`" class="version-main">
+            <span v-if="v.is_current" class="current-badge">{{ $t('Current') }}</span>
+            <span class="version-name">{{ v.name }}<span v-if="v.nickname"> "{{ v.nickname }}"</span></span>
+            <span class="version-meta">
+              {{ $t('Lv.') }} {{ v.level }}
+              <span v-if="v.class_name"> · {{ v.class_name }}</span>
+              <span v-if="v.version_date"> · {{ v.version_date }}</span>
+              <span v-if="v.version_reference"> · {{ v.version_reference }}</span>
+              <span v-if="v.chapter_id && chapterLabel(v.chapter_id)"> · {{ chapterLabel(v.chapter_id) }}</span>
+            </span>
+          </RouterLink>
+          <div class="version-actions">
+            <RouterLink
+              v-if="!v.is_current && currentVersion"
+              :to="{ path: `/characters/${id}/compare`, query: { a: v.id, b: currentVersion.id } }"
+              class="btn btn-ghost small"
+              :title="$t('Compare with the current version')"
+            >
+              {{ $t('Compare') }}
+            </RouterLink>
+            <button v-if="!v.is_current" class="btn btn-ghost small" :title="$t('Make this the version shown on the sheet, the wiki and the timeline')" @click="handleSetCurrent(v.id)">
+              {{ $t('Set current') }}
+            </button>
+            <button
+              class="btn btn-ghost small"
+              :disabled="versions.length <= 1"
+              :title="versions.length <= 1 ? $t('The only version — delete the character instead') : ''"
+              @click="confirmTarget = v"
+            >
+              {{ $t('Delete') }}
+            </button>
+          </div>
+        </li>
+      </ul>
+
+      <section class="glass-panel relations-panel">
+        <RelationsTab :character-id="Number(id)" :character-name="characterName" :point="relationPoint" />
+        <p class="section-sub">{{ $t('Relations belong to the character, not to one version, and are saved as soon as you add or change them.') }}</p>
+      </section>
+    </template>
 
     <NewVersionModal
       v-if="newOpen"
@@ -79,13 +118,21 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { t } from '../i18n'
-import { fetchVersions, deleteVersion, setCurrentVersion } from '../api'
+import {
+  fetchVersions, deleteVersion, setCurrentVersion, fetchCurrentVersion, fetchCharacters, fetchLocationOptions, updateSharedCharacter,
+} from '../api'
 import NewVersionModal from '../components/NewVersionModal.vue'
 import BackLink from '../components/BackLink.vue'
+import DateField from '../components/DateField.vue'
+import LocationSelect from '../components/LocationSelect.vue'
+import TagInput from '../components/TagInput.vue'
+import BloodTypePicker from '../components/BloodTypePicker.vue'
+import RelationsTab from '../components/RelationsTab.vue'
 import { chapterLabel, loadChapters } from '../chapters'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { pageTitle, useUnsavedGuard, useSaveShortcut } from '../navigation'
 
 const props = defineProps({ id: { type: String, required: true } })
 loadChapters()
@@ -97,11 +144,46 @@ const newOpen = ref(false)
 const confirmTarget = ref(null)
 const currentVersion = computed(() => versions.value.find((v) => v.is_current) || null)
 
+// What belongs to the character rather than to a version
+// (backend/charactershared.go), saved with its own button.
+const characterName = ref('')
+const shared = reactive({ birth_date: '', blood_type: '', born_in: '', born_in_location_id: null, tags: [] })
+const sharedSaving = ref(false)
+const sharedSaved = ref(false)
+const sharedError = ref('')
+const locationOptions = ref([])
+const tagSuggestions = ref([])
+// Relations that hold at the current version are listed first.
+const relationPoint = computed(() =>
+  currentVersion.value ? { chapterId: currentVersion.value.chapter_id, date: currentVersion.value.version_date } : null,
+)
+
+let sharedSnapshot = ''
+const sharedState = () => JSON.stringify(shared)
+const sharedDirty = () => !loading.value && !loadError.value && sharedState() !== sharedSnapshot
+useUnsavedGuard(sharedDirty)
+useSaveShortcut(() => sharedDirty() && !sharedSaving.value && saveShared())
+
+function takeCharacter(current) {
+  characterName.value = current.name
+  pageTitle.value = current.name
+  Object.assign(shared, {
+    birth_date: current.story.birth_date || '',
+    blood_type: current.story.blood_type || '',
+    born_in: current.story.born_in || '',
+    born_in_location_id: current.story.born_in_location_id ?? null,
+    tags: current.tags || [],
+  })
+  sharedSnapshot = sharedState()
+}
+
 async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    versions.value = await fetchVersions(props.id)
+    const [list, current] = await Promise.all([fetchVersions(props.id), fetchCurrentVersion(props.id)])
+    versions.value = list
+    takeCharacter(current)
   } catch (err) {
     loadError.value = t("Couldn't load versions. Try refreshing.")
   } finally {
@@ -109,15 +191,38 @@ async function load() {
   }
 }
 
+async function loadVersions() {
+  try {
+    versions.value = await fetchVersions(props.id)
+  } catch (err) {
+    loadError.value = t("Couldn't load versions. Try refreshing.")
+  }
+}
+
+async function saveShared() {
+  sharedSaving.value = true
+  sharedError.value = ''
+  sharedSaved.value = false
+  try {
+    takeCharacter(await updateSharedCharacter(props.id, { ...shared }))
+    sharedSaved.value = true
+    setTimeout(() => (sharedSaved.value = false), 2500)
+  } catch (err) {
+    sharedError.value = err.message || t("Couldn't save. Try again.")
+  } finally {
+    sharedSaving.value = false
+  }
+}
+
 function onCreated() {
   newOpen.value = false
-  load()
+  loadVersions()
 }
 
 async function handleSetCurrent(versionId) {
   try {
     await setCurrentVersion(versionId)
-    await load()
+    await loadVersions()
   } catch (err) {
     loadError.value = t("Couldn't set that version as current.")
   }
@@ -127,17 +232,78 @@ async function handleDelete() {
   try {
     await deleteVersion(confirmTarget.value.id)
     confirmTarget.value = null
-    await load()
+    await loadVersions()
   } catch (err) {
     loadError.value = t("Couldn't delete that version.")
     confirmTarget.value = null
   }
 }
 
-onMounted(load)
+onMounted(async () => {
+  load()
+  // Every tag already on a character, offered while typing.
+  fetchCharacters()
+    .then((list) => {
+      const seen = new Map()
+      for (const c of list) for (const tag of c.tags || []) seen.set(tag.toLowerCase(), tag)
+      tagSuggestions.value = [...seen.values()].sort((a, b) => a.localeCompare(b))
+    })
+    .catch(() => {})
+  locationOptions.value = await fetchLocationOptions()
+})
 </script>
 
 <style scoped>
+.shared-panel,
+.relations-panel {
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.shared-panel h2,
+.section-head h2 {
+  font-family: 'Fraunces', serif;
+  font-weight: 500;
+  font-size: 1.15rem;
+  margin: 0 0 0.35rem;
+}
+
+.section-sub {
+  margin: 0 0 1rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+.relations-panel .section-sub {
+  margin: 1rem 0 0;
+}
+
+.save-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.saved-hint {
+  font-size: 0.85rem;
+  color: var(--accent);
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.section-head h2 {
+  margin: 0;
+}
+
 .header-actions {
   display: flex;
   gap: 0.6rem;
@@ -146,7 +312,7 @@ onMounted(load)
 
 .versions {
   list-style: none;
-  margin: 0;
+  margin: 0 0 1.5rem;
   padding: 0;
   display: flex;
   flex-direction: column;

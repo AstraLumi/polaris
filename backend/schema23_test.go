@@ -107,3 +107,48 @@ func TestNativeKingdom(t *testing.T) {
 		t.Errorf("kingdom groups: %v", groups)
 	}
 }
+
+// The version list saves birth date, blood type, birthplace and tags on
+// their own, and a version save that leaves them out keeps them.
+func TestSharedCharacterFields(t *testing.T) {
+	mgr, h := newTestServer(t)
+	s := createStory(t, h, map[string]string{"name": "Shared fields"})
+	app, _ := mgr.open(s.ID)
+	base := "/api/s/" + s.ID
+	app.db.Exec(`INSERT INTO locations (id, name) VALUES (1, 'Aldor')`)
+	body, ct := form(t, map[string]string{"name": "Aria", "level": "1"}, "", "", nil)
+	rec := do(t, h, "POST", base+"/characters", body, ct)
+	var c struct {
+		ID        int64 `json:"id"`
+		VersionID int64 `json:"version_id"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &c)
+
+	rec = do(t, h, "PUT", base+"/characters/"+idStr(c.ID)+"/shared",
+		strings.NewReader(`{"birth_date":"02-05-1590","blood_type":" AB- ","born_in":"","born_in_location_id":1,"tags":["hero"]}`), "application/json")
+	if rec.Code != 200 {
+		t.Fatalf("shared save: %d %s", rec.Code, rec.Body.String())
+	}
+	check := func(when string) {
+		t.Helper()
+		d, _ := buildVersionDetail(app.db, idStr(c.VersionID))
+		if d.Story.BirthDate != "02-05-1590" || d.Story.BloodType != "AB-" || d.Story.BornInName != "Aldor" || len(d.Tags) != 1 || d.Tags[0] != "hero" {
+			t.Errorf("%s: birth %q, blood %q, born in %q, tags %v", when, d.Story.BirthDate, d.Story.BloodType, d.Story.BornInName, d.Tags)
+		}
+	}
+	check("after the shared save")
+
+	body, ct = form(t, map[string]string{"name": "Aria", "level": "2"}, "", "", nil)
+	if rec := do(t, h, "PUT", base+"/versions/"+idStr(c.VersionID), body, ct); rec.Code != 200 {
+		t.Fatalf("version save: %d %s", rec.Code, rec.Body.String())
+	}
+	check("after a version save without them")
+
+	if rec := do(t, h, "PUT", base+"/characters/"+idStr(c.ID)+"/shared",
+		strings.NewReader(`{"birth_date":"99-99-1590"}`), "application/json"); rec.Code != 400 {
+		t.Errorf("an impossible birth date: %d", rec.Code)
+	}
+	if rec := do(t, h, "PUT", base+"/characters/999/shared", strings.NewReader(`{}`), "application/json"); rec.Code != 404 {
+		t.Errorf("a missing character: %d", rec.Code)
+	}
+}
