@@ -88,6 +88,9 @@ export const FACT_LABELS = {
   nation: tr('Nation'),
   type: tr('Type'),
   part_of: tr('Part of'),
+  hemisphere: tr('Hemisphere'),
+  latitude: tr('Latitude'),
+  climate_zone: tr('Climate zone'),
   founded: tr('Founded'),
   date: tr('Date'),
   location: tr('Location'),
@@ -110,6 +113,7 @@ export const FACT_GROUPS = [
   { label: tr('Personal'), keys: ['gender', 'age', 'race', 'body_type', 'blood_type'] },
   { label: tr('Birth'), keys: ['born', 'born_in', 'nation', 'human_birth_date'] },
   { label: tr('Abilities'), keys: ['class', 'subclass', 'specialization'] },
+  { label: tr('Geography'), keys: ['hemisphere', 'latitude', 'climate_zone'] },
 ]
 
 // Words the server sends as an infobox value.
@@ -117,7 +121,12 @@ export const WORD_LABELS = [
   tr('Kingdom'), tr('Major location'), tr('Minor location'), tr('Capital'), tr('City'),
   tr('Alive'), tr('Missing'), tr('Dead'),
   tr('Monster'), tr('Animal'), tr('Construct'),
+  tr('Northern hemisphere'), tr('Southern hemisphere'), tr('Both hemispheres'), tr('On the equator'),
+  tr('Tropical'), tr('Temperate'), tr('Polar'),
 ]
+
+// A 'words' value: several of the words above, joined by '|'.
+export const factWords = (value) => value.split('|').map((w) => t(w)).join(', ')
 
 // Related lists.
 export const GROUP_LABELS = {

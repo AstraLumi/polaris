@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
 )
 
@@ -144,15 +145,25 @@ func TestMapEquator(t *testing.T) {
 		Equator mapEquator `json:"equator"`
 	}
 	json.Unmarshal(do(t, h, "GET", base, nil, "").Body.Bytes(), &m)
-	if m.Equator.Show {
-		t.Error("the equator starts hidden")
+	if m.Equator.Show || m.Equator.Placed || m.Equator.HexKm != 50 {
+		t.Errorf("the equator starts hidden, unplaced, at 50 km hexes: %+v", m.Equator)
 	}
-	if rec := do(t, h, "PUT", base+"/equator", jsonBody(mapEquator{Show: true, Row: 40.5, Center: 12, Bend: -3}), "application/json"); rec.Code != 200 {
+	if rec := do(t, h, "PUT", base+"/equator", jsonBody(map[string]any{"show": true, "row": 40.5, "center": 12, "bend": -3}), "application/json"); rec.Code != 200 {
 		t.Fatalf("save: %d", rec.Code)
 	}
 	json.Unmarshal(do(t, h, "GET", base, nil, "").Body.Bytes(), &m)
-	if m.Equator != (mapEquator{Show: true, Row: 40.5, Center: 12, Bend: -3}) {
-		t.Errorf("equator: %+v", m.Equator)
+	want := defaultEquator()
+	want.Show, want.Row, want.Center, want.Bend, want.Placed = true, 40.5, 12, -3, true
+	if m.Equator != want {
+		t.Errorf("equator: %+v (fields left out keep their defaults)", m.Equator)
+	}
+	for name, bad := range map[string]map[string]any{
+		"no hex size": {"hex_km": 0},
+		"tilt":        {"tilt": 91},
+	} {
+		if rec := do(t, h, "PUT", base+"/equator", jsonBody(bad), "application/json"); rec.Code != 400 {
+			t.Errorf("%s: %d", name, rec.Code)
+		}
 	}
 	if rec := do(t, h, "PUT", base+"/equator", jsonBody(map[string]any{"show": true, "row": 1e9}), "application/json"); rec.Code != 400 {
 		t.Errorf("an equator far off the map: %d", rec.Code)
@@ -174,5 +185,69 @@ func TestMigrationAddsRegionClimate(t *testing.T) {
 	app.db.QueryRow(`SELECT COUNT(*) FROM locations`).Scan(&n)
 	if n != 1 {
 		t.Fatal("migration must keep existing data")
+	}
+}
+
+// Latitude from the equator: 50 km hexes on an Earth-sized planet put the
+// pole about 231 rows away.
+func TestLatitude(t *testing.T) {
+	e := defaultEquator()
+	e.Row = 100
+	if n := e.rowsToPole(); math.Abs(n-231.4) > 0.1 {
+		t.Errorf("rows to the pole: %v", n)
+	}
+	for _, c := range []struct {
+		q, r int64
+		lat  float64
+		zone string
+	}{
+		{-50, 100, 0, "Tropical"},
+		{-50, 0, 38.9, "Temperate"},
+		{-120, 240, -54.5, "Temperate"},
+		{-200, -100, 77.8, "Polar"},
+		{0, -1000, 90, "Polar"},
+	} {
+		lat := e.latitude(c.q, c.r)
+		if math.Abs(lat-c.lat) > 0.1 || e.zone(lat) != c.zone {
+			t.Errorf("hex %d,%d: %.1f° %s, want %.1f° %s", c.q, c.r, lat, e.zone(lat), c.lat, c.zone)
+		}
+	}
+	// A bend lowers the equator away from its centre column.
+	e.Bend = 10
+	if lat := e.latitude(100, 100); !(lat > 0) {
+		t.Errorf("100 columns out, a bent equator is 10 rows lower, so row 100 is north: %.1f°", lat)
+	}
+}
+
+// A place knows its hemisphere, latitude and zones once the equator is placed.
+func TestPlanetFacts(t *testing.T) {
+	mgr, h := newTestServer(t)
+	s := createStory(t, h, map[string]string{"name": "Planet"})
+	app, _ := mgr.open(s.ID)
+	for _, q := range []string{
+		`INSERT INTO locations (id, name, kind, color) VALUES (1, 'Kemet-Vib', 'major', '#aa0000')`,
+		`INSERT INTO location_hexes (location_id, q, r) VALUES (1, 0, 90), (1, 0, 110), (1, 0, 50)`,
+		`INSERT INTO locations (id, name, kind, q, r) VALUES (2, 'Zalagnord', 'minor', 0, 0)`,
+	} {
+		app.db.Exec(q)
+	}
+	facts := func(id int64) map[string]string {
+		a := &wikiArticle{Type: "location", ID: id}
+		loadSourceFacts(app.db, a)
+		out := map[string]string{}
+		for _, f := range a.Facts {
+			out[f.Key] = f.Value
+		}
+		return out
+	}
+	if f := facts(1); f["hemisphere"] != "" {
+		t.Errorf("no equator yet, no hemisphere: %v", f)
+	}
+	do(t, h, "PUT", "/api/s/"+s.ID+"/map/equator", jsonBody(map[string]any{"row": 100}), "application/json")
+	if f := facts(1); f["hemisphere"] != "Both hemispheres" || f["latitude"] != "4°S – 19°N" || f["climate_zone"] != "Tropical" {
+		t.Errorf("region: %v", f)
+	}
+	if f := facts(2); f["hemisphere"] != "Northern hemisphere" || f["latitude"] != "39°N" || f["climate_zone"] != "Temperate" {
+		t.Errorf("town: %v", f)
 	}
 }

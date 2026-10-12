@@ -77,10 +77,32 @@
         <p class="eq-note">
           {{ $t('Bend curves the line away from the hex you placed it on, for a map drawn from a globe. 0 keeps it straight. Hexes above the line are in the north.') }}
         </p>
+
+        <div class="eq-sep"></div>
+        <label class="eq-check">
+          <input v-model="equator.show_zones" type="checkbox" @change="saveEquatorSoon" />
+          {{ $t('Show the tropics and polar circles') }}
+        </label>
+        <label class="eq-field eq-wide">
+          <span>{{ $t('Hex width (km)') }}</span>
+          <input v-model.number="equator.hex_km" type="number" min="0.01" step="any" @change="saveEquatorSoon" />
+        </label>
+        <label class="eq-field eq-wide">
+          <span>{{ $t('Planet circumference (km)') }}</span>
+          <input v-model.number="equator.planet_km" type="number" min="1" step="any" @change="saveEquatorSoon" />
+        </label>
+        <label class="eq-field eq-wide">
+          <span>{{ $t('Axial tilt (°)') }}</span>
+          <input v-model.number="equator.tilt" type="number" min="0" max="90" step="any" @change="saveEquatorSoon" />
+        </label>
+        <p class="eq-note">
+          {{ $t('From the equator to a pole is {n} rows of hexes. The tropics lie at the tilt and the polar circles at 90° minus it; places between them are temperate. Each place\'s wiki article shows its hemisphere, latitude and zone.', { n: poleRows }) }}
+        </p>
       </div>
 
       <div class="top-notes">
         <p class="hint-line">{{ hint }}</p>
+        <p v-if="hoverLatitude" class="lat-line">{{ hoverLatitude }}</p>
         <p v-if="notice" class="error-banner notice">{{ notice }}</p>
       </div>
 
@@ -139,6 +161,7 @@ import { t, tr } from '../i18n'
 import { mapApi } from '../api'
 import { themeRgba } from '../theme'
 import { HEX_SIZE, SQRT3, CORNERS, keyOf, hexCenter, pixelToHex, hexLine, hexesWithin } from '../hexMath'
+import { rowsToPole, latitudeRow, latitudeOf, zoneOf, zoneLines, formatLatitude } from '../planet'
 import MapHoverPane from '../components/MapHoverPane.vue'
 import HexPanel from '../components/HexPanel.vue'
 import MajorLocationModal from '../components/MajorLocationModal.vue'
@@ -179,7 +202,17 @@ const zoomLabel = ref('100%')
 const notice = ref('')
 // The equator (backend/seasons.go): a line along hex row `row` at column
 // `center`, curving by `bend` rows per 100 columns squared away from it.
-const equator = reactive({ show: false, row: 0, center: 0, bend: 0 })
+const equator = reactive({
+  show: false,
+  row: 0,
+  center: 0,
+  bend: 0,
+  show_zones: false,
+  hex_km: 50,
+  planet_km: 40075,
+  tilt: 23.44,
+  placed: false,
+})
 const equatorOpen = ref(false)
 const placingEquator = ref(false)
 
@@ -632,27 +665,33 @@ function drawMinorLabels(ctx, spots, z, screenSize) {
 // ---- The equator -------------------------------------------------------------------
 const COLUMN_W = HEX_SIZE * SQRT3
 
-// The equator's world y at world x.
-function equatorY(x) {
-  const off = (x / COLUMN_W - equator.center) / 100
-  return HEX_SIZE * 1.5 * (equator.row + equator.bend * off * off)
+// The world y of the line of latitude `lat` (0: the equator) at world x.
+const latitudeY = (x, lat) => HEX_SIZE * 1.5 * latitudeRow(equator, x / COLUMN_W, lat)
+
+// Each line: its colour, width and dashes (in screen pixels).
+const LINE_STYLES = {
+  equator: { color: [232, 86, 70], width: 2, dash: [12, 7] },
+  tropic: { color: [236, 168, 64], width: 1.5, dash: [3, 6] },
+  polar: { color: [120, 180, 236], width: 1.5, dash: [3, 6] },
 }
 
-function drawEquator(ctx, z, fromX, toX) {
+function drawLatitude(ctx, z, fromX, toX, lat, kind, label) {
+  const style = LINE_STYLES[kind]
+  const rgba = (a) => `rgba(${style.color.join(', ')}, ${a})`
   const steps = equator.bend ? 160 : 1
   ctx.beginPath()
   for (let i = 0; i <= steps; i++) {
     const x = fromX + ((toX - fromX) * i) / steps
-    if (i === 0) ctx.moveTo(x, equatorY(x))
-    else ctx.lineTo(x, equatorY(x))
+    if (i === 0) ctx.moveTo(x, latitudeY(x, lat))
+    else ctx.lineTo(x, latitudeY(x, lat))
   }
   ctx.save()
-  ctx.setLineDash([12 / z, 7 / z])
-  ctx.lineWidth = 3.5 / z
+  ctx.setLineDash(style.dash.map((d) => d / z))
+  ctx.lineWidth = (style.width + 1.5) / z
   ctx.strokeStyle = themeRgba('--surface', 0.7)
   ctx.stroke()
-  ctx.lineWidth = 2 / z
-  ctx.strokeStyle = 'rgba(232, 86, 70, 0.95)'
+  ctx.lineWidth = style.width / z
+  ctx.strokeStyle = rgba(0.95)
   ctx.stroke()
   ctx.restore()
 
@@ -664,11 +703,30 @@ function drawEquator(ctx, z, fromX, toX) {
   ctx.lineJoin = 'round'
   ctx.lineWidth = 3 / z
   ctx.strokeStyle = themeRgba('--surface', 0.9)
-  const label = t('Equator')
-  ctx.strokeText(label, lx, equatorY(lx) - 5 / z)
-  ctx.fillStyle = 'rgba(232, 86, 70, 1)'
-  ctx.fillText(label, lx, equatorY(lx) - 5 / z)
+  ctx.strokeText(label, lx, latitudeY(lx, lat) - 5 / z)
+  ctx.fillStyle = rgba(1)
+  ctx.fillText(label, lx, latitudeY(lx, lat) - 5 / z)
 }
+
+// The equator and, when asked, the tropics and polar circles.
+function drawLatitudes(ctx, z, fromX, toX) {
+  if (equator.show_zones && rowsToPole(equator) > 0) {
+    for (const l of zoneLines(equator)) {
+      const name = l.kind === 'tropic' ? t('Tropic') : t('Polar circle')
+      drawLatitude(ctx, z, fromX, toX, l.lat, l.kind, `${name} · ${formatLatitude(l.lat)}`)
+    }
+  }
+  if (equator.show) drawLatitude(ctx, z, fromX, toX, 0, 'equator', t('Equator'))
+}
+
+// "39°N, Temperate" for the hovered hex, once the equator is placed.
+const hoverLatitude = computed(() => {
+  if (!equator.placed || !hoverHex.value || !(rowsToPole(equator) > 0)) return ''
+  const lat = latitudeOf(equator, hoverHex.value.q, hoverHex.value.r)
+  return `${formatLatitude(lat)}, ${t(zoneOf(equator, lat))}`
+})
+
+const poleRows = computed(() => Math.round(rowsToPole(equator)) || 0)
 
 let equatorTimer = null
 function saveEquatorSoon() {
@@ -784,7 +842,7 @@ function draw() {
     }
   }
 
-  if (equator.show) drawEquator(ctx, z, minX - pad, maxX + pad)
+  drawLatitudes(ctx, z, minX - pad, maxX + pad)
 
   // 5. Minor locations. Capitals and cities get their own markers and are
   //    labelled from further out than ordinary places (see LABEL_AT); markers
@@ -1456,6 +1514,8 @@ onBeforeUnmount(() => {
   top: 16px;
   left: 100px;
   width: 250px;
+  max-height: calc(100% - 32px);
+  overflow-y: auto;
   padding: 0.75rem 0.85rem;
   display: flex;
   flex-direction: column;
@@ -1499,6 +1559,20 @@ onBeforeUnmount(() => {
   grid-column: 2 / 4;
   min-height: 1.9rem;
   padding: 0.2rem 0.45rem;
+}
+
+.eq-sep {
+  border-top: 1px solid var(--glass-border);
+}
+
+/* A longer label above its box. */
+.eq-wide {
+  grid-template-columns: 1fr;
+  gap: 0.2rem;
+}
+
+.eq-wide input[type='number'] {
+  grid-column: 1;
 }
 
 .eq-val {
@@ -1597,6 +1671,17 @@ onBeforeUnmount(() => {
   font-size: 0.75rem;
   color: var(--text-faint);
   text-align: center;
+}
+
+.lat-line {
+  margin: 0;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .notice {

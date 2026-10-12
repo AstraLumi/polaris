@@ -92,7 +92,7 @@ export function dateParts(text) {
 }
 
 // Messages the server can send back about seasons, climates and the
-// equator (backend/seasons.go); listed so they get translated.
+// equator (backend/seasons.go, planet.go); listed so they get translated.
 export const SEASON_MESSAGES = [
   tr('a story can have at most 24 seasons'),
   tr('every season needs a name'),
@@ -106,4 +106,6 @@ export const SEASON_MESSAGES = [
   tr('the equator is off the map'),
   tr('that bend is out of range'),
   tr('failed to save the equator'),
+  tr("the hex size and the planet's size must be more than 0"),
+  tr('the axial tilt is between 0 and 90 degrees'),
 ]

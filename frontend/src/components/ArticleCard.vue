@@ -21,7 +21,7 @@
 <script setup>
 import { computed } from 'vue'
 import IconImage from './IconImage.vue'
-import { TYPE_LABELS, FACT_LABELS } from '../wiki'
+import { TYPE_LABELS, FACT_LABELS, factWords } from '../wiki'
 import { articleText } from '../articlePreview'
 import { fullDate, dateParts } from '../calendar'
 import { t } from '../i18n'
@@ -38,6 +38,7 @@ const facts = computed(() =>
       let value = f.link ? f.link.name : f.value
       if (f.kind === 'date' && dateParts(f.value)) value = fullDate(f.value)
       if (f.kind === 'word') value = t(f.value)
+      if (f.kind === 'words') value = factWords(f.value)
       return { key: f.key, text: value }
     })
     .filter((f) => f.text && FACT_LABELS[f.key])

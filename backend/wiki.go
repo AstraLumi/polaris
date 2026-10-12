@@ -596,6 +596,7 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 				WHERE m.id = ? ORDER BY l.id LIMIT 1`, id).Scan(&parentID, &parentName)
 		}
 		a.addFact("part_of", "", "", refOf("location", parentID, parentName))
+		a.addPlanetFacts(db, kind, id)
 		if kind == "major" {
 			a.HasClimate = true
 			a.Climate = loadClimate(db, id)
