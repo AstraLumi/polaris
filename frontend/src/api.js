@@ -298,6 +298,16 @@ export async function saveSettings(payload) {
   return res.json()
 }
 
+export async function saveSeasons(payload) {
+  const res = await fetch(`${BASE}/settings/seasons`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw apiError((await res.text()).trim() || 'failed to save the seasons')
+  return res.json()
+}
+
 export async function fetchHome() {
   const res = await fetch(`${BASE}/home`)
   if (!res.ok) throw apiError('failed to load home')
@@ -452,6 +462,8 @@ export const mapApi = {
   // locationId may be null, which erases everything covering those hexes
   erase: (locationId, hexes) =>
     mapRequest('/map/erase', jsonBody('POST', { location_id: locationId, hexes }), 'failed to erase'),
+  // { show, row, center, bend } (backend/seasons.go)
+  saveEquator: (equator) => mapRequest('/map/equator', jsonBody('PUT', equator), 'failed to save the equator'),
 }
 
 // ---- Events ------------------------------------------------------------------

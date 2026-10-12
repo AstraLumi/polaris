@@ -34,6 +34,7 @@ type mapLocation struct {
 type mapPayload struct {
 	Locations []mapLocation `json:"locations"`
 	Hexes     [][3]int64    `json:"hexes"`
+	Equator   mapEquator    `json:"equator"`
 }
 
 const mapLocationSelect = `
@@ -69,7 +70,7 @@ func scanMapLocation(s rowScanner) (mapLocation, error) {
 
 func getMapHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		payload := mapPayload{Locations: []mapLocation{}, Hexes: [][3]int64{}}
+		payload := mapPayload{Locations: []mapLocation{}, Hexes: [][3]int64{}, Equator: loadEquator(db)}
 
 		rows, err := db.Query(mapLocationSelect + ` ORDER BY name COLLATE NOCASE`)
 		if err != nil {

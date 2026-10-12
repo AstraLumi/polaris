@@ -5,10 +5,12 @@
         <h1>{{ $t('Calendar') }}</h1>
         <p class="page-sub">
           {{ $t('{months} months of {days} days', { months: calendar.months_per_year, days: calendar.days_per_month }) }}
-          <RouterLink to="/settings">{{ $t('change') }}</RouterLink>
         </p>
       </div>
       <div class="head-actions">
+        <RouterLink :to="{ path: '/settings', hash: '#calendar' }" class="btn btn-ghost" :title="$t('Months, days and seasons')">
+          ⚙ {{ $t('Calendar settings') }}
+        </RouterLink>
         <RouterLink to="/timeline" class="btn btn-ghost">{{ $t('Timeline') }}</RouterLink>
         <RouterLink :to="{ path: '/events/new', query: { date: newEventDate } }" class="btn btn-primary">{{ $t('New event') }}</RouterLink>
       </div>
@@ -36,6 +38,16 @@
         </label>
       </section>
 
+      <div v-if="cycle" class="season-line">
+        <div v-for="h in hemispheres" :key="h.key" class="season-hemi">
+          <span class="hemi-name">{{ h.label }}</span>
+          <span v-for="r in h.runs" :key="r.from" class="season-tag" :style="{ '--season': r.season.color }">
+            <i class="dot season-dot"></i>{{ r.season.name }}
+            <span v-if="h.runs.length > 1" class="faint">{{ $t('days {from}–{to}', { from: r.from, to: r.to }) }}</span>
+          </span>
+        </div>
+      </div>
+
       <div class="months" role="tablist" :aria-label="$t('Months of {year}', { year: yearLabel })">
         <button
           v-for="m in calendar.months_per_year"
@@ -43,9 +55,10 @@
           type="button"
           role="tab"
           class="month-chip"
-          :class="{ 'is-on': m === month, 'has-points': monthCounts[m] }"
+          :class="{ 'is-on': m === month, 'has-points': monthCounts[m], 'has-season': monthSeason[m] }"
+          :style="monthSeason[m] ? { '--season': monthSeason[m].color } : null"
           :aria-selected="m === month"
-          :title="$tn('{n} point', '{n} points', monthCounts[m] || 0)"
+          :title="[monthSeason[m]?.name, $tn('{n} point', '{n} points', monthCounts[m] || 0)].filter(Boolean).join(' · ')"
           @click="go(year, m)"
         >
           {{ m }}<span v-if="monthCounts[m]" class="dot-count">{{ monthCounts[m] }}</span>
@@ -57,10 +70,13 @@
           v-for="d in calendar.days_per_month"
           :key="d"
           class="day"
-          :class="{ 'has-points': byDay[d], 'is-picked': picked === d }"
+          :class="{ 'has-points': byDay[d], 'is-picked': picked === d, 'has-season': daySeason[d] }"
+          :style="daySeason[d] ? { '--season': daySeason[d].season.color } : null"
+          :title="daySeason[d]?.season.name"
           @click="picked = picked === d ? null : d"
         >
           <span class="day-num">{{ d }}</span>
+          <span v-if="daySeason[d]?.begins" class="season-begins">{{ $t('{season} begins', { season: daySeason[d].season.name }) }}</span>
           <ul v-if="byDay[d]" class="chips">
             <li v-for="n in byDay[d].slice(0, MAX_CHIPS)" :key="n.key">
               <RouterLink :to="linkOf(n)" class="chip" :class="'kind-' + n.kind" :title="`${n.name} · ${fullDate(n.date)}`" @click.stop>
@@ -103,6 +119,7 @@ import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { timelineApi } from '../api'
 import { calendar, parseStoryDate, formatStoryDate, fullDate } from '../calendar'
+import { seasonCycle, seasonOn, monthSeasons, dayIndex } from '../seasons'
 import { mapPath } from '../navigation'
 import { wikiPath } from '../wiki'
 import { t } from '../i18n'
@@ -190,6 +207,44 @@ const nextPoint = computed(() => {
   return points.value.find((n) => monthIndex(n.d.year, n.d.month) > here) || null
 })
 
+// ---- Seasons (seasons.js) ---------------------------------------------------------
+// The settings describe one hemisphere; the other is half a round apart.
+const cycle = computed(() => seasonCycle(calendar.seasons, calendar))
+const south = computed(() => calendar.seasons.hemisphere === 'south')
+const hemispheres = computed(() => {
+  if (!cycle.value) return []
+  const own = { key: 'own', label: south.value ? t('Southern hemisphere') : t('Northern hemisphere'), other: false }
+  const other = { key: 'other', label: south.value ? t('Northern hemisphere') : t('Southern hemisphere'), other: true }
+  return (south.value ? [other, own] : [own, other]).map((h) => ({
+    ...h,
+    runs: monthSeasons(year.value, month.value, cycle.value, calendar, h.other),
+  }))
+})
+
+// Each day's season in the settings' own hemisphere, and whether it begins
+// that day.
+const daySeason = computed(() => {
+  const out = {}
+  if (!cycle.value) return out
+  const first = dayIndex({ day: 1, month: month.value, year: year.value }, calendar)
+  for (let d = 1; d <= calendar.days_per_month; d++) {
+    const s = seasonOn(first + d - 1, cycle.value)
+    out[d] = { season: s.season, begins: s.first === first + d - 1 }
+  }
+  return out
+})
+
+// The season in the middle of each month, for the month chips.
+const monthSeason = computed(() => {
+  const out = {}
+  if (!cycle.value) return out
+  const mid = Math.ceil(calendar.days_per_month / 2)
+  for (let m = 1; m <= calendar.months_per_year; m++) {
+    out[m] = seasonOn(dayIndex({ day: mid, month: m, year: year.value }, calendar), cycle.value).season
+  }
+  return out
+})
+
 function go(y, m) {
   picked.value = null
   router.replace({ query: { ...route.query, y: String(y), m: String(m) } })
@@ -246,9 +301,58 @@ timelineApi
   gap: 0.5rem;
 }
 
-.page-sub a {
-  color: var(--line);
-  text-decoration: none;
+.season-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.6rem;
+  margin: -0.2rem 0 0.7rem;
+  font-size: 0.8rem;
+}
+
+.season-hemi {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.8rem;
+}
+
+.hemi-name {
+  color: var(--text-faint);
+}
+
+.season-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.season-tag .faint {
+  font-weight: 500;
+  color: var(--text-faint);
+}
+
+.season-dot {
+  background: var(--season);
+}
+
+.month-chip.has-season {
+  box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--season) 75%, transparent);
+}
+
+.day.has-season {
+  border-top: 3px solid color-mix(in srgb, var(--season) 70%, transparent);
+}
+
+.season-begins {
+  align-self: flex-start;
+  padding: 0.05rem 0.35rem;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--season) 22%, transparent);
+  color: var(--text-primary);
+  font-size: 0.66rem;
+  font-weight: 700;
 }
 
 .nav-bar {

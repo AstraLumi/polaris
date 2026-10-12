@@ -47,6 +47,36 @@
         <button type="button" class="tool-btn" :title="$t('Zoom out')" @click="zoomBy(0.8)">−</button>
         <button type="button" class="tool-btn" :title="$t('Fit the map in view')" @click="fitAndDraw">{{ $t('Fit') }}</button>
         <span class="zoom-label">{{ zoomLabel }}</span>
+        <div class="tool-sep"></div>
+        <button type="button" class="tool-btn" :class="{ active: equatorOpen }" :title="$t('Show and place the equator')" @click="equatorOpen = !equatorOpen">
+          {{ $t('Equator') }}
+        </button>
+      </div>
+
+      <div v-if="equatorOpen" class="equator-panel glass-panel panel-solid">
+        <div class="eq-head">
+          <strong>{{ $t('Equator') }}</strong>
+          <button type="button" class="eq-close" :aria-label="$t('Close')" @click="equatorOpen = false">×</button>
+        </div>
+        <label class="eq-check">
+          <input v-model="equator.show" type="checkbox" @change="saveEquatorSoon" />
+          {{ $t('Show the equator') }}
+        </label>
+        <button type="button" class="btn btn-ghost small" :class="{ 'is-placing': placingEquator }" @click="togglePlacing">
+          {{ placingEquator ? $t('Click a hex on the map…') : $t('Place it on a hex') }}
+        </button>
+        <label class="eq-field">
+          <span>{{ $t('Row') }}</span>
+          <input v-model.number="equator.row" type="number" step="0.5" @change="saveEquatorSoon" />
+        </label>
+        <label class="eq-field">
+          <span>{{ $t('Bend') }}</span>
+          <input v-model.number="equator.bend" type="range" min="-20" max="20" step="0.5" @input="saveEquatorSoon" />
+          <span class="eq-val">{{ equator.bend }}</span>
+        </label>
+        <p class="eq-note">
+          {{ $t('Bend curves the line away from the hex you placed it on, for a map drawn from a globe. 0 keeps it straight. Hexes above the line are in the north.') }}
+        </p>
       </div>
 
       <div class="top-notes">
@@ -103,7 +133,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { t, tr } from '../i18n'
 import { mapApi } from '../api'
@@ -147,6 +177,11 @@ const spaceDown = ref(false)
 const panning = ref(false)
 const zoomLabel = ref('100%')
 const notice = ref('')
+// The equator (backend/seasons.go): a line along hex row `row` at column
+// `center`, curving by `bend` rows per 100 columns squared away from it.
+const equator = reactive({ show: false, row: 0, center: 0, bend: 0 })
+const equatorOpen = ref(false)
+const placingEquator = ref(false)
 
 // ---- Map data (plain objects: thousands of hexes shouldn't be reactive) ------
 let hexMembers = new Map() // "q,r" -> { q, r, x, y, ids: [major location ids] }
@@ -179,6 +214,7 @@ const wrapClass = computed(() => ({
 }))
 
 const hint = computed(() => {
+  if (placingEquator.value) return t('Click the hex the equator runs through')
   if (tool.value === 'paint') {
     return activeName.value
       ? t('Scroll to zoom · Hold Space to drag the view · Painting {name}', { name: activeName.value })
@@ -319,6 +355,7 @@ async function load({ keepView = false } = {}) {
   try {
     const data = await mapApi.get()
     locations.value = data.locations
+    if (data.equator) Object.assign(equator, data.equator)
     hexMembers = new Map()
     for (const [id, q, r] of data.hexes) {
       const k = keyOf(q, r)
@@ -592,6 +629,72 @@ function drawMinorLabels(ctx, spots, z, screenSize) {
   if ('letterSpacing' in ctx) ctx.letterSpacing = '0px'
 }
 
+// ---- The equator -------------------------------------------------------------------
+const COLUMN_W = HEX_SIZE * SQRT3
+
+// The equator's world y at world x.
+function equatorY(x) {
+  const off = (x / COLUMN_W - equator.center) / 100
+  return HEX_SIZE * 1.5 * (equator.row + equator.bend * off * off)
+}
+
+function drawEquator(ctx, z, fromX, toX) {
+  const steps = equator.bend ? 160 : 1
+  ctx.beginPath()
+  for (let i = 0; i <= steps; i++) {
+    const x = fromX + ((toX - fromX) * i) / steps
+    if (i === 0) ctx.moveTo(x, equatorY(x))
+    else ctx.lineTo(x, equatorY(x))
+  }
+  ctx.save()
+  ctx.setLineDash([12 / z, 7 / z])
+  ctx.lineWidth = 3.5 / z
+  ctx.strokeStyle = themeRgba('--surface', 0.7)
+  ctx.stroke()
+  ctx.lineWidth = 2 / z
+  ctx.strokeStyle = 'rgba(232, 86, 70, 0.95)'
+  ctx.stroke()
+  ctx.restore()
+
+  // Its name near the left edge of the view, clear of the toolbar.
+  const lx = fromX + HEX_SIZE * 2 + 96 / z
+  ctx.font = `700 ${11 / z}px Manrope, sans-serif`
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'bottom'
+  ctx.lineJoin = 'round'
+  ctx.lineWidth = 3 / z
+  ctx.strokeStyle = themeRgba('--surface', 0.9)
+  const label = t('Equator')
+  ctx.strokeText(label, lx, equatorY(lx) - 5 / z)
+  ctx.fillStyle = 'rgba(232, 86, 70, 1)'
+  ctx.fillText(label, lx, equatorY(lx) - 5 / z)
+}
+
+let equatorTimer = null
+function saveEquatorSoon() {
+  scheduleDraw()
+  clearTimeout(equatorTimer)
+  equatorTimer = setTimeout(async () => {
+    try {
+      Object.assign(equator, await mapApi.saveEquator({ ...equator, row: Number(equator.row) || 0 }))
+    } catch (err) {
+      flash(err.message)
+    }
+  }, 400)
+}
+
+function togglePlacing() {
+  placingEquator.value = !placingEquator.value
+  if (placingEquator.value) tool.value = 'select'
+}
+
+// The equator runs through hex (q, r) and is shown.
+function placeEquator({ q, r }) {
+  placingEquator.value = false
+  Object.assign(equator, { show: true, row: r, center: q + r / 2 })
+  saveEquatorSoon()
+}
+
 function draw() {
   const canvas = canvasEl.value
   if (!canvas || !size.w) return
@@ -680,6 +783,8 @@ function draw() {
       if (l && !l.color) outline(hexesOf(id), themeRgba('--accent', 0.95), 2)
     }
   }
+
+  if (equator.show) drawEquator(ctx, z, minX - pad, maxX + pad)
 
   // 5. Minor locations. Capitals and cities get their own markers and are
   //    labelled from further out than ordinary places (see LABEL_AT); markers
@@ -957,7 +1062,10 @@ function onPointerUp(e) {
     canvas.releasePointerCapture(e.pointerId)
   }
   if (!finished) return
-  if (finished.type === 'pan' && finished.selectOnClick && !finished.moved) {
+  if (finished.type === 'pan' && finished.selectOnClick && !finished.moved && placingEquator.value) {
+    const { sx, sy } = eventPoint(e)
+    placeEquator(hexAt(sx, sy))
+  } else if (finished.type === 'pan' && finished.selectOnClick && !finished.moved) {
     const { sx, sy } = eventPoint(e)
     selectedHex.value = hexAt(sx, sy)
     focusId.value = null
@@ -1235,6 +1343,7 @@ async function placeLocation(loc) {
 
 // ---- Lifecycle --------------------------------------------------------------------------------------
 watch([tool, activeId, selectedHex, panning, brush], scheduleDraw)
+watch(equator, scheduleDraw)
 
 onMounted(async () => {
   updateSize()
@@ -1340,6 +1449,74 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 4px;
   z-index: 7;
+}
+
+.equator-panel {
+  position: absolute;
+  top: 16px;
+  left: 100px;
+  width: 250px;
+  padding: 0.75rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.55rem;
+  font-size: 0.8rem;
+  z-index: 8;
+}
+
+.eq-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.eq-close {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.eq-check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--text-primary);
+}
+
+.eq-field {
+  display: grid;
+  grid-template-columns: 3.2rem 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-muted);
+}
+
+.eq-field input[type='number'] {
+  grid-column: 2 / 4;
+  min-height: 1.9rem;
+  padding: 0.2rem 0.45rem;
+}
+
+.eq-val {
+  min-width: 2.2rem;
+  text-align: right;
+  color: var(--text-primary);
+}
+
+.is-placing {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.eq-note {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text-faint);
 }
 
 .tool-btn {
@@ -1510,6 +1687,11 @@ onBeforeUnmount(() => {
   }
   .hint-line {
     display: none;
+  }
+  .equator-panel {
+    left: 80px;
+    right: 8px;
+    width: auto;
   }
   .top-notes {
     left: 80px;

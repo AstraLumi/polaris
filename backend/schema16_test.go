@@ -5,9 +5,23 @@ import (
 	"testing"
 )
 
+// rollBackSchema26 turns a fresh database back into schema 25.
+func rollBackSchema26(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, q := range []string{
+		`DROP TABLE location_climate`,
+		`UPDATE schema_meta SET value = '25' WHERE key = 'schema_version'`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+}
+
 // rollBackSchema25 turns a fresh database back into schema 24.
 func rollBackSchema25(t *testing.T, db *sql.DB) {
 	t.Helper()
+	rollBackSchema26(t, db)
 	for _, q := range []string{
 		`DROP TRIGGER wiki_cleanup_creatures`,
 		`DROP TABLE creature_links`,

@@ -139,6 +139,7 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	// Calendar and other app-wide settings.
 	mux.HandleFunc("GET /api/settings", getSettingsHandler(db))
 	mux.HandleFunc("PUT /api/settings", updateSettingsHandler(db))
+	mux.HandleFunc("PUT /api/settings/seasons", updateSeasonsHandler(db))
 
 	// The stat system: which stats exist and their formulas (statsystem.go).
 	mux.HandleFunc("GET /api/stat-system", getStatSystemHandler(db))
@@ -186,6 +187,7 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	mux.HandleFunc("DELETE /api/map/locations/{id}", deleteMapLocationHandler(db, uploadsDir))
 	mux.HandleFunc("POST /api/map/paint", paintHexesHandler(db))
 	mux.HandleFunc("POST /api/map/erase", eraseHexesHandler(db))
+	mux.HandleFunc("PUT /api/map/equator", updateEquatorHandler(db))
 
 	// Versions (the actual editable/viewable sheets).
 	mux.HandleFunc("GET /api/characters/{id}/versions", listVersionsHandler(db))

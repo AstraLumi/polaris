@@ -256,6 +256,10 @@ type wikiArticle struct {
 	// Versions is a character's facts as they stand in each of its versions
 	// (the article's own facts are the current version's).
 	Versions []wikiVersion `json:"versions,omitempty"`
+	// Climate is a region's temperatures per season (seasons.go); only major
+	// locations have one, and HasClimate says so.
+	HasClimate bool         `json:"has_climate"`
+	Climate    []climateRow `json:"climate"`
 
 	version      int64 // which character version the facts are for; 0 = current
 	allRelations bool  // every relation, not only those holding at that version (the graph)
@@ -593,6 +597,8 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 		}
 		a.addFact("part_of", "", "", refOf("location", parentID, parentName))
 		if kind == "major" {
+			a.HasClimate = true
+			a.Climate = loadClimate(db, id)
 			var capID sql.NullInt64
 			var capName sql.NullString
 			db.QueryRow(`SELECT c.id, c.name FROM locations c WHERE c.is_capital = 1 AND c.kind = 'minor' AND (c.belongs_to_id = ?1
@@ -772,7 +778,7 @@ func loadWikiArticle(db *sql.DB, t wikiTypeDef, id int64) (*wikiArticle, error) 
 		Type: t.Key, ID: id, FieldKeys: t.Fields,
 		Facts: []wikiFact{}, Groups: []wikiGroup{}, Sheet: []wikiSheet{},
 		Fields: map[string]string{}, Sections: []wikiSection{}, Infobox: []wikiInfoRow{},
-		Backlinks: []wikiRef{}, Gallery: []galleryItem{},
+		Backlinks: []wikiRef{}, Gallery: []galleryItem{}, Climate: []climateRow{},
 	}
 	if err := db.QueryRow(t.oneSQL(), id).Scan(new(int64), &a.Name, &a.Picture); err != nil {
 		return nil, err
@@ -1058,6 +1064,8 @@ type wikiSavePayload struct {
 	Fields   map[string]string `json:"fields"`
 	Sections []wikiSection     `json:"sections"`
 	Infobox  []wikiInfoRow     `json:"infobox"`
+	// Climate, when sent, replaces a region's temperatures; nil leaves them.
+	Climate *[]climateRow `json:"climate"`
 }
 
 func tooLong(s string, max int) bool { return utf8.RuneCountInString(s) > max }
@@ -1159,6 +1167,20 @@ func saveWikiHandler(db *sql.DB) http.HandlerFunc {
 			http.Error(w, msg, http.StatusBadRequest)
 			return
 		}
+		var climate []climateRow
+		if p.Climate != nil {
+			var kind string
+			db.QueryRow(`SELECT kind FROM locations WHERE id = ?`, id).Scan(&kind)
+			if t.Key != "location" || kind != "major" {
+				http.Error(w, "only a region has a climate", http.StatusBadRequest)
+				return
+			}
+			var msg string
+			if climate, msg = cleanClimate(*p.Climate); msg != "" {
+				http.Error(w, msg, http.StatusBadRequest)
+				return
+			}
+		}
 
 		tx, err := db.Begin()
 		if err != nil {
@@ -1218,6 +1240,13 @@ func saveWikiHandler(db *sql.DB) http.HandlerFunc {
 					log.Printf("save wiki infobox: %v", err)
 					return
 				}
+			}
+		}
+		if p.Climate != nil {
+			if err := saveClimate(tx, id, climate); err != nil {
+				http.Error(w, "failed to save the article", http.StatusInternalServerError)
+				log.Printf("save climate: %v", err)
+				return
 			}
 		}
 		if err := tx.Commit(); err != nil {

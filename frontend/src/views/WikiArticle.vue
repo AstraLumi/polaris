@@ -75,6 +75,30 @@
               <div class="md" v-html="md(s.body)"></div>
             </section>
 
+            <section v-if="climateSeasons.length" id="sec-climate" class="part">
+              <h2>
+                {{ $t('Climate') }}
+                <a href="#" class="edit-link" :title="$t('Edit the temperatures')" @click.prevent="startEdit('climate-editor')">[ {{ $t('edit') }} ]</a>
+              </h2>
+              <table v-if="hasClimate" class="climate-table">
+                <thead>
+                  <tr>
+                    <th>{{ $t('Season') }}</th>
+                    <th>{{ $t('Lowest') }}</th>
+                    <th>{{ $t('Highest') }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="r in climateRows" :key="r.season.id">
+                    <td><i class="climate-dot" :style="{ background: r.season.color }"></i>{{ r.season.name }}</td>
+                    <td>{{ temp(r.low) }}</td>
+                    <td>{{ temp(r.high) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p v-else class="faint">{{ $t('No temperatures yet.') }}</p>
+            </section>
+
             <section v-for="s in customSections" :id="s.id" :key="s.id" class="part">
               <h2>
                 {{ s.title }}
@@ -141,6 +165,22 @@
             <div v-for="k in article.field_keys" :key="k" class="field">
               <label :for="`f-${k}`">{{ $t(FIELD_LABELS[k]) }}</label>
               <MarkdownEditor :id="`f-${k}`" v-model="draft.fields[k]" :items="items" :resolve="resolver" />
+            </div>
+
+            <div v-if="climateSeasons.length" id="climate-editor" class="field" tabindex="-1">
+              <label>{{ $t('Climate') }}</label>
+              <p class="faint climate-hint">
+                {{ $t('The temperature range in each season, in {unit}. Leave a box empty when you don\'t know.', { unit: unitLabel }) }}
+              </p>
+              <div class="climate-grid">
+                <template v-for="s in climateSeasons" :key="s.id">
+                  <span class="climate-season"><i class="climate-dot" :style="{ background: s.color }"></i>{{ s.name }}</span>
+                  <input v-model="draft.climate[s.id].low" type="number" step="any" :placeholder="$t('Lowest')" :aria-label="$t('{season}: lowest', { season: s.name })" />
+                  <span class="faint">–</span>
+                  <input v-model="draft.climate[s.id].high" type="number" step="any" :placeholder="$t('Highest')" :aria-label="$t('{season}: highest', { season: s.name })" />
+                  <span class="faint">{{ unitLabel }}</span>
+                </template>
+              </div>
             </div>
 
             <div class="custom-head">
@@ -318,7 +358,7 @@ import { creaturesApi, mapApi } from '../api'
 import { mapHexesOf } from '../creatures'
 import { pageTitle, useUnsavedGuard, useSaveShortcut, viewPicture } from '../navigation'
 import { renderMarkdown } from '../markdown'
-import { fullDate, dateParts } from '../calendar'
+import { calendar, fullDate, dateParts } from '../calendar'
 import { chapterLabel, loadChapters } from '../chapters'
 import { t } from '../i18n'
 import {
@@ -340,7 +380,7 @@ const saveError = ref('')
 const editing = ref(false)
 const saving = ref(false)
 const tocOpen = ref(true)
-const draft = reactive({ name: '', summary: '', fields: {}, sections: [], infobox: [] })
+const draft = reactive({ name: '', summary: '', fields: {}, sections: [], infobox: [], climate: {} })
 const isLore = computed(() => article.value?.type === 'lore')
 
 // A character's facts change between versions: the infobox and the related
@@ -411,8 +451,24 @@ const hasText = computed(
     article.value.gallery.length,
 )
 
+// A region's temperatures per season (backend/seasons.go), in the order the
+// calendar's seasons are in.
+const climateSeasons = computed(() => (article.value?.has_climate ? calendar.seasons.seasons || [] : []))
+const unitLabel = computed(() => (calendar.seasons.unit === 'F' ? '°F' : '°C'))
+const climateRows = computed(() =>
+  climateSeasons.value.map((s) => {
+    const c = article.value.climate.find((x) => x.season_id === s.id)
+    return { season: s, low: c?.low ?? null, high: c?.high ?? null }
+  }),
+)
+const hasClimate = computed(() => climateRows.value.some((r) => r.low !== null || r.high !== null))
+const temp = (v) => (v === null ? '—' : `${v} ${unitLabel.value}`)
+const numOrNull = (v) => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v))
+
 const toc = computed(() => {
-  const rows = [...sheetSections.value, ...fieldSections.value, ...customSections.value]
+  const rows = [...sheetSections.value, ...fieldSections.value]
+  if (climateSeasons.value.length) rows.push({ id: 'sec-climate', title: t('Climate') })
+  rows.push(...customSections.value)
   if (article.value.gallery.length) rows.push({ id: 'sec-gallery', title: t('Gallery') })
   if (shownGroups.value.length) rows.push({ id: 'sec-related', title: t('Related') })
   rows.push({ id: 'sec-backlinks', title: t('What links here') })
@@ -449,6 +505,10 @@ const makeDraft = () => ({
   fields: Object.fromEntries(Object.entries(draft.fields).filter(([, v]) => v && v.trim())),
   sections: draft.sections.map((s) => ({ title: s.title, body: s.body })),
   infobox: draft.infobox.map((r) => ({ label: r.label, value: r.value, kind: r.kind || undefined })),
+  // Rows for seasons that were since removed are sent back as they were.
+  climate: article.value?.has_climate
+    ? Object.entries(draft.climate).map(([id, v]) => ({ season_id: id, low: numOrNull(v.low), high: numOrNull(v.high) }))
+    : undefined,
 })
 // A lore article's title and picture are saved apart from its text.
 const draftState = () => JSON.stringify({ ...makeDraft(), name: draft.name })
@@ -525,6 +585,9 @@ function fillDraft() {
   draft.fields = Object.fromEntries(a.field_keys.map((k) => [k, a.fields[k] || '']))
   draft.sections = a.sections.map((s) => ({ key: ++keySeq, title: s.title, body: s.body }))
   draft.infobox = a.infobox.map((r) => ({ key: ++keySeq, label: r.label, value: r.value, kind: r.kind || '' }))
+  draft.climate = {}
+  for (const c of a.climate || []) draft.climate[c.season_id] = { low: c.low ?? '', high: c.high ?? '' }
+  for (const s of climateSeasons.value) draft.climate[s.id] ||= { low: '', high: '' }
   snapshot = draftState()
 }
 
@@ -1019,6 +1082,52 @@ useSaveShortcut(() => editing.value && !saving.value && save())
   margin: 0 0 1rem;
   font-size: 0.82rem;
   color: var(--text-muted);
+}
+
+.climate-table {
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.climate-table th,
+.climate-table td {
+  padding: 0.35rem 1.2rem 0.35rem 0;
+  border-bottom: 1px solid var(--glass-border);
+  text-align: left;
+}
+
+.climate-table th {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.climate-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 0.45rem;
+  border-radius: 50%;
+}
+
+.climate-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.82rem;
+}
+
+.climate-grid {
+  display: grid;
+  grid-template-columns: minmax(3rem, 10rem) 5.75rem auto 5.75rem auto;
+  justify-content: start;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+}
+
+.climate-season {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.88rem;
 }
 
 .custom-head {

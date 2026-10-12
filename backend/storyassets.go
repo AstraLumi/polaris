@@ -69,6 +69,8 @@ var storyOnlyTables = []string{
 	"lore_articles", "character_tags", "wiki_gallery",
 	// The bestiary lives in the world (creatures are native to map regions).
 	"creatures", "creature_links", "creature_hexes",
+	// A region's temperatures per season.
+	"location_climate",
 }
 
 func isNullCol(t assetTable, col string) bool {

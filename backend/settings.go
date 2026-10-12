@@ -35,6 +35,18 @@ type calendarSettings struct {
 	DaysPerMonth  int `json:"days_per_month"`
 }
 
+// settingsPayload is what GET /api/settings returns: the calendar and its
+// seasons (saved on their own, see seasons.go).
+type settingsPayload struct {
+	calendarSettings
+	Seasons seasonSettings `json:"seasons"`
+}
+
+func loadSettingsPayload(db *sql.DB) settingsPayload {
+	cal := loadCalendar(db)
+	return settingsPayload{cal, loadSeasons(db, cal)}
+}
+
 func readIntSetting(db *sql.DB, key string, fallback, min, max int) int {
 	var raw string
 	if err := db.QueryRow(`SELECT value FROM app_settings WHERE key = ?`, key).Scan(&raw); err != nil {
@@ -56,7 +68,7 @@ func loadCalendar(db *sql.DB) calendarSettings {
 
 func getSettingsHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, loadCalendar(db))
+		writeJSON(w, loadSettingsPayload(db))
 	}
 }
 
@@ -100,6 +112,6 @@ func updateSettingsHandler(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "failed to save settings", http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, loadCalendar(db))
+		writeJSON(w, loadSettingsPayload(db))
 	}
 }

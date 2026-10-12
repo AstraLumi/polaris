@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { t } from './i18n'
+import { t, tr } from './i18n'
 import { STORY_API } from './stories'
 
 // The story world's calendar. Loaded once at startup (App.vue) and again
@@ -8,6 +8,8 @@ import { STORY_API } from './stories'
 export const calendar = reactive({
   months_per_year: 12,
   days_per_month: 30,
+  // The story's seasons (seasons.js): { seasons, start, hemisphere, unit }.
+  seasons: { seasons: [], start: '', hemisphere: 'north', unit: 'C' },
   loaded: false,
 })
 
@@ -18,6 +20,7 @@ export async function loadCalendar() {
       const data = await res.json()
       calendar.months_per_year = data.months_per_year
       calendar.days_per_month = data.days_per_month
+      if (data.seasons) calendar.seasons = data.seasons
     }
   } catch (err) {
     // Keep the defaults; date inputs still work.
@@ -87,3 +90,20 @@ export function dateParts(text) {
   const d = parseStoryDate(text)
   return d ? { year: d.year, quarter: quarterOf(d.month) } : null
 }
+
+// Messages the server can send back about seasons, climates and the
+// equator (backend/seasons.go); listed so they get translated.
+export const SEASON_MESSAGES = [
+  tr('a story can have at most 24 seasons'),
+  tr('every season needs a name'),
+  tr('that season name is too long'),
+  tr('a season lasts more than 0 and at most 1200 months'),
+  tr('the first season needs a start date'),
+  tr('only a region has a climate'),
+  tr('unknown season'),
+  tr('that temperature is out of range'),
+  tr('too many seasons'),
+  tr('the equator is off the map'),
+  tr('that bend is out of range'),
+  tr('failed to save the equator'),
+]
