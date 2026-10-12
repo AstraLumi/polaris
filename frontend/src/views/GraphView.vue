@@ -120,6 +120,8 @@ const TYPE_COLORS = {
   spell: '#5ec8e8',
   gear: '#c8a27a',
   creature: '#d98f5c',
+  solar_system: '#ffd27a',
+  celestial_body: '#9fb7ff',
   lore: '#f0a0c8',
 }
 

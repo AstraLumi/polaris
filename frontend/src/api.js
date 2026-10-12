@@ -504,13 +504,19 @@ export const solarApi = {
   create: (body) => mapRequest('/solar/bodies', jsonBody('POST', body), 'failed to save the body'),
   update: (id, body) => mapRequest(`/solar/bodies/${id}`, jsonBody('PUT', body), 'failed to save the body'),
   remove: (id) => mapRequest(`/solar/bodies/${id}`, { method: 'DELETE' }, 'failed to delete the body'),
+  setName: (name) => mapRequest('/solar/system', jsonBody('PUT', { name }), 'failed to save the name'),
+  // A planet's own map (not the main one's): { body_id, frequency, cells: [[cell, color]], colors }.
+  bodyMap: (id) => mapRequest(`/solar/bodies/${id}/map`, undefined, 'failed to load the map'),
+  paintBody: (id, color, cells) => mapRequest(`/solar/bodies/${id}/map/paint`, jsonBody('POST', { color, cells }), 'failed to paint'),
+  eraseBody: (id, cells) => mapRequest(`/solar/bodies/${id}/map/erase`, jsonBody('POST', { cells }), 'failed to erase'),
 }
 
 // Messages the solar system can send back; listed so they get translated.
 void [
   tr('a solar system has one star'), tr('pick what it orbits'), tr('a planet orbits the star'), tr('a moon orbits a planet'),
   tr("the orbit's distance must be more than 0"), tr('the radius must be more than 0'), tr("that kind of body can't be of that type"),
-  tr('unknown kind of body'), tr('that name is too long'), tr('a solar system can have at most 500 bodies'), tr('body not found'),
+  tr('unknown kind of body'), tr('that name is too long'), tr('this body has no map of its own'), tr('failed to save the name'),
+  tr('unknown kind of star'), tr('the mass must be more than 0'), tr('the temperature must be between 0 and 1 000 000 000 K'), tr('a solar system can have at most 500 bodies'), tr('body not found'),
 ]
 
 export const planetApi = {

@@ -227,29 +227,32 @@ const dragNote = computed(() => {
   pointer-events: none;
 }
 
+/* The circles are outlines; their labels are filled text only (an
+   outline on text this small, in view units, drew it as a huge blot). */
 .limits circle {
   fill: none;
   opacity: 0.85;
 }
 
-.limits .near {
+.limits circle.near {
   stroke: #e05a5a;
-  fill: #e05a5a;
 }
 
-.limits .far {
-  stroke: #e0a04a;
-  fill: #e0a04a;
-}
-
-.limits circle.near,
 .limits circle.far {
-  fill: none;
+  stroke: #e0a04a;
 }
 
 .limits text {
   stroke: none;
   pointer-events: none;
+}
+
+.limits text.near {
+  fill: #ff8a8a;
+}
+
+.limits text.far {
+  fill: #f0b866;
 }
 
 .far-note {

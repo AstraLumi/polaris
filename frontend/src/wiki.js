@@ -8,7 +8,8 @@ import { mapPath } from './navigation'
 // refers to by key; tr() marks them for translation.
 
 export const TYPE_ORDER = [
-  'character', 'location', 'faction', 'event', 'class', 'subclass', 'specialization', 'race', 'body_type', 'spell', 'gear', 'creature', 'lore',
+  'character', 'location', 'faction', 'event', 'class', 'subclass', 'specialization', 'race', 'body_type', 'spell', 'gear', 'creature',
+  'solar_system', 'celestial_body', 'lore',
 ]
 
 export const TYPE_LABELS = {
@@ -24,6 +25,8 @@ export const TYPE_LABELS = {
   spell: tr('Spell'),
   gear: tr('Gear'),
   creature: tr('Creature'),
+  solar_system: tr('Solar system'),
+  celestial_body: tr('Celestial body'),
   lore: tr('Lore'),
 }
 
@@ -40,6 +43,8 @@ export const TYPE_PLURALS = {
   spell: tr('Spells'),
   gear: tr('Gear'),
   creature: tr('Creatures'),
+  solar_system: tr('Solar system'),
+  celestial_body: tr('Stars, planets and moons'),
   lore: tr('Lore'),
 }
 
@@ -104,6 +109,16 @@ export const FACT_LABELS = {
   settlement: tr('Settlement'),
   capital: tr('Capital'),
   headquarters: tr('Headquarters'),
+  star_class: tr('Class'),
+  temperature: tr('Temperature'),
+  body_kind: tr('Composition'),
+  world: tr('World'),
+  radius: tr('Radius'),
+  orbits: tr('Orbits'),
+  orbit_radius: tr('Orbit radius'),
+  system: tr('Solar system'),
+  star: tr('Star'),
+  planet_count: tr('Planets'),
 }
 
 // How the infobox groups its facts, top to bottom. Facts that aren't listed
@@ -115,6 +130,7 @@ export const FACT_GROUPS = [
   { label: tr('Birth'), keys: ['born', 'born_in', 'nation', 'earth_name', 'human_birth_date'] },
   { label: tr('Abilities'), keys: ['class', 'subclass', 'specialization'] },
   { label: tr('Geography'), keys: ['hemisphere', 'latitude', 'climate_zone'] },
+  { label: tr('Orbit'), keys: ['system', 'orbits', 'orbit_radius'] },
 ]
 
 // Words the server sends as an infobox value.
@@ -125,6 +141,8 @@ export const WORD_LABELS = [
   tr('Northern hemisphere'), tr('Southern hemisphere'), tr('Both hemispheres'), tr('On the equator'),
   tr('Tropical'), tr('Temperate'), tr('Polar'),
   tr('Region'), tr('Ocean'),
+  tr('Star'), tr('Planet'), tr('Moon'), tr('Rocky'), tr('Gas giant'), tr('Ocean world'), tr('The world of the map'),
+  tr('Yellow dwarf (like the Sun)'), tr('Red giant'), tr('White dwarf'), tr('Brown dwarf'), tr('Neutron star'), tr('Black hole'),
 ]
 
 // A 'words' value: several of the words above, joined by '|'.
@@ -155,6 +173,9 @@ export const GROUP_LABELS = {
   relations: tr('Relations'),
   classes: tr('Classes'),
   links_to: tr('Links to'),
+  orbited_by: tr('Orbited by'),
+  planets: tr('Planets'),
+  moons: tr('Moons'),
 }
 
 // Text that already exists on the sheet or event and is shown read-only.
@@ -173,6 +194,7 @@ export function sourcePath(type, id) {
   if (type === 'location') return mapPath(id)
   if (type === 'faction') return '/factions'
   if (type === 'creature') return '/bestiary'
+  if (type === 'solar_system' || type === 'celestial_body') return '/solar-system'
   return '/assets'
 }
 
@@ -182,6 +204,7 @@ export function sourceLabel(type) {
   if (type === 'location') return t('map')
   if (type === 'faction') return t('Factions page')
   if (type === 'creature') return t('Bestiary')
+  if (type === 'solar_system' || type === 'celestial_body') return t('Solar system page')
   return t('Character Assets page')
 }
 

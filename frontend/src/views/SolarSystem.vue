@@ -78,9 +78,20 @@
             {{ panelClosed ? '‹' : '›' }}
           </button>
           <strong v-if="!panelClosed">{{ $t('Solar system') }}</strong>
+          <RouterLink v-if="!panelClosed && systemName" :to="wikiPath('solar_system', 1)" class="wiki-link" :title="$t('Its wiki article')">{{ $t('Wiki') }}</RouterLink>
         </header>
 
         <template v-if="!panelClosed">
+          <input
+            v-model="systemName"
+            class="system-name"
+            type="text"
+            maxlength="80"
+            :placeholder="$t('Name the system')"
+            :aria-label="$t('The name of the solar system')"
+            @change="saveName"
+            @keydown.enter="$event.target.blur()"
+          />
           <ul class="tree">
             <li v-for="row in rows" :key="row.body.id" class="tree-item">
               <button
@@ -184,6 +195,7 @@
             <p v-if="problem" class="problem">{{ problem }}</p>
 
             <p v-if="saveError" class="error-banner">{{ saveError }}</p>
+            <RouterLink :to="wikiPath('celestial_body', draft.id)" class="wiki-link">{{ $t('Wiki article') }} ›</RouterLink>
             <div class="form-actions">
               <button type="submit" class="btn btn-primary small" :disabled="busy || !dirty">{{ $t('Save') }}</button>
               <button type="button" class="btn btn-ghost small danger-text" :disabled="busy" @click="confirmDelete = true">{{ $t('Delete') }}</button>
@@ -212,6 +224,7 @@ import { skyUrl, applyMapSettings } from '../worldMap'
 import { planetColorOf } from '../planetColors'
 import { bodyFacts, orbitProblem, systemTree } from '../orbits'
 import { useUnsavedGuard } from '../navigation'
+import { wikiPath } from '../wiki'
 import SolarScene from '../components/SolarScene.vue'
 import SolarEditor2D from '../components/SolarEditor2D.vue'
 import StarFields from '../components/StarFields.vue'
@@ -303,7 +316,15 @@ function toggleMarker(key) {
 }
 
 // ---- Loading -------------------------------------------------------------------------
+// The system's name: saved as soon as it is changed. Empty, the system has
+// no name (and no wiki article).
+const systemName = ref('')
+async function saveName() {
+  await run(() => solarApi.setName(systemName.value))
+}
+
 function take(system) {
+  systemName.value = system.name || ''
   bodies.value = system.bodies
   main.value = system.main
   if (selectedId.value != null && !tree.value.byId.has(selectedId.value)) selectedId.value = null
@@ -659,6 +680,17 @@ const problem = computed(() => {
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+.system-name {
+  font-family: 'Fraunces', serif;
+  font-size: 1rem;
+}
+
+.wiki-link {
+  font-size: 0.76rem;
+  color: var(--accent);
+  align-self: flex-start;
 }
 
 .marker-btn.zone.active {

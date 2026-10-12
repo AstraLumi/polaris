@@ -40,6 +40,9 @@ type wikiTypeDef struct {
 	Filter string // restricts which rows are articles ("" = all)
 	IDCol  string
 	Fields []string // the fixed markdown boxes, in order
+	// OwnTrigger: the delete trigger is made by the migration that made the
+	// table, as the table comes after the wiki's own in the fresh schema.
+	OwnTrigger bool
 }
 
 // Order matters: it is the order of the index and the tie-break for a
@@ -85,6 +88,14 @@ var wikiTypes = []wikiTypeDef{
 	{Key: "creature", Table: "creatures", IDCol: "id",
 		Select: `SELECT id, name, COALESCE(picture_path, '') FROM creatures`,
 		Fields: []string{"appearance", "behavior", "habitat", "lore", "trivia"}},
+	// The solar system (bodymaps.go): the system itself, and its star,
+	// planets and moons.
+	{Key: "solar_system", Table: "solar_systems", IDCol: "id", OwnTrigger: true,
+		Select: `SELECT id, name, '' FROM solar_systems`,
+		Fields: []string{"history", "lore", "trivia"}},
+	{Key: "celestial_body", Table: "celestial_bodies", IDCol: "id", OwnTrigger: true,
+		Select: `SELECT id, name, '' FROM celestial_bodies`,
+		Fields: []string{"appearance", "geography", "history", "lore", "trivia"}},
 	// Free-form pages: everything beyond the introduction and trivia is the
 	// user's own sections. Last, so a lore page never takes over a [[link]]
 	// that already pointed at a character or place of the same name.
@@ -159,7 +170,9 @@ const wikiInfoboxTableSQL = `CREATE TABLE IF NOT EXISTS wiki_infobox (
 var wikiSchemaStatements = func() []string {
 	var keys []string
 	for _, t := range wikiTypes {
-		keys = append(keys, t.Key)
+		if !t.OwnTrigger {
+			keys = append(keys, t.Key)
+		}
 	}
 	return wikiSchemaFor(keys...)
 }()
@@ -760,6 +773,12 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 			a.addFact("slot", slot, "", nil)
 			a.addSheet("description", desc)
 		}
+
+	case "celestial_body":
+		celestialFacts(db, a)
+
+	case "solar_system":
+		solarSystemFacts(db, a)
 
 	case "creature":
 		var kind, desc string

@@ -40,7 +40,9 @@ Run all of these before committing. `backend/static/` is build output (only
   databases hold rows whose parent is gone: a migration that copies rows
   into a table with a foreign key must skip those (`TestMigrationsSkipLeftoverRows`). A new wiki
   article kind gets its delete trigger in its own migration
-  (`wikiTriggerSQL`); the schema-13 migration's list is frozen.
+  (`wikiTriggerSQL`); the schema-13 migration's list is frozen. A kind
+  whose table is created after the wiki's in the fresh schema sets
+  `OwnTrigger` and makes its trigger in that table's migration.
 - **Every new table must be classified** in `backend/storyassets.go`: either
   `assetTables` (copied with "copy Character Assets") or `storyOnlyTables`.
   `TestEveryTableIsClassified` fails until you do. List image/icon columns in
@@ -87,7 +89,10 @@ Run all of these before committing. `backend/static/` is build output (only
   physics out of the drawing code. The main planet's size is the map's
   (`planet_km`), never stored twice. The globe mesh and the sky are shared
   three.js modules (`src/three/`) used by the map's globe and the solar
-  system; only lazily loaded pages may import them.
+  system; only lazily loaded pages may import them. Planets and moons other
+  than the main one have painting-only maps (`body_cells`,
+  `backend/bodymaps.go`, `BodyMap.vue`), opened from the Map page's planet
+  switch; the main planet's map is the story's map.
 - **The sky format** (an equirectangular 2:1 picture, top above the north
   pole, middle column above longitude 0, east to the left) is defined twice:
   by `backend/cmd/skygen`, which draws the default sky

@@ -98,6 +98,7 @@ type celestialBody struct {
 // already the map's; main says so, with the map's axial tilt and whether the
 // map is a planet at all (a 2D map has nothing to wrap round it).
 type solarSystem struct {
+	Name   string          `json:"name"`
 	Bodies []celestialBody `json:"bodies"`
 	Main   struct {
 		RadiusKm float64 `json:"radius_km"`
@@ -112,6 +113,7 @@ func loadSolarSystem(db *sql.DB) (solarSystem, error) {
 	out.Main.RadiusKm = m.Planet.PlanetKm / (2 * math.Pi)
 	out.Main.Tilt = m.Planet.Tilt
 	out.Main.Globe = m.Mode == "3d"
+	out.Name = systemName(db)
 	out.Bodies = []celestialBody{}
 	rows, err := db.Query(`SELECT id, parent_id, kind, name, body_type, radius_km, orbit_km, phase, COALESCE(color, ''), is_main, sort,
 		COALESCE(star_class, ''), temperature_k, mass_kg, free_values
