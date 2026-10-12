@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -614,6 +615,23 @@ func initSchema(db *sql.DB) {
 	}
 }
 
+// errNewerSchema refuses a database saved by a newer version of Polaris.
+// Rolling back the app is safe; rolling back a story's data needs an export
+// from before it was upgraded.
+var errNewerSchema = userError("this story was saved by a newer version of Polaris; update Polaris to open it")
+
+// errNewerSchemaBackedUp is errNewerSchema once a backup of the story was
+// saved (storybackup.go).
+var errNewerSchemaBackedUp = userError("this story was saved by a newer version of Polaris; update Polaris to open it. A backup was saved in the story's backups folder")
+
+// newerSchema reports whether version is a schema this build doesn't know
+// yet (a later one, not an old one).
+func newerSchema(version string) bool {
+	v, err := strconv.Atoi(version)
+	cur, _ := strconv.Atoi(currentSchemaVersion)
+	return err == nil && v > cur
+}
+
 // canMigrate reports whether a database at `version` can be upgraded in
 // place to the current schema without losing data.
 func canMigrate(version string) bool {
@@ -646,6 +664,13 @@ func ensureSchema(db *sql.DB) error {
 	).Scan(&version)
 	if err != nil && err != sql.ErrNoRows {
 		return fmt.Errorf("read schema version: %w", err)
+	}
+
+	// A story saved by a newer Polaris is left alone: below, a version with
+	// no migration path gets the fresh schema, which would wipe it.
+	if newerSchema(version) {
+		log.Printf("schema %s is newer than this version's %s; not opening", version, currentSchemaVersion)
+		return errNewerSchema
 	}
 
 	// Walk any available migrations forward — these keep existing data.

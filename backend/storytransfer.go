@@ -69,64 +69,62 @@ func (m *storyManager) exportHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := os.MkdirAll(m.tmpDir(), 0o755); err != nil {
-		http.Error(w, "export failed", http.StatusInternalServerError)
-		return
-	}
-	snap, err := os.CreateTemp(m.tmpDir(), "export-*.db")
-	if err != nil {
-		http.Error(w, "export failed", http.StatusInternalServerError)
-		return
-	}
-	snapPath := snap.Name()
-	snap.Close()
-	os.Remove(snapPath) // VACUUM INTO wants a path that doesn't exist yet
-	defer os.Remove(snapPath)
-	if _, err := app.db.Exec(`VACUUM INTO ?`, snapPath); err != nil {
-		http.Error(w, "export failed", http.StatusInternalServerError)
-		log.Printf("export snapshot %s: %v", id, err)
-		return
-	}
-
-	man := storyManifest{
-		Format: storyFormat, FormatVersion: storyFormatVersion, Name: si.Name, Icon: icon,
-		SchemaVersion: currentSchemaVersion, ExportedAt: time.Now().UTC().Format(time.RFC3339),
-	}
-
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="polaris-%s-%s.zip"`, slugify(si.Name), time.Now().Format("2006-01-02")))
-	zw := zip.NewWriter(w)
-	defer zw.Close()
-
-	mf, _ := zw.Create("polaris-story.json")
-	enc := json.NewEncoder(mf)
-	enc.SetIndent("", "  ")
-	enc.Encode(man)
-
-	if err := addFileToZip(zw, "story.db", snapPath); err != nil {
-		log.Printf("export %s: %v", id, err)
-		return
-	}
-	filepath.WalkDir(app.uploadsDir, func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
-		}
-		rel, err := filepath.Rel(app.uploadsDir, p)
-		if err != nil {
-			return nil
-		}
-		if err := addFileToZip(zw, "uploads/"+filepath.ToSlash(rel), p); err != nil {
-			log.Printf("export %s: %v", id, err)
-		}
-		return nil
-	})
-	if err := zw.Close(); err != nil {
+	if err := m.writeStoryZip(w, app.db, app.uploadsDir, si.Name, icon, currentSchemaVersion); err != nil {
 		log.Printf("export %s: %v", id, err)
 		return
 	}
 	if _, err := m.reg.Exec(`UPDATE stories SET last_exported_at = datetime('now') WHERE id = ?`, id); err != nil {
 		log.Printf("export %s: remember export time: %v", id, err)
 	}
+}
+
+// writeStoryZip writes a story as an export zip: a consistent snapshot of
+// db (VACUUM INTO), the manifest, and every file under uploadsDir. schema is
+// the schema the database is at.
+func (m *storyManager) writeStoryZip(w io.Writer, db *sql.DB, uploadsDir, name, icon, schema string) error {
+	if err := os.MkdirAll(m.tmpDir(), 0o755); err != nil {
+		return err
+	}
+	snap, err := os.CreateTemp(m.tmpDir(), "export-*.db")
+	if err != nil {
+		return err
+	}
+	snapPath := snap.Name()
+	snap.Close()
+	os.Remove(snapPath) // VACUUM INTO wants a path that doesn't exist yet
+	defer os.Remove(snapPath)
+	if _, err := db.Exec(`VACUUM INTO ?`, snapPath); err != nil {
+		return fmt.Errorf("snapshot: %w", err)
+	}
+
+	man := storyManifest{
+		Format: storyFormat, FormatVersion: storyFormatVersion, Name: name, Icon: icon,
+		SchemaVersion: schema, ExportedAt: time.Now().UTC().Format(time.RFC3339),
+	}
+	zw := zip.NewWriter(w)
+	mf, _ := zw.Create("polaris-story.json")
+	enc := json.NewEncoder(mf)
+	enc.SetIndent("", "  ")
+	enc.Encode(man)
+	if err := addFileToZip(zw, "story.db", snapPath); err != nil {
+		return err
+	}
+	filepath.WalkDir(uploadsDir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(uploadsDir, p)
+		if err != nil {
+			return nil
+		}
+		if err := addFileToZip(zw, "uploads/"+filepath.ToSlash(rel), p); err != nil {
+			log.Printf("export: %v", err)
+		}
+		return nil
+	})
+	return zw.Close()
 }
 
 func addFileToZip(zw *zip.Writer, name, src string) error {
@@ -348,6 +346,9 @@ func checkImportedDB(dbPath string) error {
 	var version string
 	if err := db.QueryRow(`SELECT value FROM schema_meta WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		return userError("that file isn't a Polaris story database")
+	}
+	if newerSchema(version) {
+		return userError("that export was made by a newer version of Polaris; update Polaris to import it")
 	}
 	if !canMigrate(version) {
 		return userError("that export was made by a different version of Polaris and can't be opened")

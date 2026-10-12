@@ -169,8 +169,13 @@ func (m *storyManager) openLocked(id string) (*storyApp, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A story at another schema is backed up first (storybackup.go).
+	backedUp := m.backupBeforeOpen(id, db, uploads)
 	if err := ensureSchema(db); err != nil {
 		db.Close()
+		if errors.Is(err, errNewerSchema) && backedUp {
+			return nil, errNewerSchemaBackedUp
+		}
 		return nil, err
 	}
 	a := &storyApp{id: id, db: db, dbPath: dbPath, uploadsDir: uploads, handler: storyRoutes(db, uploads)}
@@ -512,6 +517,8 @@ func (m *storyManager) storyHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, errNoStory) {
 			http.Error(w, "story not found", http.StatusNotFound)
+		} else if errors.Is(err, errNewerSchema) || errors.Is(err, errNewerSchemaBackedUp) {
+			http.Error(w, err.Error(), http.StatusConflict)
 		} else {
 			http.Error(w, "failed to open story", http.StatusInternalServerError)
 			log.Printf("open story %s: %v", id, err)
