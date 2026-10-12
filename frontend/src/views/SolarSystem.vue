@@ -554,7 +554,8 @@ function updateShapes(now = performance.now()) {
   if (sim) {
     for (const b of liveBodies.value) {
       const o = sim.orbitNow(b.id)
-      if (o?.bound) out.set(b.id, { orbit_km: o.orbit_km, eccentricity: Math.min(o.eccentricity, 0.95), periapsis: o.periapsis })
+      // As stretched as it is: capped, the line missed the body.
+      if (o?.bound && o.eccentricity < 0.9999) out.set(b.id, { orbit_km: o.orbit_km, eccentricity: o.eccentricity, periapsis: o.periapsis })
     }
   }
   shapes.value = out
@@ -583,6 +584,8 @@ watch(playing, (on) => {
   cancelAnimationFrame(raf)
   last = 0
   if (on) raf = requestAnimationFrame(tick)
+  // Stopped (by hand or by a warning): the lines show where things are now.
+  else if (live.value) updateShapes()
 })
 onBeforeUnmount(() => cancelAnimationFrame(raf))
 

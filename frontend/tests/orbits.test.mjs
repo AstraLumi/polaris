@@ -1,7 +1,7 @@
 // The solar system's physics (src/orbits.js) and its drawing scale
 // (src/solarScale.js). No dependencies: node frontend/tests/orbits.test.mjs
 import assert from 'node:assert/strict'
-import { massOf, surfaceGravity, circularOrbit, keplerOrbit, positionsAt, hillRadius, moonProblem, systemTree, orbitLimits, orbitProblem, periapsisOf, apoapsisOf, orbitThrough, createGravitySim } from '../src/orbits.js'
+import { massOf, surfaceGravity, circularOrbit, keplerOrbit, positionsAt, hillRadius, moonProblem, systemTree, orbitLimits, orbitProblem, periapsisOf, apoapsisOf, orbitThrough, createGravitySim, orbitPoint } from '../src/orbits.js'
 import { sceneRadius, sceneDistance, orbitForSceneDistance } from '../src/solarScale.js'
 import { SUN, AU_KM, luminosity, habitableZone, schwarzschildRadius, fitToClass, starColor } from '../src/stars.js'
 
@@ -131,4 +131,19 @@ assert.ok(now.bound)
 // Back in time starts again.
 sim.advanceTo(0)
 close(dist(sim.relative(2)), 1.496e8, 1e-9, 'reset')
+// Wherever gravity takes a body, it is on the orbit it is on now: the line
+// drawn through orbitNow passes through the body, even very stretched.
+const swing = { ...comet, id: 7, eccentricity: 0.95, orbit_km: 3 * AU_KM, phase: 200 }
+const big = { id: 8, kind: 'planet', body_type: 'gas', radius_km: 70000, orbit_km: 2.2 * AU_KM, parent_id: 1, phase: 210 }
+const sim4 = createGravitySim([sun, big, swing])
+sim4.advanceTo(400)
+for (const id of [7, 8]) {
+  const o = sim4.orbitNow(id)
+  if (!o?.bound) continue
+  const r = sim4.relative(id)
+  const shape = { orbit_km: o.orbit_km, eccentricity: o.eccentricity, periapsis: o.periapsis }
+  const nu = Math.atan2(r[1], r[0]) - (o.periapsis * Math.PI) / 180
+  const onLine = dist(orbitPoint(shape, nu))
+  close(onLine, dist(r), 1e-6, `body ${id} on its line (e ${o.eccentricity.toFixed(3)})`)
+}
 console.log('orbits: ok')

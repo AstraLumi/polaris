@@ -73,7 +73,9 @@ export const circularOrbit = {
 // it comes closest, and phase where the body is on day 0. It moves fastest
 // near periapsis and slowest far out, as gravity has it. Computed once from
 // these values; the live simulation below lets gravity reshape it.
-const eccOf = (b) => Math.min(Math.max(b.eccentricity || 0, 0), 0.95)
+// Orbits typed in stop at 0.95 (the server says so); the orbit gravity has
+// a body on can be more stretched than that, and is drawn as it is.
+const eccOf = (b) => Math.min(Math.max(b.eccentricity || 0, 0), 0.9999)
 
 // The eccentric anomaly for a mean anomaly (Kepler's equation, by Newton).
 function eccentricAnomaly(M, e) {
