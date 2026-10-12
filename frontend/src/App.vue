@@ -170,6 +170,7 @@ const navGroups = [
     label: tr('World'),
     items: [
       { label: tr('Map'), to: '/map', icon: 'map', tip: tr('The hex map of kingdoms and places') },
+      { label: tr('Solar system'), to: '/solar-system', icon: 'solar', tip: tr('The star, planets and moons round your world') },
       { label: tr('Bestiary'), to: '/bestiary', icon: 'bestiary', tip: tr('The monsters, animals and constructs of the world') },
       { label: tr('Character Assets'), to: '/assets', icon: 'assets', tip: tr('Classes, races, spells, gear and the rest a character is built from') },
     ],

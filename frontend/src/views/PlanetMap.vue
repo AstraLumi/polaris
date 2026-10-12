@@ -140,6 +140,7 @@ import { t, tr } from '../i18n'
 import { planetApi, mapApi } from '../api'
 import { worldMap, PROJECTIONS, realmLabel, applyMapSettings, mapName, skyUrl } from '../worldMap'
 import { PlanetGrid, latLon, middleCell } from '../planetGrid'
+import { cellColor } from '../planetColors'
 import { areaFontPx } from '../planetLabels'
 import { formatLatitude, zoneOf } from '../planet'
 import PlanetGlobe from '../components/PlanetGlobe.vue'
@@ -168,7 +169,6 @@ const BRUSHES = [
   { radius: 1, hexes: 7, dot: 9 },
   { radius: 2, hexes: 19, dot: 13 },
 ]
-const LAND = '#7c7f74' // land with no kingdom, region or ocean on it
 
 const VIEW_KEY = 'polaris-planet-view'
 const PROJ_KEY = 'polaris-planet-projection'
@@ -311,13 +311,7 @@ function coloredOf(ids) {
 // without a colour is there, or '' for the sea. An ocean leaves its water
 // as it is; its territory is outlined instead (borders).
 function colorOf(cell) {
-  const ids = cellMembers.get(cell)
-  if (ids && ids.length) {
-    const owner = coloredOf(ids)
-    if (owner) return owner.realm === 'ocean' ? '' : owner.color
-    return LAND
-  }
-  return minorsByCell.has(cell) ? LAND : ''
+  return cellColor(cellMembers.get(cell), locMap, minorsByCell.has(cell))
 }
 
 // Each kingdom's, region's and ocean's name, at the middle of its land.

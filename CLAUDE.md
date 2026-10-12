@@ -22,6 +22,7 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/planet.test.mjs
     node frontend/tests/planetGrid.test.mjs
     node frontend/tests/bucketFill.test.mjs
+    node frontend/tests/orbits.test.mjs
 
 Run all of these before committing. `backend/static/` is build output (only
 `.gitkeep` is tracked); the tests do not need it.
@@ -79,6 +80,14 @@ Run all of these before committing. `backend/static/` is build output (only
   fixtures in their tests equal. three.js is only loaded with the planet
   (`MapPage.vue`, `PlanetTerritory.vue` load it lazily); keep it out of the
   main bundle.
+- **The solar system** (`backend/solar.go`, the Solar system tab) keeps
+  the bodies only; their physics lives in `frontend/src/orbits.js` (mass
+  from size and one density per type, gravity, orbits behind a swappable
+  orbit model) and the picture's squeezed scale in `solarScale.js`. Keep
+  physics out of the drawing code. The main planet's size is the map's
+  (`planet_km`), never stored twice. The globe mesh and the sky are shared
+  three.js modules (`src/three/`) used by the map's globe and the solar
+  system; only lazily loaded pages may import them.
 - **The sky format** (an equirectangular 2:1 picture, top above the north
   pole, middle column above longitude 0, east to the left) is defined twice:
   by `backend/cmd/skygen`, which draws the default sky

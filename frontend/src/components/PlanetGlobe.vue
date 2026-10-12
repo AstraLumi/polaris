@@ -37,6 +37,8 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import { PlanetGrid, cellsWithin, normalize, territoryEdges } from '../planetGrid'
 import { pickLabels } from '../planetLabels'
 import { markerIcon } from '../mapMarkers'
+import { createGlobeMesh } from '../three/globeMesh'
+import { loadSkyDome, disposeSkyDome } from '../three/skyDome'
 
 // The planet drawn in 3D: every cell of the grid (planetGrid.js) coloured by
 // colorOf, with an outline once cells are big enough on screen. Drag to turn
@@ -81,12 +83,10 @@ const building = ref(true)
 const spaceDown = ref(false)
 const dragging = ref(false)
 
-const SEA = [27, 45, 74]
-const COLUMNS = 2048 // the colour texture's width
-
 let grid = null
 let renderer, scene, camera, controls
-let globe, colorTex, colorData, globeMat
+let globe, globeMat
+let globeView = null // three/globeMesh.js
 let borderGroup = null
 let skyMesh = null
 let lineGroup = null
@@ -103,121 +103,24 @@ const cursorClass = computed(() => ({
 }))
 
 // ---- Building --------------------------------------------------------------------
-const hexRgb = (hex) => {
-  const n = parseInt(hex.slice(1), 16)
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
-}
-
-function writeColor(cell) {
-  const c = props.colorOf(cell)
-  const [r, g, b] = c ? hexRgb(c) : SEA
-  colorData[cell * 4] = r
-  colorData[cell * 4 + 1] = g
-  colorData[cell * 4 + 2] = b
-  colorData[cell * 4 + 3] = 255
-}
-
+// Recolours every cell (the parent bumped version) or some (after painting).
 function recolorAll() {
-  if (!colorData) return
-  for (let c = 0; c < grid.count; c++) writeColor(c)
-  colorTex.needsUpdate = true
+  if (!globeView) return
+  globeView.recolorAll()
   requestRender()
 }
 
-// Recolours some cells (after painting them).
 function recolor(cells) {
-  if (!colorData) return
-  for (const c of cells) writeColor(c)
-  colorTex.needsUpdate = true
+  if (!globeView) return
+  globeView.recolor(cells)
   requestRender()
 }
 
-const VERTEX = `
-attribute float aCell;
-attribute float aEdge;
-uniform sampler2D uColors;
-uniform vec2 uSize;
-varying vec3 vColor;
-varying float vEdge;
-varying vec3 vNormal;
-void main() {
-  float x = mod(aCell, uSize.x);
-  float y = floor(aCell / uSize.x);
-  vColor = texture2D(uColors, vec2((x + 0.5) / uSize.x, (y + 0.5) / uSize.y)).rgb;
-  vEdge = aEdge;
-  vNormal = normalize(position);
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}`
-
-const FRAGMENT = `
-uniform vec3 uLight;
-uniform float uGrid;
-varying vec3 vColor;
-varying float vEdge;
-varying vec3 vNormal;
-void main() {
-  float light = 0.6 + 0.4 * max(dot(vNormal, uLight), 0.0);
-  vec3 c = vColor * light;
-  float line = smoothstep(0.84, 0.96, vEdge) * uGrid;
-  gl_FragColor = vec4(mix(c, c * 0.5, line), 1.0);
-}`
-
-// One fan of triangles per cell: its centre and its corners, each vertex
-// carrying the cell's number (for its colour) and whether it is a corner
-// (for the outline).
 function buildGlobe() {
-  const n = grid.count
-  const pos = new Float32Array(n * 7 * 3)
-  const cellAttr = new Float32Array(n * 7)
-  const edge = new Float32Array(n * 7)
-  const index = new Uint32Array(n * 6 * 3)
-  let v = 0
-  let ix = 0
-  for (let c = 0; c < n; c++) {
-    const corners = grid.corners(c)
-    const centre = grid.center(c)
-    const base = v
-    pos.set(centre, v * 3)
-    cellAttr[v] = c
-    edge[v] = 0
-    v++
-    for (const k of corners) {
-      pos.set(k, v * 3)
-      cellAttr[v] = c
-      edge[v] = 1
-      v++
-    }
-    const m = corners.length
-    for (let k = 0; k < m; k++) {
-      index[ix++] = base
-      index[ix++] = base + 1 + k
-      index[ix++] = base + 1 + ((k + 1) % m)
-    }
-  }
-  const geo = new THREE.BufferGeometry()
-  geo.setAttribute('position', new THREE.BufferAttribute(pos.subarray(0, v * 3), 3))
-  geo.setAttribute('aCell', new THREE.BufferAttribute(cellAttr.subarray(0, v), 1))
-  geo.setAttribute('aEdge', new THREE.BufferAttribute(edge.subarray(0, v), 1))
-  geo.setIndex(new THREE.BufferAttribute(index.subarray(0, ix), 1))
-
-  const rows = Math.ceil(n / COLUMNS)
-  colorData = new Uint8Array(COLUMNS * rows * 4)
-  colorTex = new THREE.DataTexture(colorData, COLUMNS, rows, THREE.RGBAFormat, THREE.UnsignedByteType)
-  colorTex.magFilter = THREE.NearestFilter
-  colorTex.minFilter = THREE.NearestFilter
-  globeMat = new THREE.ShaderMaterial({
-    vertexShader: VERTEX,
-    fragmentShader: FRAGMENT,
-    uniforms: {
-      uColors: { value: colorTex },
-      uSize: { value: new THREE.Vector2(COLUMNS, rows) },
-      uLight: { value: new THREE.Vector3(0, 0, 1) },
-      uGrid: { value: 0 },
-    },
-  })
-  globe = new THREE.Mesh(geo, globeMat)
+  globeView = createGlobeMesh(grid, props.colorOf)
+  globe = globeView.mesh
+  globeMat = globeView.material
   scene.add(globe)
-  recolorAll()
 }
 
 // ---- Lines, markers, highlights ---------------------------------------------------
@@ -260,60 +163,22 @@ const markerColor = () => {
 }
 
 // ---- The sky -----------------------------------------------------------------------
-// A sphere round the camera, drawn behind everything. Each pixel looks up the
-// sky picture by its direction, exactly as the format says: the top edge is
-// above the north pole (+z), the middle column above longitude 0 (+x), and
-// east is to the left, as the sky looks from the ground.
-const SKY_VERTEX = `
-varying vec3 vDir;
-void main() {
-  vDir = position;
-  vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  gl_Position = p.xyww;
-}`
-
-const SKY_FRAGMENT = `
-uniform sampler2D uSky;
-varying vec3 vDir;
-void main() {
-  vec3 d = normalize(vDir);
-  float lon = atan(d.y, d.x);
-  float lat = asin(clamp(d.z, -1.0, 1.0));
-  vec2 uv = vec2(0.5 - lon / 6.283185307, 0.5 + lat / 3.141592654);
-  gl_FragColor = vec4(texture2D(uSky, uv).rgb, 1.0);
-}`
-
-let skyLoad = 0
+// three/skyDome.js; it turns with the globe, as the sky over the world does.
+let cancelSky = () => {}
 function loadSky() {
+  cancelSky()
   const url = props.sky
-  const mine = ++skyLoad
   if (!url) {
+    const old = skyMesh
     skyMesh = replace(skyMesh, null)
+    if (old) old.material.uniforms.uSky.value.dispose()
     return
   }
-  new THREE.TextureLoader().load(url, (tex) => {
-    if (mine !== skyLoad || !scene) return tex.dispose()
-    // Sampled as it is (like the globe's colours), with no mipmaps: they
-    // would draw a seam where the picture's edges meet.
-    tex.colorSpace = THREE.NoColorSpace
-    tex.generateMipmaps = false
-    tex.minFilter = THREE.LinearFilter
-    tex.wrapS = THREE.RepeatWrapping
-    const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(1, 48, 24),
-      new THREE.ShaderMaterial({
-        vertexShader: SKY_VERTEX,
-        fragmentShader: SKY_FRAGMENT,
-        uniforms: { uSky: { value: tex } },
-        side: THREE.BackSide,
-        depthWrite: false,
-        depthTest: false,
-      }),
-    )
-    mesh.renderOrder = -1
-    mesh.frustumCulled = false
-    skyMesh?.material.uniforms?.uSky.value.dispose()
+  cancelSky = loadSkyDome(url, (mesh) => {
+    if (!scene) return disposeSkyDome(mesh)
+    const old = skyMesh
     skyMesh = replace(skyMesh, mesh)
+    if (old) old.material.uniforms.uSky.value.dispose()
   })
 }
 
@@ -581,11 +446,9 @@ function rebuild() {
   building.value = true
   // Let the "building" note paint before the heavy work.
   setTimeout(() => {
-    if (globe) {
+    if (globeView) {
       scene.remove(globe)
-      globe.geometry.dispose()
-      globeMat.dispose()
-      colorTex.dispose()
+      globeView.dispose()
     }
     grid = new PlanetGrid(props.frequency)
     buildGlobe()
@@ -621,7 +484,8 @@ onBeforeUnmount(() => {
     o.geometry?.dispose()
     o.material?.dispose?.()
   })
-  colorTex?.dispose()
+  cancelSky()
+  globeView?.dispose()
   renderer?.dispose()
   renderer = null
 })

@@ -50,6 +50,8 @@ const routes = [
   },
   { path: '/assets', name: 'assets', component: CharacterAssets, meta: { title: tr('Character Assets') } },
   { path: '/map', name: 'map', component: MapPage, meta: { title: tr('Map') } },
+  // Loaded on its own, with three.js, only when opened.
+  { path: '/solar-system', name: 'solar-system', component: () => import('./views/SolarSystem.vue'), meta: { title: tr('Solar system') } },
   { path: '/settings', name: 'settings', component: SettingsView, meta: { title: tr('Settings') } },
   { path: '/timeline', name: 'timeline', component: TimelineView, meta: { title: tr('Timeline') } },
   { path: '/calendar', name: 'calendar', component: CalendarView, meta: { title: tr('Calendar') } },

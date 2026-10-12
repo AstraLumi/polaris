@@ -497,6 +497,22 @@ export const mapApi = {
 
 // The planet (backend/planetmap.go): its settings, every location, and the
 // cells major locations cover as [location id, cell].
+// The solar system (backend/solar.go). Each call answers with the whole
+// system: { bodies, main: { radius_km, tilt, globe } }.
+export const solarApi = {
+  get: () => mapRequest('/solar', undefined, 'failed to load the solar system'),
+  create: (body) => mapRequest('/solar/bodies', jsonBody('POST', body), 'failed to save the body'),
+  update: (id, body) => mapRequest(`/solar/bodies/${id}`, jsonBody('PUT', body), 'failed to save the body'),
+  remove: (id) => mapRequest(`/solar/bodies/${id}`, { method: 'DELETE' }, 'failed to delete the body'),
+}
+
+// Messages the solar system can send back; listed so they get translated.
+void [
+  tr('a solar system has one star'), tr('pick what it orbits'), tr('a planet orbits the star'), tr('a moon orbits a planet'),
+  tr("the orbit's distance must be more than 0"), tr('the radius must be more than 0'), tr("that kind of body can't be of that type"),
+  tr('unknown kind of body'), tr('that name is too long'), tr('a solar system can have at most 500 bodies'), tr('body not found'),
+]
+
 export const planetApi = {
   get: () => mapRequest('/planet', undefined, 'failed to load the planet'),
   paint: (locationId, cells) =>
