@@ -1,6 +1,7 @@
 // The planet's hex grid, the same as backend/planetgrid.go (read that for
 // how it is laid out): an icosahedron cut into a triangular lattice of
-// frequency n on the unit sphere, 10n²+2 cells, twelve of them pentagons.
+// frequency n on the unit sphere, 10n²+2 cells, twelve of them pentagons,
+// spread evenly over each face (warp).
 // No dependencies: node frontend/tests/planetGrid.test.mjs
 
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
@@ -57,6 +58,30 @@ export function axialRound(a, b) {
   return [rx + 0, rz + 0]
 }
 
+// The angle between two neighbouring corners of the icosahedron, and warp /
+// unwarp, which space the lattice evenly over a face (backend/planetgrid.go
+// explains them).
+const EDGE = Math.acos(1 / Math.sqrt(5))
+const warp = (b) => Math.sin(b * EDGE) / Math.sin(EDGE)
+const asin = (x) => Math.asin(Math.max(-1, Math.min(1, x)))
+function unwarp(c) {
+  let lam = Math.sin(EDGE)
+  for (let k = 0; k < 40; k++) {
+    let f = -1
+    let df = 0
+    for (const x of c) {
+      const y = Math.max(-0.999999, Math.min(0.999999, lam * x))
+      f += asin(y) / EDGE
+      df += x / (EDGE * Math.sqrt(1 - y * y))
+    }
+    if (df <= 0) break
+    const step = f / df
+    lam -= step
+    if (Math.abs(step) < 1e-15) break
+  }
+  return c.map((x) => asin(lam * x) / EDGE)
+}
+
 const OFFSETS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]]
 
 export class PlanetGrid {
@@ -71,8 +96,8 @@ export class PlanetGrid {
     const [T, A, B, C] = DIAMONDS[d]
     const s = i / this.n
     const t = j / this.n
-    if (s + t <= 1) return add(add(T, scale(sub(A, T), s)), scale(sub(C, T), t))
-    return add(add(B, scale(sub(C, B), 1 - s)), scale(sub(A, B), 1 - t))
+    if (s + t <= 1) return add(add(scale(T, warp(1 - s - t)), scale(A, warp(s))), scale(C, warp(t)))
+    return add(add(scale(B, warp(s + t - 1)), scale(C, warp(1 - s))), scale(A, warp(1 - t)))
   }
 
   owner(d, i, j) {
@@ -125,11 +150,14 @@ export class PlanetGrid {
     const p = scale(v, dot(face.centre, origin) / dot(face.centre, v))
     let s
     let t
-    if (face.upper) [s, t] = solve2(sub(A, T), sub(C, T), sub(p, T))
-    else {
-      const [u, w] = solve2(sub(C, B), sub(A, B), sub(p, B))
-      s = 1 - u
-      t = 1 - w
+    if (face.upper) {
+      const [a, b] = solve2(sub(A, T), sub(C, T), sub(p, T))
+      ;[, s, t] = unwarp([1 - a - b, a, b])
+    } else {
+      const [a, b] = solve2(sub(C, B), sub(A, B), sub(p, B))
+      const w = unwarp([1 - a - b, a, b])
+      s = 1 - w[1]
+      t = 1 - w[2]
     }
     const [i, j] = axialRound(s * this.n, t * this.n)
     const clamp = (x) => Math.max(0, Math.min(this.n, x))

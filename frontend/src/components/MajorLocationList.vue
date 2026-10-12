@@ -285,8 +285,11 @@ ul {
     width: auto;
     max-height: 42%;
   }
+  /* Folded, it keeps its place in the corner: without a bottom it would
+     drop below the map, out of sight, with no way to open it again. */
   .loc-list.is-closed {
     left: auto;
+    bottom: 8px;
   }
 }
 </style>

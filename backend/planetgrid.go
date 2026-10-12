@@ -7,6 +7,9 @@ import (
 
 // The planet's hex grid: an icosahedron whose 20 triangles are cut into a
 // triangular lattice of frequency n and puffed out onto the unit sphere.
+// The lattice is spread over each face so its points are evenly spaced
+// along the face's edges (see warp), rather than projected straight from
+// the flat face, which crowds them towards the corners.
 // Every lattice point is a cell: hexagons everywhere except the 12 corners of
 // the icosahedron, which are pentagons. There are 10n²+2 cells.
 //
@@ -74,6 +77,44 @@ func init() {
 	}
 }
 
+// icoEdge is the angle between two neighbouring corners of the icosahedron.
+var icoEdge = math.Acos(1 / math.Sqrt(5))
+
+// warp turns a barycentric coordinate on a face into the weight of that
+// corner: along an edge, the weights sin(bα), sin((1−b)α) place a point as
+// slerp does, at even angles, and inside a face they stay close to even.
+// Projected straight (weight = b), cells near the twelve pentagons came out
+// about 40% smaller than those in the middle of a face; this way the
+// difference is under 20%. A cell's number and its neighbours don't change.
+func warp(b float64) float64 { return math.Sin(b*icoEdge) / math.Sin(icoEdge) }
+
+// unwarp is warp backwards: c are where a direction meets the flat face, as
+// barycentric coordinates (summing to 1); it finds the b, also summing to 1,
+// whose weights warp(b) are in the proportions of c. warp's sum grows with
+// a common factor λ, so Newton's method finds λ, starting from the top
+// (where the sum is at least 1) and coming down.
+func unwarp(c [3]float64) [3]float64 {
+	lam := math.Sin(icoEdge)
+	asin := func(x float64) float64 { return math.Asin(math.Max(-1, math.Min(1, x))) }
+	for range 40 {
+		f, df := -1.0, 0.0
+		for _, x := range c {
+			y := math.Max(-0.999999, math.Min(0.999999, lam*x))
+			f += asin(y) / icoEdge
+			df += x / (icoEdge * math.Sqrt(1-y*y))
+		}
+		if df <= 0 {
+			break
+		}
+		step := f / df
+		lam -= step
+		if math.Abs(step) < 1e-15 {
+			break
+		}
+	}
+	return [3]float64{asin(lam*c[0]) / icoEdge, asin(lam*c[1]) / icoEdge, asin(lam*c[2]) / icoEdge}
+}
+
 // planetGrid is the grid of one frequency.
 type planetGrid struct{ n int }
 
@@ -85,9 +126,9 @@ func (g planetGrid) lattice(d int, i, j float64) vec3 {
 	T, A, B, C := diamonds[d][0], diamonds[d][1], diamonds[d][2], diamonds[d][3]
 	s, t := i/float64(g.n), j/float64(g.n)
 	if s+t <= 1 {
-		return T.add(A.sub(T).scale(s)).add(C.sub(T).scale(t))
+		return T.scale(warp(1 - s - t)).add(A.scale(warp(s))).add(C.scale(warp(t)))
 	}
-	return B.add(C.sub(B).scale(1 - s)).add(A.sub(B).scale(1 - t))
+	return B.scale(warp(s + t - 1)).add(C.scale(warp(1 - s))).add(A.scale(warp(1 - t)))
 }
 
 // owner is the cell at lattice point (i, j) of diamond d, 0 ≤ i, j ≤ n:
@@ -167,10 +208,13 @@ func (g planetGrid) cellAt(v vec3) int {
 	p := v.scale(face.centre.dot(origin) / face.centre.dot(v))
 	var s, t float64
 	if face.upper {
-		s, t = solve2(A.sub(T), C.sub(T), p.sub(T))
+		a, b := solve2(A.sub(T), C.sub(T), p.sub(T))
+		w := unwarp([3]float64{1 - a - b, a, b})
+		s, t = w[1], w[2]
 	} else {
-		u, w := solve2(C.sub(B), A.sub(B), p.sub(B))
-		s, t = 1-u, 1-w
+		a, b := solve2(C.sub(B), A.sub(B), p.sub(B))
+		w := unwarp([3]float64{1 - a - b, a, b})
+		s, t = 1-w[1], 1-w[2]
 	}
 	i, j := axialRound(s*float64(g.n), t*float64(g.n))
 	clamp := func(x int) int { return max(0, min(g.n, x)) }

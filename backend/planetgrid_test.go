@@ -47,6 +47,22 @@ func TestPlanetGrid(t *testing.T) {
 	}
 }
 
+// The cells are about the same size everywhere: neighbours near the
+// pentagons sit nearly as far apart as in the middle of a face.
+func TestPlanetGridIsEven(t *testing.T) {
+	g := planetGrid{24}
+	lo, hi := math.Inf(1), 0.0
+	for c := 0; c < g.cellCount(); c++ {
+		for _, o := range g.neighbors(c) {
+			a := math.Acos(math.Min(1, g.center(c).dot(g.center(o))))
+			lo, hi = math.Min(lo, a), math.Max(hi, a)
+		}
+	}
+	if hi/lo > 1.2 {
+		t.Errorf("neighbours are from %.4f to %.4f apart: %.2f times", lo, hi, hi/lo)
+	}
+}
+
 // Fixed values the frontend's copy checks too (frontend/tests/planetGrid.test.mjs).
 func TestPlanetGridFixtures(t *testing.T) {
 	g := planetGrid{5}

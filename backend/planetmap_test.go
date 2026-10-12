@@ -182,8 +182,12 @@ func TestPortToPlanet(t *testing.T) {
 			t.Errorf("north's cell %d at %.1f°", c, lat*180/math.Pi)
 		}
 	}
+	// The row on the equator wavers a little off it (the grid is spaced
+	// evenly over each face, not in rows of latitude): less than a quarter
+	// of a cell.
+	quarter := math.Atan(2) / float64(g.n) / 4
 	for _, c := range south {
-		if lat, _ := latLon(g.center(int(c))); lat > 1e-9 {
+		if lat, _ := latLon(g.center(int(c))); lat > quarter {
 			t.Errorf("south's cell %d at %.1f°", c, lat*180/math.Pi)
 		}
 	}

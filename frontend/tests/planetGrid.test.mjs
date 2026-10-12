@@ -20,6 +20,22 @@ for (const n of [2, 3, 5, 8]) {
   assert.equal(pentagons, 12, `n=${n}: twelve pentagons`)
 }
 
+// About the same size everywhere (TestPlanetGridIsEven).
+{
+  const g = new PlanetGrid(24)
+  let lo = Infinity
+  let hi = 0
+  const d = (a, b) => Math.acos(Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2]))
+  for (let c = 0; c < g.count; c++) {
+    for (const o of g.neighbors(c)) {
+      const a = d(g.center(c), g.center(o))
+      lo = Math.min(lo, a)
+      hi = Math.max(hi, a)
+    }
+  }
+  assert.ok(hi / lo < 1.2, `neighbours from ${lo} to ${hi} apart`)
+}
+
 // The same cells as the backend.
 const g5 = new PlanetGrid(5)
 for (const [lat, lon, cell] of [[90, 0, 0], [-90, 0, 1], [0, 0, 228], [45, 100, 34], [-30, -120, 181], [10, 179, 70]]) {
