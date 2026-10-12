@@ -16,22 +16,9 @@ void main() {
 
 const SKY_FRAGMENT = `
 uniform sampler2D uSky;
-uniform vec3 uLensDir; // towards a black hole, from the camera
-uniform float uLensE;  // its Einstein angle (radians); 0 for none
 varying vec3 vDir;
 void main() {
   vec3 d = normalize(vDir);
-  // Light passing a mass bends towards it: what is seen at angle th from
-  // it comes from beta = th - E^2 / th (beyond it for small th). Near the
-  // middle the stars smear into rings round it.
-  if (uLensE > 0.0) {
-    float th = acos(clamp(dot(d, uLensDir), -1.0, 1.0));
-    if (th < uLensE * 6.0 && th > 1e-4) {
-      float beta = th - uLensE * uLensE / th;
-      vec3 side = normalize(d - uLensDir * cos(th));
-      d = normalize(uLensDir * cos(beta) + side * sin(beta));
-    }
-  }
   float lon = atan(d.y, d.x);
   float lat = asin(clamp(d.z, -1.0, 1.0));
   vec2 uv = vec2(0.5 - lon / 6.283185307, 0.5 + lat / 3.141592654);
@@ -56,7 +43,7 @@ export function loadSkyDome(url, done) {
       new THREE.ShaderMaterial({
         vertexShader: SKY_VERTEX,
         fragmentShader: SKY_FRAGMENT,
-        uniforms: { uSky: { value: tex }, uLensDir: { value: new THREE.Vector3(1, 0, 0) }, uLensE: { value: 0 } },
+        uniforms: { uSky: { value: tex } },
         side: THREE.BackSide,
         depthWrite: false,
         depthTest: false,

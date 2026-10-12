@@ -96,9 +96,9 @@ void main() {
   if (uMode > 1.5) {
     k = exp(-x * 7.0) * 0.1;
   } else if (uMode > 0.5) {
-    float ring = exp(-pow((d - uCore * 1.5) / (uCore * 0.12), 2.0));
-    k = ring * 1.1 + exp(-x * 4.0) * 0.25;
-    if (d < uCore * 1.3) k *= smoothstep(uCore * 1.05, uCore * 1.3, d);
+    // Bright right at the edge of the shadow, fading outwards.
+    float ring = exp(-pow((d - uCore * 1.06) / (uCore * 0.09), 2.0));
+    k = ring * 1.2 + exp(-x * 4.0) * 0.25 * step(uCore, d);
   } else {
     k = (exp(-x * 6.0) * 0.95 * rays + exp(-x * 1.8) * 0.16) * edge;
   }

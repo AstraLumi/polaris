@@ -26,6 +26,7 @@ import { createGlobeMesh } from '../three/globeMesh'
 import { createStar, createPlanetMaterial, createAtmosphere, createClouds, createRings } from '../three/bodyShaders'
 import { cloudCoverage, genericCloudCover, mainPlanetCloudCover } from '../climate'
 import { loadSkyDome, disposeSkyDome } from '../three/skyDome'
+import { createLensPass } from '../three/lensPass'
 
 // The solar system in 3D: the star at the centre, each body on its orbit at
 // the time `days`, drawn at the squeezed scale of solarScale.js. Every
@@ -62,6 +63,7 @@ const labels = ref([])
 const colorOf = bodyColor
 
 let renderer, scene, camera, controls
+let lens = null // three/lensPass.js
 let raf = 0
 let resizeObserver = null
 let skyMesh = null
@@ -416,21 +418,13 @@ function render() {
   }
   for (const g of globeViews.values()) g.material.uniforms.uPower.value = power
   for (const ring of rings) ring.material.uniforms.uPlanet.value.copy(positions.get(ring.id) ?? sun)
-  // A black hole bends the light of the sky behind it.
-  if (skyMesh) {
-    const lens = skyMesh.material.uniforms
-    if (star?.star_class === 'black_hole') {
-      const toHole = sun.clone().sub(camera.position)
-      const dist = toHole.length()
-      lens.uLensDir.value.copy(toHole.normalize())
-      lens.uLensE.value = Math.atan((sceneRadius(star) * 3) / Math.max(dist, 1e-6))
-    } else lens.uLensE.value = 0
-  }
   // Clouds drift with the clock (slowly: a turn of the pattern is years).
   for (const m of cloudMaterials) m.uniforms.uTime.value = (props.days % 100000) * 0.004
   const time = performance.now() / 1000
   for (const s of stars) s.faceCamera(camera, time)
-  renderer.render(scene, camera)
+  // A black hole bends the light of everything behind it (three/lensPass.js).
+  const lensed = star?.star_class === 'black_hole' && lens.render(renderer, scene, camera, sun, sceneRadius(star))
+  if (!lensed) renderer.render(scene, camera)
   placeLabels()
 }
 
@@ -455,6 +449,7 @@ function resize() {
   const w = wrapEl.value.clientWidth
   const h = wrapEl.value.clientHeight
   renderer.setSize(w, h, false)
+  lens.setSize(renderer.domElement.width, renderer.domElement.height)
   // Thick lines are sized in pixels.
   for (const { orbit } of meshes.values()) orbit?.behind.material.resolution.set(renderer.domElement.width, renderer.domElement.height)
   camera.aspect = w / Math.max(h, 1)
@@ -498,6 +493,7 @@ function followSelected() {
 onMounted(() => {
   renderer = new THREE.WebGLRenderer({ canvas: canvasEl.value, antialias: true })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  lens = createLensPass()
   scene = new THREE.Scene()
   scene.background = new THREE.Color(0x02030a)
   camera = new THREE.PerspectiveCamera(45, 1, 0.005, 20000)
@@ -525,6 +521,7 @@ onBeforeUnmount(() => {
   disposeGroup(markerGroup)
   for (const g of globeViews.values()) g.dispose()
   if (skyMesh) disposeSkyDome(skyMesh)
+  lens?.dispose()
   renderer?.dispose()
   renderer = null
   scene = null
