@@ -39,11 +39,13 @@ const groups = computed(() => {
   if (props.kingdomOnly) return kingdoms.length ? [{ label: t('Kingdoms'), items: kingdoms }] : []
   const regions = majors.filter((o) => realm(o) === 'region')
   const oceans = majors.filter((o) => realm(o) === 'ocean')
+  const unknown = majors.filter((o) => realm(o) === 'unknown')
   const places = props.options.filter((o) => o.kind === 'minor')
   return [
     { label: t('Kingdoms'), items: kingdoms },
     { label: t('Regions'), items: regions },
     { label: t('Oceans'), items: oceans },
+    { label: t('Unknown lands'), items: unknown },
     { label: t('Locations'), items: places },
   ].filter((g) => g.items.length)
 })

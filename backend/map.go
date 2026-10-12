@@ -172,7 +172,7 @@ func normalizeColor(s string) (string, bool) {
 func colorTaken(db *sql.DB, color string, exceptID int64) (bool, error) {
 	var n int
 	err := db.QueryRow(
-		`SELECT COUNT(*) FROM locations WHERE kind = 'major' AND color = ? AND id != ?`,
+		`SELECT COUNT(*) FROM locations WHERE kind = 'major' AND color = ? AND id != ? AND realm <> 'unknown'`,
 		color, exceptID,
 	).Scan(&n)
 	return n > 0, err
@@ -207,6 +207,9 @@ func createMapLocationHandler(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
+		if in.Kind == "major" {
+			applyUnknownLand(db, &in, 0)
+		}
 		in.Name = strings.TrimSpace(in.Name)
 		if in.Name == "" {
 			http.Error(w, "name is required", http.StatusBadRequest)
@@ -229,7 +232,7 @@ func createMapLocationHandler(db *sql.DB) http.HandlerFunc {
 				http.Error(w, "color must look like #rrggbb", http.StatusBadRequest)
 				return
 			}
-			if c != "" {
+			if c != "" && realmOf(in.Realm) != "unknown" {
 				taken, err := colorTaken(db, c, 0)
 				if err != nil {
 					http.Error(w, "failed to check color", http.StatusInternalServerError)
@@ -239,6 +242,8 @@ func createMapLocationHandler(db *sql.DB) http.HandlerFunc {
 					http.Error(w, "that color is already used by another kingdom", http.StatusBadRequest)
 					return
 				}
+			}
+			if c != "" {
 				color = sql.NullString{String: c, Valid: true}
 			}
 		} else {
@@ -307,6 +312,9 @@ func updateMapLocationHandler(db *sql.DB) http.HandlerFunc {
 		if _, sent := raw["realm"]; !sent {
 			in.Realm = oldRealm
 		}
+		if kind == "major" {
+			applyUnknownLand(db, &in, id)
+		}
 		in.Name = strings.TrimSpace(in.Name)
 		if in.Name == "" {
 			http.Error(w, "name is required", http.StatusBadRequest)
@@ -328,14 +336,16 @@ func updateMapLocationHandler(db *sql.DB) http.HandlerFunc {
 				return
 			}
 			if c != "" {
-				taken, err := colorTaken(db, c, id)
-				if err != nil {
-					http.Error(w, "failed to check color", http.StatusInternalServerError)
-					return
-				}
-				if taken {
-					http.Error(w, "that color is already used by another kingdom", http.StatusBadRequest)
-					return
+				if realmOf(in.Realm) != "unknown" {
+					taken, err := colorTaken(db, c, id)
+					if err != nil {
+						http.Error(w, "failed to check color", http.StatusInternalServerError)
+						return
+					}
+					if taken {
+						http.Error(w, "that color is already used by another kingdom", http.StatusBadRequest)
+						return
+					}
 				}
 				color = sql.NullString{String: c, Valid: true}
 				newColor = c

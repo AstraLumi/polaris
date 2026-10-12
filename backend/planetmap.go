@@ -3,9 +3,11 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"math"
 	"net/http"
+	"strings"
 )
 
 // A story's map is either flat (the 2D hex map, "2D only") or a planet (the
@@ -45,8 +47,79 @@ var schema27Statements = []string{
 }
 
 // What a coloured major location is. Only a kingdom has a faction; a region
-// is land too wild to rule, an ocean is water.
-var realms = map[string]string{"kingdom": "Kingdom", "region": "Region", "ocean": "Ocean"}
+// is land too wild to rule, an ocean is water, and unknown land is not yet
+// explored: every piece of it is its own location, all sharing one grey and
+// shown on the map as "???".
+var realms = map[string]string{"kingdom": "Kingdom", "region": "Region", "ocean": "Ocean", "unknown": "Unknown land"}
+
+// unknownColor is the grey every unknown land is painted in.
+const unknownColor = "#c9cacf"
+
+// schema28Statements upgrade a database to schema 28: unknown lands, which
+// share a colour (widenRealms lets the realm column hold them). The fresh
+// schema runs them too.
+var schema28Statements = []string{
+	`DROP INDEX idx_locations_major_color`,
+	`CREATE UNIQUE INDEX idx_locations_major_color ON locations(color) WHERE kind = 'major' AND color IS NOT NULL AND realm <> 'unknown'`,
+}
+
+// widenRealms lets locations.realm hold 'unknown' by loosening its CHECK in
+// the table's stored definition: SQLite's documented way to relax a CHECK
+// without rebuilding the table (https://sqlite.org/lang_altertable.html,
+// "Making Other Kinds Of Table Schema Changes"). Nothing on disk changes.
+// Runs on one connection (a transaction); a database already widened is left.
+func widenRealms(tx *sql.Tx) error {
+	const narrow = `CHECK (realm IN ('kingdom', 'region', 'ocean'))`
+	const wide = `CHECK (realm IN ('kingdom', 'region', 'ocean', 'unknown'))`
+	var def string
+	if err := tx.QueryRow(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'locations'`).Scan(&def); err != nil {
+		return err
+	}
+	if !strings.Contains(def, narrow) {
+		return nil
+	}
+	var version int
+	if err := tx.QueryRow(`PRAGMA schema_version`).Scan(&version); err != nil {
+		return err
+	}
+	for _, q := range []string{
+		`PRAGMA writable_schema = ON`,
+		`UPDATE sqlite_master SET sql = ` + quoteSQL(strings.Replace(def, narrow, wide, 1)) + ` WHERE type = 'table' AND name = 'locations'`,
+		fmt.Sprintf(`PRAGMA schema_version = %d`, version+1),
+		`PRAGMA writable_schema = OFF`,
+	} {
+		if _, err := tx.Exec(q); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func quoteSQL(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
+
+// applyUnknownLand gives an unknown land its grey and, when it has no name
+// (or just "???"), the next free "???" name: names are unique, so the second
+// is "??? 2". The map shows them all as "???".
+func applyUnknownLand(db *sql.DB, in *mapLocationInput, id int64) {
+	if realmOf(in.Realm) != "unknown" {
+		return
+	}
+	in.Color = unknownColor
+	if name := strings.TrimSpace(in.Name); name != "" && name != "???" {
+		return
+	}
+	for n := 1; ; n++ {
+		name := "???"
+		if n > 1 {
+			name = fmt.Sprintf("??? %d", n)
+		}
+		var other int64
+		if db.QueryRow(`SELECT id FROM locations WHERE name = ? COLLATE NOCASE`, name).Scan(&other) != nil || other == id {
+			in.Name = name
+			return
+		}
+	}
+}
 
 type planetSettings struct {
 	Frequency int     `json:"frequency"` // the grid's (planetgrid.go)

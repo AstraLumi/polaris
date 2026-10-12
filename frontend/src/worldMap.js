@@ -32,8 +32,15 @@ export const PROJECTIONS = [
 export const REALMS = [
   { id: 'kingdom', label: tr('Kingdom'), blurb: tr('A realm with a ruler: it gets a faction of the same name.') },
   { id: 'region', label: tr('Region'), blurb: tr('Land with borders but no ruler, too wild for a kingdom. No faction.') },
-  { id: 'ocean', label: tr('Ocean'), blurb: tr('A named sea or ocean. No faction.') },
+  { id: 'ocean', label: tr('Ocean'), blurb: tr('A named sea or ocean, drawn as an outline. No faction.') },
+  { id: 'unknown', label: tr('Unknown land'), blurb: tr('Not yet explored: grey, and shown on the map as "???". Explored, make it anything else.') },
 ]
+
+// Every unknown land is this grey (backend unknownColor).
+export const UNKNOWN_COLOR = '#c9cacf'
+
+// The name a territory shows on the map: "???" for unknown land.
+export const mapName = (m) => (m.realm === 'unknown' ? '???' : m.name)
 
 export const realmLabel = (id) => REALMS.find((r) => r.id === id)?.label || REALMS[0].label
 

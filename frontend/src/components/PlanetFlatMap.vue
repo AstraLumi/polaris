@@ -35,6 +35,8 @@ const props = defineProps({
   // As PlanetGlobe: territory names, and oceans drawn as outlines.
   areas: { type: Array, default: () => [] },
   borders: { type: Array, default: () => [] },
+  // Pixels covered on the right (the side list): the map fits beside them.
+  insetRight: { type: Number, default: 0 },
 })
 const emit = defineEmits(['hover'])
 
@@ -51,8 +53,9 @@ let resizeObserver = null
 
 function fit() {
   const [x0, y0, x1, y1] = mapBounds(props.projection)
-  view.scale = Math.min((size.w - 32) / (x1 - x0), (size.h - 32) / (y1 - y0))
-  view.ox = size.w / 2 - ((x0 + x1) / 2) * view.scale
+  const w = Math.max(100, size.w - props.insetRight)
+  view.scale = Math.min((w - 32) / (x1 - x0), (size.h - 32) / (y1 - y0))
+  view.ox = w / 2 - ((x0 + x1) / 2) * view.scale
   view.oy = size.h / 2 + ((y0 + y1) / 2) * view.scale
 }
 
@@ -102,7 +105,8 @@ function draw() {
       const inView = (x, y) => x > -40 && x < size.w + 40 && y > -40 && y < size.h + 40
       const candidates = []
       for (const a of props.areas) {
-        const [x, y] = projected.point(a.cell)
+        if (!a.cells?.length) continue
+        const [x, y] = projected.labelPoint(a.cells)
         if (inView(sx(x), sy(y))) candidates.push({ kind: 'area', key: a.key, name: a.name, x: sx(x), y: sy(y), size: a.size, color: a.color })
       }
       for (const m of props.markers) {
@@ -117,11 +121,15 @@ function draw() {
           c.font = `700 ${l.size}px Fraunces, 'Times New Roman', serif`
           if ('letterSpacing' in c) c.letterSpacing = '1.5px'
           c.textBaseline = 'middle'
+          // Kept whole inside the view, however near its edge the land lies.
+          const half = c.measureText(l.name.toUpperCase()).width / 2 + 6
+          const x = Math.min(Math.max(l.x, half), size.w - half)
+          const y = Math.min(Math.max(l.y, l.size / 2 + 6), size.h - l.size / 2 - 6)
           c.lineWidth = 4
           c.strokeStyle = 'rgba(0, 0, 0, 0.75)'
-          c.strokeText(l.name.toUpperCase(), l.x, l.y)
+          c.strokeText(l.name.toUpperCase(), x, y)
           c.fillStyle = lighten(l.color, 0.45)
-          c.fillText(l.name.toUpperCase(), l.x, l.y)
+          c.fillText(l.name.toUpperCase(), x, y)
           if ('letterSpacing' in c) c.letterSpacing = '0px'
           continue
         }

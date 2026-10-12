@@ -14,7 +14,7 @@ import (
 // oldest migration (or a brand new one) gets wiped and recreated from
 // freshSchema — so every schema change from here on should ship with a
 // migration instead of relying on that reset.
-const currentSchemaVersion = "27"
+const currentSchemaVersion = "28"
 
 const freshSchema = `
 CREATE TABLE classes (
@@ -473,6 +473,12 @@ var migrations = map[string]migration{
 		// The planet, and kingdoms, regions and oceans (planetmap.go).
 		statements: schema27Statements,
 	},
+	"27": {
+		to: "28",
+		// Unknown lands (planetmap.go).
+		before:     widenRealms,
+		statements: schema28Statements,
+	},
 }
 
 // schema20Statements create what schema 20 added. The fresh schema runs them
@@ -682,11 +688,23 @@ func ensureSchema(db *sql.DB) error {
 			return fmt.Errorf("create schema: %w", err)
 		}
 	}
-	later := [][]string{wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements, schema24Statements, {gearDescriptionSQL}, schema26Statements, schema27Statements}
+	later := [][]string{wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements, schema24Statements, {gearDescriptionSQL}, schema26Statements, schema27Statements, schema28Statements}
 	for _, stmt := range slices.Concat(later...) {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("create wiki schema: %w", err)
 		}
+	}
+	// Schema 28's loosened realm check, on one connection.
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("create schema: %w", err)
+	}
+	if err := widenRealms(tx); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("create schema: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("create schema: %w", err)
 	}
 
 	if _, err := db.Exec(

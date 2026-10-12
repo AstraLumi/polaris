@@ -7,28 +7,28 @@
         <div class="field-row">
           <label class="field name-field">
             <span>{{ $t('Name') }}</span>
-            <input v-model="name" type="text" required autofocus />
+            <input v-model="name" type="text" :required="realm !== 'unknown'" :placeholder="realm === 'unknown' ? '???' : ''" autofocus />
           </label>
           <DateField v-model="foundingDate" :label="$t('Founding date')" class="date-field" />
         </div>
 
         <div class="field">
+          <span>{{ $t('What it is') }}</span>
+          <div class="realms" role="radiogroup" :aria-label="$t('What it is')">
+            <label v-for="r in REALMS" :key="r.id" class="realm" :class="{ 'is-on': realm === r.id }">
+              <input :checked="realm === r.id" type="radio" :value="r.id" @change="pickRealm(r.id)" />
+              <strong>{{ $t(r.label) }}</strong>
+              <span>{{ $t(r.blurb) }}</span>
+            </label>
+          </div>
+        </div>
+
+        <div v-if="realm !== 'unknown'" class="field">
           <span>{{ $t('Color') }}</span>
           <ColorPicker v-model="color" :taken-colors="otherColors" />
           <p class="hint">
             {{ $t('A colored location has borders: painting with it claims hexes for that color, and a hex belongs to one of them at a time. Pick no color (the dashed swatch) for a location that sits inside one — painting with it marks its hexes without changing whose they are.') }}
           </p>
-        </div>
-
-        <div v-if="color" class="field">
-          <span>{{ $t('What it is') }}</span>
-          <div class="realms" role="radiogroup" :aria-label="$t('What it is')">
-            <label v-for="r in REALMS" :key="r.id" class="realm" :class="{ 'is-on': realm === r.id }">
-              <input v-model="realm" type="radio" :value="r.id" />
-              <strong>{{ $t(r.label) }}</strong>
-              <span>{{ $t(r.blurb) }}</span>
-            </label>
-          </div>
         </div>
 
         <label class="field">
@@ -71,7 +71,7 @@ import { mapApi } from '../api'
 import ColorPicker from './ColorPicker.vue'
 import DateField from './DateField.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
-import { REALMS } from '../worldMap'
+import { REALMS, UNKNOWN_COLOR } from '../worldMap'
 
 const props = defineProps({
   location: { type: Object, default: null }, // an existing major location when editing
@@ -83,7 +83,14 @@ const name = ref(props.location?.name ?? '')
 const foundingDate = ref(props.location?.founding_date ?? '')
 const description = ref(props.location?.description ?? '')
 const color = ref(props.location?.color ?? '')
-const realm = ref(props.location?.realm || 'kingdom')
+const realm = ref(props.location?.color ? props.location.realm || 'kingdom' : 'kingdom')
+
+// Unknown land is always grey; leaving it, a colour of its own is picked.
+function pickRealm(id) {
+  if (id === 'unknown') color.value = UNKNOWN_COLOR
+  else if (realm.value === 'unknown') color.value = ''
+  realm.value = id
+}
 const saving = ref(false)
 const error = ref('')
 const confirmOpen = ref(false)
@@ -92,7 +99,7 @@ const confirmOpen = ref(false)
 const otherColors = computed(() => props.takenColors.filter((c) => c !== props.location?.color))
 
 async function submit() {
-  if (!name.value.trim()) return
+  if (!name.value.trim() && realm.value !== 'unknown') return
   saving.value = true
   error.value = ''
   const payload = {

@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -311,5 +313,80 @@ func TestLocationKeepsItsOtherPlace(t *testing.T) {
 	app.db.QueryRow(`SELECT realm FROM locations WHERE id = 2`).Scan(&realm)
 	if q != 5 || r != 6 || cell != 77 || realm != "ocean" {
 		t.Errorf("q %d r %d cell %d realm %s", q, r, cell, realm)
+	}
+}
+
+// Unknown lands: grey, numbered "???" names, and no colour clash.
+func TestUnknownLands(t *testing.T) {
+	app, h, base := planetSetup(t)
+	create := func(body map[string]any) mapLocation {
+		t.Helper()
+		rec := do(t, h, "POST", base+"/map/locations", jsonBody(body), "application/json")
+		if rec.Code != 200 {
+			t.Fatalf("create: %d %s", rec.Code, rec.Body.String())
+		}
+		var l mapLocation
+		json.Unmarshal(rec.Body.Bytes(), &l)
+		return l
+	}
+	a := create(map[string]any{"kind": "major", "name": "", "realm": "unknown"})
+	b := create(map[string]any{"kind": "major", "name": "???", "realm": "unknown", "color": "#ff0000"})
+	c := create(map[string]any{"kind": "major", "name": "The Mists", "realm": "unknown"})
+	if a.Name != "???" || b.Name != "??? 2" || c.Name != "The Mists" {
+		t.Errorf("names: %q %q %q", a.Name, b.Name, c.Name)
+	}
+	if a.Color != unknownColor || b.Color != unknownColor || a.Realm != "unknown" {
+		t.Errorf("unknown lands share a grey: %+v %+v", a, b)
+	}
+	// Explored: a kingdom now, with a colour of its own.
+	rec := do(t, h, "PUT", base+"/map/locations/"+idStr(b.ID), jsonBody(map[string]any{"name": "Thule", "color": "#336699", "realm": "kingdom"}), "application/json")
+	if rec.Code != 200 {
+		t.Fatalf("explore: %d %s", rec.Code, rec.Body.String())
+	}
+	var n int
+	app.db.QueryRow(`SELECT COUNT(*) FROM factions WHERE kingdom_id = ?`, b.ID).Scan(&n)
+	if n != 1 {
+		t.Error("an explored land that becomes a kingdom gets its faction")
+	}
+	if f := wikiFacts(app, "location", a.ID); f["type"] != "Unknown land" {
+		t.Errorf("wiki: %v", f)
+	}
+}
+
+func TestMigrationWidensRealms(t *testing.T) {
+	mgr, _ := newTestServer(t)
+	app, _ := mgr.open(createStoryDirect(t, mgr, "Old"))
+	rollBackSchema28(t, app.db)
+	// As a schema-27 database really was: the narrow check.
+	def := func() string {
+		var d string
+		app.db.QueryRow(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'locations'`).Scan(&d)
+		return d
+	}
+	tx, _ := app.db.Begin()
+	var version int
+	tx.QueryRow(`PRAGMA schema_version`).Scan(&version)
+	narrow := strings.Replace(def(), `, 'unknown'))`, `))`, 1)
+	for _, q := range []string{`PRAGMA writable_schema = ON`, `UPDATE sqlite_master SET sql = ` + quoteSQL(narrow) + ` WHERE name = 'locations'`,
+		fmt.Sprintf(`PRAGMA schema_version = %d`, version+1), `PRAGMA writable_schema = OFF`} {
+		if _, err := tx.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tx.Commit()
+	if strings.Contains(def(), "'unknown'") {
+		t.Fatal("the check should be narrow before the upgrade")
+	}
+	if err := ensureSchema(app.db); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(def(), "'unknown'") {
+		t.Fatalf("the upgrade widens the check: %s", def())
+	}
+	if _, err := app.db.Exec(`INSERT INTO locations (name, kind, color, realm) VALUES ('???', 'major', '#c9cacf', 'unknown'), ('??? 2', 'major', '#c9cacf', 'unknown')`); err != nil {
+		t.Fatalf("two unknown lands of one colour: %v", err)
+	}
+	if _, err := app.db.Exec(`INSERT INTO locations (name, kind, realm) VALUES ('Nowhere', 'major', 'swamp')`); err == nil {
+		t.Error("the check still refuses other realms")
 	}
 }

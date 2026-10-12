@@ -16,10 +16,11 @@ export const ICON_PX = [10, 22, 34]
 
 // candidates: [{ kind: 'area' | 'marker', key, name, x, y, rank, size, color }],
 // already on screen (x, y in pixels) and facing the viewer. Answers the ones
-// to show, most important first, dropping names that would land on one
-// already placed (territory names are always shown).
+// to show, most important first (territories by size), dropping names that
+// would land on one already placed; a territory whose name doesn't fit is
+// left out until zooming in makes room.
 export function pickLabels(candidates, cellPx) {
-  const order = (c) => (c.kind === 'area' ? 3 : c.rank)
+  const order = (c) => (c.kind === 'area' ? 3 + c.size / 100 : c.rank)
   const shown = candidates
     .filter((c) => {
       if (c.kind === 'area') return cellPx < TIERS.areaUntil
@@ -35,8 +36,9 @@ export function pickLabels(candidates, cellPx) {
     const icon = c.kind === 'marker' ? ICON_PX[c.rank] : 0
     const top = c.kind === 'area' ? c.y - px / 2 - 3 : c.y + icon / 2 - 2
     const rect = { x0: c.x - w / 2, x1: c.x + w / 2, y0: top, y1: top + px + 8 }
-    const named = c.kind === 'area' || free(rect)
+    const named = free(rect)
     if (named) placed.push(rect)
+    else if (c.kind === 'area') continue
     out.push({ ...c, named, icon })
     if (out.length >= 400) break
   }

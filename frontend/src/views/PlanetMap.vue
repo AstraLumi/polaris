@@ -1,6 +1,6 @@
 <template>
   <div class="map-page">
-    <div class="map-wrap">
+    <div class="map-wrap" :class="{ 'has-list': !listClosed }">
       <PlanetGlobe
         v-if="ready && view === 'globe'"
         ref="globeRef"
@@ -16,6 +16,7 @@
         :focus="homeCell"
         :areas="areas"
         :borders="borders"
+        :inset-right="listInset"
         @hover="onHover"
         @select="onSelect"
         @paint-start="onPaintStart"
@@ -33,6 +34,7 @@
         :lines="lines"
         :areas="areas"
         :borders="borders"
+        :inset-right="listInset"
         @hover="onHover"
       />
 
@@ -100,26 +102,14 @@
         @edit-major="editMajor = $event"
       />
 
-      <div class="kingdom-bar glass-panel panel-solid">
-        <div class="chips">
-          <div
-            v-for="m in majors"
-            :key="m.id"
-            class="chip"
-            :class="{ active: activeId === m.id }"
-            :title="m.color ? $t(realmLabel(m.realm)) : $t('Colorless major location')"
-            @click="toggleActive(m)"
-          >
-            <span class="chip-dot" :class="{ none: !m.color }" :style="m.color ? { background: m.color } : {}"></span>
-            <span class="chip-name" data-tip-overflow>{{ m.name }}</span>
-            <button type="button" class="chip-edit" :title="$t('Edit')" @click.stop="editMajor = m">✎</button>
-          </div>
-          <span v-if="!majors.length" class="chip-empty">{{ $t('No major locations yet') }}</span>
-        </div>
-        <button type="button" class="btn btn-primary small" @click="newMajorOpen = true">
-          {{ $t('New major location') }}
-        </button>
-      </div>
+      <MajorLocationList
+        :majors="majors"
+        :active-id="activeId"
+        @pick="toggleActive"
+        @edit="editMajor = $event"
+        @new="newMajorOpen = true"
+        @closed="listClosed = $event"
+      />
     </div>
 
     <MajorLocationModal
@@ -138,13 +128,14 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { t, tr } from '../i18n'
 import { planetApi, mapApi } from '../api'
-import { worldMap, PROJECTIONS, realmLabel, applyMapSettings } from '../worldMap'
+import { worldMap, PROJECTIONS, realmLabel, applyMapSettings, mapName } from '../worldMap'
 import { PlanetGrid, latLon, middleCell } from '../planetGrid'
 import { areaFontPx } from '../planetLabels'
 import { formatLatitude, zoneOf } from '../planet'
 import PlanetGlobe from '../components/PlanetGlobe.vue'
 import PlanetFlatMap from '../components/PlanetFlatMap.vue'
 import MapHoverPane from '../components/MapHoverPane.vue'
+import MajorLocationList from '../components/MajorLocationList.vue'
 import HexPanel from '../components/HexPanel.vue'
 import MajorLocationModal from '../components/MajorLocationModal.vue'
 
@@ -200,6 +191,13 @@ const editMajor = ref(null)
 const notice = ref('')
 const version = ref(0)
 const globeRef = ref(null)
+const listClosed = ref(false) // the side list of major locations
+// On phones the list sits along the bottom instead (MajorLocationList.vue).
+const phone = window.matchMedia('(max-width: 720px)')
+const narrow = ref(phone.matches)
+const onNarrow = (e) => (narrow.value = e.matches)
+phone.addEventListener('change', onNarrow)
+const listInset = computed(() => (listClosed.value || narrow.value ? 0 : 256))
 
 let grid = new PlanetGrid(worldMap.planet.frequency)
 let cellMembers = new Map() // cell -> [major location ids]
@@ -211,7 +209,7 @@ let noticeTimer = null
 const frequency = computed(() => worldMap.planet.frequency)
 const majors = computed(() => locations.value.filter((l) => l.kind === 'major'))
 const unplaced = computed(() => locations.value.filter((l) => l.kind === 'minor' && l.cell == null))
-const takenColors = computed(() => majors.value.filter((m) => m.color).map((m) => m.color))
+const takenColors = computed(() => majors.value.filter((m) => m.color && m.realm !== 'unknown').map((m) => m.color))
 const lines = computed(() => ({ equator: worldMap.planet.show_equator, zones: worldMap.planet.show_zones, tilt: worldMap.planet.tilt }))
 
 const rankOf = (l) => (l.is_capital ? 2 : l.is_city ? 1 : 0)
@@ -311,7 +309,7 @@ const areas = computed(() => {
     .filter((m) => m.color)
     .map((m) => {
       const cells = cellsOf(m.id)
-      return { key: m.id, name: m.name, color: m.color, cell: middleCell(grid, cells), size: areaFontPx(cells.length) }
+      return { key: m.id, name: mapName(m), color: m.color, cell: middleCell(grid, cells), cells, size: areaFontPx(cells.length) }
     })
     .filter((a) => a.cell != null)
 })
@@ -686,7 +684,10 @@ onMounted(async () => {
   applyFocus()
 })
 
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeyDown)
+  phone.removeEventListener('change', onNarrow)
+})
 
 watch(() => route.query.focus, applyFocus)
 </script>

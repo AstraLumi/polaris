@@ -74,6 +74,29 @@ export class ProjectedCells {
     return out
   }
 
+  // Where a territory's name goes on the flat map: on the territory, at the
+  // cell nearest the middle of its projected cells. Unlike the middle on the
+  // sphere, this keeps a polar territory's name on the land (the pole itself
+  // is a whole edge of most projections). Cached by the list.
+  labelPoint(cells) {
+    this.labelCache ||= new WeakMap()
+    const hit = this.labelCache.get(cells)
+    if (hit) return hit
+    const step = Math.max(1, Math.floor(cells.length / 3000))
+    const pts = []
+    for (let k = 0; k < cells.length; k += step) pts.push(this.point(cells[k]))
+    const mx = pts.reduce((a, p) => a + p[0], 0) / pts.length
+    const my = pts.reduce((a, p) => a + p[1], 0) / pts.length
+    let best = pts[0]
+    let bestD = Infinity
+    for (const p of pts) {
+      const d = (p[0] - mx) ** 2 + (p[1] - my) ** 2
+      if (d < bestD) [best, bestD] = [p, d]
+    }
+    this.labelCache.set(cells, best)
+    return best
+  }
+
   // Where a cell's centre lands.
   point(cell) {
     const [lat, lon] = latLon(this.grid.center(cell))

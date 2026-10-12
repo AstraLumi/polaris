@@ -121,26 +121,14 @@
         @edit-major="editMajor = $event"
       />
 
-      <div class="kingdom-bar glass-panel panel-solid">
-        <div class="chips">
-          <div
-            v-for="m in majors"
-            :key="m.id"
-            class="chip"
-            :class="{ active: activeId === m.id }"
-            :title="m.color ? $t(realmLabel(m.realm)) : $t('Colorless major location')"
-            @click="toggleActive(m)"
-          >
-            <span class="chip-dot" :class="{ none: !m.color }" :style="m.color ? { background: m.color } : {}"></span>
-            <span class="chip-name" data-tip-overflow>{{ m.name }}</span>
-            <button type="button" class="chip-edit" :title="$t('Edit')" @click.stop="editMajor = m">✎</button>
-          </div>
-          <span v-if="!majors.length" class="chip-empty">{{ $t('No major locations yet') }}</span>
-        </div>
-        <button type="button" class="btn btn-primary small" @click="newMajorOpen = true">
-          {{ $t('New major location') }}
-        </button>
-      </div>
+      <MajorLocationList
+        :majors="majors"
+        :active-id="activeId"
+        @pick="toggleActive"
+        @edit="editMajor = $event"
+        @new="newMajorOpen = true"
+        @closed="listClosed = $event"
+      />
     </div>
 
     <MajorLocationModal
@@ -162,10 +150,11 @@ import { mapApi } from '../api'
 import { themeRgba } from '../theme'
 import { HEX_SIZE, SQRT3, CORNERS, keyOf, hexCenter, pixelToHex, hexLine, hexesWithin } from '../hexMath'
 import { rowsToPole, latitudeRow, latitudeOf, zoneOf, zoneLines, formatLatitude } from '../planet'
-import { realmLabel } from '../worldMap'
+import { realmLabel, mapName } from '../worldMap'
 import { drawDot, drawCity, drawCapital, lighten } from '../mapMarkers'
 import { TIERS, areaFontPx } from '../planetLabels'
 import MapHoverPane from '../components/MapHoverPane.vue'
+import MajorLocationList from '../components/MajorLocationList.vue'
 import HexPanel from '../components/HexPanel.vue'
 import MajorLocationModal from '../components/MajorLocationModal.vue'
 
@@ -240,10 +229,12 @@ const majors = computed(() => locations.value.filter((l) => l.kind === 'major'))
 const unplaced = computed(() =>
   locations.value.filter((l) => l.kind === 'minor' && (l.q == null || l.r == null)),
 )
-const takenColors = computed(() => majors.value.filter((m) => m.color).map((m) => m.color))
+const takenColors = computed(() => majors.value.filter((m) => m.color && m.realm !== 'unknown').map((m) => m.color))
 const activeName = computed(() => majors.value.find((m) => m.id === activeId.value)?.name ?? '')
 
+const listClosed = ref(false) // the side list of major locations
 const wrapClass = computed(() => ({
+  'has-list': !listClosed.value,
   'cursor-grab': (tool.value === 'pan' || spaceDown.value) && !panning.value,
   'cursor-grabbing': panning.value,
   'cursor-cross': (tool.value === 'paint' || tool.value === 'erase') && !spaceDown.value,
@@ -541,7 +532,7 @@ function drawAreaNames(ctx, z, inView) {
     const px = areaFontPx(hexes.length)
     ctx.font = `700 ${px / z}px Fraunces, 'Times New Roman', serif`
     if ('letterSpacing' in ctx) ctx.letterSpacing = `${1.5 / z}px`
-    const text = m.name.toUpperCase()
+    const text = mapName(m).toUpperCase()
     ctx.lineWidth = 4 / z
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)'
     ctx.strokeText(text, x, y)

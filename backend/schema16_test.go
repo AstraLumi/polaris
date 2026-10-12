@@ -5,9 +5,25 @@ import (
 	"testing"
 )
 
+// rollBackSchema28 turns a fresh database back into schema 27. The realm
+// check stays wide; widenRealms leaves it so.
+func rollBackSchema28(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, q := range []string{
+		`DROP INDEX idx_locations_major_color`,
+		`CREATE UNIQUE INDEX idx_locations_major_color ON locations(color) WHERE kind = 'major' AND color IS NOT NULL`,
+		`UPDATE schema_meta SET value = '27' WHERE key = 'schema_version'`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+}
+
 // rollBackSchema27 turns a fresh database back into schema 26.
 func rollBackSchema27(t *testing.T, db *sql.DB) {
 	t.Helper()
+	rollBackSchema28(t, db)
 	for _, q := range []string{
 		`DROP TABLE creature_cells`,
 		`DROP TABLE planet_cells`,

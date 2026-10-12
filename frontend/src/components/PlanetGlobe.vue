@@ -66,6 +66,8 @@ const props = defineProps({
   areas: { type: Array, default: () => [] },
   // Territories drawn as an outline only (oceans): [{ color, cells }]
   borders: { type: Array, default: () => [] },
+  // Pixels covered on the right (the side list): the globe centres beside them.
+  insetRight: { type: Number, default: 0 },
 })
 const emit = defineEmits(['hover', 'select', 'paint-start', 'paint', 'paint-end'])
 
@@ -370,7 +372,12 @@ function resize() {
   const h = el.clientHeight
   renderer.setSize(w, h, false)
   borderGroup?.traverse((o) => o.material?.resolution?.set(renderer.domElement.width, renderer.domElement.height))
-  camera.aspect = w / Math.max(1, h)
+  // Drawn as the left part of a wider view, so the globe's centre sits in
+  // the middle of the space the side list leaves.
+  const inset = Math.min(props.insetRight, w / 2)
+  camera.aspect = (w + inset) / Math.max(1, h)
+  if (inset) camera.setViewOffset(w + inset, h, inset, 0, w, h)
+  else camera.clearViewOffset()
   camera.updateProjectionMatrix()
   requestRender()
 }
@@ -562,6 +569,7 @@ watch(() => props.lines, () => grid && buildLines(), { deep: true })
 watch(() => props.selected, () => grid && drawSelected())
 watch(() => props.outlined, () => grid && drawOutlined())
 watch(painting, setControls)
+watch(() => props.insetRight, resize)
 
 defineExpose({ recolor, focusOn })
 </script>
