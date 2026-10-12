@@ -234,6 +234,33 @@
       </div>
 
       <div class="port">
+        <h3>{{ $t('Sky') }}</h3>
+        <p class="note">
+          {{ $t('The sky behind the planet in the 3D map, turning with it as you look around. Use your own picture of the sky over your world; the template is the default sky, so it shows the format.') }}
+        </p>
+        <div class="sky-row">
+          <img class="sky-preview" :src="currentSky" :alt="$t('The sky')" />
+          <div class="sky-actions">
+            <a class="btn btn-ghost small" :href="DEFAULT_SKY" download="polaris-sky-template.jpg">{{ $t('Download the template') }}</a>
+            <button type="button" class="btn btn-ghost small" :disabled="skyBusy" @click="skyInput.click()">
+              {{ skyBusy ? $t('Saving…') : $t('Upload your sky') }}
+            </button>
+            <button v-if="worldMap.sky_url" type="button" class="btn btn-ghost small" :disabled="skyBusy" @click="resetSky">
+              {{ $t('Use the default sky') }}
+            </button>
+            <input ref="skyInput" type="file" accept="image/jpeg,image/png" hidden @change="uploadSky" />
+          </div>
+        </div>
+        <ul class="sky-format">
+          <li>{{ $t('A JPEG or PNG exactly twice as wide as it is tall, up to 8192 × 4096.') }}</li>
+          <li>{{ $t('The sky as seen from the ground, like a photo of it: the top edge is the sky straight above the north pole, the bottom edge above the south pole, the middle row the celestial equator.') }}</li>
+          <li>{{ $t('The middle column is above longitude 0; east is to the left. The left and right edges meet, so they must match.') }}</li>
+          <li>{{ $t('Near the top and bottom the picture is stretched sideways, as on a world map: draw round things there wider than they are tall.') }}</li>
+        </ul>
+        <p v-if="skyError" class="error-banner">{{ skyError }}</p>
+      </div>
+
+      <div class="port">
         <h3>{{ $t('Port the 2D map onto the planet') }}</h3>
         <p class="note">
           {{ $t('Reads the 2D map as drawn in a projection, with its equator as the planet\'s and its hexes as wide as the 2D map\'s Equator panel says, and copies every painted hex, place and creature territory onto the planet. Whatever is on the planet now is replaced. The 2D map itself is not changed.') }}
@@ -294,7 +321,7 @@ import { useRoute } from 'vue-router'
 import StatSystemEditor from '../components/StatSystemEditor.vue'
 import DateField from '../components/DateField.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
-import { PROJECTIONS, applyMapSettings } from '../worldMap'
+import { PROJECTIONS, applyMapSettings, worldMap, DEFAULT_SKY, skyUrl } from '../worldMap'
 import { frequencyFor, hexKmOf } from '../planetGrid'
 import { newSeasonId } from '../seasons'
 
@@ -477,6 +504,39 @@ async function saveMapSettings() {
     mapError.value = err.message || t("Couldn't save.")
   } finally {
     mapSaving.value = false
+  }
+}
+
+// The sky (backend/sky.go): saved as soon as it is picked.
+const skyInput = ref(null)
+const skyBusy = ref(false)
+const skyError = ref('')
+const currentSky = computed(() => skyUrl())
+
+async function uploadSky(e) {
+  const file = e.target.files[0]
+  e.target.value = ''
+  if (!file) return
+  skyBusy.value = true
+  skyError.value = ''
+  try {
+    applyMapSettings(await planetApi.uploadSky(file))
+  } catch (err) {
+    skyError.value = err.message
+  } finally {
+    skyBusy.value = false
+  }
+}
+
+async function resetSky() {
+  skyBusy.value = true
+  skyError.value = ''
+  try {
+    applyMapSettings(await planetApi.resetSky())
+  } catch (err) {
+    skyError.value = err.message
+  } finally {
+    skyBusy.value = false
   }
 }
 
@@ -811,6 +871,39 @@ onMounted(async () => {
 .port h3 {
   margin: 0 0 0.4rem;
   font-size: 1rem;
+}
+
+.sky-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.sky-preview {
+  width: 280px;
+  max-width: 100%;
+  aspect-ratio: 2 / 1;
+  object-fit: cover;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: #05070c;
+}
+
+.sky-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+}
+
+.sky-format {
+  margin: 0 0 0.6rem;
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 
 .port-row {

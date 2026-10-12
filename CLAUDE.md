@@ -78,6 +78,12 @@ Run all of these before committing. `backend/static/` is build output (only
   fixtures in their tests equal. three.js is only loaded with the planet
   (`MapPage.vue`, `PlanetTerritory.vue` load it lazily); keep it out of the
   main bundle.
+- **The sky format** (an equirectangular 2:1 picture, top above the north
+  pole, middle column above longitude 0, east to the left) is defined twice:
+  by `backend/cmd/skygen`, which draws the default sky
+  (`frontend/public/sky/default-sky.jpg`, also the downloadable template:
+  `cd backend && go run ./cmd/skygen ../frontend/public/sky/default-sky.jpg`),
+  and by the sky shader in `PlanetGlobe.vue`. Change both together.
 - Birth date, blood type and Born in belong to the character (`characters`
   columns, schema 23), not to a version; the version form edits them for
   all versions.

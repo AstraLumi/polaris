@@ -10,7 +10,13 @@ export const worldMap = reactive({
   planet: { frequency: 141, planet_km: 40075, tilt: 23.44, bestiary_projection: 'equirectangular', show_equator: true, show_zones: false },
   hex_km: 50,
   cells: 0,
+  sky_url: '',
 })
+
+// The default sky, also the template a story's own must follow
+// (backend/cmd/skygen draws it and describes the format).
+export const DEFAULT_SKY = '/sky/default-sky.jpg'
+export const skyUrl = () => worldMap.sky_url || DEFAULT_SKY
 
 export function applyMapSettings(s) {
   if (!s) return
@@ -18,6 +24,7 @@ export function applyMapSettings(s) {
   worldMap.planet = { ...worldMap.planet, ...s.planet }
   worldMap.hex_km = s.hex_km
   worldMap.cells = s.cells
+  worldMap.sky_url = s.sky_url || ''
   worldMap.loaded = true
 }
 
@@ -52,4 +59,10 @@ export const PLANET_MESSAGES = [
   tr('failed to port the map'),
   tr('pick a projection'),
   tr('failed to save the map settings'),
+  tr('the sky must be a JPEG or PNG image'),
+  tr('the sky must be twice as wide as it is tall (for example 4096 × 2048)'),
+  tr('the sky must be between 512 and 8192 pixels wide'),
+  tr('the sky picture is too large'),
+  tr('choose a picture for the sky'),
+  tr('failed to save the sky'),
 ]

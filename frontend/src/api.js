@@ -477,6 +477,13 @@ export const planetApi = {
   port: (projection) => mapRequest('/planet/port', jsonBody('POST', { projection }), 'failed to port the map'),
   // { mode, planet_km, hex_km, tilt, bestiary_projection, show_equator, show_zones }
   saveSettings: (s) => mapRequest('/settings/map', jsonBody('PUT', s), 'failed to save the map settings'),
+  // The story's own sky (backend/sky.go); each answers with the map settings.
+  uploadSky: (file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return mapRequest('/planet/sky', { method: 'PUT', body: fd }, 'failed to save the sky')
+  },
+  resetSky: () => mapRequest('/planet/sky', { method: 'DELETE' }, 'failed to save the sky'),
 }
 
 // ---- Events ------------------------------------------------------------------

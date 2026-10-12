@@ -193,6 +193,8 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	mux.HandleFunc("POST /api/planet/paint", paintCellsHandler(db))
 	mux.HandleFunc("POST /api/planet/erase", eraseCellsHandler(db))
 	mux.HandleFunc("POST /api/planet/port", portPlanetHandler(db))
+	mux.HandleFunc("PUT /api/planet/sky", uploadSkyHandler(db, uploadsDir))
+	mux.HandleFunc("DELETE /api/planet/sky", resetSkyHandler(db, uploadsDir))
 
 	// Versions (the actual editable/viewable sheets).
 	mux.HandleFunc("GET /api/characters/{id}/versions", listVersionsHandler(db))

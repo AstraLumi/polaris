@@ -17,6 +17,7 @@
         :areas="areas"
         :borders="borders"
         :inset-right="listInset"
+        :sky="skyUrl()"
         @hover="onHover"
         @select="onSelect"
         @paint-start="onPaintStart"
@@ -128,7 +129,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { t, tr } from '../i18n'
 import { planetApi, mapApi } from '../api'
-import { worldMap, PROJECTIONS, realmLabel, applyMapSettings, mapName } from '../worldMap'
+import { worldMap, PROJECTIONS, realmLabel, applyMapSettings, mapName, skyUrl } from '../worldMap'
 import { PlanetGrid, latLon, middleCell } from '../planetGrid'
 import { areaFontPx } from '../planetLabels'
 import { formatLatitude, zoneOf } from '../planet'

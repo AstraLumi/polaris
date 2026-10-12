@@ -68,6 +68,9 @@ const props = defineProps({
   borders: { type: Array, default: () => [] },
   // Pixels covered on the right (the side list): the globe centres beside them.
   insetRight: { type: Number, default: 0 },
+  // The sky behind the planet: an equirectangular picture (the format is
+  // described in backend/cmd/skygen); '' for none.
+  sky: { type: String, default: '' },
 })
 const emit = defineEmits(['hover', 'select', 'paint-start', 'paint', 'paint-end'])
 
@@ -85,6 +88,7 @@ let grid = null
 let renderer, scene, camera, controls
 let globe, colorTex, colorData, globeMat
 let borderGroup = null
+let skyMesh = null
 let lineGroup = null
 let hoverLine = null
 let selectLine = null
@@ -255,6 +259,64 @@ const markerColor = () => {
   return new THREE.Color(v || '#e6c06a')
 }
 
+// ---- The sky -----------------------------------------------------------------------
+// A sphere round the camera, drawn behind everything. Each pixel looks up the
+// sky picture by its direction, exactly as the format says: the top edge is
+// above the north pole (+z), the middle column above longitude 0 (+x), and
+// east is to the left, as the sky looks from the ground.
+const SKY_VERTEX = `
+varying vec3 vDir;
+void main() {
+  vDir = position;
+  vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  gl_Position = p.xyww;
+}`
+
+const SKY_FRAGMENT = `
+uniform sampler2D uSky;
+varying vec3 vDir;
+void main() {
+  vec3 d = normalize(vDir);
+  float lon = atan(d.y, d.x);
+  float lat = asin(clamp(d.z, -1.0, 1.0));
+  vec2 uv = vec2(0.5 - lon / 6.283185307, 0.5 + lat / 3.141592654);
+  gl_FragColor = vec4(texture2D(uSky, uv).rgb, 1.0);
+}`
+
+let skyLoad = 0
+function loadSky() {
+  const url = props.sky
+  const mine = ++skyLoad
+  if (!url) {
+    skyMesh = replace(skyMesh, null)
+    return
+  }
+  new THREE.TextureLoader().load(url, (tex) => {
+    if (mine !== skyLoad || !scene) return tex.dispose()
+    // Sampled as it is (like the globe's colours), with no mipmaps: they
+    // would draw a seam where the picture's edges meet.
+    tex.colorSpace = THREE.NoColorSpace
+    tex.generateMipmaps = false
+    tex.minFilter = THREE.LinearFilter
+    tex.wrapS = THREE.RepeatWrapping
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 48, 24),
+      new THREE.ShaderMaterial({
+        vertexShader: SKY_VERTEX,
+        fragmentShader: SKY_FRAGMENT,
+        uniforms: { uSky: { value: tex } },
+        side: THREE.BackSide,
+        depthWrite: false,
+        depthTest: false,
+      }),
+    )
+    mesh.renderOrder = -1
+    mesh.frustumCulled = false
+    skyMesh?.material.uniforms?.uSky.value.dispose()
+    skyMesh = replace(skyMesh, mesh)
+  })
+}
+
 // Oceans and the like: the edge of their territory, in their colour.
 function buildBorders() {
   if (borderGroup) {
@@ -332,6 +394,8 @@ function render() {
   if (!renderer || !globeMat) return
   const dist = camera.position.length()
   globeMat.uniforms.uLight.value.copy(camera.position).normalize()
+  // The sky stays round the camera, so only its direction matters.
+  skyMesh?.position.copy(camera.position)
   // Outlines once a cell is about 7 pixels across.
   const cellPx = ((Math.atan(2) / grid.n) / ((dist - 1) * Math.tan((camera.fov * Math.PI) / 360))) * (renderer.domElement.clientHeight / 2)
   globeMat.uniforms.uGrid.value = Math.max(0, Math.min(1, (cellPx - 5) / 6))
@@ -527,6 +591,7 @@ function rebuild() {
     buildGlobe()
     buildLines()
     buildBorders()
+    loadSky()
     drawSelected()
     drawOutlined()
     building.value = false
@@ -570,6 +635,7 @@ watch(() => props.selected, () => grid && drawSelected())
 watch(() => props.outlined, () => grid && drawOutlined())
 watch(painting, setControls)
 watch(() => props.insetRight, resize)
+watch(() => props.sky, () => scene && loadSky())
 
 defineExpose({ recolor, focusOn })
 </script>

@@ -129,6 +129,8 @@ type planetSettings struct {
 	BestiaryProjection string `json:"bestiary_projection"`
 	ShowEquator        bool   `json:"show_equator"`
 	ShowZones          bool   `json:"show_zones"`
+	// The story's own sky (sky.go), a path in its uploads; "" for the default.
+	Sky string `json:"sky"`
 }
 
 type mapSettings struct {
@@ -137,6 +139,8 @@ type mapSettings struct {
 	// Derived, sent for show: a cell's width and how many cells there are.
 	HexKm float64 `json:"hex_km"`
 	Cells int     `json:"cells"`
+	// Where the sky picture is: the story's own, or "" for the default.
+	SkyURL string `json:"sky_url"`
 }
 
 // The planet starts from the 2D map's scale (planet.go).
@@ -158,6 +162,7 @@ func loadMapSettings(db *sql.DB) mapSettings {
 		json.Unmarshal([]byte(raw), &s.Planet)
 	}
 	s.HexKm = hexKmOf(s.Planet.PlanetKm, s.Planet.Frequency)
+	s.SkyURL = uploadURL(s.Planet.Sky)
 	s.Cells = planetGrid{s.Planet.Frequency}.cellCount()
 	return s
 }
@@ -205,6 +210,7 @@ func updateMapSettingsHandler(db *sql.DB) http.HandlerFunc {
 		next := planetSettings{
 			Frequency: frequencyFor(in.PlanetKm, in.HexKm), PlanetKm: in.PlanetKm, Tilt: in.Tilt,
 			BestiaryProjection: in.BestiaryProjection, ShowEquator: in.ShowEquator, ShowZones: in.ShowZones,
+			Sky: old.Planet.Sky, // changed on its own (sky.go)
 		}
 
 		tx, err := db.Begin()
