@@ -124,6 +124,25 @@ func TestMigrationGivesStarsAClass(t *testing.T) {
 	}
 }
 
+// Orbits can be ellipses; a star's orbit has no shape.
+func TestEllipticalOrbits(t *testing.T) {
+	_, h := newTestServer(t)
+	st := createStory(t, h, map[string]string{"name": "Ellipses"})
+	base := "/api/s/" + st.ID + "/solar"
+	_, s := solarSave(t, h, "POST", base+"/bodies", `{"kind":"star","name":"Sol","body_type":"star","radius_km":696000,"temperature_k":5772,"mass_kg":1.989e30,"eccentricity":0.5}`)
+	if s.Bodies[0].Eccentricity != 0 {
+		t.Errorf("a star has no orbit: %+v", s.Bodies[0])
+	}
+	star := idStr(s.Bodies[0].ID)
+	_, s = solarSave(t, h, "POST", base+"/bodies", `{"kind":"planet","name":"Comet","body_type":"rocky","radius_km":10,"orbit_km":5e8,"eccentricity":0.9,"periapsis":-90,"parent_id":`+star+`}`)
+	if b := s.Bodies[1]; b.Eccentricity != 0.9 || b.Periapsis != 270 {
+		t.Errorf("orbit: %+v", b)
+	}
+	if rec, _ := solarSave(t, h, "POST", base+"/bodies", `{"kind":"planet","name":"Escaping","body_type":"rocky","radius_km":10,"orbit_km":5e8,"eccentricity":1,"parent_id":`+star+`}`); rec.Code != 400 {
+		t.Errorf("an open orbit: %d", rec.Code)
+	}
+}
+
 // An older story gets the empty table.
 func TestMigrationAddsSolarTable(t *testing.T) {
 	mgr, _ := newTestServer(t)

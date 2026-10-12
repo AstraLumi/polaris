@@ -52,6 +52,17 @@ var schema31Statements = []string{
 		WHERE kind = 'star'`,
 }
 
+// schema33Statements create what schema 33 added: elliptical orbits. An
+// orbit's eccentricity (0 a circle, up to 0.95) and the direction of its
+// periapsis, where it comes closest, in degrees. orbit_km is the semi-major
+// axis; phase is still where the body is on day 0. Old orbits stay circles.
+var schema33Statements = []string{
+	`ALTER TABLE celestial_bodies ADD COLUMN eccentricity REAL NOT NULL DEFAULT 0`,
+	`ALTER TABLE celestial_bodies ADD COLUMN periapsis REAL NOT NULL DEFAULT 0`,
+}
+
+const maxEccentricity = 0.95
+
 // The classes a star can be. Their realistic ranges live with the physics
 // (frontend/src/stars.js); here a star only has to be one of them.
 var starClasses = map[string]bool{
@@ -84,9 +95,12 @@ type celestialBody struct {
 	RadiusKm float64  `json:"radius_km"`
 	OrbitKm  *float64 `json:"orbit_km"`
 	Phase    float64  `json:"phase"`
-	Color    string   `json:"color"`
-	IsMain   bool     `json:"is_main"`
-	Sort     int      `json:"sort"`
+	// The orbit's shape: eccentricity and periapsis direction (degrees).
+	Eccentricity float64 `json:"eccentricity"`
+	Periapsis    float64 `json:"periapsis"`
+	Color        string  `json:"color"`
+	IsMain       bool    `json:"is_main"`
+	Sort         int     `json:"sort"`
 	// Stars only.
 	StarClass    string   `json:"star_class"`
 	TemperatureK *float64 `json:"temperature_k"`
@@ -116,7 +130,7 @@ func loadSolarSystem(db *sql.DB) (solarSystem, error) {
 	out.Name = systemName(db)
 	out.Bodies = []celestialBody{}
 	rows, err := db.Query(`SELECT id, parent_id, kind, name, body_type, radius_km, orbit_km, phase, COALESCE(color, ''), is_main, sort,
-		COALESCE(star_class, ''), temperature_k, mass_kg, free_values
+		COALESCE(star_class, ''), temperature_k, mass_kg, free_values, eccentricity, periapsis
 		FROM celestial_bodies ORDER BY sort, id`)
 	if err != nil {
 		return out, err
@@ -127,7 +141,7 @@ func loadSolarSystem(db *sql.DB) (solarSystem, error) {
 		var parent sql.NullInt64
 		var orbit, temp, mass sql.NullFloat64
 		if err := rows.Scan(&b.ID, &parent, &b.Kind, &b.Name, &b.BodyType, &b.RadiusKm, &orbit, &b.Phase, &b.Color, &b.IsMain, &b.Sort,
-			&b.StarClass, &temp, &mass, &b.FreeValues); err != nil {
+			&b.StarClass, &temp, &mass, &b.FreeValues, &b.Eccentricity, &b.Periapsis); err != nil {
 			return out, err
 		}
 		if temp.Valid {
@@ -202,12 +216,17 @@ func checkBody(db *sql.DB, b *celestialBody, id int64) string {
 	}
 	b.Color = color
 	b.Phase = math.Mod(math.Mod(b.Phase, 360)+360, 360)
+	b.Periapsis = math.Mod(math.Mod(b.Periapsis, 360)+360, 360)
+	if !(b.Eccentricity >= 0 && b.Eccentricity <= maxEccentricity) {
+		return "the eccentricity must be between 0 and 0.95"
+	}
 	if b.Kind != "planet" {
 		b.IsMain = false
 	}
 
 	if b.Kind == "star" {
 		b.ParentID, b.OrbitKm = nil, nil
+		b.Eccentricity, b.Periapsis = 0, 0
 		if b.StarClass == "" {
 			b.StarClass = "yellow_dwarf"
 		}
@@ -318,18 +337,18 @@ func writeBody(db *sql.DB, b *celestialBody, id int64) error {
 	color := nullableString(b.Color)
 	if id == 0 {
 		res, err := tx.Exec(`INSERT INTO celestial_bodies (parent_id, kind, name, body_type, radius_km, orbit_km, phase, color, is_main,
-				star_class, temperature_k, mass_kg, free_values, sort)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM celestial_bodies))`,
+				star_class, temperature_k, mass_kg, free_values, eccentricity, periapsis, sort)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM celestial_bodies))`,
 			b.ParentID, b.Kind, b.Name, b.BodyType, b.RadiusKm, b.OrbitKm, b.Phase, color, b.IsMain,
-			nullableString(b.StarClass), b.TemperatureK, b.MassKg, b.FreeValues)
+			nullableString(b.StarClass), b.TemperatureK, b.MassKg, b.FreeValues, b.Eccentricity, b.Periapsis)
 		if err != nil {
 			return err
 		}
 		b.ID, _ = res.LastInsertId()
 	} else if _, err := tx.Exec(`UPDATE celestial_bodies SET name = ?, body_type = ?, radius_km = ?, orbit_km = ?, phase = ?, color = ?, is_main = ?,
-			star_class = ?, temperature_k = ?, mass_kg = ?, free_values = ?
+			star_class = ?, temperature_k = ?, mass_kg = ?, free_values = ?, eccentricity = ?, periapsis = ?
 		WHERE id = ?`, b.Name, b.BodyType, b.RadiusKm, b.OrbitKm, b.Phase, color, b.IsMain,
-		nullableString(b.StarClass), b.TemperatureK, b.MassKg, b.FreeValues, id); err != nil {
+		nullableString(b.StarClass), b.TemperatureK, b.MassKg, b.FreeValues, b.Eccentricity, b.Periapsis, id); err != nil {
 		return err
 	}
 	return tx.Commit()

@@ -46,35 +46,208 @@ export function escapeVelocity(body) {
 
 // ---- Orbits ---------------------------------------------------------------------------
 // An orbit model says where a body is, relative to what it orbits, at a
-// time. The only model for now is a circle in the parent's equatorial plane
-// (x, y), gravity alone deciding its speed. A better model (eccentricity,
-// inclination, n-body) only needs the same two functions.
+// time: period(body, parent) in days and position(body, parent, days) in km,
+// in the parent's equatorial plane (x, y). Gravity decides the speed; the
+// body gives the shape. Swapping the model swaps how every orbit moves.
 
+const mu = (body, parent) => G * (massOf(parent) + massOf(body)) // m³/s²
+const rad = (deg) => ((deg || 0) * Math.PI) / 180
+
+// A circle (kept for comparison and the tests).
 export const circularOrbit = {
   // Days for one turn (Kepler's third law, both masses counted).
   period(body, parent) {
     const a = body.orbit_km * 1000
-    return (2 * Math.PI * Math.sqrt(a ** 3 / (G * (massOf(parent) + massOf(body))))) / DAY
+    return (2 * Math.PI * Math.sqrt(a ** 3 / mu(body, parent))) / DAY
   },
   // Position in km at `days`, starting at the body's phase (degrees).
   position(body, parent, days) {
     const turn = days / this.period(body, parent)
-    const angle = ((body.phase || 0) * Math.PI) / 180 + 2 * Math.PI * turn
+    const angle = rad(body.phase) + 2 * Math.PI * turn
     return [body.orbit_km * Math.cos(angle), body.orbit_km * Math.sin(angle), 0]
   },
 }
 
-let model = circularOrbit
+// An ellipse (Kepler's laws): orbit_km is its semi-major axis, eccentricity
+// how stretched it is (0 a circle), periapsis the direction (degrees) where
+// it comes closest, and phase where the body is on day 0. It moves fastest
+// near periapsis and slowest far out, as gravity has it. Computed once from
+// these values; the live simulation below lets gravity reshape it.
+const eccOf = (b) => Math.min(Math.max(b.eccentricity || 0, 0), 0.95)
+
+// The eccentric anomaly for a mean anomaly (Kepler's equation, by Newton).
+function eccentricAnomaly(M, e) {
+  let E = e < 0.8 ? M : Math.PI
+  for (let i = 0; i < 30; i++) {
+    const d = (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E))
+    E -= d
+    if (Math.abs(d) < 1e-12) break
+  }
+  return E
+}
+
+const trueFromEccentric = (E, e) => 2 * Math.atan2(Math.sqrt(1 + e) * Math.sin(E / 2), Math.sqrt(1 - e) * Math.cos(E / 2))
+const eccentricFromTrue = (nu, e) => 2 * Math.atan2(Math.sqrt(1 - e) * Math.sin(nu / 2), Math.sqrt(1 + e) * Math.cos(nu / 2))
+
+// The point at true anomaly nu (from periapsis), in km.
+export function orbitPoint(body, nu) {
+  const e = eccOf(body)
+  const r = (body.orbit_km * (1 - e * e)) / (1 + e * Math.cos(nu))
+  const angle = nu + rad(body.periapsis)
+  return [r * Math.cos(angle), r * Math.sin(angle), 0]
+}
+
+export const keplerOrbit = {
+  period: circularOrbit.period,
+  position(body, parent, days) {
+    const e = eccOf(body)
+    const nu0 = rad(body.phase) - rad(body.periapsis)
+    const E0 = eccentricFromTrue(nu0, e)
+    const M = E0 - e * Math.sin(E0) + (2 * Math.PI * days) / this.period(body, parent)
+    return orbitPoint(body, trueFromEccentric(eccentricAnomaly(M, e), e))
+  },
+  // Velocity in km/s at `days` (to start the live simulation from).
+  velocity(body, parent, days) {
+    const e = eccOf(body)
+    const [x, y] = this.position(body, parent, days)
+    const nu = Math.atan2(y, x) - rad(body.periapsis)
+    const p = body.orbit_km * 1000 * (1 - e * e)
+    const v = Math.sqrt(mu(body, parent) / p) / 1000
+    const w = rad(body.periapsis)
+    const [vx, vy] = [-v * Math.sin(nu), v * (e + Math.cos(nu))]
+    return [vx * Math.cos(w) - vy * Math.sin(w), vx * Math.sin(w) + vy * Math.cos(w), 0]
+  },
+}
+
+// Points round a body's whole orbit, for drawing it.
+export function orbitPath(body, steps = 128) {
+  const out = []
+  for (let k = 0; k <= steps; k++) out.push(orbitPoint(body, (k / steps) * 2 * Math.PI))
+  return out
+}
+
+// Its closest and farthest distances, in km.
+export const periapsisOf = (b) => b.orbit_km * (1 - eccOf(b))
+export const apoapsisOf = (b) => b.orbit_km * (1 + eccOf(b))
+
+// Where a body dragged to `distance` km at `angle` degrees sits on an orbit
+// of its shape: the semi-major axis that puts it there, and its phase.
+export function orbitThrough(body, distance, angle) {
+  const e = eccOf(body)
+  const nu = rad(angle) - rad(body.periapsis)
+  return { orbit_km: (distance * (1 + e * Math.cos(nu))) / (1 - e * e), phase: angle }
+}
+
+let model = keplerOrbit
 export const orbitModel = () => model
 export function useOrbitModel(m) {
   model = m
 }
 
+// ---- Live gravity ---------------------------------------------------------------------
+// Every body pulling on every other, stepped forward in time (leapfrog,
+// which keeps orbits from drifting). It starts from the Kepler orbits on
+// day 0 and from then on only gravity moves things: moons too far out are
+// taken, close planets tug at each other. Going back in time starts again
+// from day 0. A step is a small part of the quickest orbit; past maxSteps
+// a call stops short, and `days` lags behind what was asked.
+export function createGravitySim(bodies, { stepsPerOrbit = 200, maxSteps = 20000 } = {}) {
+  const { byId } = systemTree(bodies)
+  const list = bodies.filter((b) => b.kind === 'star' || (b.orbit_km > 0 && byId.has(b.parent_id)))
+  const n = list.length
+  const index = new Map(list.map((b, i) => [b.id, i]))
+  const mass = list.map(massOf)
+  let quickest = Infinity
+  for (const b of list) if (b.parent_id != null) quickest = Math.min(quickest, keplerOrbit.period(b, byId.get(b.parent_id)))
+  const dt = (Number.isFinite(quickest) ? Math.max(quickest / stepsPerOrbit, 1e-4) : 1) * DAY // s
+  const pos = new Float64Array(n * 3) // m
+  const vel = new Float64Array(n * 3) // m/s
+  const acc = new Float64Array(n * 3)
+  let days = 0
+
+  function accelerate() {
+    acc.fill(0)
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const dx = pos[j * 3] - pos[i * 3]
+        const dy = pos[j * 3 + 1] - pos[i * 3 + 1]
+        const dz = pos[j * 3 + 2] - pos[i * 3 + 2]
+        const r2 = dx * dx + dy * dy + dz * dz || 1
+        const f = G / (r2 * Math.sqrt(r2))
+        acc[i * 3] += f * mass[j] * dx
+        acc[i * 3 + 1] += f * mass[j] * dy
+        acc[i * 3 + 2] += f * mass[j] * dz
+        acc[j * 3] -= f * mass[i] * dx
+        acc[j * 3 + 1] -= f * mass[i] * dy
+        acc[j * 3 + 2] -= f * mass[i] * dz
+      }
+    }
+  }
+
+  function reset() {
+    days = 0
+    pos.fill(0)
+    vel.fill(0)
+    const done = new Set()
+    const place = (b) => {
+      if (done.has(b.id)) return
+      done.add(b.id)
+      const parent = b.parent_id != null ? byId.get(b.parent_id) : null
+      if (!parent || !index.has(parent.id)) return
+      place(parent)
+      const i = index.get(b.id)
+      const j = index.get(parent.id)
+      const p = keplerOrbit.position(b, parent, 0)
+      const v = keplerOrbit.velocity(b, parent, 0)
+      for (let k = 0; k < 3; k++) {
+        pos[i * 3 + k] = pos[j * 3 + k] + p[k] * 1000
+        vel[i * 3 + k] = vel[j * 3 + k] + v[k] * 1000
+      }
+    }
+    for (const b of list) place(b)
+    accelerate()
+  }
+
+  function step() {
+    const h = dt / 2
+    for (let k = 0; k < n * 3; k++) vel[k] += acc[k] * h
+    for (let k = 0; k < n * 3; k++) pos[k] += vel[k] * dt
+    accelerate()
+    for (let k = 0; k < n * 3; k++) vel[k] += acc[k] * h
+  }
+
+  reset()
+  return {
+    get days() {
+      return days
+    },
+    // Moves on to `target` days (or as far as maxSteps allows); false when
+    // it fell short.
+    advanceTo(target) {
+      if (target < days) reset()
+      const want = Math.max(0, Math.floor(((target - days) * DAY) / dt))
+      const steps = Math.min(want, maxSteps)
+      for (let s = 0; s < steps; s++) step()
+      days += (steps * dt) / DAY
+      return steps === want
+    },
+    // Where a body is relative to what it orbits, in km.
+    relative(id) {
+      const b = byId.get(id)
+      const i = index.get(id)
+      if (i == null || b?.parent_id == null || !index.has(b.parent_id)) return [0, 0, 0]
+      const j = index.get(b.parent_id)
+      return [0, 1, 2].map((k) => (pos[i * 3 + k] - pos[j * 3 + k]) / 1000)
+    },
+  }
+}
+
 // The region round a body where its own gravity, not its parent's, holds a
 // moon (the Hill sphere), in km. Moons farther out than about half of it
 // wouldn't stay.
+// On an ellipse, it is smallest where the orbit comes closest.
 export function hillRadius(body, parent) {
-  return body.orbit_km * Math.cbrt(massOf(body) / (3 * massOf(parent)))
+  return periapsisOf(body) * Math.cbrt(massOf(body) / (3 * massOf(parent)))
 }
 
 // ---- The system as a tree -------------------------------------------------------------
@@ -149,12 +322,13 @@ export function orbitLimits(body, parent, grandparent = null) {
 }
 
 // What is wrong with an orbit, if anything: 'inside' what it orbits, 'close'
-// enough to be torn apart, or too far out ('loose') to be held.
+// enough to be torn apart, or too far out ('loose') to be held. An ellipse
+// is judged where it comes closest and where it goes farthest.
 export function orbitProblem(body, parent, grandparent = null) {
-  if (body.orbit_km <= parent.radius_km + body.radius_km) return 'inside'
+  if (periapsisOf(body) <= parent.radius_km + body.radius_km) return 'inside'
   const { near_km, far_km } = orbitLimits(body, parent, grandparent)
-  if (body.orbit_km < near_km) return 'close'
-  if (body.orbit_km > far_km) return 'loose'
+  if (periapsisOf(body) < near_km) return 'close'
+  if (apoapsisOf(body) > far_km) return 'loose'
   return ''
 }
 

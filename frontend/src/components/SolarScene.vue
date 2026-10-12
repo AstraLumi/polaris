@@ -16,7 +16,7 @@ import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { PlanetGrid } from '../planetGrid'
-import { sceneRadius, sceneDistance, scenePositions, bodyColor } from '../solarScale'
+import { sceneRadius, sceneDistance, scenePositions, sceneOrbitPath, bodyColor } from '../solarScale'
 import { orbitLimits } from '../orbits'
 import { habitableZone } from '../stars'
 import { createGlobeMesh } from '../three/globeMesh'
@@ -41,6 +41,9 @@ const props = defineProps({
   // picked body can orbit what it orbits.
   showZone: { type: Boolean, default: true },
   showLimits: { type: Boolean, default: true },
+  // With live gravity, where each body is (id -> km from what it orbits);
+  // null to follow the orbits as drawn.
+  relative: { type: Function, default: null },
 })
 const emit = defineEmits(['select'])
 
@@ -71,12 +74,14 @@ function disposeGroup(g) {
   })
 }
 
-function orbitLine(radius) {
-  const pts = []
-  for (let k = 0; k <= 128; k++) {
-    const a = (k / 128) * Math.PI * 2
-    pts.push(new THREE.Vector3(Math.cos(a) * radius, Math.sin(a) * radius, 0))
-  }
+// A line through points (a circle of `radius`, or the given ones).
+function orbitLine(radius, points = null) {
+  const pts = points
+    ? points.map((p) => new THREE.Vector3(...p))
+    : Array.from({ length: 129 }, (_, k) => {
+      const a = (k / 128) * Math.PI * 2
+      return new THREE.Vector3(Math.cos(a) * radius, Math.sin(a) * radius, 0)
+    })
   return new THREE.Line(
     new THREE.BufferGeometry().setFromPoints(pts),
     new THREE.LineBasicMaterial({ color: 0x8aa0c8, transparent: true, opacity: 0.35 }),
@@ -120,7 +125,7 @@ function buildBodies() {
     let orbit = null
     const parent = byId.get(b.parent_id)
     if (parent && b.orbit_km) {
-      orbit = orbitLine(sceneDistance(b.orbit_km, parent, b))
+      orbit = orbitLine(0, sceneOrbitPath(b, parent))
       bodyGroup.add(orbit)
     }
     meshes.set(b.id, { body: b, mesh, orbit })
@@ -188,7 +193,7 @@ function buildGlobe() {
 const positions = new Map()
 function place() {
   positions.clear()
-  for (const [id, p] of scenePositions(props.bodies, props.days)) positions.set(id, new THREE.Vector3(...p))
+  for (const [id, p] of scenePositions(props.bodies, props.days, undefined, props.relative)) positions.set(id, new THREE.Vector3(...p))
   for (const { body, mesh, orbit } of meshes.values()) {
     mesh.position.copy(positions.get(body.id))
     if (orbit) orbit.position.copy(positions.get(body.parent_id) ?? new THREE.Vector3())
@@ -354,6 +359,7 @@ watch(() => props.globe?.version, () => {
 })
 watch(() => props.tilt, buildBodies)
 watch(() => props.days, place)
+watch(() => props.relative, place)
 watch(() => props.selected, () => {
   buildMarkers()
   place()

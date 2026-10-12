@@ -293,6 +293,11 @@ func celestialFacts(db *sql.DB, a *wikiArticle) {
 	}
 	if b.OrbitKm != nil {
 		a.addFact("orbit_radius", kmText(*b.OrbitKm), "", nil)
+		if b.Eccentricity > 0 {
+			a.addFact("eccentricity", strconv.FormatFloat(b.Eccentricity, 'g', 3, 64), "", nil)
+			a.addFact("closest", kmText(*b.OrbitKm*(1-b.Eccentricity)), "", nil)
+			a.addFact("farthest", kmText(*b.OrbitKm*(1+b.Eccentricity)), "", nil)
+		}
 	}
 	if name := systemName(db); name != "" {
 		a.addFact("system", "", "", &wikiRef{Type: "solar_system", ID: 1, Name: name})

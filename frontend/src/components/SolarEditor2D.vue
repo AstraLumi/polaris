@@ -23,15 +23,11 @@
           <text :y="limits.far" :dy="extent * 0.03" :font-size="extent * 0.024" text-anchor="middle" class="far">{{ $t('Too far') }}</text>
         </template>
       </g>
-      <!-- Orbits -->
-      <circle
-        v-for="c in children"
-        :key="'o' + c.id"
-        :r="dist(c)"
-        class="ring"
-        :class="{ 'is-selected': c.id === selected }"
-        :stroke-width="extent * 0.004"
-      />
+      <!-- Orbits, with a dot where each comes closest -->
+      <template v-for="c in children" :key="'o' + c.id">
+        <path :d="orbitD(c)" class="ring" :class="{ 'is-selected': c.id === selected }" :stroke-width="extent * 0.004" />
+        <circle v-if="c.eccentricity > 0" :cx="peri(c)[0]" :cy="peri(c)[1]" :r="extent * 0.006" class="peri" :class="{ 'is-selected': c.id === selected }" />
+      </template>
       <!-- What everything here orbits -->
       <g v-if="focus" class="body is-focus" @click="$emit('select', focus.id)">
         <circle :r="size(focus)" :fill="colorOf(focus)" />
@@ -63,8 +59,8 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { t } from '../i18n'
-import { systemTree, orbitLimits } from '../orbits'
-import { sceneRadius, sceneDistance, orbitForSceneDistance, bodyColor } from '../solarScale'
+import { systemTree, orbitLimits, keplerOrbit, orbitPoint, orbitThrough } from '../orbits'
+import { sceneRadius, sceneDistance, orbitForSceneDistance, bodyColor, scenePoint, sceneOrbitPath } from '../solarScale'
 import { habitableZone } from '../stars'
 
 // The solar system's editor, seen from above and flat: what `focusId` is
@@ -90,7 +86,14 @@ const childrenOf = (id) => tree.value.childrenOf(id)
 const focus = computed(() => tree.value.byId.get(props.focusId) ?? tree.value.star)
 const children = computed(() => (focus.value ? childrenOf(focus.value.id) : []))
 
-const dist = (c) => sceneDistance(c.orbit_km, focus.value, c)
+// Where a body is on day 0, and its orbit, drawn (y down on screen, so
+// angles turn anticlockwise as seen from above the north pole).
+const flip = ([x, y]) => [x, -y]
+const at = (c) => flip(scenePoint(keplerOrbit.position(c, focus.value, 0), focus.value, c))
+const dist = (c) => Math.hypot(...at(c))
+const orbitD = (c) => 'M ' + sceneOrbitPath(c, focus.value).map((p) => flip(p).join(' ')).join(' L ') + ' Z'
+const peri = (c) => flip(scenePoint(orbitPoint(c, 0), focus.value, c))
+const reach = (c) => sceneDistance(c.orbit_km * (1 + (c.eccentricity || 0)), focus.value, c)
 
 // The markers, at the drawn scale. The habitable zone shows round the star;
 // the gravity limits round what the picked body orbits, when that is in
@@ -122,7 +125,7 @@ const limits = computed(() => {
 // doesn't run away from the pointer).
 const fitted = computed(() => {
   let far = focus.value ? sceneRadius(focus.value) * 1.6 : 1
-  for (const c of children.value) far = Math.max(far, dist(c) + sceneRadius(c))
+  for (const c of children.value) far = Math.max(far, reach(c) + sceneRadius(c))
   // The zone shows whole, and a near limit; a far one only when close by.
   if (zone.value) far = Math.max(far, zone.value.outer)
   if (limits.value) {
@@ -136,11 +139,6 @@ const extent = computed(() => (drag.value ? frozen.value : fitted.value))
 // Small bodies still get a size you can see and grab.
 const size = (b) => Math.max(sceneRadius(b), extent.value * 0.012)
 const hitSize = (b) => Math.max(size(b), extent.value * 0.03)
-const at = (c) => {
-  const a = ((c.phase || 0) * Math.PI) / 180
-  // Angles turn anticlockwise, as seen from above the north pole.
-  return [Math.cos(a) * dist(c), -Math.sin(a) * dist(c)]
-}
 
 // ---- Dragging --------------------------------------------------------------------------
 const drag = ref(null) // { id, moved }
@@ -170,10 +168,11 @@ function onMove(e) {
   const p = point(e)
   const d = Math.hypot(p.x, p.y)
   const phase = Math.round(((Math.atan2(-p.y, p.x) * 180) / Math.PI + 360) % 360)
-  // Rounded to three significant figures: tidy numbers in the form.
-  const km = Number(orbitForSceneDistance(d, focus.value, c).toPrecision(3))
+  // The orbit, of the same shape, that passes where the pointer is; its
+  // size rounded to three significant figures, for tidy numbers.
+  const through = orbitThrough(c, orbitForSceneDistance(d, focus.value, c), phase)
   drag.value.moved = true
-  emit('move', { id: c.id, orbit_km: km, phase })
+  emit('move', { id: c.id, orbit_km: Number(through.orbit_km.toPrecision(3)), phase })
 }
 
 function onUp(e) {
@@ -181,12 +180,11 @@ function onUp(e) {
   const { id, moved } = drag.value
   drag.value = null
   if (svgEl.value.hasPointerCapture?.(e.pointerId)) svgEl.value.releasePointerCapture(e.pointerId)
-  if (moved) {
-    emit('commit', id)
-    // The click that ends a drag isn't a click on the background.
-    justDragged = true
-    setTimeout(() => (justDragged = false), 0)
-  }
+  if (moved) emit('commit', id)
+  // The click that ends a press on a body (the view holds the pointer, so
+  // that click lands on the background) mustn't pick the background.
+  justDragged = true
+  setTimeout(() => (justDragged = false), 0)
 }
 
 function onBackground() {
@@ -263,6 +261,16 @@ const dragNote = computed(() => {
   fill: none;
   stroke: #8aa0c8;
   opacity: 0.35;
+}
+
+.peri {
+  fill: #8aa0c8;
+  opacity: 0.6;
+}
+
+.peri.is-selected {
+  fill: var(--accent);
+  opacity: 1;
 }
 
 .ring.is-selected {

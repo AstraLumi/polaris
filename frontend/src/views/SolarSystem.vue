@@ -21,6 +21,7 @@
         :selected="selectedId"
         :globe="globe"
         :tilt="main.tilt"
+        :relative="live ? simRelative : null"
         :show-zone="markers.zone"
         :show-limits="markers.limits"
         :sky="skyUrl()"
@@ -61,7 +62,15 @@
         <div class="tool-sep"></div>
         <button type="button" class="tool-btn" :title="$t('Back to day 0')" @click="days = 0">0</button>
         <button type="button" class="tool-btn" :title="$t('See the whole system')" @click="selectedId = null; sceneRef?.frame()">{{ $t('Fit') }}</button>
+        <button
+          type="button"
+          class="tool-btn"
+          :class="{ active: live }"
+          :title="$t('Let the gravity of every body move every other, from where the orbits put them on day 0')"
+          @click="live = !live"
+        >{{ $t('Live gravity') }}</button>
         <span class="day-label">{{ $t('Day {n}', { n: Math.floor(days).toLocaleString() }) }}</span>
+        <span v-if="live && lagging" class="lag" :title="$t('Too many steps to keep up at this speed; time runs slower')">{{ $t('catching up…') }}</span>
         </template>
       </div>
 
@@ -160,6 +169,19 @@
                 <input v-model.number="draft.phase" type="number" step="any" />
                 <small class="hint">{{ $t('Where on its orbit it is on day 0.') }}</small>
               </label>
+              <label class="field">
+                <span>{{ $t('Eccentricity') }}</span>
+                <div class="ecc">
+                  <input v-model.number="draft.eccentricity" type="range" min="0" max="0.95" step="0.01" />
+                  <input v-model.number="draft.eccentricity" type="number" min="0" max="0.95" step="0.01" class="ecc-num" />
+                </div>
+                <small class="hint">{{ $t('0 is a circle; the higher, the more stretched, coming closer and going farther.') }}</small>
+              </label>
+              <label v-if="draft.eccentricity > 0" class="field">
+                <span>{{ $t('Closest point at (°)') }}</span>
+                <input v-model.number="draft.periapsis" type="number" step="any" />
+                <small class="hint">{{ $t('The direction where the orbit comes closest.') }}</small>
+              </label>
             </template>
             <button
               v-if="draft.kind === 'planet' && mode === 'edit' && focusId !== draft.id"
@@ -190,6 +212,12 @@
               <template v-if="facts.period">
                 <dt>{{ draft.kind === 'moon' ? $t('One orbit') : $t('Year') }}</dt>
                 <dd>{{ facts.period }}</dd>
+              </template>
+              <template v-if="facts.closest">
+                <dt>{{ $t('Closest') }}</dt>
+                <dd>{{ facts.closest }}</dd>
+                <dt>{{ $t('Farthest') }}</dt>
+                <dd>{{ facts.farthest }}</dd>
               </template>
             </dl>
             <p v-if="problem" class="problem">{{ problem }}</p>
@@ -222,7 +250,7 @@ import { t, tn, tr } from '../i18n'
 import { solarApi, planetApi } from '../api'
 import { skyUrl, applyMapSettings } from '../worldMap'
 import { planetColorOf } from '../planetColors'
-import { bodyFacts, orbitProblem, systemTree } from '../orbits'
+import { bodyFacts, orbitProblem, systemTree, periapsisOf, apoapsisOf, createGravitySim } from '../orbits'
 import { useUnsavedGuard } from '../navigation'
 import { wikiPath } from '../wiki'
 import SolarScene from '../components/SolarScene.vue'
@@ -361,10 +389,35 @@ const speed = ref(10)
 let raf = 0
 let last = 0
 function tick(now) {
-  if (last) days.value += ((now - last) / 1000) * speed.value
+  if (last) {
+    const next = days.value + ((now - last) / 1000) * speed.value
+    if (live.value && sim) {
+      lagging.value = !sim.advanceTo(next)
+      days.value = sim.days
+    } else days.value = next
+  }
   last = now
   raf = requestAnimationFrame(tick)
 }
+
+// ---- Live gravity -------------------------------------------------------------------------
+// orbits.js steps every body by the gravity of all the others, from where
+// the orbits put them on day 0. Made again when the bodies change.
+const live = ref(false)
+const lagging = ref(false)
+let sim = null
+const simRelative = (id) => sim?.relative(id) ?? [0, 0, 0]
+function makeSim() {
+  sim = live.value ? createGravitySim(liveBodies.value) : null
+  if (sim) sim.advanceTo(days.value)
+  lagging.value = false
+}
+watch(live, makeSim)
+watch(liveBodies, () => live.value && makeSim(), { deep: true })
+// Going back (day 0) starts again; the clock moves it on otherwise.
+watch(days, (d) => {
+  if (sim && d < sim.days) sim.advanceTo(d)
+})
 watch(playing, (on) => {
   cancelAnimationFrame(raf)
   last = 0
@@ -538,8 +591,16 @@ const facts = computed(() => {
     gravity: `${num(f.gravity)} m/s² (${num(g)} g)`,
     escape: `${num(f.escape)} km/s`,
     period,
+    ...shapeFacts(b),
   }
 })
+
+// How close and how far an elliptical orbit goes.
+function shapeFacts(b) {
+  if (b.kind === 'star' || !(b.eccentricity > 0) || !(b.orbit_km > 0)) return {}
+  const show = (km) => (b.kind === 'moon' ? t('{n} km', { n: num(km) }) : t('{n} AU', { n: num(km / AU) }))
+  return { closest: show(periapsisOf(b)), farthest: show(apoapsisOf(b)) }
+}
 
 // A star's light, and where its habitable zone lies.
 function starFacts(b) {
@@ -691,6 +752,26 @@ const problem = computed(() => {
   font-size: 0.76rem;
   color: var(--accent);
   align-self: flex-start;
+}
+
+.ecc {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ecc input[type='range'] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.ecc-num {
+  width: 4.5rem;
+}
+
+.lag {
+  font-size: 0.72rem;
+  color: #e0a04a;
 }
 
 .marker-btn.zone.active {

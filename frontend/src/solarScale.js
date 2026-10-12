@@ -2,7 +2,7 @@
 // planet a pixel wide and a screen apart, so both are squeezed (a power
 // below 1 keeps bigger bigger and farther farther). The physics in
 // orbits.js always uses the true values; only the picture uses these.
-import { orbitModel } from './orbits.js'
+import { orbitModel, orbitPath } from './orbits.js'
 import { starColor } from './stars.js'
 
 // The colour a body is drawn in: its own, else a star's by its temperature
@@ -33,9 +33,21 @@ export function orbitForSceneDistance(distance, parent, body) {
   return Math.max(km, (parent.radius_km + body.radius_km) * 1.05)
 }
 
-// Where each body is drawn at `days`: in the direction the orbit model puts
-// it, at its drawn distance, added up the tree like the true positions.
-export function scenePositions(bodies, days, orbits = orbitModel()) {
+// A point `rel` km from a parent, drawn: same direction, squeezed distance.
+export function scenePoint(rel, parent, body) {
+  const len = Math.hypot(rel[0], rel[1], rel[2]) || 1
+  const d = sceneDistance(len, parent, body)
+  return [(rel[0] / len) * d, (rel[1] / len) * d, (rel[2] / len) * d]
+}
+
+// A body's whole orbit, drawn round its parent (an ellipse squeezed the
+// same way as the bodies on it, so they stay on their line).
+export const sceneOrbitPath = (body, parent, steps = 128) => orbitPath(body, steps).map((p) => scenePoint(p, parent, body))
+
+// Where each body is drawn at `days`: where the orbit model puts it, its
+// distance squeezed, added up the tree like the true positions. `relative`
+// (id -> km from its parent) replaces the model, for the live simulation.
+export function scenePositions(bodies, days, orbits = orbitModel(), relative = null) {
   const byId = new Map(bodies.map((b) => [b.id, b]))
   const out = new Map()
   const place = (b) => {
@@ -44,10 +56,9 @@ export function scenePositions(bodies, days, orbits = orbitModel()) {
     let p = [0, 0, 0]
     if (parent && b.orbit_km) {
       const base = place(parent)
-      const [x, y, z] = orbits.position(b, parent, days)
-      const len = Math.hypot(x, y, z) || 1
-      const d = sceneDistance(b.orbit_km, parent, b)
-      p = [base[0] + (x / len) * d, base[1] + (y / len) * d, base[2] + (z / len) * d]
+      const rel = relative ? relative(b.id) : orbits.position(b, parent, days)
+      const q = scenePoint(rel, parent, b)
+      p = [base[0] + q[0], base[1] + q[1], base[2] + q[2]]
     }
     out.set(b.id, p)
     return p

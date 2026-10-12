@@ -1,7 +1,7 @@
 // The solar system's physics (src/orbits.js) and its drawing scale
 // (src/solarScale.js). No dependencies: node frontend/tests/orbits.test.mjs
 import assert from 'node:assert/strict'
-import { massOf, surfaceGravity, circularOrbit, positionsAt, hillRadius, moonProblem, systemTree, orbitLimits, orbitProblem } from '../src/orbits.js'
+import { massOf, surfaceGravity, circularOrbit, keplerOrbit, positionsAt, hillRadius, moonProblem, systemTree, orbitLimits, orbitProblem, periapsisOf, apoapsisOf, orbitThrough, createGravitySim } from '../src/orbits.js'
 import { sceneRadius, sceneDistance, orbitForSceneDistance } from '../src/solarScale.js'
 import { SUN, AU_KM, luminosity, habitableZone, schwarzschildRadius, fitToClass, starColor } from '../src/stars.js'
 
@@ -70,4 +70,39 @@ assert.equal(orbitProblem({ ...moon, orbit_km: 8050 }, earth, sun), "inside")
 assert.equal(orbitProblem({ ...moon, body_type: "ocean", orbit_km: 9000 }, earth, sun), "close")
 assert.equal(orbitProblem(earth, sun), '')
 assert.ok(orbitLimits(earth, sun).far_km > 1e4 * AU_KM)
+// Ellipses: a comet at e = 0.9 starts at periapsis (phase = periapsis),
+// passes apoapsis half a period later, and keeps Kepler's period.
+const comet = { id: 9, kind: 'planet', body_type: 'rocky', radius_km: 5, orbit_km: 5 * AU_KM, parent_id: 1, eccentricity: 0.9, periapsis: 30, phase: 30 }
+const P = keplerOrbit.period(comet, sun)
+const dist = (p) => Math.hypot(...p)
+close(dist(keplerOrbit.position(comet, sun, 0)), periapsisOf(comet), 1e-9, 'starts closest')
+close(dist(keplerOrbit.position(comet, sun, P / 2)), apoapsisOf(comet), 1e-9, 'farthest half a period on')
+close(dist(keplerOrbit.position(comet, sun, P)), periapsisOf(comet), 1e-6, 'back after a period')
+// Faster when closer: a tenth of a period covers far more angle near periapsis.
+const angleAt = (d) => Math.atan2(keplerOrbit.position(comet, sun, d)[1], keplerOrbit.position(comet, sun, d)[0])
+assert.ok(Math.abs(angleAt(P * 0.05) - angleAt(0)) > Math.abs(angleAt(P * 0.55) - angleAt(P * 0.5)), 'faster near the star')
+// A circle is the old circle.
+close(keplerOrbit.position(earth, sun, 100)[0], circularOrbit.position(earth, sun, 100)[0], 1e-9, 'e = 0 is a circle')
+// Dragging to a point puts the body exactly there.
+const through = { ...comet, ...orbitThrough(comet, 2 * AU_KM, 120) }
+close(dist(keplerOrbit.position(through, sun, 0)), 2 * AU_KM, 1e-9, 'dragged distance')
+// An ellipse that dips too close is judged at its closest.
+assert.equal(orbitProblem({ ...moon, body_type: 'ocean', orbit_km: 30000, eccentricity: 0.7 }, earth, sun), 'close')
+
+// Live gravity: Earth and the Moon, a year on, are still where Kepler puts
+// them (the Moon round Earth, within a few percent).
+const sim = createGravitySim([sun, earth, moon])
+assert.ok(sim.advanceTo(365.25), 'a year in one go')
+const e1 = sim.relative(2)
+close(dist(e1), 1.496e8, 0.01, 'Earth stays at 1 AU')
+close(Math.atan2(e1[1], e1[0]) + 2 * Math.PI, 2 * Math.PI, 0.02, 'and comes round in a year')
+close(dist(sim.relative(3)), 384400, 0.05, 'the Moon stays round Earth')
+// A moon far beyond the Hill sphere is taken away.
+const lost = { ...moon, id: 4, orbit_km: 3e6 }
+const sim2 = createGravitySim([sun, earth, lost])
+sim2.advanceTo(400)
+assert.ok(dist(sim2.relative(4)) > 3e6 * 2, 'a loose moon drifts off')
+// Back in time starts again.
+sim.advanceTo(0)
+close(dist(sim.relative(2)), 1.496e8, 1e-9, 'reset')
 console.log('orbits: ok')
