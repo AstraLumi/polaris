@@ -3,6 +3,12 @@
 // below 1 keeps bigger bigger and farther farther). The physics in
 // orbits.js always uses the true values; only the picture uses these.
 import { orbitModel } from './orbits.js'
+import { starColor } from './stars.js'
+
+// The colour a body is drawn in: its own, else a star's by its temperature
+// and anything else by its type.
+const TYPE_COLORS = { rocky: '#9c8a74', gas: '#d9b38c', ocean: '#3f7fbf' }
+export const bodyColor = (b) => b.color || (b.kind === 'star' ? starColor(b) : TYPE_COLORS[b.body_type] || TYPE_COLORS.rocky)
 
 const SIZE_POWER = 0.35
 const SIZE_SCALE = 0.02

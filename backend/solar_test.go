@@ -24,12 +24,12 @@ func TestSolarSystem(t *testing.T) {
 	st := createStory(t, h, map[string]string{"name": "Sky"})
 	base := "/api/s/" + st.ID + "/solar"
 
-	rec, s := solarSave(t, h, "POST", base+"/bodies", `{"kind":"star","name":"Sol","body_type":"star","radius_km":696000}`)
+	rec, s := solarSave(t, h, "POST", base+"/bodies", `{"kind":"star","name":"Sol","body_type":"star","radius_km":696000,"temperature_k":5772,"mass_kg":1.989e30}`)
 	if rec.Code != 200 || len(s.Bodies) != 1 {
 		t.Fatalf("star: %d %s", rec.Code, rec.Body.String())
 	}
 	star := s.Bodies[0].ID
-	if rec, _ := solarSave(t, h, "POST", base+"/bodies", `{"kind":"star","name":"Second","body_type":"star","radius_km":1000}`); rec.Code != 400 {
+	if rec, _ := solarSave(t, h, "POST", base+"/bodies", `{"kind":"star","name":"Second","body_type":"star","radius_km":1000,"temperature_k":5772,"mass_kg":1e30}`); rec.Code != 400 {
 		t.Errorf("a second star: %d", rec.Code)
 	}
 	_, s = solarSave(t, h, "POST", base+"/bodies",
@@ -74,6 +74,53 @@ func TestSolarSystem(t *testing.T) {
 	_, s = solarSave(t, h, "DELETE", base+"/bodies/"+idStr(giant), ``)
 	if len(s.Bodies) != 2 {
 		t.Errorf("deleting the planet takes its moon: %+v", s.Bodies)
+	}
+}
+
+// A star has a class, a temperature and a mass; planets have none.
+func TestStarClasses(t *testing.T) {
+	_, h := newTestServer(t)
+	st := createStory(t, h, map[string]string{"name": "Stars"})
+	base := "/api/s/" + st.ID + "/solar"
+	rec, s := solarSave(t, h, "POST", base+"/bodies",
+		`{"kind":"star","name":"Remnant","body_type":"star","star_class":"black_hole","radius_km":29.5,"temperature_k":0,"mass_kg":1.989e31,"free_values":15}`)
+	if rec.Code != 200 {
+		t.Fatalf("black hole: %d %s", rec.Code, rec.Body.String())
+	}
+	b := s.Bodies[0]
+	if b.StarClass != "black_hole" || *b.TemperatureK != 0 || *b.MassKg != 1.989e31 || b.FreeValues != freeAll {
+		t.Errorf("star: %+v", b)
+	}
+	_, s = solarSave(t, h, "POST", base+"/bodies",
+		`{"kind":"planet","name":"P","body_type":"rocky","radius_km":6000,"orbit_km":1e8,"parent_id":`+idStr(b.ID)+`,"star_class":"red_giant","mass_kg":5}`)
+	if p := s.Bodies[1]; p.StarClass != "" || p.MassKg != nil {
+		t.Errorf("a planet keeps no star values: %+v", p)
+	}
+	for _, bad := range []string{
+		`{"kind":"star","name":"X","body_type":"star","star_class":"quasar","radius_km":1,"temperature_k":1,"mass_kg":1}`,
+		`{"kind":"star","name":"X","body_type":"star","radius_km":1,"temperature_k":1}`,
+	} {
+		if rec, _ := solarSave(t, h, "PUT", base+"/bodies/"+idStr(b.ID), bad); rec.Code != 400 {
+			t.Errorf("%s: %d", bad, rec.Code)
+		}
+	}
+}
+
+// Stars made before classes are Sun-like, with the mass their size gave.
+func TestMigrationGivesStarsAClass(t *testing.T) {
+	mgr, _ := newTestServer(t)
+	app, _ := mgr.open(createStoryDirect(t, mgr, "Old"))
+	rollBackSchema31(t, app.db)
+	if _, err := app.db.Exec(`INSERT INTO celestial_bodies (kind, name, body_type, radius_km) VALUES ('star', 'Sol', 'star', 696000)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureSchema(app.db); err != nil {
+		t.Fatal(err)
+	}
+	s, _ := loadSolarSystem(app.db)
+	b := s.Bodies[0]
+	if b.StarClass != "yellow_dwarf" || *b.TemperatureK != 5772 || math.Abs(*b.MassKg/1.989e30-1) > 0.01 {
+		t.Errorf("%+v, mass %v", b, *b.MassKg)
 	}
 }
 

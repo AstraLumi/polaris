@@ -20,13 +20,17 @@ export const BODY_TYPES = {
   ocean: { density: 3000 },
 }
 
-export const densityOf = (body) => BODY_TYPES[body.body_type]?.density ?? BODY_TYPES.rocky.density
+const volumeOf = (body) => (4 / 3) * Math.PI * (body.radius_km * 1000) ** 3
 
-// Mass in kg of a uniform sphere.
+// Mass in kg: a star's own (stars.js keeps it real for its class), else a
+// uniform sphere of its type's density.
 export function massOf(body) {
-  const r = body.radius_km * 1000
-  return densityOf(body) * (4 / 3) * Math.PI * r ** 3
+  if (body.mass_kg > 0) return body.mass_kg
+  return (BODY_TYPES[body.body_type]?.density ?? BODY_TYPES.rocky.density) * volumeOf(body)
 }
+
+// Average density, kg/m³.
+export const densityOf = (body) => massOf(body) / volumeOf(body)
 
 // Gravity at the surface, in m/s².
 export function surfaceGravity(body) {
@@ -126,10 +130,33 @@ export function bodyFacts(body, parent) {
   return facts
 }
 
-// Problems with a moon's orbit: inside its planet, or too far out for the
-// planet to hold it.
-export function moonProblem(moon, planet, star) {
-  if (moon.orbit_km <= planet.radius_km + moon.radius_km) return 'inside'
-  if (star && planet.orbit_km && moon.orbit_km > hillRadius(planet, star) / 2) return 'loose'
+// How close and how far a body can orbit its parent, in km, by the gravity
+// of both (and of the parent's own parent, when there is one):
+// - too close: inside the Roche limit, the parent's tides would pull a body
+//   of its density apart (and never closer than touching);
+// - too far: past half the parent's Hill sphere a moon is taken by the
+//   star; a planet round a star, past the star's reach against the rest of
+//   the galaxy (about 230 000 AU for the Sun, growing with the mass).
+const SUN_MASS = 1.989e30
+const AU = 1.496e8
+export function orbitLimits(body, parent, grandparent = null) {
+  const touching = parent.radius_km + body.radius_km
+  const roche = parent.radius_km * Math.cbrt((2 * densityOf(parent)) / densityOf(body))
+  const far = grandparent && parent.orbit_km
+    ? hillRadius(parent, grandparent) / 2
+    : 230000 * AU * Math.cbrt((massOf(parent) + massOf(body)) / SUN_MASS)
+  return { near_km: Math.max(roche, touching), far_km: far }
+}
+
+// What is wrong with an orbit, if anything: 'inside' what it orbits, 'close'
+// enough to be torn apart, or too far out ('loose') to be held.
+export function orbitProblem(body, parent, grandparent = null) {
+  if (body.orbit_km <= parent.radius_km + body.radius_km) return 'inside'
+  const { near_km, far_km } = orbitLimits(body, parent, grandparent)
+  if (body.orbit_km < near_km) return 'close'
+  if (body.orbit_km > far_km) return 'loose'
   return ''
 }
+
+// The same, for a moon: kept for the tests' sake.
+export const moonProblem = (moon, planet, star) => orbitProblem(moon, planet, star)

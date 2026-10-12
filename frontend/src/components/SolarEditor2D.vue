@@ -9,6 +9,20 @@
       @pointercancel="onUp"
       @click.self="onBackground"
     >
+      <!-- The habitable zone: a band round the star. -->
+      <g v-if="zone" class="zone">
+        <path :d="zonePath" fill-rule="evenodd" />
+        <text :x="zone.outer" :y="extent * 0.02" :font-size="extent * 0.026" text-anchor="end" :dx="-extent * 0.01">{{ $t('Habitable zone') }}</text>
+      </g>
+      <!-- How close and how far the picked body can orbit. -->
+      <g v-if="limits" class="limits">
+        <circle :r="limits.near" class="near" :stroke-width="extent * 0.005" :stroke-dasharray="`${extent * 0.02} ${extent * 0.012}`" />
+        <text :y="-limits.near" :dy="-extent * 0.008" :font-size="extent * 0.024" text-anchor="middle" class="near">{{ $t('Too close') }}</text>
+        <template v-if="limits.far < extent * 1.5">
+          <circle :r="limits.far" class="far" :stroke-width="extent * 0.005" :stroke-dasharray="`${extent * 0.02} ${extent * 0.012}`" />
+          <text :y="limits.far" :dy="extent * 0.03" :font-size="extent * 0.024" text-anchor="middle" class="far">{{ $t('Too far') }}</text>
+        </template>
+      </g>
       <!-- Orbits -->
       <circle
         v-for="c in children"
@@ -21,7 +35,7 @@
       <!-- What everything here orbits -->
       <g v-if="focus" class="body is-focus" @click="$emit('select', focus.id)">
         <circle :r="size(focus)" :fill="colorOf(focus)" />
-        <circle v-if="focus.kind === 'star'" :r="size(focus) * 1.35" :fill="colorOf(focus)" opacity="0.18" />
+        <circle v-if="focus.kind === 'star'" :r="size(focus) * 1.35" :fill="focus.star_class === 'black_hole' ? '#ff8c3a' : colorOf(focus)" opacity="0.18" />
       </g>
       <!-- The bodies on their orbits, at their starting angle -->
       <g
@@ -41,6 +55,7 @@
       </g>
     </svg>
     <p v-if="drag" class="drag-note">{{ dragNote }}</p>
+    <p v-else-if="limits && limits.far >= extent * 1.5" class="hint far-note">{{ $t('Too far: {far}, beyond this view', { far: limits.farText }) }}</p>
     <p v-else class="hint">{{ $t('Drag a body to move it: out or in changes its distance, round changes where it starts.') }}</p>
   </div>
 </template>
@@ -48,8 +63,9 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { t } from '../i18n'
-import { systemTree } from '../orbits'
-import { sceneRadius, sceneDistance, orbitForSceneDistance } from '../solarScale'
+import { systemTree, orbitLimits } from '../orbits'
+import { sceneRadius, sceneDistance, orbitForSceneDistance, bodyColor } from '../solarScale'
+import { habitableZone } from '../stars'
 
 // The solar system's editor, seen from above and flat: what `focusId` is
 // (the star, or a planet to see its moons) in the middle, and what orbits
@@ -60,12 +76,14 @@ const props = defineProps({
   bodies: { type: Array, default: () => [] },
   focusId: { type: Number, default: null },
   selected: { type: Number, default: null },
+  showZone: { type: Boolean, default: true },
+  showLimits: { type: Boolean, default: true },
 })
 const emit = defineEmits(['select', 'focus', 'move', 'commit'])
 
 const svgEl = ref(null)
-const TYPE_COLORS = { star: '#ffd27a', rocky: '#9c8a74', gas: '#d9b38c', ocean: '#3f7fbf' }
-const colorOf = (b) => b.color || TYPE_COLORS[b.body_type] || TYPE_COLORS.rocky
+const AU = 1.496e8
+const colorOf = bodyColor
 
 const tree = computed(() => systemTree(props.bodies))
 const childrenOf = (id) => tree.value.childrenOf(id)
@@ -73,11 +91,44 @@ const focus = computed(() => tree.value.byId.get(props.focusId) ?? tree.value.st
 const children = computed(() => (focus.value ? childrenOf(focus.value.id) : []))
 
 const dist = (c) => sceneDistance(c.orbit_km, focus.value, c)
+
+// The markers, at the drawn scale. The habitable zone shows round the star;
+// the gravity limits round what the picked body orbits, when that is in
+// the middle.
+const zone = computed(() => {
+  const f = focus.value
+  if (!props.showZone || f?.kind !== 'star') return null
+  const hz = habitableZone(f)
+  return hz && { inner: sceneDistance(hz.inner_km, f), outer: sceneDistance(hz.outer_km, f) }
+})
+const zonePath = computed(() => {
+  const ring = (r) => `M ${r} 0 A ${r} ${r} 0 1 0 ${-r} 0 A ${r} ${r} 0 1 0 ${r} 0 Z`
+  return zone.value ? ring(zone.value.outer) + ' ' + ring(zone.value.inner) : ''
+})
+const limits = computed(() => {
+  const b = tree.value.byId.get(props.selected)
+  const f = focus.value
+  if (!props.showLimits || !b || !f || b.parent_id !== f.id) return null
+  const grand = f.parent_id != null ? tree.value.byId.get(f.parent_id) : null
+  const { near_km, far_km } = orbitLimits(b, f, grand)
+  const n = (x) => Number(x.toPrecision(3)).toLocaleString()
+  return {
+    near: sceneDistance(near_km, f, b),
+    far: sceneDistance(far_km, f, b),
+    farText: far_km > AU * 0.1 ? t('{n} AU', { n: n(far_km / AU) }) : t('{n} km', { n: n(far_km) }),
+  }
+})
 // The view fits the farthest orbit (kept while dragging, so the view
 // doesn't run away from the pointer).
 const fitted = computed(() => {
   let far = focus.value ? sceneRadius(focus.value) * 1.6 : 1
   for (const c of children.value) far = Math.max(far, dist(c) + sceneRadius(c))
+  // The zone shows whole, and a near limit; a far one only when close by.
+  if (zone.value) far = Math.max(far, zone.value.outer)
+  if (limits.value) {
+    far = Math.max(far, limits.value.near)
+    if (limits.value.far < far * 1.3) far = Math.max(far, limits.value.far)
+  }
   return far * 1.15
 })
 const frozen = ref(1)
@@ -142,7 +193,6 @@ function onBackground() {
   if (!justDragged) emit('select', focus.value?.id ?? null)
 }
 
-const AU = 1.496e8
 const dragNote = computed(() => {
   const c = tree.value.byId.get(drag.value?.id)
   if (!c) return ''
@@ -165,6 +215,45 @@ const dragNote = computed(() => {
   height: 100%;
   touch-action: none;
   user-select: none;
+}
+
+.zone path {
+  fill: #4caf6e;
+  opacity: 0.16;
+}
+
+.zone text {
+  fill: #7fd39a;
+  pointer-events: none;
+}
+
+.limits circle {
+  fill: none;
+  opacity: 0.85;
+}
+
+.limits .near {
+  stroke: #e05a5a;
+  fill: #e05a5a;
+}
+
+.limits .far {
+  stroke: #e0a04a;
+  fill: #e0a04a;
+}
+
+.limits circle.near,
+.limits circle.far {
+  fill: none;
+}
+
+.limits text {
+  stroke: none;
+  pointer-events: none;
+}
+
+.far-note {
+  color: #e0a04a;
 }
 
 .ring {

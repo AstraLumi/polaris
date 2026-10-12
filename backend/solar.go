@@ -37,6 +37,37 @@ var schema30Statements = []string{
 	`CREATE INDEX idx_celestial_parent ON celestial_bodies(parent_id)`,
 }
 
+// schema31Statements create what schema 31 added: a star's class (white
+// dwarf, black hole…), its surface temperature and its own mass (a star's
+// mass isn't its size times one density), and which of temperature, size
+// and mass are typed freely instead of kept within what is real for the
+// class (freeValues). Stars made before are Sun-like stars.
+var schema31Statements = []string{
+	`ALTER TABLE celestial_bodies ADD COLUMN star_class TEXT`,
+	`ALTER TABLE celestial_bodies ADD COLUMN temperature_k REAL`,
+	`ALTER TABLE celestial_bodies ADD COLUMN mass_kg REAL`,
+	`ALTER TABLE celestial_bodies ADD COLUMN free_values INTEGER NOT NULL DEFAULT 0`,
+	`UPDATE celestial_bodies SET star_class = 'yellow_dwarf', temperature_k = 5772,
+		mass_kg = 1410 * 4.0 / 3.0 * 3.141592653589793 * (radius_km * 1000) * (radius_km * 1000) * (radius_km * 1000)
+		WHERE kind = 'star'`,
+}
+
+// The classes a star can be. Their realistic ranges live with the physics
+// (frontend/src/stars.js); here a star only has to be one of them.
+var starClasses = map[string]bool{
+	"yellow_dwarf": true, "red_giant": true, "white_dwarf": true,
+	"brown_dwarf": true, "neutron_star": true, "black_hole": true,
+}
+
+// freeValues bits: set when the value is typed freely ("Reality
+// Following" unticked).
+const (
+	freeTemperature = 1 << iota
+	freeRadius
+	freeMass
+	freeAll = freeTemperature | freeRadius | freeMass
+)
+
 const (
 	maxBodyName  = 80
 	maxRadiusKm  = 1e8  // a thousand suns
@@ -56,6 +87,11 @@ type celestialBody struct {
 	Color    string   `json:"color"`
 	IsMain   bool     `json:"is_main"`
 	Sort     int      `json:"sort"`
+	// Stars only.
+	StarClass    string   `json:"star_class"`
+	TemperatureK *float64 `json:"temperature_k"`
+	MassKg       *float64 `json:"mass_kg"`
+	FreeValues   int      `json:"free_values"`
 }
 
 // solarSystem is what GET /api/solar returns. The main planet's radius is
@@ -77,7 +113,8 @@ func loadSolarSystem(db *sql.DB) (solarSystem, error) {
 	out.Main.Tilt = m.Planet.Tilt
 	out.Main.Globe = m.Mode == "3d"
 	out.Bodies = []celestialBody{}
-	rows, err := db.Query(`SELECT id, parent_id, kind, name, body_type, radius_km, orbit_km, phase, COALESCE(color, ''), is_main, sort
+	rows, err := db.Query(`SELECT id, parent_id, kind, name, body_type, radius_km, orbit_km, phase, COALESCE(color, ''), is_main, sort,
+		COALESCE(star_class, ''), temperature_k, mass_kg, free_values
 		FROM celestial_bodies ORDER BY sort, id`)
 	if err != nil {
 		return out, err
@@ -86,9 +123,16 @@ func loadSolarSystem(db *sql.DB) (solarSystem, error) {
 	for rows.Next() {
 		var b celestialBody
 		var parent sql.NullInt64
-		var orbit sql.NullFloat64
-		if err := rows.Scan(&b.ID, &parent, &b.Kind, &b.Name, &b.BodyType, &b.RadiusKm, &orbit, &b.Phase, &b.Color, &b.IsMain, &b.Sort); err != nil {
+		var orbit, temp, mass sql.NullFloat64
+		if err := rows.Scan(&b.ID, &parent, &b.Kind, &b.Name, &b.BodyType, &b.RadiusKm, &orbit, &b.Phase, &b.Color, &b.IsMain, &b.Sort,
+			&b.StarClass, &temp, &mass, &b.FreeValues); err != nil {
 			return out, err
+		}
+		if temp.Valid {
+			b.TemperatureK = &temp.Float64
+		}
+		if mass.Valid {
+			b.MassKg = &mass.Float64
 		}
 		if parent.Valid {
 			b.ParentID = &parent.Int64
@@ -162,12 +206,28 @@ func checkBody(db *sql.DB, b *celestialBody, id int64) string {
 
 	if b.Kind == "star" {
 		b.ParentID, b.OrbitKm = nil, nil
+		if b.StarClass == "" {
+			b.StarClass = "yellow_dwarf"
+		}
+		if !starClasses[b.StarClass] {
+			return "unknown kind of star"
+		}
+		if b.TemperatureK == nil || !(*b.TemperatureK >= 0 && *b.TemperatureK <= 1e9) {
+			return "the temperature must be between 0 and 1 000 000 000 K"
+		}
+		if b.MassKg == nil || !(*b.MassKg > 0 && *b.MassKg <= 1e34) {
+			return "the mass must be more than 0"
+		}
+		b.FreeValues &= freeAll
 		var other int64
 		if db.QueryRow(`SELECT id FROM celestial_bodies WHERE kind = 'star' AND id != ?`, id).Scan(&other) == nil {
 			return "a solar system has one star"
 		}
 		return ""
 	}
+	// Only stars have these, for now; planets weigh what their size and
+	// type say.
+	b.StarClass, b.TemperatureK, b.MassKg, b.FreeValues = "", nil, nil, 0
 	if b.ParentID == nil {
 		return "pick what it orbits"
 	}
@@ -255,15 +315,19 @@ func writeBody(db *sql.DB, b *celestialBody, id int64) error {
 	}
 	color := nullableString(b.Color)
 	if id == 0 {
-		res, err := tx.Exec(`INSERT INTO celestial_bodies (parent_id, kind, name, body_type, radius_km, orbit_km, phase, color, is_main, sort)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM celestial_bodies))`,
-			b.ParentID, b.Kind, b.Name, b.BodyType, b.RadiusKm, b.OrbitKm, b.Phase, color, b.IsMain)
+		res, err := tx.Exec(`INSERT INTO celestial_bodies (parent_id, kind, name, body_type, radius_km, orbit_km, phase, color, is_main,
+				star_class, temperature_k, mass_kg, free_values, sort)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM celestial_bodies))`,
+			b.ParentID, b.Kind, b.Name, b.BodyType, b.RadiusKm, b.OrbitKm, b.Phase, color, b.IsMain,
+			nullableString(b.StarClass), b.TemperatureK, b.MassKg, b.FreeValues)
 		if err != nil {
 			return err
 		}
 		b.ID, _ = res.LastInsertId()
-	} else if _, err := tx.Exec(`UPDATE celestial_bodies SET name = ?, body_type = ?, radius_km = ?, orbit_km = ?, phase = ?, color = ?, is_main = ?
-		WHERE id = ?`, b.Name, b.BodyType, b.RadiusKm, b.OrbitKm, b.Phase, color, b.IsMain, id); err != nil {
+	} else if _, err := tx.Exec(`UPDATE celestial_bodies SET name = ?, body_type = ?, radius_km = ?, orbit_km = ?, phase = ?, color = ?, is_main = ?,
+			star_class = ?, temperature_k = ?, mass_kg = ?, free_values = ?
+		WHERE id = ?`, b.Name, b.BodyType, b.RadiusKm, b.OrbitKm, b.Phase, color, b.IsMain,
+		nullableString(b.StarClass), b.TemperatureK, b.MassKg, b.FreeValues, id); err != nil {
 		return err
 	}
 	return tx.Commit()

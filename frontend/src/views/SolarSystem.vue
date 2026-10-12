@@ -3,9 +3,11 @@
     <div class="map-wrap solar-page">
       <SolarEditor2D
         v-if="ready && bodies.length && mode === 'edit'"
-        :bodies="bodies"
+        :bodies="liveBodies"
         :focus-id="focusId"
         :selected="selectedId"
+        :show-zone="markers.zone"
+        :show-limits="markers.limits"
         @select="pick"
         @focus="focusId = $event"
         @move="onMove"
@@ -14,11 +16,13 @@
       <SolarScene
         v-else-if="ready && bodies.length"
         ref="sceneRef"
-        :bodies="bodies"
+        :bodies="liveBodies"
         :days="days"
         :selected="selectedId"
         :globe="globe"
         :tilt="main.tilt"
+        :show-zone="markers.zone"
+        :show-limits="markers.limits"
         :sky="skyUrl()"
         @select="pick"
       />
@@ -26,6 +30,13 @@
       <div v-if="ready && bodies.length" class="toolbar clock glass-panel panel-solid">
         <button type="button" class="tool-btn" :class="{ active: mode === 'edit' }" :title="$t('Edit the system from above, in 2D')" @click="setMode('edit')">{{ $t('Edit') }}</button>
         <button type="button" class="tool-btn" :class="{ active: mode === 'run' }" :title="$t('Watch it turn, in 3D')" @click="setMode('run')">{{ $t('Run') }}</button>
+        <div class="tool-sep"></div>
+        <button type="button" class="tool-btn marker-btn zone" :class="{ active: markers.zone }" :title="$t('Show where water can be liquid round the star')" @click="toggleMarker('zone')">
+          {{ $t('Habitable zone') }}
+        </button>
+        <button type="button" class="tool-btn marker-btn limits" :class="{ active: markers.limits }" :title="$t('Show how close and how far the picked body can orbit')" @click="toggleMarker('limits')">
+          {{ $t('Gravity limits') }}
+        </button>
         <div class="tool-sep"></div>
         <template v-if="mode === 'edit'">
           <button type="button" class="tool-btn crumb" :class="{ active: focusId == null }" @click="focusId = null">{{ star?.name }}</button>
@@ -105,10 +116,11 @@
               <span>{{ $t('Name') }}</span>
               <input v-model="draft.name" type="text" maxlength="80" required />
             </label>
+            <StarFields v-if="draft.kind === 'star'" v-model="draft" />
             <div class="field-row">
-              <label class="field">
+              <label v-if="draft.kind !== 'star'" class="field">
                 <span>{{ $t('Type') }}</span>
-                <select v-model="draft.body_type" :disabled="draft.kind === 'star'">
+                <select v-model="draft.body_type">
                   <option v-for="t in typesFor(draft.kind)" :key="t" :value="t">{{ $t(TYPE_LABELS[t]) }}</option>
                 </select>
               </label>
@@ -117,7 +129,7 @@
                 <input :value="draft.color || bodyColor(draft)" type="color" @input="draft.color = $event.target.value" />
               </label>
             </div>
-            <label class="field">
+            <label v-if="draft.kind !== 'star'" class="field">
               <span>{{ $t('Radius (km)') }}</span>
               <input v-model.number="draft.radius_km" type="number" min="0.001" step="any" :disabled="draft.is_main" />
               <small v-if="draft.is_main" class="hint">
@@ -158,6 +170,12 @@
               <dd>{{ facts.gravity }}</dd>
               <dt>{{ $t('Escape velocity') }}</dt>
               <dd>{{ facts.escape }}</dd>
+              <template v-if="facts.light">
+                <dt>{{ $t('Brightness') }}</dt>
+                <dd>{{ facts.light }}</dd>
+                <dt>{{ $t('Habitable zone') }}</dt>
+                <dd>{{ facts.zone }}</dd>
+              </template>
               <template v-if="facts.period">
                 <dt>{{ draft.kind === 'moon' ? $t('One orbit') : $t('Year') }}</dt>
                 <dd>{{ facts.period }}</dd>
@@ -192,10 +210,13 @@ import { t, tn, tr } from '../i18n'
 import { solarApi, planetApi } from '../api'
 import { skyUrl, applyMapSettings } from '../worldMap'
 import { planetColorOf } from '../planetColors'
-import { bodyFacts, moonProblem, systemTree } from '../orbits'
+import { bodyFacts, orbitProblem, systemTree } from '../orbits'
 import { useUnsavedGuard } from '../navigation'
 import SolarScene from '../components/SolarScene.vue'
 import SolarEditor2D from '../components/SolarEditor2D.vue'
+import StarFields from '../components/StarFields.vue'
+import { bodyColor } from '../solarScale'
+import { luminosity, habitableZone, SUN } from '../stars'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 
 // The Solar system tab: a star, its planets and their moons, each sized and
@@ -231,6 +252,9 @@ const focusId = ref(null)
 
 const tree = computed(() => systemTree(bodies.value))
 const star = computed(() => tree.value.star)
+// What the views draw: the saved bodies, with the one being edited as it is
+// in the form, so the markers follow the sliders before saving.
+const liveBodies = computed(() => (draft.value ? bodies.value.map((b) => (b.id === draft.value.id ? draft.value : b)) : bodies.value))
 const focusBody = computed(() => tree.value.byId.get(focusId.value) ?? null)
 
 function setMode(m) {
@@ -260,7 +284,23 @@ const planetForMoon = computed(() => {
 })
 
 const typesFor = (kind) => (kind === 'star' ? ['star'] : ['rocky', 'gas', 'ocean'])
-const bodyColor = (b) => b.color || { star: '#ffd27a', rocky: '#9c8a74', gas: '#d9b38c', ocean: '#3f7fbf' }[b.body_type]
+
+// The markers shown in both views, remembered on this device.
+const MARKERS_KEY = 'polaris-solar-markers'
+const markers = ref({ zone: true, limits: true })
+try {
+  Object.assign(markers.value, JSON.parse(localStorage.getItem(MARKERS_KEY) || '{}'))
+} catch {
+  // Defaults.
+}
+function toggleMarker(key) {
+  markers.value = { ...markers.value, [key]: !markers.value[key] }
+  try {
+    localStorage.setItem(MARKERS_KEY, JSON.stringify(markers.value))
+  } catch {
+    // Not remembered.
+  }
+}
 
 // ---- Loading -------------------------------------------------------------------------
 function take(system) {
@@ -361,7 +401,7 @@ async function addBody(body) {
 }
 
 function addStar() {
-  addBody({ kind: 'star', name: t('Sun'), body_type: 'star', radius_km: SUN_RADIUS })
+  addBody({ kind: 'star', name: t('Sun'), body_type: 'star', star_class: 'yellow_dwarf', ...SUN, free_values: 0 })
 }
 
 function addPlanet() {
@@ -438,7 +478,9 @@ async function remove() {
 }
 
 // ---- What the form says about the body ---------------------------------------------------
-const num = (x, digits = 3) => Number(x.toPrecision(digits)).toLocaleString()
+// Three significant figures; tiny values (a red giant's density) in
+// scientific notation rather than rounded to 0.
+const num = (x, digits = 3) => (x !== 0 && Math.abs(x) < 0.001 ? x.toExponential(digits - 1) : Number(x.toPrecision(digits)).toLocaleString())
 
 function radiusHint(b) {
   return b.kind === 'star'
@@ -470,6 +512,7 @@ const facts = computed(() => {
     mass: b.kind === 'star'
       ? t('{n} Suns', { n: num(f.mass / SUN_MASS) })
       : t('{n} Earths', { n: num(f.mass / EARTH_MASS) }),
+    ...starFacts(b),
     density: `${num(f.density / 1000)} g/cm³`,
     gravity: `${num(f.gravity)} m/s² (${num(g)} g)`,
     escape: `${num(f.escape)} km/s`,
@@ -477,17 +520,30 @@ const facts = computed(() => {
   }
 })
 
+// A star's light, and where its habitable zone lies.
+function starFacts(b) {
+  if (b.kind !== 'star') return {}
+  const zone = habitableZone(b)
+  const l = luminosity(b)
+  return {
+    light: l > 0 ? t('{n} Suns', { n: num(l) }) : t('None'),
+    zone: zone ? t('{from} to {to} AU', { from: num(zone.inner_km / AU), to: num(zone.outer_km / AU) }) : t('None'),
+  }
+}
+
 const problem = computed(() => {
   const b = draft.value
   if (!b || b.kind === 'star' || !(b.orbit_km > 0)) return ''
   const parent = tree.value.byId.get(b.parent_id)
   if (!parent) return ''
-  if (b.kind === 'planet') {
-    return b.orbit_km <= parent.radius_km ? t('This orbit is inside the star.') : ''
+  const why = orbitProblem(b, parent, b.kind === 'moon' ? tree.value.byId.get(parent.parent_id) : null)
+  if (why === 'inside') return b.kind === 'planet' ? t('This orbit is inside the star.') : t('This orbit is inside its planet.')
+  if (why === 'close') return t("This orbit is too close: inside the Roche limit, where the tides of what it orbits would tear it apart.")
+  if (why === 'loose') {
+    return b.kind === 'moon'
+      ? t("This orbit is too far out for its planet's gravity to hold the moon; the star would pull it away.")
+      : t("This orbit is too far out for the star's gravity to hold it against the rest of the galaxy.")
   }
-  const why = moonProblem(b, parent, tree.value.byId.get(parent.parent_id))
-  if (why === 'inside') return t('This orbit is inside its planet.')
-  if (why === 'loose') return t("This orbit is too far out for its planet's gravity to hold the moon; the star would pull it away.")
   return ''
 })
 </script>
@@ -603,6 +659,16 @@ const problem = computed(() => {
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+.marker-btn.zone.active {
+  border-color: #4caf6e;
+  background: rgba(76, 175, 110, 0.18);
+}
+
+.marker-btn.limits.active {
+  border-color: #e0864a;
+  background: rgba(224, 134, 74, 0.18);
 }
 
 .tree-item {

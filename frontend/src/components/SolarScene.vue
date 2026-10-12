@@ -16,7 +16,9 @@ import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { PlanetGrid } from '../planetGrid'
-import { sceneRadius, sceneDistance, scenePositions } from '../solarScale'
+import { sceneRadius, sceneDistance, scenePositions, bodyColor } from '../solarScale'
+import { orbitLimits } from '../orbits'
+import { habitableZone } from '../stars'
 import { createGlobeMesh } from '../three/globeMesh'
 import { loadSkyDome, disposeSkyDome } from '../three/skyDome'
 
@@ -35,6 +37,10 @@ const props = defineProps({
   // The main planet's axial tilt, in degrees.
   tilt: { type: Number, default: 0 },
   sky: { type: String, default: '' },
+  // The markers: the star's habitable zone, and how close and how far the
+  // picked body can orbit what it orbits.
+  showZone: { type: Boolean, default: true },
+  showLimits: { type: Boolean, default: true },
 })
 const emit = defineEmits(['select'])
 
@@ -42,8 +48,7 @@ const wrapEl = ref(null)
 const canvasEl = ref(null)
 const labels = ref([])
 
-const TYPE_COLORS = { star: '#ffd27a', rocky: '#9c8a74', gas: '#d9b38c', ocean: '#3f7fbf' }
-const colorOf = (b) => b.color || TYPE_COLORS[b.body_type] || TYPE_COLORS.rocky
+const colorOf = bodyColor
 
 let renderer, scene, camera, controls
 let raf = 0
@@ -54,6 +59,8 @@ let globeView = null // the map, built once and moved onto the main planet
 let bodyGroup = null // everything rebuilt when the bodies change
 const meshes = new Map() // body id -> { body, mesh, orbit (line, round its parent) }
 let follow = null // { id, last: Vector3 }
+let markerGroup = null // the habitable zone and the gravity limits
+let limitsAround = null // the id of the body the limits are drawn round
 
 // ---- Building ----------------------------------------------------------------------
 function disposeGroup(g) {
@@ -93,7 +100,7 @@ function buildBodies() {
       // A soft glow round it.
       mesh.add(new THREE.Mesh(
         new THREE.SphereGeometry(r * 1.35, 32, 16),
-        new THREE.MeshBasicMaterial({ color: colorOf(b), transparent: true, opacity: 0.18, depthWrite: false }),
+        new THREE.MeshBasicMaterial({ color: b.star_class === 'black_hole' ? '#ff8c3a' : colorOf(b), transparent: true, opacity: 0.18, depthWrite: false }),
       ))
     } else if (b.is_main && globeView) {
       // The map: its north pole tilted away from the orbit's pole.
@@ -119,7 +126,50 @@ function buildBodies() {
     meshes.set(b.id, { body: b, mesh, orbit })
   }
   scene.add(bodyGroup)
+  buildMarkers()
   place()
+}
+
+// ---- Markers -------------------------------------------------------------------------
+function dashedCircle(radius, color) {
+  const line = orbitLine(radius)
+  line.material.dispose()
+  line.material = new THREE.LineDashedMaterial({ color, dashSize: radius * 0.04, gapSize: radius * 0.025, transparent: true, opacity: 0.9 })
+  line.computeLineDistances()
+  return line
+}
+
+function buildMarkers() {
+  if (markerGroup) {
+    scene.remove(markerGroup)
+    disposeGroup(markerGroup)
+  }
+  markerGroup = new THREE.Group()
+  limitsAround = null
+  const byId = new Map(props.bodies.map((b) => [b.id, b]))
+  const star = props.bodies.find((b) => b.kind === 'star')
+  const hz = props.showZone && star ? habitableZone(star) : null
+  if (hz) {
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(sceneDistance(hz.inner_km, star), sceneDistance(hz.outer_km, star), 128),
+      new THREE.MeshBasicMaterial({ color: 0x4caf6e, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }),
+    )
+    ring.userData.zone = true
+    markerGroup.add(ring)
+  }
+  const b = byId.get(props.selected)
+  const parent = b && byId.get(b.parent_id)
+  if (props.showLimits && parent) {
+    const grand = parent.parent_id != null ? byId.get(parent.parent_id) : null
+    const { near_km, far_km } = orbitLimits(b, parent, grand)
+    const limits = new THREE.Group()
+    limits.add(dashedCircle(sceneDistance(near_km, parent, b), 0xe05a5a))
+    limits.add(dashedCircle(sceneDistance(far_km, parent, b), 0xe0a04a))
+    limits.userData.limits = true
+    markerGroup.add(limits)
+    limitsAround = parent.id
+  }
+  scene.add(markerGroup)
 }
 
 function buildGlobe() {
@@ -143,6 +193,9 @@ function place() {
     mesh.position.copy(positions.get(body.id))
     if (orbit) orbit.position.copy(positions.get(body.parent_id) ?? new THREE.Vector3())
   }
+  // The limits ring what the picked body orbits, wherever it is.
+  const limits = markerGroup?.children.find((o) => o.userData.limits)
+  if (limits && positions.has(limitsAround)) limits.position.copy(positions.get(limitsAround))
   requestRender()
 }
 
@@ -285,6 +338,7 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   controls?.dispose()
   disposeGroup(bodyGroup)
+  disposeGroup(markerGroup)
   globeView?.dispose()
   if (skyMesh) disposeSkyDome(skyMesh)
   renderer?.dispose()
@@ -300,7 +354,15 @@ watch(() => props.globe?.version, () => {
 })
 watch(() => props.tilt, buildBodies)
 watch(() => props.days, place)
-watch(() => props.selected, followSelected)
+watch(() => props.selected, () => {
+  buildMarkers()
+  place()
+  followSelected()
+})
+watch(() => [props.showZone, props.showLimits], () => {
+  buildMarkers()
+  place()
+})
 watch(() => props.sky, loadSky)
 
 defineExpose({ frame: () => {
