@@ -3,7 +3,9 @@
     <svg
       ref="svgEl"
       class="orrery"
-      :viewBox="`${-extent} ${-extent} ${extent * 2} ${extent * 2}`"
+      :viewBox="viewBox"
+      @pointerdown.self="onPanStart"
+      @wheel.prevent="onWheel"
       @pointermove="onMove"
       @pointerup="onUp"
       @pointercancel="onUp"
@@ -12,21 +14,21 @@
       <!-- The habitable zone: a band round the star. -->
       <g v-if="zone" class="zone">
         <path :d="zonePath" fill-rule="evenodd" />
-        <text :x="zone.outer" :y="extent * 0.02" :font-size="extent * 0.026" text-anchor="end" :dx="-extent * 0.01">{{ $t('Habitable zone') }}</text>
+        <text :x="zone.outer" :y="vu * 0.02" :font-size="vu * 0.026" text-anchor="end" :dx="-vu * 0.01">{{ $t('Habitable zone') }}</text>
       </g>
       <!-- How close and how far the picked body can orbit. -->
       <g v-if="limits" class="limits">
-        <circle :r="limits.near" class="near" :stroke-width="extent * 0.005" :stroke-dasharray="`${extent * 0.02} ${extent * 0.012}`" />
-        <text :y="-limits.near" :dy="-extent * 0.008" :font-size="extent * 0.024" text-anchor="middle" class="near">{{ $t('Too close') }}</text>
+        <circle :r="limits.near" class="near" :stroke-width="vu * 0.005" :stroke-dasharray="`${vu * 0.02} ${vu * 0.012}`" />
+        <text :y="-limits.near" :dy="-vu * 0.008" :font-size="vu * 0.024" text-anchor="middle" class="near">{{ $t('Too close') }}</text>
         <template v-if="limits.far < extent * 1.5">
-          <circle :r="limits.far" class="far" :stroke-width="extent * 0.005" :stroke-dasharray="`${extent * 0.02} ${extent * 0.012}`" />
-          <text :y="limits.far" :dy="extent * 0.03" :font-size="extent * 0.024" text-anchor="middle" class="far">{{ $t('Too far') }}</text>
+          <circle :r="limits.far" class="far" :stroke-width="vu * 0.005" :stroke-dasharray="`${vu * 0.02} ${vu * 0.012}`" />
+          <text :y="limits.far" :dy="vu * 0.03" :font-size="vu * 0.024" text-anchor="middle" class="far">{{ $t('Too far') }}</text>
         </template>
       </g>
       <!-- Orbits, with a dot where each comes closest -->
       <template v-for="c in children" :key="'o' + c.id">
-        <path :d="orbitD(c)" class="ring" :class="{ 'is-selected': c.id === selected }" :stroke-width="extent * 0.004" />
-        <circle v-if="c.eccentricity > 0" :cx="peri(c)[0]" :cy="peri(c)[1]" :r="extent * 0.006" class="peri" :class="{ 'is-selected': c.id === selected }" />
+        <path :d="orbitD(c)" class="ring" :class="{ 'is-selected': c.id === selected }" :stroke-width="vu * 0.004" />
+        <circle v-if="c.eccentricity > 0" :cx="peri(c)[0]" :cy="peri(c)[1]" :r="vu * 0.006" class="peri" :class="{ 'is-selected': c.id === selected }" />
       </template>
       <!-- What everything here orbits -->
       <g v-if="focus" class="body is-focus" @click="$emit('select', focus.id)">
@@ -44,12 +46,17 @@
         @dblclick.stop="childrenOf(c.id).length && $emit('focus', c.id)"
       >
         <circle :r="hitSize(c)" fill="transparent" />
-        <circle :r="size(c)" :fill="colorOf(c)" class="disc" :stroke-width="extent * 0.004" />
-        <text :y="-hitSize(c) - extent * 0.012" :font-size="extent * 0.032" text-anchor="middle">
+        <circle :r="size(c)" :fill="colorOf(c)" class="disc" :stroke-width="vu * 0.004" />
+        <text :y="-hitSize(c) - vu * 0.012" :font-size="vu * 0.032" text-anchor="middle">
           {{ c.name }}<tspan v-if="childrenOf(c.id).length" class="moons"> · {{ childrenOf(c.id).length }}☾</tspan>
         </text>
       </g>
     </svg>
+    <div class="zoom-tools glass-panel panel-solid">
+      <button type="button" class="zoom-btn" :title="$t('Zoom in')" @click="zoomBy(1.4)">+</button>
+      <button type="button" class="zoom-btn" :title="$t('Zoom out')" @click="zoomBy(1 / 1.4)">−</button>
+      <button type="button" class="zoom-btn fit" :title="$t('Fit everything in view')" @click="resetView">{{ $t('Fit') }}</button>
+    </div>
     <p v-if="drag" class="drag-note">{{ dragNote }}</p>
     <p v-else-if="limits && limits.far >= extent * 1.5" class="hint far-note">{{ $t('Too far: {far}, beyond this view', { far: limits.farText }) }}</p>
     <p v-else class="hint">{{ $t('Drag a body to move it: out or in changes its distance, round changes where it starts.') }}</p>
@@ -57,7 +64,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { t } from '../i18n'
 import { systemTree, orbitLimits, keplerOrbit, orbitPoint, orbitThrough } from '../orbits'
 import { sceneRadius, sceneDistance, orbitForSceneDistance, bodyColor, scenePoint, sceneOrbitPath } from '../solarScale'
@@ -68,6 +75,7 @@ import { habitableZone } from '../stars'
 // it on circles at the drawn scale of solarScale.js, each at its starting
 // angle. Dragging a body sets its distance and its angle; while dragging it
 // emits `move` ({ id, orbit_km, phase }), and `commit` (id) when let go.
+// Scroll (or the buttons) zooms, dragging the background moves the view.
 const props = defineProps({
   bodies: { type: Array, default: () => [] },
   focusId: { type: Number, default: null },
@@ -136,9 +144,51 @@ const fitted = computed(() => {
 })
 const frozen = ref(1)
 const extent = computed(() => (drag.value ? frozen.value : fitted.value))
+
+// ---- Zoom and pan ----------------------------------------------------------------------
+// zoom 1 fits everything; center is the middle of the view, in scene units.
+const zoom = ref(1)
+const center = ref([0, 0])
+const vu = computed(() => extent.value / zoom.value) // half the visible width
+const viewBox = computed(() => {
+  const h = vu.value
+  return `${center.value[0] - h} ${center.value[1] - h} ${h * 2} ${h * 2}`
+})
+const ZOOM_MIN = 0.5
+const ZOOM_MAX = 400
+
+function resetView() {
+  zoom.value = 1
+  center.value = [0, 0]
+}
+watch(() => props.focusId, resetView)
+
+// Zooms by `k` keeping `at` (scene units) where it is on screen.
+function zoomBy(k, at = center.value) {
+  const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom.value * k))
+  const f = zoom.value / next
+  center.value = [at[0] + (center.value[0] - at[0]) * f, at[1] + (center.value[1] - at[1]) * f]
+  zoom.value = next
+}
+
+function onWheel(e) {
+  const p = point(e)
+  zoomBy(Math.exp(-e.deltaY * 0.0015), [p.x, p.y])
+}
+
+let pan = null
+function onPanStart(e) {
+  pan = { x: e.clientX, y: e.clientY, center: [...center.value], scale: svgEl.value.getScreenCTM().a, moved: false }
+  try {
+    svgEl.value.setPointerCapture(e.pointerId)
+  } catch {
+    // Not a live pointer.
+  }
+}
+
 // Small bodies still get a size you can see and grab.
-const size = (b) => Math.max(sceneRadius(b), extent.value * 0.012)
-const hitSize = (b) => Math.max(size(b), extent.value * 0.03)
+const size = (b) => Math.max(sceneRadius(b), vu.value * 0.012)
+const hitSize = (b) => Math.max(size(b), vu.value * 0.03)
 
 // ---- Dragging --------------------------------------------------------------------------
 const drag = ref(null) // { id, moved }
@@ -162,6 +212,13 @@ function onDown(e, c) {
 }
 
 function onMove(e) {
+  if (pan) {
+    const dx = e.clientX - pan.x
+    const dy = e.clientY - pan.y
+    if (Math.hypot(dx, dy) > 3) pan.moved = true
+    center.value = [pan.center[0] - dx / pan.scale, pan.center[1] - dy / pan.scale]
+    return
+  }
   if (!drag.value) return
   const c = tree.value.byId.get(drag.value.id)
   if (!c) return
@@ -176,6 +233,16 @@ function onMove(e) {
 }
 
 function onUp(e) {
+  if (pan) {
+    // A drag of the background isn't a click on it.
+    if (pan.moved) {
+      justDragged = true
+      setTimeout(() => (justDragged = false), 0)
+    }
+    pan = null
+    if (svgEl.value.hasPointerCapture?.(e.pointerId)) svgEl.value.releasePointerCapture(e.pointerId)
+    return
+  }
   if (!drag.value) return
   const { id, moved } = drag.value
   drag.value = null
@@ -312,6 +379,39 @@ const dragNote = computed(() => {
 
 .moons {
   fill: #9fb0d0;
+}
+
+.zoom-tools {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  z-index: 2;
+}
+
+.zoom-btn {
+  min-width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.zoom-btn.fit {
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.zoom-btn:hover {
+  color: var(--text-primary);
+  background: var(--accent-soft);
 }
 
 .hint,

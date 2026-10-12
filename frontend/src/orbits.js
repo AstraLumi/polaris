@@ -77,6 +77,9 @@ const eccOf = (b) => Math.min(Math.max(b.eccentricity || 0, 0), 0.95)
 
 // The eccentric anomaly for a mean anomaly (Kepler's equation, by Newton).
 function eccentricAnomaly(M, e) {
+  // Wrapped into one turn first: many turns on (a fast moon, years in),
+  // Newton's method from far away jumped about, and the orbit with it.
+  M = ((M % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)
   let E = e < 0.8 ? M : Math.PI
   for (let i = 0; i < 30; i++) {
     const d = (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E))
@@ -144,36 +147,71 @@ export function useOrbitModel(m) {
   model = m
 }
 
-// ---- Live gravity ---------------------------------------------------------------------
-// Every body pulling on every other, stepped forward in time (leapfrog,
-// which keeps orbits from drifting). It starts from the Kepler orbits on
-// day 0 and from then on only gravity moves things: moons too far out are
-// taken, close planets tug at each other. Going back in time starts again
-// from day 0. A step is a small part of the quickest orbit; past maxSteps
-// a call stops short, and `days` lags behind what was asked.
-export function createGravitySim(bodies, { stepsPerOrbit = 200, maxSteps = 20000 } = {}) {
+// ---- Gravity ------------------------------------------------------------------------
+// Every body pulling on every other, stepped forward in time with a
+// fourth-order symplectic integrator (Yoshida), which keeps orbits from
+// drifting over thousands of turns. It starts from the Kepler orbits on day
+// 0 and from then on only gravity moves things: as a planet passes another,
+// each bends the other's path; moons too far out are taken. Going back in
+// time starts again from day 0.
+//
+// Steps adapt: each is a small part of the shortest orbit any pair of
+// bodies would have at their present distance, so a comet diving at its
+// star takes small steps there and big ones far out (fixed steps sent it
+// straight through). Past maxSteps a call stops short, and `days` lags
+// behind what was asked.
+//
+// It watches for the system coming apart: two bodies touching ('collision')
+// or a body no longer held by what it orbits ('escape': moving fast enough
+// to leave it, or, for a moon, out past its planet's reach). It stops at
+// the first, and reports it.
+const CBRT2 = Math.cbrt(2)
+const W1 = 1 / (2 - CBRT2)
+const W0 = -CBRT2 / (2 - CBRT2)
+const YOSHIDA_C = [W1 / 2, (W0 + W1) / 2, (W0 + W1) / 2, W1 / 2]
+const YOSHIDA_D = [W1, W0, W1]
+
+export function createGravitySim(bodies, { stepsPerOrbit = 120, maxSteps = 20000, checkEvery = 20 } = {}) {
   const { byId } = systemTree(bodies)
   const list = bodies.filter((b) => b.kind === 'star' || (b.orbit_km > 0 && byId.has(b.parent_id)))
   const n = list.length
   const index = new Map(list.map((b, i) => [b.id, i]))
   const mass = list.map(massOf)
+  const radius = list.map((b) => b.radius_km * 1000)
+  const parentIndex = list.map((b) => (b.parent_id != null && index.has(b.parent_id) ? index.get(b.parent_id) : -1))
+  // How far a moon can go from its planet before the star takes it (m).
+  const reach = list.map((b) => {
+    const p = byId.get(b.parent_id)
+    const g = p && byId.get(p.parent_id)
+    return b.kind === 'moon' && p && g && p.orbit_km ? hillRadius(p, g) * 1000 : Infinity
+  })
   let quickest = Infinity
   for (const b of list) if (b.parent_id != null) quickest = Math.min(quickest, keplerOrbit.period(b, byId.get(b.parent_id)))
-  const dt = (Number.isFinite(quickest) ? Math.max(quickest / stepsPerOrbit, 1e-4) : 1) * DAY // s
+  const maxDt = (Number.isFinite(quickest) ? quickest / stepsPerOrbit : 1) * DAY // s
+  const eta = (2 * Math.PI) / stepsPerOrbit
+  let pairTime = Infinity // the shortest r³/(G·m) time of any pair, s
   const pos = new Float64Array(n * 3) // m
   const vel = new Float64Array(n * 3) // m/s
   const acc = new Float64Array(n * 3)
   let days = 0
+  let event = null
+  let touching = null // [i, j] found while computing forces
 
   function accelerate() {
     acc.fill(0)
+    touching = null
+    pairTime = Infinity
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
         const dx = pos[j * 3] - pos[i * 3]
         const dy = pos[j * 3 + 1] - pos[i * 3 + 1]
         const dz = pos[j * 3 + 2] - pos[i * 3 + 2]
         const r2 = dx * dx + dy * dy + dz * dz || 1
-        const f = G / (r2 * Math.sqrt(r2))
+        const rr = radius[i] + radius[j]
+        if (r2 < rr * rr) touching = [i, j]
+        const r3 = r2 * Math.sqrt(r2)
+        pairTime = Math.min(pairTime, Math.sqrt(r3 / (G * (mass[i] + mass[j]))))
+        const f = G / r3
         acc[i * 3] += f * mass[j] * dx
         acc[i * 3 + 1] += f * mass[j] * dy
         acc[i * 3 + 2] += f * mass[j] * dz
@@ -186,6 +224,7 @@ export function createGravitySim(bodies, { stepsPerOrbit = 200, maxSteps = 20000
 
   function reset() {
     days = 0
+    event = null
     pos.fill(0)
     vel.fill(0)
     const done = new Set()
@@ -208,12 +247,35 @@ export function createGravitySim(bodies, { stepsPerOrbit = 200, maxSteps = 20000
     accelerate()
   }
 
-  function step() {
-    const h = dt / 2
-    for (let k = 0; k < n * 3; k++) vel[k] += acc[k] * h
-    for (let k = 0; k < n * 3; k++) pos[k] += vel[k] * dt
-    accelerate()
-    for (let k = 0; k < n * 3; k++) vel[k] += acc[k] * h
+  function step(dt) {
+    for (let s = 0; s < 4; s++) {
+      const c = YOSHIDA_C[s] * dt
+      for (let k = 0; k < n * 3; k++) pos[k] += vel[k] * c
+      if (s < 3) {
+        accelerate()
+        const d = YOSHIDA_D[s] * dt
+        for (let k = 0; k < n * 3; k++) vel[k] += acc[k] * d
+      }
+    }
+  }
+
+  // Relative position (m) and velocity (m/s) of body i to its parent.
+  function rel(i) {
+    const j = parentIndex[i]
+    const r = [0, 1, 2].map((k) => pos[i * 3 + k] - pos[j * 3 + k])
+    const v = [0, 1, 2].map((k) => vel[i * 3 + k] - vel[j * 3 + k])
+    return { r, v, mu: G * (mass[i] + mass[j]) }
+  }
+
+  function checkEscapes() {
+    for (let i = 0; i < n; i++) {
+      if (parentIndex[i] < 0) continue
+      const { r, v, mu } = rel(i)
+      const d = Math.hypot(...r)
+      const energy = (v[0] ** 2 + v[1] ** 2 + v[2] ** 2) / 2 - mu / d
+      if (energy >= 0 || d > reach[i]) return { type: 'escape', id: list[i].id, from: list[parentIndex[i]].id }
+    }
+    return null
   }
 
   reset()
@@ -221,24 +283,71 @@ export function createGravitySim(bodies, { stepsPerOrbit = 200, maxSteps = 20000
     get days() {
       return days
     },
-    // Moves on to `target` days (or as far as maxSteps allows); false when
-    // it fell short.
+    // What broke the system, if anything: { type, id, from } or { type,
+    // a, b }, with the day.
+    get event() {
+      return event
+    },
+    reset,
+    // Moves on to `target` days, as far as maxSteps allows, stopping at
+    // an event. True when it got there.
     advanceTo(target) {
       if (target < days) reset()
-      const want = Math.max(0, Math.floor(((target - days) * DAY) / dt))
-      const steps = Math.min(want, maxSteps)
-      for (let s = 0; s < steps; s++) step()
-      days += (steps * dt) / DAY
-      return steps === want
+      if (event) return false
+      for (let s = 0; days < target; s++) {
+        if (s >= maxSteps) return false
+        const dt = Math.min(maxDt, eta * pairTime, (target - days) * DAY)
+        step(dt)
+        days += dt / DAY
+        if (touching) {
+          event = { type: 'collision', a: list[touching[0]].id, b: list[touching[1]].id, days }
+          return false
+        }
+        if (s % checkEvery === 0) {
+          const e = checkEscapes()
+          if (e) {
+            event = { ...e, days }
+            return false
+          }
+        }
+      }
+      return true
     },
     // Where a body is relative to what it orbits, in km.
     relative(id) {
-      const b = byId.get(id)
       const i = index.get(id)
-      if (i == null || b?.parent_id == null || !index.has(b.parent_id)) return [0, 0, 0]
-      const j = index.get(b.parent_id)
-      return [0, 1, 2].map((k) => (pos[i * 3 + k] - pos[j * 3 + k]) / 1000)
+      if (i == null || parentIndex[i] < 0) return [0, 0, 0]
+      return rel(i).r.map((x) => x / 1000)
     },
+    // The orbit a body is on right now, by its position and speed (the
+    // osculating orbit): how gravity has reshaped it so far.
+    orbitNow(id) {
+      const i = index.get(id)
+      if (i == null || parentIndex[i] < 0) return null
+      const { r, v, mu } = rel(i)
+      return elementsFromState(r, v, mu)
+    },
+  }
+}
+
+// The ellipse through a position (m) with a velocity (m/s) round a mass
+// (mu = G·M): { orbit_km, eccentricity, periapsis (degrees), bound }. An
+// unbound path (eccentricity 1 or more) is flying off.
+export function elementsFromState(r, v, mu) {
+  const d = Math.hypot(r[0], r[1], r[2])
+  const v2 = v[0] ** 2 + v[1] ** 2 + v[2] ** 2
+  const energy = v2 / 2 - mu / d
+  const rv = r[0] * v[0] + r[1] * v[1] + r[2] * v[2]
+  // The eccentricity vector, pointing at periapsis (in the x-y plane).
+  const ex = ((v2 - mu / d) * r[0] - rv * v[0]) / mu
+  const ey = ((v2 - mu / d) * r[1] - rv * v[1]) / mu
+  const e = Math.hypot(ex, ey)
+  const bound = energy < 0 && e < 1
+  return {
+    orbit_km: bound ? -mu / (2 * energy) / 1000 : d / 1000,
+    eccentricity: e,
+    periapsis: ((Math.atan2(ey, ex) * 180) / Math.PI + 360) % 360,
+    bound,
   }
 }
 

@@ -1634,4 +1634,12 @@ export default {
   "too many features": "demasiados elementos",
   "unknown layer": "capa desconocida",
   "{name} (main)": "{name} (principal)",
+  "Dismiss": "Descartar",
+  "Each body on the orbit you set, always the same": "Cada cuerpo en la órbita que definiste, siempre igual",
+  "Every body pulls on every other: orbits bend as bodies pass each other, starting from the orbits you set on day 0": "Cada cuerpo atrae a todos los demás: las órbitas se curvan cuando los cuerpos se cruzan, a partir de las órbitas definidas el día 0",
+  "Gravity": "Gravedad",
+  "Static": "Estática",
+  "The orbits are not stable": "Las órbitas no son estables",
+  "{a} and {b} collided on day {day}.": "{a} y {b} chocaron el día {day}.",
+  "{a} flew off from {b} on day {day}: its gravity no longer holds it.": "{a} se escapó de {b} el día {day}: su gravedad ya no lo retiene.",
 }

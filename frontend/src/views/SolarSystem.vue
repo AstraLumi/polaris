@@ -22,6 +22,7 @@
         :globe="globe"
         :tilt="main.tilt"
         :relative="live ? simRelative : null"
+        :shapes="live ? shapes : null"
         :show-zone="markers.zone"
         :show-limits="markers.limits"
         :sky="skyUrl()"
@@ -62,16 +63,39 @@
         <div class="tool-sep"></div>
         <button type="button" class="tool-btn" :title="$t('Back to day 0')" @click="days = 0">0</button>
         <button type="button" class="tool-btn" :title="$t('See the whole system')" @click="selectedId = null; sceneRef?.frame()">{{ $t('Fit') }}</button>
-        <button
-          type="button"
-          class="tool-btn"
-          :class="{ active: live }"
-          :title="$t('Let the gravity of every body move every other, from where the orbits put them on day 0')"
-          @click="live = !live"
-        >{{ $t('Live gravity') }}</button>
+        <div class="tool-sep"></div>
+        <span class="orbit-mode" role="radiogroup" :aria-label="$t('Orbits')">
+          <button
+            type="button"
+            class="tool-btn"
+            role="radio"
+            :aria-checked="!live"
+            :class="{ active: !live }"
+            :title="$t('Each body on the orbit you set, always the same')"
+            @click="live = false"
+          >{{ $t('Static') }}</button>
+          <button
+            type="button"
+            class="tool-btn"
+            role="radio"
+            :aria-checked="live"
+            :class="{ active: live }"
+            :title="$t('Every body pulls on every other: orbits bend as bodies pass each other, starting from the orbits you set on day 0')"
+            @click="live = true"
+          >{{ $t('Gravity') }}</button>
+        </span>
         <span class="day-label">{{ $t('Day {n}', { n: Math.floor(days).toLocaleString() }) }}</span>
         <span v-if="live && lagging" class="lag" :title="$t('Too many steps to keep up at this speed; time runs slower')">{{ $t('catching up…') }}</span>
         </template>
+      </div>
+
+      <div v-if="unstable" class="unstable glass-panel panel-solid" role="alert">
+        <strong>{{ $t('The orbits are not stable') }}</strong>
+        <p>{{ unstableText }}</p>
+        <div class="unstable-actions">
+          <button type="button" class="btn btn-primary small" @click="restart">{{ $t('Back to day 0') }}</button>
+          <button type="button" class="btn btn-ghost small" @click="dismissUnstable">{{ $t('Dismiss') }}</button>
+        </div>
       </div>
 
       <p v-if="loadError" class="error-banner floating">{{ loadError }}</p>
@@ -250,7 +274,7 @@ import { t, tn, tr } from '../i18n'
 import { solarApi, planetApi } from '../api'
 import { skyUrl, applyMapSettings } from '../worldMap'
 import { planetColorOf } from '../planetColors'
-import { bodyFacts, orbitProblem, systemTree, periapsisOf, apoapsisOf, createGravitySim } from '../orbits'
+import { bodyFacts, orbitProblem, systemTree, periapsisOf, apoapsisOf, createGravitySim, positionsAt } from '../orbits'
 import { useUnsavedGuard } from '../navigation'
 import { wikiPath } from '../wiki'
 import SolarScene from '../components/SolarScene.vue'
@@ -392,31 +416,113 @@ function tick(now) {
   if (last) {
     const next = days.value + ((now - last) / 1000) * speed.value
     if (live.value && sim) {
-      lagging.value = !sim.advanceTo(next)
+      lagging.value = !sim.advanceTo(next) && !sim.event
       days.value = sim.days
-    } else days.value = next
+      if (sim.event) stopFor(sim.event)
+      else if (now - shapesAt > 200) updateShapes(now)
+    } else {
+      days.value = next
+      const hit = touchingNow()
+      if (hit) stopFor(hit)
+    }
   }
   last = now
-  raf = requestAnimationFrame(tick)
+  if (playing.value) raf = requestAnimationFrame(tick)
 }
 
-// ---- Live gravity -------------------------------------------------------------------------
-// orbits.js steps every body by the gravity of all the others, from where
-// the orbits put them on day 0. Made again when the bodies change.
+// ---- Instability ---------------------------------------------------------------------------
+// When bodies touch, or (with gravity) one flies off, the clock stops and
+// says so. Static orbits can't fly off, but crossing ones can meet.
+const unstable = ref(null) // { type, a, b } or { type, id, from }, with days
+const dismissedPairs = new Set() // static meetings already shown
+const nameOf = (id) => tree.value.byId.get(id)?.name ?? '?'
+const unstableText = computed(() => {
+  const u = unstable.value
+  if (!u) return ''
+  const day = Math.floor(u.days).toLocaleString()
+  return u.type === 'collision'
+    ? t('{a} and {b} collided on day {day}.', { a: nameOf(u.a), b: nameOf(u.b), day })
+    : t('{a} flew off from {b} on day {day}: its gravity no longer holds it.', { a: nameOf(u.id), b: nameOf(u.from), day })
+})
+
+function stopFor(event) {
+  playing.value = false
+  unstable.value = event
+}
+
+// With static orbits: two bodies that overlap where they are now.
+function touchingNow() {
+  const list = liveBodies.value
+  const pos = positionsAt(list, days.value)
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      const [a, b] = [list[i], list[j]]
+      const key = `${a.id}:${b.id}`
+      if (dismissedPairs.has(key)) continue
+      const pa = pos.get(a.id)
+      const pb = pos.get(b.id)
+      if (Math.hypot(pa[0] - pb[0], pa[1] - pb[1], pa[2] - pb[2]) < a.radius_km + b.radius_km) {
+        return { type: 'collision', a: a.id, b: b.id, days: days.value, key }
+      }
+    }
+  }
+  return null
+}
+
+function dismissUnstable() {
+  if (unstable.value?.key) dismissedPairs.add(unstable.value.key)
+  unstable.value = null
+}
+
+function restart() {
+  unstable.value = null
+  dismissedPairs.clear()
+  days.value = 0
+  sim?.reset()
+  updateShapes()
+}
+
+// ---- Gravity --------------------------------------------------------------------------------
+// Static: every body on the orbit it was given. Gravity: orbits.js steps
+// every body by the pull of all the others, from where the orbits put them
+// on day 0, so orbits bend as bodies pass. Made again when the bodies
+// change. The orbit lines then show the orbit each is on now.
 const live = ref(false)
 const lagging = ref(false)
 let sim = null
 const simRelative = (id) => sim?.relative(id) ?? [0, 0, 0]
+const shapes = ref(new Map())
+let shapesAt = 0
+function updateShapes(now = performance.now()) {
+  shapesAt = now
+  const out = new Map()
+  if (sim) {
+    for (const b of liveBodies.value) {
+      const o = sim.orbitNow(b.id)
+      if (o?.bound) out.set(b.id, { orbit_km: o.orbit_km, eccentricity: Math.min(o.eccentricity, 0.95), periapsis: o.periapsis })
+    }
+  }
+  shapes.value = out
+}
 function makeSim() {
+  unstable.value = null
   sim = live.value ? createGravitySim(liveBodies.value) : null
-  if (sim) sim.advanceTo(days.value)
+  if (sim) {
+    sim.advanceTo(days.value)
+    if (sim.event) stopFor(sim.event)
+  }
   lagging.value = false
+  updateShapes()
 }
 watch(live, makeSim)
 watch(liveBodies, () => live.value && makeSim(), { deep: true })
 // Going back (day 0) starts again; the clock moves it on otherwise.
 watch(days, (d) => {
-  if (sim && d < sim.days) sim.advanceTo(d)
+  if (sim && d < sim.days) {
+    unstable.value = null
+    sim.advanceTo(d)
+    updateShapes()
+  }
 })
 watch(playing, (on) => {
   cancelAnimationFrame(raf)
@@ -767,6 +873,37 @@ const problem = computed(() => {
 
 .ecc-num {
   width: 4.5rem;
+}
+
+.orbit-mode {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.unstable {
+  position: absolute;
+  top: 76px;
+  left: 50%;
+  translate: -50% 0;
+  max-width: min(460px, calc(100% - 32px));
+  padding: 0.85rem 1rem;
+  border-color: var(--danger);
+  z-index: 8;
+}
+
+.unstable strong {
+  color: var(--danger);
+}
+
+.unstable p {
+  margin: 0.35rem 0 0.7rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.unstable-actions {
+  display: flex;
+  gap: 0.5rem;
 }
 
 .lag {

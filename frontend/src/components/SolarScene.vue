@@ -44,6 +44,10 @@ const props = defineProps({
   // With live gravity, where each body is (id -> km from what it orbits);
   // null to follow the orbits as drawn.
   relative: { type: Function, default: null },
+  // With gravity, the orbit each body is on now (id -> { orbit_km,
+  // eccentricity, periapsis }, or no entry when it has none); null to
+  // draw the orbits as set.
+  shapes: { type: Map, default: null },
 })
 const emit = defineEmits(['select'])
 
@@ -360,6 +364,20 @@ watch(() => props.globe?.version, () => {
 watch(() => props.tilt, buildBodies)
 watch(() => props.days, place)
 watch(() => props.relative, place)
+
+// Redraws each orbit line as gravity has reshaped it (or as set).
+function drawShapes() {
+  const byId = new Map(props.bodies.map((b) => [b.id, b]))
+  for (const { body, orbit } of meshes.values()) {
+    if (!orbit) continue
+    const shape = props.shapes ? props.shapes.get(body.id) : body
+    orbit.visible = !!shape
+    if (!shape) continue
+    orbit.geometry.setFromPoints(sceneOrbitPath({ ...body, ...shape }, byId.get(body.parent_id)).map((p) => new THREE.Vector3(...p)))
+  }
+  requestRender()
+}
+watch(() => props.shapes, drawShapes)
 watch(() => props.selected, () => {
   buildMarkers()
   place()

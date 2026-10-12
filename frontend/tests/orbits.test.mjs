@@ -81,6 +81,13 @@ close(dist(keplerOrbit.position(comet, sun, P)), periapsisOf(comet), 1e-6, 'back
 // Faster when closer: a tenth of a period covers far more angle near periapsis.
 const angleAt = (d) => Math.atan2(keplerOrbit.position(comet, sun, d)[1], keplerOrbit.position(comet, sun, d)[0])
 assert.ok(Math.abs(angleAt(P * 0.05) - angleAt(0)) > Math.abs(angleAt(P * 0.55) - angleAt(P * 0.5)), 'faster near the star')
+// Many turns on, a fast eccentric moon is still on its ellipse (the angle
+// used to grow without bound and Kepler's equation went astray).
+const fast = { ...moon, orbit_km: 30000, eccentricity: 0.9, periapsis: 40 }
+for (const d of [1e3, 3.3e4, 1e6 + 0.37]) {
+  const r = dist(keplerOrbit.position(fast, earth, d))
+  assert.ok(r >= periapsisOf(fast) * 0.999999 && r <= apoapsisOf(fast) * 1.000001, `on the ellipse at day ${d}: ${r}`)
+}
 // A circle is the old circle.
 close(keplerOrbit.position(earth, sun, 100)[0], circularOrbit.position(earth, sun, 100)[0], 1e-9, 'e = 0 is a circle')
 // Dragging to a point puts the body exactly there.
@@ -100,8 +107,27 @@ close(dist(sim.relative(3)), 384400, 0.05, 'the Moon stays round Earth')
 // A moon far beyond the Hill sphere is taken away.
 const lost = { ...moon, id: 4, orbit_km: 3e6 }
 const sim2 = createGravitySim([sun, earth, lost])
-sim2.advanceTo(400)
-assert.ok(dist(sim2.relative(4)) > 3e6 * 2, 'a loose moon drifts off')
+assert.equal(sim2.advanceTo(400), false, 'stops when the moon breaks away')
+assert.equal(sim2.event?.type, 'escape')
+assert.equal(sim2.event.id, 4)
+assert.equal(sim2.event.from, 2)
+
+// A comet whose closest point is inside the star hits it: the run stops
+// at the collision.
+const diver = { id: 5, kind: 'planet', body_type: 'rocky', radius_km: 50, orbit_km: 0.05 * AU_KM, parent_id: 1, eccentricity: 0.95, periapsis: 0, phase: 180 }
+const sim3 = createGravitySim([sun, earth, diver])
+assert.equal(sim3.advanceTo(30), false)
+assert.equal(sim3.event?.type, 'collision', `event ${JSON.stringify(sim3.event)}`)
+assert.deepEqual([sim3.event.a, sim3.event.b].sort(), [1, 5])
+
+// The orbit gravity has the body on now: unchanged when nothing else pulls.
+const solo = createGravitySim([sun, comet])
+solo.advanceTo(300)
+const now = solo.orbitNow(9)
+close(now.orbit_km, comet.orbit_km, 1e-3, 'same size')
+close(now.eccentricity, comet.eccentricity, 1e-3, 'same shape')
+close(now.periapsis, comet.periapsis, 1e-3, 'same direction')
+assert.ok(now.bound)
 // Back in time starts again.
 sim.advanceTo(0)
 close(dist(sim.relative(2)), 1.496e8, 1e-9, 'reset')
