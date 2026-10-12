@@ -24,6 +24,11 @@
             :options="locationOptions"
             :legacy-text="shared.born_in"
           />
+          <label class="field">
+            <span>{{ $t('Earth Name') }}</span>
+            <input v-model="shared.earth_name" type="text" maxlength="200" :placeholder="$t('Who they are on Earth, if anyone')" />
+          </label>
+          <DateField v-model="shared.human_birth_date" :label="$t('Earth Birthdate')" earth />
           <BloodTypePicker v-model="shared.blood_type" class="span-2" />
         </div>
         <TagInput
@@ -147,7 +152,7 @@ const currentVersion = computed(() => versions.value.find((v) => v.is_current) |
 // What belongs to the character rather than to a version
 // (backend/charactershared.go), saved with its own button.
 const characterName = ref('')
-const shared = reactive({ birth_date: '', blood_type: '', born_in: '', born_in_location_id: null, tags: [] })
+const shared = reactive({ birth_date: '', human_birth_date: '', earth_name: '', blood_type: '', born_in: '', born_in_location_id: null, tags: [] })
 const sharedSaving = ref(false)
 const sharedSaved = ref(false)
 const sharedError = ref('')
@@ -169,6 +174,8 @@ function takeCharacter(current) {
   pageTitle.value = current.name
   Object.assign(shared, {
     birth_date: current.story.birth_date || '',
+    human_birth_date: current.story.human_birth_date || '',
+    earth_name: current.story.earth_name || '',
     blood_type: current.story.blood_type || '',
     born_in: current.story.born_in || '',
     born_in_location_id: current.story.born_in_location_id ?? null,

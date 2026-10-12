@@ -168,7 +168,6 @@ const groups = computed(() => {
         row(t('Body type'), s(x).body_type_name, s(y).body_type_name),
         row(t('Age'), s(x).age, s(y).age),
         row(t('Nation'), s(x).nation_name || s(x).nation, s(y).nation_name || s(y).nation),
-        row(t('Human birth date'), s(x).human_birth_date, s(y).human_birth_date),
         row(t('Status'), statusLabel(s(x).status), statusLabel(s(y).status)),
         row(t('Deaths'), s(x).deaths, s(y).deaths),
         row(t('Description'), s(x).description, s(y).description, { long: true }),

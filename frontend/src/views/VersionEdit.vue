@@ -115,7 +115,6 @@
             :legacy-text="form.nation"
             kingdom-only
           />
-          <DateField v-model="form.human_birth_date" :label="$t('Human birth date')" class="span-2" />
           <div class="field">
             <span>{{ $t('Status') }}</span>
             <div class="status-picker" role="radiogroup" :aria-label="$t('Status')">
@@ -139,7 +138,7 @@
           </label>
         </div>
         <p class="shared-note">
-          {{ $t('Birth date, blood type, Born in, tags and relations belong to the character, not to one version.') }}
+          {{ $t('Birth date, Born in, blood type, Earth name and birthdate, tags and relations belong to the character, not to one version.') }}
           <router-link :to="`/characters/${id}/versions`">{{ $t('Edit them with the versions') }}</router-link>
         </p>
         <div class="long-fields">
@@ -246,7 +245,6 @@ const form = reactive({
   weight: '',
   body_type: '',
   age: '',
-  human_birth_date: '',
   nation: '',
   nation_location_id: null,
   deaths: 0,
@@ -359,7 +357,6 @@ async function load() {
       weight: data.story.weight ?? '',
       body_type: data.story.body_type_name,
       age: data.story.age ?? '',
-      human_birth_date: data.story.human_birth_date,
       nation: data.story.nation,
       nation_location_id: data.story.nation_location_id,
       deaths: data.story.deaths,

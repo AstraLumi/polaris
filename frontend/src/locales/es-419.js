@@ -121,4 +121,10 @@ export default {
   "Restore the default blood types?": "¿Restaurar los tipos de sangre predeterminados?",
   "The list goes back to A, B, AB and O, each Rh+ and Rh−, with the built-in notes, and is saved. Characters keep the blood type they have.": "La lista vuelve a A, B, AB y O, cada uno Rh+ y Rh−, con las notas incluidas, y se guarda. Los personajes conservan el tipo de sangre que tienen.",
   "Birth date, blood type, Born in, tags and relations belong to the character, not to one version.": "La fecha de nacimiento, el tipo de sangre, Nacido en, las etiquetas y las relaciones pertenecen al personaje, no a una versión.",
+  "Birth date, Born in, blood type, Earth name and birthdate, tags and relations belong to the character, not to one version.": "La fecha de nacimiento, Nacido en, el tipo de sangre, el nombre y la fecha de nacimiento en la Tierra, las etiquetas y las relaciones pertenecen al personaje, no a una versión.",
+  "Bucket": "Cubeta",
+  "Fill the connected area that holds the same as the clicked hex with the selected major location": "Rellena el área contigua igual al hexágono en el que hiciste clic con la ubicación principal seleccionada",
+  "Scroll to zoom · Drag to turn the globe · Click to fill an area with {name}": "Desplázate para hacer zoom · Arrastra para girar el globo · Haz clic para rellenar un área con {name}",
+  "Scroll to zoom · Hold Space to drag the view · Click to fill an area with {name}": "Desplázate para hacer zoom · Mantén Espacio para arrastrar la vista · Haz clic para rellenar un área con {name}",
+  "The bucket only fills empty hexes.": "La cubeta solo rellena hexágonos vacíos.",
 }

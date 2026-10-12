@@ -303,7 +303,7 @@ export async function saveSettings(payload) {
 void [
   tr('a story can have at most 64 blood types'), tr('every blood type needs a name'),
   tr("a blood type's name can be at most 24 characters"), tr("a blood type's note can be at most 600 characters"),
-  tr('a blood type is listed twice'), tr('the blood type is too long'),
+  tr('a blood type is listed twice'), tr('the blood type is too long'), tr('the Earth name is too long'),
 ]
 
 // The story's blood types: [{ name, note }].
@@ -442,7 +442,7 @@ export function buildVersionFormData(form, build, specialBases, pictureFile, spe
   const fields = [
     'version_date', 'version_reference', 'name', 'nickname', 'level',
     'class', 'subclass', 'specialization',
-    'gender', 'race', 'height', 'weight', 'body_type', 'age', 'human_birth_date',
+    'gender', 'race', 'height', 'weight', 'body_type', 'age',
     'nation', 'nation_location_id', 'deaths', 'chapter_id',
     'description', 'bio', 'speech_mannerisms', 'status',
   ]

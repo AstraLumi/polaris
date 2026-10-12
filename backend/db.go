@@ -15,7 +15,7 @@ import (
 // oldest migration (or a brand new one) gets wiped and recreated from
 // freshSchema — so every schema change from here on should ship with a
 // migration instead of relying on that reset.
-const currentSchemaVersion = "28"
+const currentSchemaVersion = "29"
 
 const freshSchema = `
 CREATE TABLE classes (
@@ -480,6 +480,11 @@ var migrations = map[string]migration{
 		before:     widenRealms,
 		statements: schema28Statements,
 	},
+	"28": {
+		to: "29",
+		// The Earth birth date moves to the character, with an Earth name.
+		statements: schema29Statements,
+	},
 }
 
 // schema20Statements create what schema 20 added. The fresh schema runs them
@@ -713,7 +718,7 @@ func ensureSchema(db *sql.DB) error {
 			return fmt.Errorf("create schema: %w", err)
 		}
 	}
-	later := [][]string{wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements, schema24Statements, {gearDescriptionSQL}, schema26Statements, schema27Statements, schema28Statements}
+	later := [][]string{wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements, schema24Statements, {gearDescriptionSQL}, schema26Statements, schema27Statements, schema28Statements, schema29Statements}
 	for _, stmt := range slices.Concat(later...) {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("create wiki schema: %w", err)
@@ -785,6 +790,22 @@ func moveToCharacterSQL(cols ...string) []string {
 	}
 	return out
 }
+
+// schema29Statements create what schema 29 added. The fresh schema runs them
+// too.
+//
+// The Earth birth date (once "Human birth date", per version) belongs to the
+// character, like the in-story one, and the character gains an Earth name:
+// who they were or are on Earth, for isekai stories. Each character takes
+// the date from the first of its versions that has one, the current first.
+var schema29Statements = slices.Concat(
+	[]string{
+		`ALTER TABLE characters ADD COLUMN human_birth_date TEXT`,
+		`ALTER TABLE characters ADD COLUMN earth_name TEXT`,
+	},
+	moveToCharacterSQL("human_birth_date"),
+	[]string{`ALTER TABLE character_story DROP COLUMN human_birth_date`},
+)
 
 // schema24Statements create what schema 24 added: a stat can say that lower
 // is better, so its drops show as improvements. The default Cold Threshold

@@ -81,7 +81,8 @@ export const FACT_LABELS = {
   subclass: tr('Subclass'),
   specialization: tr('Specialization'),
   born: tr('Born'),
-  human_birth_date: tr('Human birth date'),
+  human_birth_date: tr('Earth Birthdate'),
+  earth_name: tr('Earth Name'),
   age: tr('Age'),
   blood_type: tr('Blood type'),
   born_in: tr('Born in'),
@@ -111,7 +112,7 @@ export const FACT_LABELS = {
 export const FACT_GROUPS = [
   { label: '', keys: ['nickname', 'also_known_as', 'status', 'tags'] },
   { label: tr('Personal'), keys: ['gender', 'age', 'race', 'body_type', 'blood_type'] },
-  { label: tr('Birth'), keys: ['born', 'born_in', 'nation', 'human_birth_date'] },
+  { label: tr('Birth'), keys: ['born', 'born_in', 'nation', 'earth_name', 'human_birth_date'] },
   { label: tr('Abilities'), keys: ['class', 'subclass', 'specialization'] },
   { label: tr('Geography'), keys: ['hemisphere', 'latitude', 'climate_zone'] },
 ]

@@ -459,7 +459,7 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 	id := a.ID
 	switch a.Type {
 	case "character":
-		var nick, gender, birth, bornText, nationText, desc, bio, speech, status, vname, vdate, blood, humanBirth string
+		var nick, gender, birth, bornText, nationText, desc, bio, speech, status, vname, vdate, blood, humanBirth, earthName string
 		var age sql.NullFloat64
 		var raceID, bodyID, classID, subID, specID, bornLoc, nationLoc, vchapter sql.NullInt64
 		var raceName, bodyName, className, subName, specName, bornName, nationName sql.NullString
@@ -471,7 +471,7 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 			       v.class_id, cl.name, v.subclass_id, sc.name, v.specialization_id, sp.name,
 			       ch.born_in_location_id, bl.name, st.nation_location_id, nl.name,
 			       v.name, COALESCE(v.version_date, ''), v.chapter_id,
-			       COALESCE(ch.blood_type, ''), COALESCE(st.human_birth_date, ''), st.age
+			       COALESCE(ch.blood_type, ''), COALESCE(ch.human_birth_date, ''), COALESCE(ch.earth_name, ''), st.age
 			FROM character_versions v
 			JOIN characters ch ON ch.id = v.character_id
 			LEFT JOIN character_story st ON st.version_id = v.id
@@ -487,7 +487,7 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 			&status, &raceID, &raceName, &bodyID, &bodyName,
 			&classID, &className, &subID, &subName, &specID, &specName,
 			&bornLoc, &bornName, &nationLoc, &nationName,
-			&vname, &vdate, &vchapter, &blood, &humanBirth, &age)
+			&vname, &vdate, &vchapter, &blood, &humanBirth, &earthName, &age)
 		if err != nil {
 			log.Printf("wiki character facts: %v", err)
 			return
@@ -524,6 +524,7 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 		a.addFact("subclass", "", "", refOf("subclass", subID, subName))
 		a.addFact("specialization", "", "", refOf("specialization", specID, specName))
 		a.addFact("born", normalizeStoryDate(birth), "date", nil)
+		a.addFact("earth_name", earthName, "", nil)
 		a.addFact("human_birth_date", normalizeStoryDate(humanBirth), "date", nil)
 		if l := refOf("location", bornLoc, bornName); l != nil {
 			a.addFact("born_in", "", "", l)

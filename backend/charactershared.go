@@ -10,15 +10,23 @@ import (
 )
 
 // sharedCharacterInput is what belongs to the character rather than to one
-// of its versions: birth date, blood type, birthplace and tags. The version
-// list page edits them, above the versions.
+// of its versions: birth date, blood type, birthplace, the Earth name and
+// birth date, and tags. The version list page edits them, above the versions.
 type sharedCharacterInput struct {
 	BirthDate        string   `json:"birth_date"`
+	HumanBirthDate   string   `json:"human_birth_date"`
+	EarthName        string   `json:"earth_name"`
 	BloodType        string   `json:"blood_type"`
 	BornIn           string   `json:"born_in"`
 	BornInLocationID *int64   `json:"born_in_location_id"`
 	Tags             []string `json:"tags"`
 }
+
+const maxEarthName = 200
+
+// earthCalendar checks Earth dates: 12 months of up to 31 days, whatever
+// the story's own calendar is.
+var earthCalendar = calendarSettings{MonthsPerYear: 12, DaysPerMonth: 31}
 
 func updateSharedCharacterHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -37,8 +45,18 @@ func updateSharedCharacterHandler(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-		if msg := checkDateFits(loadCalendar(db), "Birth date", in.BirthDate); msg != "" {
-			http.Error(w, msg, http.StatusBadRequest)
+		for _, c := range []struct {
+			cal         calendarSettings
+			label, date string
+		}{{loadCalendar(db), "Birth date", in.BirthDate}, {earthCalendar, "Earth birthdate", in.HumanBirthDate}} {
+			if msg := checkDateFits(c.cal, c.label, c.date); msg != "" {
+				http.Error(w, msg, http.StatusBadRequest)
+				return
+			}
+		}
+		earthName := strings.TrimSpace(in.EarthName)
+		if len([]rune(earthName)) > maxEarthName {
+			http.Error(w, "the Earth name is too long", http.StatusBadRequest)
 			return
 		}
 		blood := strings.TrimSpace(in.BloodType)
@@ -64,10 +82,13 @@ func updateSharedCharacterHandler(db *sql.DB) http.HandlerFunc {
 		}
 		defer tx.Rollback()
 		if _, err := tx.Exec(`
-			UPDATE characters SET birth_date = ?, blood_type = ?, born_in = ?, born_in_location_id = ?
+			UPDATE characters SET birth_date = ?, human_birth_date = ?, earth_name = ?,
+				blood_type = ?, born_in = ?, born_in_location_id = ?
 			WHERE id = ?
 		`,
 			nullableString(normalizeStoryDate(in.BirthDate)),
+			nullableString(normalizeStoryDate(in.HumanBirthDate)),
+			nullableString(earthName),
 			nullableString(blood),
 			nullableString(unlinkedText(in.BornIn, bornInLoc)), bornInLoc,
 			characterID,

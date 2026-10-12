@@ -121,6 +121,15 @@
       @saved="onMajorSaved"
       @deleted="onMajorDeleted"
     />
+
+    <ConfirmDialog
+      v-if="bucketAsk"
+      :title="$tn('Fill {n} hex?', 'Fill {n} hexes?', bucketAsk.cells.length)"
+      :message="$t('That is a big area. It is painted with {name}; Undo takes it back.', { name: bucketAsk.name })"
+      :confirm-label="$t('Fill')"
+      @cancel="bucketAsk = null"
+      @confirm="confirmBucket"
+    />
   </div>
 </template>
 
@@ -135,6 +144,8 @@ import { areaFontPx } from '../planetLabels'
 import { formatLatitude, zoneOf } from '../planet'
 import PlanetGlobe from '../components/PlanetGlobe.vue'
 import PlanetFlatMap from '../components/PlanetFlatMap.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { floodFill, BUCKET_WARN } from '../bucketFill'
 import MapHoverPane from '../components/MapHoverPane.vue'
 import MajorLocationList from '../components/MajorLocationList.vue'
 import HexPanel from '../components/HexPanel.vue'
@@ -150,6 +161,7 @@ const tools = [
   { key: 'select', label: tr('Select'), title: tr('Click a hex to inspect it and add locations. Drag to turn the globe.') },
   { key: 'paint', label: tr('Paint'), title: tr('Paint hexes with the selected major location') },
   { key: 'erase', label: tr('Erase'), title: tr('Erase the selected major location from hexes (everything, if none is selected)') },
+  { key: 'fill', label: tr('Bucket'), title: tr('Fill the empty hexes connected to the clicked one with the selected major location') },
 ]
 const BRUSHES = [
   { radius: 0, hexes: 1, dot: 5 },
@@ -277,6 +289,11 @@ const hint = computed(() => {
     return activeName.value
       ? t('Scroll to zoom · Hold Space to turn the globe · Erasing {name}', { name: activeName.value })
       : t('Scroll to zoom · Hold Space to turn the globe · Erasing everything on a hex')
+  }
+  if (tool.value === 'fill') {
+    return activeName.value
+      ? t('Scroll to zoom · Drag to turn the globe · Click to fill an area with {name}', { name: activeName.value })
+      : t('Scroll to zoom · Hold Space to turn the globe · Pick a major location below to paint with')
   }
   return t('Scroll to zoom · Drag to turn the globe · Click a hex to inspect it')
 })
@@ -420,6 +437,7 @@ function refreshPanel() {
 }
 
 function onSelect(cell) {
+  if (tool.value === 'fill') return bucketAt(cell)
   selectedCell.value = cell
   focusId.value = null
   refreshPanel()
@@ -503,6 +521,39 @@ function onPaintEnd() {
     }
     refreshPanel()
   })
+}
+
+// ---- Bucket --------------------------------------------------------------------------------
+// A click fills the connected empty hexes around the clicked one
+// (bucketFill.js); hexes with anything on them are left alone. The planet is
+// finite, so any area ends somewhere.
+const bucketAsk = ref(null) // { cells, locId, name }: a big fill waiting for a yes
+
+function bucketAt(cell) {
+  if (cell == null) return
+  const loc = locMap.get(activeId.value)
+  if (!loc) {
+    flash(t('Pick a major location in the bar below to paint with.'))
+    return
+  }
+  if (idsAt(cell).length) return flash(t('The bucket only fills empty hexes.'))
+  const { cells, tooBig } = floodFill(cell, { neighbors: (c) => grid.neighbors(c), empty: (c) => !idsAt(c).length })
+  if (tooBig) return flash(t('That area is too big to fill at once.'))
+  if (cells.length > BUCKET_WARN) bucketAsk.value = { cells, locId: loc.id, name: loc.name }
+  else fill(cells, loc.id)
+}
+
+function confirmBucket() {
+  const { cells, locId } = bucketAsk.value
+  bucketAsk.value = null
+  fill(cells, locId)
+}
+
+// Painted like one stroke, so Undo takes it back whole.
+function fill(cells, locId) {
+  stroke = { type: 'paint', locId, before: new Map(), changed: new Set() }
+  onPaint(cells)
+  onPaintEnd()
 }
 
 // ---- Undo / redo -----------------------------------------------------------------------

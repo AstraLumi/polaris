@@ -42,6 +42,9 @@ const props = defineProps({
   modelValue: { type: String, default: '' },
   label: { type: String, default: tr('Date') },
   hint: { type: String, default: '' },
+  // A date on Earth: 12 months of up to 31 days, whatever the story's
+  // calendar is.
+  earth: { type: Boolean, default: false },
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -83,10 +86,10 @@ const problem = computed(() => {
   const p = digitsToParts(digits.value, negative.value)
   if (!p) return negative.value ? t('Enter a year.') : ''
   if (p.year === 0) return t('There is no year 0 — the year before 1 is -1.')
-  if (p.month !== null && (p.month < 1 || p.month > calendar.months_per_year))
-    return t('Month must be 1–{max}.', { max: calendar.months_per_year })
-  if (p.day !== null && (p.day < 1 || p.day > calendar.days_per_month))
-    return t('Day must be 1–{max}.', { max: calendar.days_per_month })
+  const months = props.earth ? 12 : calendar.months_per_year
+  const days = props.earth ? 31 : calendar.days_per_month
+  if (p.month !== null && (p.month < 1 || p.month > months)) return t('Month must be 1–{max}.', { max: months })
+  if (p.day !== null && (p.day < 1 || p.day > days)) return t('Day must be 1–{max}.', { max: days })
   return ''
 })
 // Half-typed dates are often "wrong" on the way (21 as a month), so problems

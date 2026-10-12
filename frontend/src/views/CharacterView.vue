@@ -74,7 +74,8 @@
           <ReadField :label="$t('Born in')" :value="data.story.born_in_name || data.story.born_in" />
           <ReadField :label="$t('Nation')" :value="data.story.nation_name || data.story.nation" />
           <ReadField :label="$t('Birth date (in-story)')" :value="data.story.birth_date" />
-          <ReadField :label="$t('Human birth date')" :value="data.story.human_birth_date" />
+          <ReadField :label="$t('Earth Name')" :value="data.story.earth_name" />
+          <ReadField :label="$t('Earth Birthdate')" :value="data.story.human_birth_date" />
           <ReadField :label="$t('Status')" :value="statusLabel(data.story.status)" />
           <ReadField :label="$t('Deaths')" :value="data.story.deaths" />
         </div>

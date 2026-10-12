@@ -139,6 +139,15 @@
       @saved="onMajorSaved"
       @deleted="onMajorDeleted"
     />
+
+    <ConfirmDialog
+      v-if="bucketAsk"
+      :title="$tn('Fill {n} hex?', 'Fill {n} hexes?', bucketAsk.cells.length)"
+      :message="$t('That is a big area. It is painted with {name}; Undo takes it back.', { name: bucketAsk.name })"
+      :confirm-label="$t('Fill')"
+      @cancel="bucketAsk = null"
+      @confirm="confirmBucket"
+    />
   </div>
 </template>
 
@@ -157,6 +166,8 @@ import MapHoverPane from '../components/MapHoverPane.vue'
 import MajorLocationList from '../components/MajorLocationList.vue'
 import HexPanel from '../components/HexPanel.vue'
 import MajorLocationModal from '../components/MajorLocationModal.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { floodFill, BUCKET_WARN } from '../bucketFill'
 
 const ZOOM_MIN = 0.15
 const ZOOM_MAX = 4
@@ -165,6 +176,7 @@ const tools = [
   { key: 'select', label: tr('Select'), title: tr('Click a hex to inspect it and add locations. Drag to move the view.') },
   { key: 'paint', label: tr('Paint'), title: tr('Paint hexes with the selected major location') },
   { key: 'erase', label: tr('Erase'), title: tr('Erase the selected major location from hexes (everything, if none is selected)') },
+  { key: 'fill', label: tr('Bucket'), title: tr('Fill the empty hexes connected to the clicked one with the selected major location') },
   { key: 'pan', label: tr('Pan'), title: tr('Drag to move the view (or hold Space with any tool)') },
 ]
 
@@ -237,7 +249,7 @@ const wrapClass = computed(() => ({
   'has-list': !listClosed.value,
   'cursor-grab': (tool.value === 'pan' || spaceDown.value) && !panning.value,
   'cursor-grabbing': panning.value,
-  'cursor-cross': (tool.value === 'paint' || tool.value === 'erase') && !spaceDown.value,
+  'cursor-cross': (tool.value === 'paint' || tool.value === 'erase' || tool.value === 'fill') && !spaceDown.value,
 }))
 
 const hint = computed(() => {
@@ -251,6 +263,11 @@ const hint = computed(() => {
     return activeName.value
       ? t('Scroll to zoom · Hold Space to drag the view · Erasing {name}', { name: activeName.value })
       : t('Scroll to zoom · Hold Space to drag the view · Erasing everything on a hex')
+  }
+  if (tool.value === 'fill') {
+    return activeName.value
+      ? t('Scroll to zoom · Hold Space to drag the view · Click to fill an area with {name}', { name: activeName.value })
+      : t('Scroll to zoom · Hold Space to drag the view · Pick a major location below to paint with')
   }
   if (tool.value === 'select') return t('Scroll to zoom · Hold Space to drag the view · Click a hex to inspect it')
   return t('Scroll to zoom · Hold Space to drag the view')
@@ -1074,6 +1091,9 @@ function onPointerUp(e) {
   if (finished.type === 'pan' && finished.selectOnClick && !finished.moved && placingEquator.value) {
     const { sx, sy } = eventPoint(e)
     placeEquator(hexAt(sx, sy))
+  } else if (finished.type === 'pan' && finished.selectOnClick && !finished.moved && tool.value === 'fill') {
+    const { sx, sy } = eventPoint(e)
+    bucketAt(hexAt(sx, sy))
   } else if (finished.type === 'pan' && finished.selectOnClick && !finished.moved) {
     const { sx, sy } = eventPoint(e)
     selectedHex.value = hexAt(sx, sy)
@@ -1164,6 +1184,63 @@ function commitStroke(stroke) {
     }
     refreshPanels()
   })
+}
+
+// ---- Bucket --------------------------------------------------------------------------------
+// A click fills the connected empty hexes around the clicked one
+// (bucketFill.js); hexes with anything on them are left alone. The area must
+// be closed in: past the painted part of the map, the 2D map runs on forever.
+const HEX_STEPS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]]
+const bucketAsk = ref(null) // { cells, locId, name }: a big fill waiting for a yes
+
+function bucketAt(hex) {
+  if (!hex) return
+  const loc = locMap.get(activeId.value)
+  if (!loc) {
+    flash(t('Pick a major location in the bar below to paint with.'))
+    return
+  }
+  if (idsAt(keyOf(hex.q, hex.r)).length) return flash(t('The bucket only fills empty hexes.'))
+  let minQ = Infinity, maxQ = -Infinity, minR = Infinity, maxR = -Infinity
+  for (const h of hexMembers.values()) {
+    minQ = Math.min(minQ, h.q)
+    maxQ = Math.max(maxQ, h.q)
+    minR = Math.min(minR, h.r)
+    maxR = Math.max(maxR, h.r)
+  }
+  const { cells, open, tooBig } = floodFill(keyOf(hex.q, hex.r), {
+    neighbors: (k) => {
+      const [q, r] = k.split(',').map(Number)
+      return HEX_STEPS.map(([dq, dr]) => keyOf(q + dq, r + dr))
+    },
+    empty: (k) => !idsAt(k).length,
+    escapes: (k) => {
+      const [q, r] = k.split(',').map(Number)
+      return q < minQ || q > maxQ || r < minR || r > maxR
+    },
+  })
+  if (open) return flash(t("That area isn't closed in, so it would never end. Paint around it first."))
+  if (tooBig) return flash(t('That area is too big to fill at once.'))
+  if (cells.length > BUCKET_WARN) bucketAsk.value = { cells, locId: loc.id, name: loc.name }
+  else fill(cells, loc.id)
+}
+
+function confirmBucket() {
+  const { cells, locId } = bucketAsk.value
+  bucketAsk.value = null
+  fill(cells, locId)
+}
+
+// Painted like one stroke, so Undo takes it back whole.
+function fill(cells, locId) {
+  const stroke = { type: 'paint', locId, changed: new Map(), before: new Map() }
+  for (const k of cells) {
+    const [q, r] = k.split(',').map(Number)
+    stroke.before.set(k, idsAt(k))
+    if (paintLocal(k, q, r, locId)) stroke.changed.set(k, [q, r])
+  }
+  commitStroke(stroke)
+  scheduleDraw()
 }
 
 // ---- Undo / redo ---------------------------------------------------------------------------

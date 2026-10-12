@@ -25,16 +25,18 @@ type versionSummary struct {
 }
 
 type storyDetail struct {
-	Gender         string   `json:"gender"`
-	RaceName       string   `json:"race_name"`
-	Height         *float64 `json:"height"`
-	Weight         *float64 `json:"weight"`
-	BodyTypeName   string   `json:"body_type_name"`
-	Age            *float64 `json:"age"`
-	HumanBirthDate string   `json:"human_birth_date"`
-	// Blood type, Born in and Birth date are the character's own (the same in
-	// every version), shown with each version's story for convenience.
-	BloodType string `json:"blood_type"`
+	Gender       string   `json:"gender"`
+	RaceName     string   `json:"race_name"`
+	Height       *float64 `json:"height"`
+	Weight       *float64 `json:"weight"`
+	BodyTypeName string   `json:"body_type_name"`
+	Age          *float64 `json:"age"`
+	// Blood type, Born in, Birth date, the Earth birth date and the Earth
+	// name are the character's own (the same in every version), shown with
+	// each version's story for convenience.
+	HumanBirthDate string `json:"human_birth_date"`
+	EarthName      string `json:"earth_name"`
+	BloodType      string `json:"blood_type"`
 	// Born in / Nation link to Map locations. born_in / nation carry the
 	// old free text only while it hasn't been matched to a location.
 	BornIn           string `json:"born_in"`
@@ -193,10 +195,10 @@ func createVersionHandler(db *sql.DB) http.HandlerFunc {
 		if _, err := tx.Exec(`
 			INSERT INTO character_story
 				(version_id, gender, race_id, height, weight, body_type_id,
-				 human_birth_date, nation, nation_location_id,
+				 nation, nation_location_id,
 				 deaths, description, bio, speech_mannerisms, status)
 			SELECT ?, gender, race_id, height, weight, body_type_id,
-				human_birth_date, nation, nation_location_id,
+				nation, nation_location_id,
 				deaths, description, bio, speech_mannerisms, status
 			FROM character_story WHERE version_id = ?
 		`, newVersionID, sourceID); err != nil {
@@ -264,7 +266,7 @@ func buildVersionDetail(db *sql.DB, versionID string) (*versionDetail, error) {
 			v.class_id, v.subclass_id, v.specialization_id,
 			COALESCE(st.gender, ''), COALESCE(r.name, ''), st.height, st.weight, COALESCE(bt.name, ''),
 			st.age,
-			COALESCE(st.human_birth_date, ''), COALESCE(ch.blood_type, ''),
+			COALESCE(ch.human_birth_date, ''), COALESCE(ch.earth_name, ''), COALESCE(ch.blood_type, ''),
 			COALESCE(ch.born_in, ''), COALESCE(st.nation, ''), COALESCE(ch.birth_date, ''),
 			ch.born_in_location_id, COALESCE(bl.name, ''), st.nation_location_id, COALESCE(nl.name, ''),
 			COALESCE(st.deaths, 0), COALESCE(st.description, ''), COALESCE(st.bio, ''),
@@ -287,7 +289,7 @@ func buildVersionDetail(db *sql.DB, versionID string) (*versionDetail, error) {
 		&classID, &subclassID, &specializationID,
 		&d.Story.Gender, &d.Story.RaceName, &height, &weight, &d.Story.BodyTypeName,
 		&age,
-		&d.Story.HumanBirthDate, &d.Story.BloodType, &d.Story.BornIn, &d.Story.Nation,
+		&d.Story.HumanBirthDate, &d.Story.EarthName, &d.Story.BloodType, &d.Story.BornIn, &d.Story.Nation,
 		&d.Story.BirthDate,
 		&bornInLoc, &d.Story.BornInName, &nationLoc, &d.Story.NationName,
 		&d.Story.Deaths, &d.Story.Description, &d.Story.Bio,
@@ -520,12 +522,16 @@ func updateVersionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 
 		cal := loadCalendar(db)
 		for label, field := range map[string]string{
-			"Story date": "version_date", "Birth date": "birth_date", "Human birth date": "human_birth_date",
+			"Story date": "version_date", "Birth date": "birth_date",
 		} {
 			if msg := checkDateFits(cal, label, r.FormValue(field)); msg != "" {
 				http.Error(w, msg, http.StatusBadRequest)
 				return
 			}
+		}
+		if msg := checkDateFits(earthCalendar, "Earth birthdate", r.FormValue("human_birth_date")); msg != "" {
+			http.Error(w, msg, http.StatusBadRequest)
+			return
 		}
 
 		// build: { primary stat: points }; special_bases: { stat: [base] }.
@@ -630,14 +636,13 @@ func updateVersionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 		_, err = tx.Exec(`
 			UPDATE character_story
 			SET gender = ?, race_id = ?, height = ?, weight = ?, body_type_id = ?, age = ?,
-				human_birth_date = ?, nation = ?, nation_location_id = ?,
+				nation = ?, nation_location_id = ?,
 				deaths = ?, description = ?, bio = ?, speech_mannerisms = ?, status = ?
 			WHERE version_id = ?
 		`,
 			nullableString(strings.TrimSpace(r.FormValue("gender"))), raceID,
 			parseNullableFloat(r.FormValue("height")), parseNullableFloat(r.FormValue("weight")), bodyTypeID,
 			parseNullableFloat(r.FormValue("age")),
-			nullableString(normalizeStoryDate(r.FormValue("human_birth_date"))),
 			// Typed text only survives while nothing is linked.
 			nullableString(unlinkedText(r.FormValue("nation"), nationLoc)), nationLoc,
 			parseIntDefault(r.FormValue("deaths"), 0),
@@ -668,6 +673,10 @@ func updateVersionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 		if sent("blood_type") {
 			sets = append(sets, "blood_type = ?")
 			args = append(args, nullableString(strings.TrimSpace(r.FormValue("blood_type"))))
+		}
+		if sent("human_birth_date") {
+			sets = append(sets, "human_birth_date = ?")
+			args = append(args, nullableString(normalizeStoryDate(r.FormValue("human_birth_date"))))
 		}
 		if sent("born_in") || sent("born_in_location_id") {
 			sets = append(sets, "born_in = ?", "born_in_location_id = ?")
