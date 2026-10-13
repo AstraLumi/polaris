@@ -23,6 +23,7 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/planetGrid.test.mjs
     node frontend/tests/bucketFill.test.mjs
     node frontend/tests/orbits.test.mjs
+    node frontend/tests/solarSimulation.test.mjs
     node frontend/tests/climate.test.mjs
 
 Run all of these before committing. `backend/static/` is build output (only

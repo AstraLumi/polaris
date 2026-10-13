@@ -46,8 +46,8 @@ const props = defineProps({
   // picked body can orbit what it orbits.
   showZone: { type: Boolean, default: true },
   showLimits: { type: Boolean, default: true },
-  // With live gravity, where each body is (id -> km from what it orbits);
-  // null to follow the orbits as drawn.
+  // Where each body is (id -> km from what it orbits: solarSimulation.js);
+  // null to follow the orbits as set, at `days`.
   relative: { type: Function, default: null },
   // With gravity, the orbit each body is on now (id -> { orbit_km,
   // eccentricity, periapsis }, or no entry when it has none); null to
@@ -613,8 +613,7 @@ onBeforeUnmount(() => {
 
 watch(() => props.bodies, onBodies, { deep: true })
 watch(() => props.globes, buildGlobes)
-watch(() => props.days, place)
-watch(() => props.relative, place)
+watch(() => [props.days, props.relative], place)
 
 // Redraws each orbit line as gravity has reshaped it (or as set).
 function drawShapes() {

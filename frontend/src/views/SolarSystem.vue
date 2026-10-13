@@ -20,7 +20,7 @@
         :days="days"
         :selected="selectedId"
         :globes="globes"
-        :relative="live ? simRelative : null"
+        :relative="where"
         :shapes="live ? shapes : null"
         :show-zone="markers.zone"
         :show-limits="markers.limits"
@@ -60,7 +60,7 @@
           @click="speed = s"
         >×{{ s }}</button>
         <div class="tool-sep"></div>
-        <button type="button" class="tool-btn" :title="$t('Back to day 0')" @click="days = 0">0</button>
+        <button type="button" class="tool-btn" :title="$t('Back to day 0')" @click="moveTo(0)">0</button>
         <button type="button" class="tool-btn" :title="$t('See the whole system')" @click="selectedId = null; sceneRef?.frame()">{{ $t('Fit') }}</button>
         <div class="tool-sep"></div>
         <span class="orbit-mode" role="radiogroup" :aria-label="$t('Orbits')">
@@ -321,12 +321,13 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, shallowRef, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { t, tn, tr } from '../i18n'
 import { solarApi, planetApi } from '../api'
 import { skyUrl, applyMapSettings } from '../worldMap'
 import { planetColorOf } from '../planetColors'
-import { bodyFacts, orbitProblem, systemTree, periapsisOf, apoapsisOf, createGravitySim, compileSystem, physicsKey } from '../orbits'
+import { bodyFacts, orbitProblem, systemTree, periapsisOf, apoapsisOf } from '../orbits'
+import { createSimulation } from '../solarSimulation'
 import { useUnsavedGuard } from '../navigation'
 import { calendar } from '../calendar'
 import { wikiPath } from '../wiki'
@@ -480,25 +481,42 @@ onMounted(async () => {
 })
 
 // ---- The clock -------------------------------------------------------------------------
+// Where the bodies are, and on what day, is solarSimulation.js: the clock
+// moves it on, and the scene reads where each body is from it (`where`, a
+// new function each time things move, so the scene knows to redraw).
+// Static: every body on the orbit it was given. Gravity: every body pulls
+// on every other (orbits.js), from where the orbits put them on day 0, so
+// orbits bend as bodies pass; the orbit lines then show the orbit each is
+// on now.
+const simulation = createSimulation()
 const days = ref(0)
 const playing = ref(false)
 const speed = ref(10)
+const live = ref(false)
+const lagging = ref(false)
+const where = shallowRef((id) => simulation.relative(id))
 let raf = 0
 let last = 0
+
+// Takes in what the simulation did: the day reached, and what stopped it.
+function sync() {
+  days.value = simulation.days
+  lagging.value = simulation.lagging
+  where.value = (id) => simulation.relative(id)
+  if (simulation.event) stopFor(simulation.event)
+}
+
+function moveTo(target) {
+  if (target < days.value) unstable.value = null
+  simulation.advanceTo(target)
+  sync()
+}
+
 function tick(now) {
   if (last) {
     // The speeds count the world's days (the clock runs in Earth days).
-    const next = days.value + ((now - last) / 1000) * speed.value * dayFactor.value
-    if (live.value && sim) {
-      lagging.value = !sim.advanceTo(next) && !sim.event
-      days.value = sim.days
-      if (sim.event) stopFor(sim.event)
-      else if (now - shapesAt > 200) updateShapes(now)
-    } else {
-      days.value = next
-      const hit = touchingNow()
-      if (hit) stopFor(hit)
-    }
+    moveTo(days.value + ((now - last) / 1000) * speed.value * dayFactor.value)
+    if (live.value && now - shapesAt > 200) updateShapes(now)
   }
   last = now
   if (playing.value) raf = requestAnimationFrame(tick)
@@ -521,7 +539,6 @@ const clockText = computed(() => {
 // When bodies touch, or (with gravity) one flies off, the clock stops and
 // says so. Static orbits can't fly off, but crossing ones can meet.
 const unstable = ref(null) // { type, a, b } or { type, id, from }, with days
-const dismissedPairs = new Set() // static meetings already shown
 const nameOf = (id) => tree.value.byId.get(id)?.name ?? '?'
 const unstableText = computed(() => {
   const u = unstable.value
@@ -537,85 +554,48 @@ function stopFor(event) {
   unstable.value = event
 }
 
-// With static orbits: two bodies that overlap where they are now. Only the
-// pairs whose orbits can meet are checked (orbits.js), worked out again
-// when the bodies change.
-const statics = computed(() => {
-  const system = compileSystem(liveBodies.value)
-  return { system, pairs: system.meetingPairs(), pos: new Float64Array(system.list.length * 3) }
-})
-function touchingNow() {
-  const { system, pairs, pos } = statics.value
-  if (!pairs.length) return null
-  system.absolute(days.value, pos)
-  for (let k = 0; k < pairs.length; k += 2) {
-    const [i, j] = [pairs[k], pairs[k + 1]]
-    const [a, b] = [system.list[i], system.list[j]]
-    const key = a.id < b.id ? `${a.id}:${b.id}` : `${b.id}:${a.id}`
-    if (dismissedPairs.has(key)) continue
-    const [dx, dy, dz] = [pos[i * 3] - pos[j * 3], pos[i * 3 + 1] - pos[j * 3 + 1], pos[i * 3 + 2] - pos[j * 3 + 2]]
-    if (Math.hypot(dx, dy, dz) < a.radius_km + b.radius_km) return { type: 'collision', a: a.id, b: b.id, days: days.value, key }
-  }
-  return null
-}
-
 function dismissUnstable() {
-  if (unstable.value?.key) dismissedPairs.add(unstable.value.key)
+  simulation.dismiss()
   unstable.value = null
 }
 
 function restart() {
   unstable.value = null
-  dismissedPairs.clear()
-  days.value = 0
-  sim?.reset()
+  simulation.restart()
+  sync()
   updateShapes()
 }
 
 // ---- Gravity --------------------------------------------------------------------------------
-// Static: every body on the orbit it was given. Gravity: orbits.js steps
-// every body by the pull of all the others, from where the orbits put them
-// on day 0, so orbits bend as bodies pass. Made again when the bodies
-// change. The orbit lines then show the orbit each is on now.
-const live = ref(false)
-const lagging = ref(false)
-let sim = null
-const simRelative = (id) => sim?.relative(id) ?? [0, 0, 0]
 const shapes = ref(new Map())
 let shapesAt = 0
 function updateShapes(now = performance.now()) {
   shapesAt = now
   const out = new Map()
-  if (sim) {
+  if (simulation.gravity) {
     for (const b of liveBodies.value) {
-      const o = sim.orbitNow(b.id)
+      const o = simulation.orbitNow(b.id)
       // As stretched as it is: capped, the line missed the body.
       if (o?.bound && o.eccentricity < 0.9999) out.set(b.id, { orbit_km: o.orbit_km, eccentricity: o.eccentricity, periapsis: o.periapsis })
     }
   }
   shapes.value = out
 }
-function makeSim() {
+
+// The bodies go in as they are in the form; only a change the physics
+// reads starts it again (picking, renaming or recolouring leaves it
+// running). Gravity only runs in Run mode.
+watch(liveBodies, (list) => {
+  if (!simulation.setBodies(list)) return
   unstable.value = null
-  sim = live.value && mode.value === 'run' ? createGravitySim(liveBodies.value) : null
-  lagging.value = false
-  if (sim) {
-    // Too far on to reach in one go: the clock shows where it got to.
-    if (!sim.advanceTo(days.value) && !sim.event) days.value = sim.days
-    if (sim.event) stopFor(sim.event)
-  }
+  sync()
   updateShapes()
-}
-// Made again only when something it reads changes: picking a body, or
-// renaming or recolouring one, leaves it running. Not run while editing.
-watch(() => live.value && mode.value === 'run' && physicsKey(liveBodies.value), makeSim)
-// Going back (day 0) starts again; the clock moves it on otherwise.
-watch(days, (d) => {
-  if (sim && d < sim.days) {
-    unstable.value = null
-    sim.advanceTo(d)
-    updateShapes()
-  }
+}, { deep: true, immediate: true })
+watch(() => live.value && mode.value === 'run', (on) => {
+  unstable.value = null
+  simulation.setGravity(on)
+  sync()
+  updateShapes()
 })
 watch(playing, (on) => {
   cancelAnimationFrame(raf)

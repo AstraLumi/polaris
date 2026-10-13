@@ -188,7 +188,9 @@ export function useOrbitModel(m) {
 // drifting over thousands of turns. It starts from the Kepler orbits on day
 // 0 and from then on only gravity moves things: as a planet passes another,
 // each bends the other's path; moons too far out are taken. Going back in
-// time starts again from day 0.
+// time starts again from the last snapshot before (one is kept every so
+// often; when there are too many, every other one goes and they are kept
+// twice as far apart), or from day 0.
 //
 // Steps adapt: each is a small part of the shortest orbit any pair of
 // bodies would have at their present distance, so a comet diving at its
@@ -206,7 +208,7 @@ const W0 = -CBRT2 / (2 - CBRT2)
 const YOSHIDA_C = [W1 / 2, (W0 + W1) / 2, (W0 + W1) / 2, W1 / 2]
 const YOSHIDA_D = [W1, W0, W1]
 
-export function createGravitySim(bodies, { stepsPerOrbit = 120, maxSteps = 20000, checkEvery = 20 } = {}) {
+export function createGravitySim(bodies, { stepsPerOrbit = 120, maxSteps = 20000, checkEvery = 20, maxSnapshots = 256 } = {}) {
   const { byId } = systemTree(bodies)
   const list = bodies.filter((b) => b.kind === 'star' || (b.orbit_km > 0 && byId.has(b.parent_id)))
   const n = list.length
@@ -231,6 +233,31 @@ export function createGravitySim(bodies, { stepsPerOrbit = 120, maxSteps = 20000
   let days = 0
   let event = null
   let touching = null // [i, j] found while computing forces
+  const snapshots = [] // { days, pos, vel }, oldest first; the first is day 0
+  let snapEvery = (maxDt / DAY) * 200 // days: every 200 of the longest steps
+
+  function snapshot() {
+    snapshots.push({ days, pos: pos.slice(), vel: vel.slice() })
+    if (snapshots.length > maxSnapshots) {
+      const kept = snapshots.filter((_, k) => k % 2 === 0)
+      snapshots.length = 0
+      snapshots.push(...kept)
+      snapEvery *= 2
+    }
+  }
+
+  // Back to the last snapshot at or before `target`.
+  function rewind(target) {
+    let k = snapshots.length - 1
+    while (k > 0 && snapshots[k].days > target) k--
+    snapshots.length = k + 1
+    const s = snapshots[k]
+    days = s.days
+    pos.set(s.pos)
+    vel.set(s.vel)
+    event = null
+    accelerate()
+  }
 
   function accelerate() {
     acc.fill(0)
@@ -281,6 +308,8 @@ export function createGravitySim(bodies, { stepsPerOrbit = 120, maxSteps = 20000
     }
     for (const b of list) place(b)
     accelerate()
+    snapshots.length = 0
+    snapshot()
   }
 
   function step(dt) {
@@ -328,7 +357,7 @@ export function createGravitySim(bodies, { stepsPerOrbit = 120, maxSteps = 20000
     // Moves on to `target` days, as far as maxSteps allows, stopping at
     // an event. True when it got there.
     advanceTo(target) {
-      if (target < days) reset()
+      if (target < days) rewind(target)
       if (event) return false
       for (let s = 0; days < target; s++) {
         if (s >= maxSteps) return false
@@ -346,14 +375,21 @@ export function createGravitySim(bodies, { stepsPerOrbit = 120, maxSteps = 20000
             return false
           }
         }
+        if (days - snapshots[snapshots.length - 1].days >= snapEvery) snapshot()
       }
       return true
     },
     // Where a body is relative to what it orbits, in km.
     relative(id) {
+      const out = [0, 0, 0]
+      this.relativeInto(id, out, 0)
+      return out
+    },
+    // The same, written into out[o..o+2].
+    relativeInto(id, out, o) {
       const i = index.get(id)
-      if (i == null || parentIndex[i] < 0) return [0, 0, 0]
-      return rel(i).r.map((x) => x / 1000)
+      const j = i == null ? -1 : parentIndex[i]
+      for (let k = 0; k < 3; k++) out[o + k] = j < 0 ? 0 : (pos[i * 3 + k] - pos[j * 3 + k]) / 1000
     },
     // The orbit a body is on right now, by its position and speed (the
     // osculating orbit): how gravity has reshaped it so far.
