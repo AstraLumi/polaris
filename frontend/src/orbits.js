@@ -49,6 +49,9 @@ export function escapeVelocity(body) {
 // time: period(body, parent) in days and position(body, parent, days) in km,
 // in the parent's equatorial plane (x, y). Gravity decides the speed; the
 // body gives the shape. Swapping the model swaps how every orbit moves.
+// prepare(body, parent) works out what doesn't change with time once and
+// returns (days, out, o) => writes the position into out[o..o+2]: what
+// compileSystem calls every frame. position() is the same, one at a time.
 
 const mu = (body, parent) => G * (massOf(parent) + massOf(body)) // m³/s²
 const rad = (deg) => ((deg || 0) * Math.PI) / 180
@@ -61,11 +64,26 @@ export const circularOrbit = {
     return (2 * Math.PI * Math.sqrt(a ** 3 / mu(body, parent))) / DAY
   },
   // Position in km at `days`, starting at the body's phase (degrees).
-  position(body, parent, days) {
-    const turn = days / this.period(body, parent)
-    const angle = rad(body.phase) + 2 * Math.PI * turn
-    return [body.orbit_km * Math.cos(angle), body.orbit_km * Math.sin(angle), 0]
+  prepare(body, parent) {
+    const a = body.orbit_km
+    const start = rad(body.phase)
+    const n = (2 * Math.PI) / circularOrbit.period(body, parent) // radians a day
+    return (days, out, o) => {
+      const angle = start + n * days
+      out[o] = a * Math.cos(angle)
+      out[o + 1] = a * Math.sin(angle)
+      out[o + 2] = 0
+    }
   },
+  position(body, parent, days) {
+    return positionOnce(this, body, parent, days)
+  },
+}
+
+function positionOnce(model, body, parent, days) {
+  const out = [0, 0, 0]
+  model.prepare(body, parent)(days, out, 0)
+  return out
 }
 
 // An ellipse (Kepler's laws): orbit_km is its semi-major axis, eccentricity
@@ -91,7 +109,6 @@ function eccentricAnomaly(M, e) {
   return E
 }
 
-const trueFromEccentric = (E, e) => 2 * Math.atan2(Math.sqrt(1 + e) * Math.sin(E / 2), Math.sqrt(1 - e) * Math.cos(E / 2))
 const eccentricFromTrue = (nu, e) => 2 * Math.atan2(Math.sqrt(1 - e) * Math.sin(nu / 2), Math.sqrt(1 + e) * Math.cos(nu / 2))
 
 // The point at true anomaly nu (from periapsis), in km.
@@ -104,12 +121,28 @@ export function orbitPoint(body, nu) {
 
 export const keplerOrbit = {
   period: circularOrbit.period,
-  position(body, parent, days) {
+  // From the eccentric anomaly E straight to the point: (a(cos E - e),
+  // b sin E) on the ellipse, turned to its periapsis.
+  prepare(body, parent) {
     const e = eccOf(body)
-    const nu0 = rad(body.phase) - rad(body.periapsis)
-    const E0 = eccentricFromTrue(nu0, e)
-    const M = E0 - e * Math.sin(E0) + (2 * Math.PI * days) / this.period(body, parent)
-    return orbitPoint(body, trueFromEccentric(eccentricAnomaly(M, e), e))
+    const a = body.orbit_km
+    const b = a * Math.sqrt(1 - e * e)
+    const w = rad(body.periapsis)
+    const [cw, sw] = [Math.cos(w), Math.sin(w)]
+    const E0 = eccentricFromTrue(rad(body.phase) - w, e)
+    const M0 = E0 - e * Math.sin(E0)
+    const n = (2 * Math.PI) / keplerOrbit.period(body, parent) // radians a day
+    return (days, out, o) => {
+      const E = e ? eccentricAnomaly(M0 + n * days, e) : M0 + n * days
+      const x = a * (Math.cos(E) - e)
+      const y = b * Math.sin(E)
+      out[o] = x * cw - y * sw
+      out[o + 1] = x * sw + y * cw
+      out[o + 2] = 0
+    }
+  },
+  position(body, parent, days) {
+    return positionOnce(this, body, parent, days)
   },
   // Velocity in km/s at `days` (to start the live simulation from).
   velocity(body, parent, days) {
@@ -202,7 +235,7 @@ export function createGravitySim(bodies, { stepsPerOrbit = 120, maxSteps = 20000
   function accelerate() {
     acc.fill(0)
     touching = null
-    pairTime = Infinity
+    let shortest = Infinity // pairTime squared, so one square root in all
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
         const dx = pos[j * 3] - pos[i * 3]
@@ -212,7 +245,7 @@ export function createGravitySim(bodies, { stepsPerOrbit = 120, maxSteps = 20000
         const rr = radius[i] + radius[j]
         if (r2 < rr * rr) touching = [i, j]
         const r3 = r2 * Math.sqrt(r2)
-        pairTime = Math.min(pairTime, Math.sqrt(r3 / (G * (mass[i] + mass[j]))))
+        shortest = Math.min(shortest, r3 / (G * (mass[i] + mass[j])))
         const f = G / r3
         acc[i * 3] += f * mass[j] * dx
         acc[i * 3 + 1] += f * mass[j] * dy
@@ -222,6 +255,7 @@ export function createGravitySim(bodies, { stepsPerOrbit = 120, maxSteps = 20000
         acc[j * 3 + 2] -= f * mass[i] * dz
       }
     }
+    pairTime = Math.sqrt(shortest)
   }
 
   function reset() {
@@ -383,25 +417,99 @@ export function systemTree(bodies) {
   return { byId, childrenOf: (id) => children.get(id ?? null) ?? [], star: (children.get(null) ?? []).find((b) => b.kind === 'star') ?? null }
 }
 
-// Where every body is at `days`, in km from the star: its orbit round its
-// parent, added up the tree.
-export function positionsAt(bodies, days, orbits = orbitModel()) {
-  const { byId } = systemTree(bodies)
-  const out = new Map()
-  const place = (b) => {
-    if (out.has(b.id)) return out.get(b.id)
-    const parent = b.parent_id != null ? byId.get(b.parent_id) : null
-    let p = [0, 0, 0]
-    if (parent && b.orbit_km) {
-      const base = place(parent)
-      const rel = orbits.position(b, parent, days)
-      p = [base[0] + rel[0], base[1] + rel[1], base[2] + rel[2]]
-    }
-    out.set(b.id, p)
-    return p
+// ---- The system, compiled ----------------------------------------------------------------
+// The bodies made ready to be moved many times a second: in an order where
+// every parent comes before what orbits it, with each orbit's constants
+// worked out once (orbits.prepare). Positions are written into flat arrays,
+// three numbers per body (list[i] at 3i), in km. Compile again when the
+// bodies change (physicsKey says when that matters).
+// A body with no orbit, or whose parent is missing, sits at the origin.
+export function compileSystem(bodies, orbits = orbitModel()) {
+  const { byId, childrenOf, star } = systemTree(bodies)
+  const list = []
+  const depths = [] // how deep in the tree: everything round list[i] follows it, deeper
+  const walk = (b, d) => {
+    list.push(b)
+    depths.push(d)
+    for (const c of childrenOf(b.id)) walk(c, d + 1)
   }
-  for (const b of bodies) place(b)
-  return out
+  for (const b of bodies) if (b.parent_id == null || !byId.has(b.parent_id)) walk(b, 0)
+  const n = list.length
+  const index = new Map(list.map((b, i) => [b.id, i]))
+  const parent = new Int32Array(n).fill(-1)
+  const moves = list.map((b, i) => {
+    const p = byId.get(b.parent_id)
+    if (!p || !b.orbit_km) return null
+    parent[i] = index.get(p.id)
+    return orbits.prepare(b, p)
+  })
+  return {
+    list,
+    index,
+    parent,
+    star,
+    // Where each body is from what it orbits, at `days`.
+    relative(days, out = new Float64Array(n * 3)) {
+      for (let i = 0; i < n; i++) {
+        if (moves[i]) moves[i](days, out, i * 3)
+        else out[i * 3] = out[i * 3 + 1] = out[i * 3 + 2] = 0
+      }
+      return out
+    },
+    // Where each body is from the star: the relative positions added up the
+    // tree (parents come first, so theirs are already summed).
+    absolute(days, out = new Float64Array(n * 3)) {
+      this.relative(days, out)
+      for (let i = 0; i < n; i++) {
+        const p = parent[i]
+        if (p < 0) continue
+        for (let k = 0; k < 3; k++) out[i * 3 + k] += out[p * 3 + k]
+      }
+      return out
+    },
+    // The pairs of bodies (indices, flat: a, b, a, b…) whose orbits can
+    // ever bring them together; the others needn't be checked for touching.
+    // Each body with everything round it (its moons' orbits) fills a ring
+    // round its parent from periapsis to apoapsis: siblings whose rings
+    // overlap can meet, everything in one with everything in the other;
+    // and a body whose ring reaches down to its parent can hit it.
+    meetingPairs() {
+      const reach = new Float64Array(n) // its radius and its moons' orbits
+      for (let i = n - 1; i >= 0; i--) {
+        reach[i] = Math.max(reach[i], list[i].radius_km)
+        const p = parent[i]
+        if (p >= 0) reach[p] = Math.max(reach[p], apoapsisOf(list[i]) + reach[i])
+      }
+      // A body and everything round it: the run of deeper ones after it.
+      const within = (i) => {
+        const out = [i]
+        for (let j = i + 1; j < n && depths[j] > depths[i]; j++) out.push(j)
+        return out
+      }
+      const pairs = []
+      const all = (a, b) => {
+        for (const i of a) for (const j of b) pairs.push(i, j)
+      }
+      for (let i = 0; i < n; i++) {
+        const p = parent[i]
+        if (p < 0) continue
+        const [near, far] = [periapsisOf(list[i]) - reach[i], apoapsisOf(list[i]) + reach[i]]
+        if (near <= list[p].radius_km) all([p], within(i))
+        for (let j = i + 1; j < n; j++) {
+          if (parent[j] !== p) continue
+          if (near <= apoapsisOf(list[j]) + reach[j] && periapsisOf(list[j]) - reach[j] <= far) all(within(i), within(j))
+        }
+      }
+      return pairs
+    },
+  }
+}
+
+// Where every body is at `days`, in km from the star (id -> [x, y, z]).
+export function positionsAt(bodies, days, orbits = orbitModel()) {
+  const system = compileSystem(bodies, orbits)
+  const pos = system.absolute(days)
+  return new Map(system.list.map((b, i) => [b.id, [pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]]]))
 }
 
 // What a body's facts say about it, for the side panel: mass, gravity, and,

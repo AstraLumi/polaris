@@ -2,7 +2,7 @@
 // planet a pixel wide and a screen apart, so both are squeezed (a power
 // below 1 keeps bigger bigger and farther farther). The physics in
 // orbits.js always uses the true values; only the picture uses these.
-import { orbitModel, orbitPath } from './orbits.js'
+import { orbitPath } from './orbits.js'
 import { starColor } from './stars.js'
 
 // The colour a body is drawn in: its own, else a star's by its temperature
@@ -44,25 +44,25 @@ export function scenePoint(rel, parent, body) {
 // same way as the bodies on it, so they stay on their line).
 export const sceneOrbitPath = (body, parent, steps = 128) => orbitPath(body, steps).map((p) => scenePoint(p, parent, body))
 
-// Where each body is drawn at `days`: where the orbit model puts it, its
-// distance squeezed, added up the tree like the true positions. `relative`
-// (id -> km from its parent) replaces the model, for the live simulation.
-export function scenePositions(bodies, days, orbits = orbitModel(), relative = null) {
-  const byId = new Map(bodies.map((b) => [b.id, b]))
-  const out = new Map()
-  const place = (b) => {
-    if (out.has(b.id)) return out.get(b.id)
-    const parent = b.parent_id != null ? byId.get(b.parent_id) : null
-    let p = [0, 0, 0]
-    if (parent && b.orbit_km) {
-      const base = place(parent)
-      const rel = relative ? relative(b.id) : orbits.position(b, parent, days)
-      const q = scenePoint(rel, parent, b)
-      p = [base[0] + q[0], base[1] + q[1], base[2] + q[2]]
+// Where each body of a compiled system (orbits.js compileSystem) is drawn,
+// from where each is from what it orbits (`rel`, km, three numbers a body,
+// in the system's order): the same direction, its distance squeezed, added
+// up the tree. Written into `out`.
+export function sceneLayout(system, rel, out = new Float64Array(rel.length)) {
+  const { list, parent } = system
+  for (let i = 0; i < list.length; i++) {
+    const o = i * 3
+    const p = parent[i]
+    if (p < 0) {
+      out[o] = out[o + 1] = out[o + 2] = 0
+      continue
     }
-    out.set(b.id, p)
-    return p
+    const [x, y, z] = [rel[o], rel[o + 1], rel[o + 2]]
+    const len = Math.hypot(x, y, z) || 1
+    const k = sceneDistance(len, list[p], list[i]) / len
+    out[o] = out[p * 3] + x * k
+    out[o + 1] = out[p * 3 + 1] + y * k
+    out[o + 2] = out[p * 3 + 2] + z * k
   }
-  for (const b of bodies) place(b)
   return out
 }

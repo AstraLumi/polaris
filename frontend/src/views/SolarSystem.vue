@@ -326,7 +326,7 @@ import { t, tn, tr } from '../i18n'
 import { solarApi, planetApi } from '../api'
 import { skyUrl, applyMapSettings } from '../worldMap'
 import { planetColorOf } from '../planetColors'
-import { bodyFacts, orbitProblem, systemTree, periapsisOf, apoapsisOf, createGravitySim, positionsAt, physicsKey } from '../orbits'
+import { bodyFacts, orbitProblem, systemTree, periapsisOf, apoapsisOf, createGravitySim, compileSystem, physicsKey } from '../orbits'
 import { useUnsavedGuard } from '../navigation'
 import { calendar } from '../calendar'
 import { wikiPath } from '../wiki'
@@ -537,21 +537,24 @@ function stopFor(event) {
   unstable.value = event
 }
 
-// With static orbits: two bodies that overlap where they are now.
+// With static orbits: two bodies that overlap where they are now. Only the
+// pairs whose orbits can meet are checked (orbits.js), worked out again
+// when the bodies change.
+const statics = computed(() => {
+  const system = compileSystem(liveBodies.value)
+  return { system, pairs: system.meetingPairs(), pos: new Float64Array(system.list.length * 3) }
+})
 function touchingNow() {
-  const list = liveBodies.value
-  const pos = positionsAt(list, days.value)
-  for (let i = 0; i < list.length; i++) {
-    for (let j = i + 1; j < list.length; j++) {
-      const [a, b] = [list[i], list[j]]
-      const key = `${a.id}:${b.id}`
-      if (dismissedPairs.has(key)) continue
-      const pa = pos.get(a.id)
-      const pb = pos.get(b.id)
-      if (Math.hypot(pa[0] - pb[0], pa[1] - pb[1], pa[2] - pb[2]) < a.radius_km + b.radius_km) {
-        return { type: 'collision', a: a.id, b: b.id, days: days.value, key }
-      }
-    }
+  const { system, pairs, pos } = statics.value
+  if (!pairs.length) return null
+  system.absolute(days.value, pos)
+  for (let k = 0; k < pairs.length; k += 2) {
+    const [i, j] = [pairs[k], pairs[k + 1]]
+    const [a, b] = [system.list[i], system.list[j]]
+    const key = a.id < b.id ? `${a.id}:${b.id}` : `${b.id}:${a.id}`
+    if (dismissedPairs.has(key)) continue
+    const [dx, dy, dz] = [pos[i * 3] - pos[j * 3], pos[i * 3 + 1] - pos[j * 3 + 1], pos[i * 3 + 2] - pos[j * 3 + 2]]
+    if (Math.hypot(dx, dy, dz) < a.radius_km + b.radius_km) return { type: 'collision', a: a.id, b: b.id, days: days.value, key }
   }
   return null
 }

@@ -19,8 +19,8 @@ import { Line2 } from 'three/addons/lines/Line2.js'
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js'
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import { PlanetGrid } from '../planetGrid'
-import { sceneRadius, sceneDistance, scenePositions, sceneOrbitPath, bodyColor } from '../solarScale'
-import { orbitLimits } from '../orbits'
+import { sceneRadius, sceneDistance, sceneLayout, sceneOrbitPath, bodyColor } from '../solarScale'
+import { orbitLimits, compileSystem } from '../orbits'
 import { habitableZone } from '../stars'
 import { createGlobeMesh } from '../three/globeMesh'
 import { createStar, createPlanetMaterial, createAtmosphere, createClouds, createRings } from '../three/bodyShaders'
@@ -115,11 +115,13 @@ function onBodies() {
     const m = meshes.get(b.id)
     if (m) m.body = b
   }
+  compile()
   place()
 }
 
 function buildBodies() {
   builtKey = sceneKey(props.bodies)
+  compile()
   if (bodyGroup) {
     for (const g of globeViews.values()) g.mesh.parent?.remove(g.mesh)
     scene.remove(bodyGroup)
@@ -351,19 +353,37 @@ function buildGlobes() {
   buildBodies()
 }
 
-// Puts every body where it is at `days`, and each orbit round its parent.
-const positions = new Map()
-function place() {
+// The bodies compiled for moving (orbits.js), made again whenever they
+// change, and the arrays each frame writes into.
+let system = null
+let relKm = null // each body from its parent, km
+let drawn = null // each body in the scene
+const positions = new Map() // body id -> where it is drawn (the same vector every frame)
+function compile() {
+  system = compileSystem(props.bodies)
+  relKm = new Float64Array(system.list.length * 3)
+  drawn = new Float64Array(system.list.length * 3)
   positions.clear()
-  for (const [id, p] of scenePositions(props.bodies, props.days, undefined, props.relative)) positions.set(id, new THREE.Vector3(...p))
+  for (const b of system.list) positions.set(b.id, new THREE.Vector3())
+}
+
+// Puts every body where it is at `days`, and each orbit round its parent.
+const origin = new THREE.Vector3()
+const fromParent = new THREE.Vector3()
+function place() {
+  if (props.relative) {
+    system.list.forEach((b, i) => relKm.set(props.relative(b.id), i * 3))
+  } else system.relative(props.days, relKm)
+  sceneLayout(system, relKm, drawn)
+  system.list.forEach((b, i) => positions.get(b.id).fromArray(drawn, i * 3))
   for (const { body, mesh, spin, orbit } of meshes.values()) {
     mesh.position.copy(positions.get(body.id))
     // A turn a day (days are Earth days; day_hours its own).
     if (spin) spin.rotation.z = (((props.days * 24) / (body.day_hours || 24)) % 1) * 2 * Math.PI
     if (orbit) {
-      const base = positions.get(body.parent_id) ?? new THREE.Vector3()
+      const base = positions.get(body.parent_id) ?? origin
       orbit.group.position.copy(base)
-      splitTrail(orbit, positions.get(body.id).clone().sub(base))
+      splitTrail(orbit, fromParent.copy(positions.get(body.id)).sub(base))
     }
   }
   // The limits ring what the picked body orbits, wherever it is.

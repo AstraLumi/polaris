@@ -1,7 +1,7 @@
 // The solar system's physics (src/orbits.js) and its drawing scale
 // (src/solarScale.js). No dependencies: node frontend/tests/orbits.test.mjs
 import assert from 'node:assert/strict'
-import { massOf, surfaceGravity, circularOrbit, keplerOrbit, positionsAt, hillRadius, moonProblem, systemTree, orbitLimits, orbitProblem, periapsisOf, apoapsisOf, orbitThrough, createGravitySim, orbitPoint, physicsKey } from '../src/orbits.js'
+import { massOf, surfaceGravity, circularOrbit, keplerOrbit, positionsAt, hillRadius, moonProblem, systemTree, orbitLimits, orbitProblem, periapsisOf, apoapsisOf, orbitThrough, createGravitySim, orbitPoint, physicsKey, compileSystem } from '../src/orbits.js'
 import { sceneRadius, sceneDistance, orbitForSceneDistance } from '../src/solarScale.js'
 import { SUN, AU_KM, luminosity, habitableZone, schwarzschildRadius, fitToClass, starColor } from '../src/stars.js'
 
@@ -153,4 +153,42 @@ const key = physicsKey([sun, earth, moon])
 assert.equal(physicsKey([sun, { ...earth, name: 'Terra', color: '#fff', day_hours: 30 }, moon]), key)
 assert.notEqual(physicsKey([sun, { ...earth, eccentricity: 0.1 }, moon]), key)
 assert.notEqual(physicsKey([sun, earth]), key)
+
+// The compiled system puts every body where the model does, one at a time.
+{
+  const comet2 = { id: 4, kind: 'planet', body_type: 'rocky', radius_km: 500, orbit_km: 4e8, parent_id: 1, phase: 200, eccentricity: 0.8, periapsis: 30 }
+  const twin = { id: 5, kind: 'planet', body_type: 'rocky', radius_km: 6000, orbit_km: 1.496e8, parent_id: 1, phase: 0.001 }
+  const far = { id: 6, kind: 'planet', body_type: 'gas', radius_km: 70000, orbit_km: 7.7e9, parent_id: 1, phase: 40 }
+  const all = [moon, far, comet2, sun, earth, twin]
+  const system = compileSystem(all)
+  assert.equal(system.list[0], sun, 'parents first')
+  for (const days of [0, 13.7, 4000]) {
+    const pos = system.absolute(days)
+    for (const b of all) {
+      const i = system.index.get(b.id)
+      const parent = all.find((p) => p.id === b.parent_id)
+      const rel = parent ? keplerOrbit.position(b, parent, days) : [0, 0, 0]
+      const base = parent ? pos.subarray(system.index.get(parent.id) * 3) : [0, 0, 0]
+      for (let k = 0; k < 2; k++) assert.ok(Math.abs(pos[i * 3 + k] - base[k] - rel[k]) <= (b.orbit_km || 1) * 1e-9, `body ${b.id} at day ${days}`)
+    }
+  }
+  // Only orbits that can meet are paired: the comet crosses Earth's (and
+  // so its moon's), the twin shares it, the far giant meets no one.
+  const pairs = system.meetingPairs()
+  const met = new Set()
+  for (let k = 0; k < pairs.length; k += 2) met.add([system.list[pairs[k]].id, system.list[pairs[k + 1]].id].sort().join('-'))
+  for (const p of ['2-4', '3-4', '2-5', '3-5', '4-5']) assert.ok(met.has(p), `pair ${p}`)
+  for (const p of ['1-2', '1-6', '2-6', '2-3']) assert.ok(!met.has(p), `no pair ${p}`)
+  // And no pair that ever touches is left out (checked against every pair).
+  for (let d = 0; d < 2000; d += 0.5) {
+    const pos = system.absolute(d)
+    for (let i = 0; i < all.length; i++) {
+      for (let j = i + 1; j < all.length; j++) {
+        const [a, b] = [system.list[i], system.list[j]]
+        const gap = Math.hypot(pos[i * 3] - pos[j * 3], pos[i * 3 + 1] - pos[j * 3 + 1])
+        if (gap < a.radius_km + b.radius_km) assert.ok(met.has([a.id, b.id].sort().join('-')), `missed ${a.id}-${b.id}`)
+      }
+    }
+  }
+}
 console.log('orbits: ok')
