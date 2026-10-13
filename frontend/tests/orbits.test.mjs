@@ -1,7 +1,7 @@
 // The solar system's physics (src/orbits.js) and its drawing scale
 // (src/solarScale.js). No dependencies: node frontend/tests/orbits.test.mjs
 import assert from 'node:assert/strict'
-import { massOf, surfaceGravity, circularOrbit, keplerOrbit, positionsAt, hillRadius, moonProblem, systemTree, orbitLimits, orbitProblem, periapsisOf, apoapsisOf, orbitThrough, createGravitySim, orbitPoint, physicsKey, compileSystem } from '../src/orbits.js'
+import { massOf, surfaceGravity, circularOrbit, keplerOrbit, positionsAt, hillRadius, moonProblem, systemTree, orbitLimits, orbitProblem, periapsisOf, apoapsisOf, orbitThrough, createGravitySim, orbitPoint, physicsKey, compileSystem, elementsFromState, alongOrbit, orbitPath, G } from '../src/orbits.js'
 import { sceneRadius, sceneDistance, orbitForSceneDistance } from '../src/solarScale.js'
 import { SUN, AU_KM, luminosity, habitableZone, schwarzschildRadius, fitToClass, starColor } from '../src/stars.js'
 
@@ -190,5 +190,57 @@ assert.notEqual(physicsKey([sun, earth]), key)
       }
     }
   }
+}
+
+// Inclined orbits: tilted about the node line, as far from the parent as
+// flat, crossing the plane going north at the ascending node.
+{
+  const tilted = { ...comet, eccentricity: 0.3, periapsis: 70, inclination: 30, ascending_node: 40, phase: 40 }
+  const flat = { ...tilted, inclination: 0 }
+  const P = keplerOrbit.period(tilted, sun)
+  for (const d of [0, P / 7, P / 3]) close(dist(keplerOrbit.position(tilted, sun, d)), dist(keplerOrbit.position(flat, sun, d)), 1e-9, 'same distance')
+  const atNode = keplerOrbit.position(tilted, sun, 0)
+  assert.ok(Math.abs(atNode[2]) < dist(atNode) * 1e-9, 'on the plane at the node')
+  close(Math.atan2(atNode[1], atNode[0]), (40 * Math.PI) / 180, 1e-9, 'the node is where it says')
+  assert.ok(keplerOrbit.velocity(tilted, sun, 0)[2] > 0, 'going north there')
+  let top = 0
+  for (const p of orbitPath(tilted)) top = Math.max(top, Math.asin(p[2] / dist(p)))
+  close((top * 180) / Math.PI, 30, 1e-2, 'as high as its inclination')
+
+  // The elements read back from a position and a velocity are the ones set
+  // (tilted, flat, and backwards).
+  const mu = G * (massOf(sun) + massOf(tilted))
+  for (const b of [tilted, { ...tilted, inclination: 0 }, { ...tilted, inclination: 150 }, { ...tilted, inclination: 180 }]) {
+    for (const d of [0, P / 5]) {
+      const r = keplerOrbit.position(b, sun, d).map((x) => x * 1000)
+      const v = keplerOrbit.velocity(b, sun, d).map((x) => x * 1000)
+      const o = elementsFromState(r, v, mu)
+      close(o.orbit_km, b.orbit_km, 1e-9, `size (i ${b.inclination})`)
+      close(o.eccentricity, b.eccentricity, 1e-9, `shape (i ${b.inclination})`)
+      close(o.inclination, b.inclination, 1e-6, `tilt (i ${b.inclination})`)
+      // A flat orbit has no node: only its closest point's direction counts.
+      const back = { ...b, ...o }
+      for (const nu of [0, 1, 2.5]) {
+        const [p1, p2] = [orbitPoint(b, nu), orbitPoint(back, nu)]
+        assert.ok(Math.hypot(p1[0] - p2[0], p1[1] - p2[1], p1[2] - p2[2]) < b.orbit_km * 1e-6, `same orbit (i ${b.inclination}, nu ${nu})`)
+      }
+    }
+  }
+
+  // Seen from above: a direction on the orbit gives back the angle along
+  // it, and how much shorter it looks.
+  for (const phase of [10, 100, 200, 300]) {
+    const p = keplerOrbit.position({ ...tilted, phase }, sun, 0)
+    const { phase: back, squash } = alongOrbit(tilted, (Math.atan2(p[1], p[0]) * 180) / Math.PI)
+    close(back, phase, 1e-6, `phase ${phase} from above`)
+    close(squash, Math.hypot(p[0], p[1]) / dist(p), 1e-9, `squash at ${phase}`)
+  }
+
+  // Gravity starts on the tilted orbit.
+  const sim = createGravitySim([sun, tilted])
+  const now = sim.orbitNow(tilted.id)
+  close(now.inclination, 30, 1e-3, 'gravity: tilt')
+  close(now.ascending_node, 40, 1e-3, 'gravity: node')
+  close(now.periapsis, 70, 1e-3, 'gravity: periapsis')
 }
 console.log('orbits: ok')

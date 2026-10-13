@@ -47,7 +47,7 @@ export function escapeVelocity(body) {
 // ---- Orbits ---------------------------------------------------------------------------
 // An orbit model says where a body is, relative to what it orbits, at a
 // time: period(body, parent) in days and position(body, parent, days) in km,
-// in the parent's equatorial plane (x, y). Gravity decides the speed; the
+// x and y in the system's plane, z north of it. Gravity decides the speed; the
 // body gives the shape. Swapping the model swaps how every orbit moves.
 // prepare(body, parent) works out what doesn't change with time once and
 // returns (days, out, o) => writes the position into out[o..o+2]: what
@@ -111,34 +111,63 @@ function eccentricAnomaly(M, e) {
 
 const eccentricFromTrue = (nu, e) => 2 * Math.atan2(Math.sqrt(1 - e) * Math.sin(nu / 2), Math.sqrt(1 + e) * Math.cos(nu / 2))
 
+// The plane an orbit lies in, as two unit vectors: P towards its closest
+// point, Q a quarter turn on along the orbit. It is tilted `inclination`
+// degrees from the system's plane about the line through its ascending
+// node (where it crosses going north). Angles along the orbit (periapsis,
+// phase) count from the same zero as in the plane: the node's direction,
+// then on along the orbit. Flat (inclination 0), P points at periapsis.
+export function orbitFrame(body) {
+  const i = rad(body.inclination)
+  const node = rad(body.ascending_node)
+  const w = rad(body.periapsis) - node // from the node to periapsis
+  const [ci, si, cn, sn, cw, sw] = [Math.cos(i), Math.sin(i), Math.cos(node), Math.sin(node), Math.cos(w), Math.sin(w)]
+  return {
+    P: [cn * cw - sn * sw * ci, sn * cw + cn * sw * ci, sw * si],
+    Q: [-cn * sw - sn * cw * ci, -sn * sw + cn * cw * ci, cw * si],
+  }
+}
+
+// x along P plus y along Q, into out[o..o+2].
+function inFrame({ P, Q }, x, y, out, o) {
+  out[o] = x * P[0] + y * Q[0]
+  out[o + 1] = x * P[1] + y * Q[1]
+  out[o + 2] = x * P[2] + y * Q[2]
+}
+
 // The point at true anomaly nu (from periapsis), in km.
 export function orbitPoint(body, nu) {
   const e = eccOf(body)
   const r = (body.orbit_km * (1 - e * e)) / (1 + e * Math.cos(nu))
-  const angle = nu + rad(body.periapsis)
-  return [r * Math.cos(angle), r * Math.sin(angle), 0]
+  const out = [0, 0, 0]
+  inFrame(orbitFrame(body), r * Math.cos(nu), r * Math.sin(nu), out, 0)
+  return out
+}
+
+// What an orbit's movement needs, worked out once: its frame, its shape,
+// and the mean anomaly (M0 on day 0, n radians a day).
+function keplerConstants(body, parent) {
+  const e = eccOf(body)
+  const E0 = eccentricFromTrue(rad(body.phase) - rad(body.periapsis), e)
+  return {
+    e,
+    a: body.orbit_km,
+    b: body.orbit_km * Math.sqrt(1 - e * e),
+    frame: orbitFrame(body),
+    M0: E0 - e * Math.sin(E0),
+    n: (2 * Math.PI) / keplerOrbit.period(body, parent),
+  }
 }
 
 export const keplerOrbit = {
   period: circularOrbit.period,
   // From the eccentric anomaly E straight to the point: (a(cos E - e),
-  // b sin E) on the ellipse, turned to its periapsis.
+  // b sin E) on the ellipse, laid in its plane.
   prepare(body, parent) {
-    const e = eccOf(body)
-    const a = body.orbit_km
-    const b = a * Math.sqrt(1 - e * e)
-    const w = rad(body.periapsis)
-    const [cw, sw] = [Math.cos(w), Math.sin(w)]
-    const E0 = eccentricFromTrue(rad(body.phase) - w, e)
-    const M0 = E0 - e * Math.sin(E0)
-    const n = (2 * Math.PI) / keplerOrbit.period(body, parent) // radians a day
+    const { e, a, b, frame, M0, n } = keplerConstants(body, parent)
     return (days, out, o) => {
       const E = e ? eccentricAnomaly(M0 + n * days, e) : M0 + n * days
-      const x = a * (Math.cos(E) - e)
-      const y = b * Math.sin(E)
-      out[o] = x * cw - y * sw
-      out[o + 1] = x * sw + y * cw
-      out[o + 2] = 0
+      inFrame(frame, a * (Math.cos(E) - e), b * Math.sin(E), out, o)
     }
   },
   position(body, parent, days) {
@@ -146,14 +175,13 @@ export const keplerOrbit = {
   },
   // Velocity in km/s at `days` (to start the live simulation from).
   velocity(body, parent, days) {
-    const e = eccOf(body)
-    const [x, y] = this.position(body, parent, days)
-    const nu = Math.atan2(y, x) - rad(body.periapsis)
-    const p = body.orbit_km * 1000 * (1 - e * e)
-    const v = Math.sqrt(mu(body, parent) / p) / 1000
-    const w = rad(body.periapsis)
-    const [vx, vy] = [-v * Math.sin(nu), v * (e + Math.cos(nu))]
-    return [vx * Math.cos(w) - vy * Math.sin(w), vx * Math.sin(w) + vy * Math.cos(w), 0]
+    const { e, frame, M0, n } = keplerConstants(body, parent)
+    const E = eccentricAnomaly(M0 + n * days, e)
+    const nu = 2 * Math.atan2(Math.sqrt(1 + e) * Math.sin(E / 2), Math.sqrt(1 - e) * Math.cos(E / 2))
+    const v = Math.sqrt(mu(body, parent) / (body.orbit_km * 1000 * (1 - e * e))) / 1000
+    const out = [0, 0, 0]
+    inFrame(frame, -v * Math.sin(nu), v * (e + Math.cos(nu)), out, 0)
+    return out
   },
 }
 
@@ -168,12 +196,30 @@ export function orbitPath(body, steps = 128) {
 export const periapsisOf = (b) => b.orbit_km * (1 - eccOf(b))
 export const apoapsisOf = (b) => b.orbit_km * (1 + eccOf(b))
 
-// Where a body dragged to `distance` km at `angle` degrees sits on an orbit
-// of its shape: the semi-major axis that puts it there, and its phase.
+// Where a body dragged to `distance` km at `angle` degrees along its orbit
+// sits on an orbit of its shape: the semi-major axis that puts it there,
+// and its phase.
 export function orbitThrough(body, distance, angle) {
   const e = eccOf(body)
   const nu = rad(angle) - rad(body.periapsis)
   return { orbit_km: (distance * (1 + e * Math.cos(nu))) / (1 - e * e), phase: angle }
+}
+
+// Seen from above (the 2D editor), an inclined orbit is squashed across its
+// node line. For the direction `skyAngle` (degrees, in the system's plane)
+// on a body's orbit: the angle along the orbit there (degrees, a phase),
+// and how much shorter its distance looks from above (1 for a flat orbit).
+export function alongOrbit(body, skyAngle) {
+  const node = rad(body.ascending_node)
+  const th = rad(skyAngle) - node
+  let c = Math.cos(rad(body.inclination))
+  // Edge-on, the whole orbit is a line: read it as nearly so.
+  if (Math.abs(c) < 0.02) c = c < 0 ? -0.02 : 0.02
+  const u = Math.atan2(Math.sin(th) / c, Math.cos(th)) // from the node, along the orbit
+  return {
+    phase: (((((node + u) * 180) / Math.PI) % 360) + 360) % 360,
+    squash: Math.max(Math.hypot(Math.cos(u), Math.sin(u) * c), 0.02),
+  }
 }
 
 let model = keplerOrbit
@@ -403,22 +449,36 @@ export function createGravitySim(bodies, { stepsPerOrbit = 120, maxSteps = 20000
 }
 
 // The ellipse through a position (m) with a velocity (m/s) round a mass
-// (mu = G·M): { orbit_km, eccentricity, periapsis (degrees), bound }. An
-// unbound path (eccentricity 1 or more) is flying off.
+// (mu = G·M): { orbit_km, eccentricity, periapsis, inclination,
+// ascending_node (degrees, as orbitFrame reads them), bound }. An unbound
+// path (eccentricity 1 or more) is flying off.
 export function elementsFromState(r, v, mu) {
   const d = Math.hypot(r[0], r[1], r[2])
   const v2 = v[0] ** 2 + v[1] ** 2 + v[2] ** 2
   const energy = v2 / 2 - mu / d
   const rv = r[0] * v[0] + r[1] * v[1] + r[2] * v[2]
-  // The eccentricity vector, pointing at periapsis (in the x-y plane).
-  const ex = ((v2 - mu / d) * r[0] - rv * v[0]) / mu
-  const ey = ((v2 - mu / d) * r[1] - rv * v[1]) / mu
-  const e = Math.hypot(ex, ey)
+  // The eccentricity vector, pointing at periapsis.
+  const ev = [0, 1, 2].map((k) => ((v2 - mu / d) * r[k] - rv * v[k]) / mu)
+  const e = Math.hypot(ev[0], ev[1], ev[2])
+  // The orbit's pole (r × v, unit), its tilt, and the node line (z × pole).
+  const h = [r[1] * v[2] - r[2] * v[1], r[2] * v[0] - r[0] * v[2], r[0] * v[1] - r[1] * v[0]]
+  const hn = Math.hypot(h[0], h[1], h[2]) || 1
+  const [hx, hy, hz] = [h[0] / hn, h[1] / hn, h[2] / hn]
+  const flat = Math.hypot(hx, hy) < 1e-9
+  const node = flat ? 0 : Math.atan2(hx, -hy)
+  const [nx, ny] = [Math.cos(node), Math.sin(node)]
+  // From the node to periapsis, along the orbit (the way it runs):
+  // atan2((n × e) · pole, n · e).
+  const along = ny * ev[2] * hx - nx * ev[2] * hy + (nx * ev[1] - ny * ev[0]) * hz
+  const w = Math.atan2(along, nx * ev[0] + ny * ev[1])
+  const deg = (x) => ((((x * 180) / Math.PI) % 360) + 360) % 360
   const bound = energy < 0 && e < 1
   return {
     orbit_km: bound ? -mu / (2 * energy) / 1000 : d / 1000,
     eccentricity: e,
-    periapsis: ((Math.atan2(ey, ex) * 180) / Math.PI + 360) % 360,
+    periapsis: deg(node + w),
+    inclination: (Math.acos(Math.max(-1, Math.min(1, hz))) * 180) / Math.PI,
+    ascending_node: deg(node),
     bound,
   }
 }
@@ -434,7 +494,7 @@ export function hillRadius(body, parent) {
 // What the physics reads of each body. Anything else (its name, colour,
 // spin, rings) can change without the orbits changing: a page compares
 // physicsKey before redoing any physics. A new physical value goes here.
-const PHYSICS_FIELDS = ['id', 'parent_id', 'kind', 'body_type', 'radius_km', 'mass_kg', 'orbit_km', 'phase', 'eccentricity', 'periapsis']
+const PHYSICS_FIELDS = ['id', 'parent_id', 'kind', 'body_type', 'radius_km', 'mass_kg', 'orbit_km', 'phase', 'eccentricity', 'periapsis', 'inclination', 'ascending_node']
 export const physicsKey = (bodies) => JSON.stringify(bodies.map((b) => PHYSICS_FIELDS.map((k) => b[k] ?? null)))
 
 // ---- The system as a tree -------------------------------------------------------------

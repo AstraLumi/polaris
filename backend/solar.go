@@ -86,6 +86,17 @@ var schema36Statements = []string{
 
 const maxRingRadii = 20
 
+// schema37Statements create what schema 37 added: inclined orbits. An
+// orbit's inclination (degrees from the system's plane, 0 to 180; over 90
+// it runs backwards) and its ascending node (the direction, in degrees,
+// where it crosses the plane going north). periapsis stays the direction
+// of the closest point and phase where the body is on day 0, both measured
+// as angles along the orbit from the same zero. Old orbits stay flat.
+var schema37Statements = []string{
+	`ALTER TABLE celestial_bodies ADD COLUMN inclination REAL NOT NULL DEFAULT 0`,
+	`ALTER TABLE celestial_bodies ADD COLUMN ascending_node REAL NOT NULL DEFAULT 0`,
+}
+
 // The classes a star can be. Their realistic ranges live with the physics
 // (frontend/src/stars.js); here a star only has to be one of them.
 var starClasses = map[string]bool{
@@ -121,6 +132,9 @@ type celestialBody struct {
 	// The orbit's shape: eccentricity and periapsis direction (degrees).
 	Eccentricity float64 `json:"eccentricity"`
 	Periapsis    float64 `json:"periapsis"`
+	// Its tilt from the system's plane, and where it crosses it (degrees).
+	Inclination   float64 `json:"inclination"`
+	AscendingNode float64 `json:"ascending_node"`
 	// Its spin: the axis's tilt (degrees) and the day's length (hours).
 	AxialTilt float64 `json:"axial_tilt"`
 	DayHours  float64 `json:"day_hours"`
@@ -171,7 +185,8 @@ func loadSolarSystem(db *sql.DB) (solarSystem, error) {
 	out.Bodies = []celestialBody{}
 	rows, err := db.Query(`SELECT id, parent_id, kind, name, body_type, radius_km, orbit_km, phase, COALESCE(color, ''), is_main, sort,
 		COALESCE(star_class, ''), temperature_k, mass_kg, free_values, eccentricity, periapsis,
-		axial_tilt, day_hours, map_frequency, ring_inner, ring_outer, COALESCE(ring_color, ''), dyson
+		axial_tilt, day_hours, map_frequency, ring_inner, ring_outer, COALESCE(ring_color, ''), dyson,
+		inclination, ascending_node
 		FROM celestial_bodies ORDER BY sort, id`)
 	if err != nil {
 		return out, err
@@ -184,7 +199,8 @@ func loadSolarSystem(db *sql.DB) (solarSystem, error) {
 		var freq sql.NullInt64
 		if err := rows.Scan(&b.ID, &parent, &b.Kind, &b.Name, &b.BodyType, &b.RadiusKm, &orbit, &b.Phase, &b.Color, &b.IsMain, &b.Sort,
 			&b.StarClass, &temp, &mass, &b.FreeValues, &b.Eccentricity, &b.Periapsis,
-			&b.AxialTilt, &b.DayHours, &freq, &b.RingInner, &b.RingOuter, &b.RingColor, &b.Dyson); err != nil {
+			&b.AxialTilt, &b.DayHours, &freq, &b.RingInner, &b.RingOuter, &b.RingColor, &b.Dyson,
+			&b.Inclination, &b.AscendingNode); err != nil {
 			return out, err
 		}
 		if temp.Valid {
@@ -307,6 +323,10 @@ func checkBody(db *sql.DB, b *celestialBody, id int64) string {
 	b.Color = color
 	b.Phase = math.Mod(math.Mod(b.Phase, 360)+360, 360)
 	b.Periapsis = math.Mod(math.Mod(b.Periapsis, 360)+360, 360)
+	b.AscendingNode = math.Mod(math.Mod(b.AscendingNode, 360)+360, 360)
+	if !(b.Inclination >= 0 && b.Inclination <= 180) {
+		return "the inclination must be between 0 and 180 degrees"
+	}
 	if b.DayHours == 0 {
 		b.DayHours = 24
 	}
@@ -342,6 +362,7 @@ func checkBody(db *sql.DB, b *celestialBody, id int64) string {
 	if b.Kind == "star" {
 		b.ParentID, b.OrbitKm = nil, nil
 		b.Eccentricity, b.Periapsis = 0, 0
+		b.Inclination, b.AscendingNode = 0, 0
 		if b.StarClass == "" {
 			b.StarClass = "yellow_dwarf"
 		}
@@ -453,21 +474,23 @@ func writeBody(db *sql.DB, b *celestialBody, id int64) error {
 	if id == 0 {
 		res, err := tx.Exec(`INSERT INTO celestial_bodies (parent_id, kind, name, body_type, radius_km, orbit_km, phase, color, is_main,
 				star_class, temperature_k, mass_kg, free_values, eccentricity, periapsis, axial_tilt, day_hours,
-				ring_inner, ring_outer, ring_color, dyson, sort)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM celestial_bodies))`,
+				ring_inner, ring_outer, ring_color, dyson, inclination, ascending_node, sort)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM celestial_bodies))`,
 			b.ParentID, b.Kind, b.Name, b.BodyType, b.RadiusKm, b.OrbitKm, b.Phase, color, b.IsMain,
 			nullableString(b.StarClass), b.TemperatureK, b.MassKg, b.FreeValues, b.Eccentricity, b.Periapsis, b.AxialTilt, b.DayHours,
-			b.RingInner, b.RingOuter, nullableString(b.RingColor), b.Dyson)
+			b.RingInner, b.RingOuter, nullableString(b.RingColor), b.Dyson, b.Inclination, b.AscendingNode)
 		if err != nil {
 			return err
 		}
 		b.ID, _ = res.LastInsertId()
 	} else if _, err := tx.Exec(`UPDATE celestial_bodies SET name = ?, body_type = ?, radius_km = ?, orbit_km = ?, phase = ?, color = ?, is_main = ?,
 			star_class = ?, temperature_k = ?, mass_kg = ?, free_values = ?, eccentricity = ?, periapsis = ?,
-			axial_tilt = ?, day_hours = ?, ring_inner = ?, ring_outer = ?, ring_color = ?, dyson = ?
+			axial_tilt = ?, day_hours = ?, ring_inner = ?, ring_outer = ?, ring_color = ?, dyson = ?,
+			inclination = ?, ascending_node = ?
 		WHERE id = ?`, b.Name, b.BodyType, b.RadiusKm, b.OrbitKm, b.Phase, color, b.IsMain,
 		nullableString(b.StarClass), b.TemperatureK, b.MassKg, b.FreeValues, b.Eccentricity, b.Periapsis,
-		b.AxialTilt, b.DayHours, b.RingInner, b.RingOuter, nullableString(b.RingColor), b.Dyson, id); err != nil {
+		b.AxialTilt, b.DayHours, b.RingInner, b.RingOuter, nullableString(b.RingColor), b.Dyson,
+		b.Inclination, b.AscendingNode, id); err != nil {
 		return err
 	}
 	return tx.Commit()

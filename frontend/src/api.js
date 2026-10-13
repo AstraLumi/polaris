@@ -517,6 +517,7 @@ void [
   tr("the orbit's distance must be more than 0"), tr('the radius must be more than 0'), tr("that kind of body can't be of that type"),
   tr('unknown kind of body'), tr('that name is too long'), tr('this body has no map of its own'), tr('failed to save the name'),
   tr('unknown kind of star'), tr('the mass must be more than 0'), tr('the temperature must be between 0 and 1 000 000 000 K'), tr('a solar system can have at most 500 bodies'), tr('body not found'),
+  tr('the inclination must be between 0 and 180 degrees'),
 ]
 
 // The planet's layers: plates, mountain ranges, ocean depths

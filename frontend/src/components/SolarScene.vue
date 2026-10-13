@@ -20,7 +20,7 @@ import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import { PlanetGrid } from '../planetGrid'
 import { sceneRadius, sceneDistance, sceneLayout, sceneOrbitPath, bodyColor } from '../solarScale'
-import { orbitLimits, compileSystem } from '../orbits'
+import { orbitLimits, compileSystem, orbitFrame } from '../orbits'
 import { habitableZone } from '../stars'
 import { createGlobeMesh } from '../three/globeMesh'
 import { createStar, createPlanetMaterial, createAtmosphere, createClouds, createRings } from '../three/bodyShaders'
@@ -50,7 +50,8 @@ const props = defineProps({
   // null to follow the orbits as set, at `days`.
   relative: { type: Function, default: null },
   // With gravity, the orbit each body is on now (id -> { orbit_km,
-  // eccentricity, periapsis }, or no entry when it has none); null to
+  // eccentricity, periapsis, inclination, ascending_node }, or no entry
+  // when it has none); null to
   // draw the orbits as set.
   shapes: { type: Map, default: null },
 })
@@ -277,12 +278,13 @@ function makeTrail() {
   behindGeometry.setColors(thick)
   const behind = new LineSegments2(behindGeometry, trailMaterial())
   group.add(ahead, behind)
-  return { group, ahead, behind, points, thick, thin, periapsis: 0, at: -1 }
+  return { group, ahead, behind, points, thick, thin, frame: null, at: -1 }
 }
 
 // The orbit's points, at even steps of the angle from periapsis.
 function setTrailPath(trail, body, parent, shape = body) {
-  const path = sceneOrbitPath({ ...body, ...shape }, parent, TRAIL_STEPS)
+  const orbit = { ...body, ...shape }
+  const path = sceneOrbitPath(orbit, parent, TRAIL_STEPS)
   for (let s = 0; s < TRAIL_STEPS; s++) {
     trail.points.set(path[s], s * 6)
     trail.points.set(path[s + 1], s * 6 + 3)
@@ -292,7 +294,7 @@ function setTrailPath(trail, body, parent, shape = body) {
   trail.ahead.geometry.computeBoundingSphere()
   trail.behind.geometry.computeBoundingBox()
   trail.behind.geometry.computeBoundingSphere()
-  trail.periapsis = ((shape.periapsis || 0) * Math.PI) / 180
+  trail.frame = orbitFrame(orbit)
   trail.at = -1
 }
 
@@ -302,7 +304,10 @@ function setTrailPath(trail, body, parent, shape = body) {
 // on from the body's front (0.12) back up to the far side (0.32).
 function splitTrail(trail, rel) {
   const n = TRAIL_STEPS
-  const nu = Math.atan2(rel.y, rel.x) - trail.periapsis
+  // The angle from periapsis, in the orbit's own plane (drawing squeezes
+  // distances, not directions).
+  const { P, Q } = trail.frame
+  const nu = Math.atan2(rel.x * Q[0] + rel.y * Q[1] + rel.z * Q[2], rel.x * P[0] + rel.y * P[1] + rel.z * P[2])
   const at = Math.round(((((nu / (2 * Math.PI)) % 1) + 1) % 1) * n) % n
   if (at === trail.at) return
   trail.at = at

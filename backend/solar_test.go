@@ -165,6 +165,42 @@ func TestRingsAndDysonSpheres(t *testing.T) {
 	}
 }
 
+// Inclined orbits: kept as typed, the node turned into 0–360, flat for a
+// star, and an older story's orbits stay flat.
+func TestInclinedOrbits(t *testing.T) {
+	mgr, h := newTestServer(t)
+	st := createStory(t, h, map[string]string{"name": "Tilted"})
+	base := "/api/s/" + st.ID + "/solar"
+	_, s := solarSave(t, h, "POST", base+"/bodies", `{"kind":"star","name":"Sol","body_type":"star","radius_km":696000,"temperature_k":5772,"mass_kg":1.989e30,"inclination":30}`)
+	star := idStr(s.Bodies[0].ID)
+	if s.Bodies[0].Inclination != 0 {
+		t.Errorf("a star has no orbit to tilt: %+v", s.Bodies[0])
+	}
+	_, s = solarSave(t, h, "POST", base+"/bodies", `{"kind":"planet","name":"Pluto","body_type":"rocky","radius_km":1188,"orbit_km":5.9e9,"inclination":17.2,"ascending_node":-250,"parent_id":`+star+`}`)
+	if b := s.Bodies[1]; b.Inclination != 17.2 || b.AscendingNode != 110 {
+		t.Errorf("inclined: %+v", b)
+	}
+	for _, bad := range []string{`"inclination":-1`, `"inclination":181`} {
+		rec, _ := solarSave(t, h, "POST", base+"/bodies", `{"kind":"planet","name":"X","body_type":"rocky","radius_km":10,"orbit_km":1e8,`+bad+`,"parent_id":`+star+`}`)
+		if rec.Code != 400 {
+			t.Errorf("%s: %d", bad, rec.Code)
+		}
+	}
+
+	app, _ := mgr.open(createStoryDirect(t, mgr, "Old"))
+	rollBackSchema37(t, app.db)
+	if _, err := app.db.Exec(`INSERT INTO celestial_bodies (kind, name, body_type, radius_km) VALUES ('star', 'Sol', 'star', 696000)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureSchema(app.db); err != nil {
+		t.Fatal(err)
+	}
+	old, err := loadSolarSystem(app.db)
+	if err != nil || len(old.Bodies) != 1 || old.Bodies[0].Inclination != 0 || old.Bodies[0].AscendingNode != 0 {
+		t.Errorf("%v, %+v", err, old)
+	}
+}
+
 // An older story gets the empty table.
 func TestMigrationAddsSolarTable(t *testing.T) {
 	mgr, _ := newTestServer(t)

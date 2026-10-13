@@ -66,7 +66,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { t } from '../i18n'
-import { systemTree, orbitLimits, keplerOrbit, orbitPoint, orbitThrough } from '../orbits'
+import { systemTree, orbitLimits, keplerOrbit, orbitPoint, orbitThrough, alongOrbit } from '../orbits'
 import { sceneRadius, sceneDistance, orbitForSceneDistance, bodyColor, scenePoint, sceneOrbitPath } from '../solarScale'
 import { habitableZone } from '../stars'
 
@@ -103,7 +103,7 @@ const flip = ([x, y]) => [x, -y]
 const paths = new Map() // body id -> { key, d }
 function orbitD(c) {
   const f = focus.value
-  const key = [f.id, f.radius_km, c.radius_km, c.orbit_km, c.eccentricity, c.periapsis].join(':')
+  const key = [f.id, f.radius_km, c.radius_km, c.orbit_km, c.eccentricity, c.periapsis, c.inclination, c.ascending_node].join(':')
   const kept = paths.get(c.id)
   if (kept?.key === key) return kept.d
   const d = 'M ' + sceneOrbitPath(c, f).map((p) => flip(p).join(' ')).join(' L ') + ' Z'
@@ -242,8 +242,11 @@ function onMove(e) {
   const c = tree.value.byId.get(drag.value.id)
   if (!c) return
   const p = point(e)
-  const d = Math.hypot(p.x, p.y)
-  const phase = Math.round(((Math.atan2(-p.y, p.x) * 180) / Math.PI + 360) % 360)
+  // Where on its orbit the pointer is: an inclined orbit is seen squashed
+  // from above, so its angle and distance there are read along the orbit.
+  const along = alongOrbit(c, (Math.atan2(-p.y, p.x) * 180) / Math.PI)
+  const phase = Math.round(along.phase) % 360
+  const d = Math.hypot(p.x, p.y) / along.squash
   // The orbit, of the same shape, that passes where the pointer is; its
   // size rounded to three significant figures, for tidy numbers.
   const through = orbitThrough(c, orbitForSceneDistance(d, focus.value, c), phase)

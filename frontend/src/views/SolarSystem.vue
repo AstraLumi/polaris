@@ -234,6 +234,17 @@
                 <input v-model.number="draft.periapsis" type="number" step="any" />
                 <small class="hint">{{ $t('The direction where the orbit comes closest.') }}</small>
               </label>
+              <div class="field-row">
+                <label class="field">
+                  <span>{{ $t('Inclination (°)') }}</span>
+                  <input v-model.number="draft.inclination" type="number" min="0" max="180" step="any" />
+                </label>
+                <label v-if="draft.inclination > 0" class="field">
+                  <span>{{ $t('Ascending node (°)') }}</span>
+                  <input v-model.number="draft.ascending_node" type="number" step="any" />
+                </label>
+              </div>
+              <small class="hint spin-hint">{{ $t("How far its orbit tilts from the system's plane, and the direction where it crosses the plane going north. Over 90° it runs backwards.") }}</small>
             </template>
             <button
               v-if="draft.kind === 'planet' && mode === 'edit' && focusId !== draft.id"
@@ -589,7 +600,10 @@ function shapesOf(now) {
   const out = new Map()
   for (const [id, o] of now) {
     // As stretched as it is: capped, the line missed the body.
-    if (o.bound && o.eccentricity < 0.9999) out.set(id, { orbit_km: o.orbit_km, eccentricity: o.eccentricity, periapsis: o.periapsis })
+    if (o.bound && o.eccentricity < 0.9999) {
+      const { orbit_km, eccentricity, periapsis, inclination, ascending_node } = o
+      out.set(id, { orbit_km, eccentricity, periapsis, inclination, ascending_node })
+    }
   }
   return out
 }

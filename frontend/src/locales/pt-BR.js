@@ -1668,4 +1668,8 @@ export default {
   "The colour of its temperature": "A cor da sua temperatura",
   "The colour of its type": "A cor do seu tipo",
   "rings run from the planet's surface outwards: inner edge at least 1 radius, outer edge beyond it, at most 20": "os anéis vão da superfície do planeta para fora: borda interna de pelo menos 1 raio, borda externa além dela, no máximo 20",
+  "Inclination (°)": "Inclinação da órbita (°)",
+  "Ascending node (°)": "Nodo ascendente (°)",
+  "How far its orbit tilts from the system's plane, and the direction where it crosses the plane going north. Over 90° it runs backwards.": "Quanto sua órbita se inclina em relação ao plano do sistema, e a direção em que cruza esse plano indo para o norte. Acima de 90° ela corre ao contrário.",
+  "the inclination must be between 0 and 180 degrees": "a inclinação da órbita deve estar entre 0 e 180 graus",
 }
