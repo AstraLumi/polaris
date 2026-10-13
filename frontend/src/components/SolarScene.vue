@@ -21,12 +21,12 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import { PlanetGrid } from '../planetGrid'
 import { sceneRadius, sceneDistance, sceneLayout, sceneOrbitPath, bodyColor } from '../solarScale'
 import { orbitLimits, compileSystem, orbitFrame } from '../orbits'
-import { habitableZone } from '../stars'
+import { habitableZone, luminosity } from '../stars'
 import { createGlobeMesh } from '../three/globeMesh'
 import { createStar, createPlanetMaterial, createAtmosphere, createClouds, createRings } from '../three/bodyShaders'
 import { cloudCoverage, genericCloudCover, mainPlanetCloudCover } from '../climate'
 import { loadSkyDome, disposeSkyDome } from '../three/skyDome'
-import { createLensPass } from '../three/lensPass'
+import { createLensPass, HOLE_LAYER } from '../three/lensPass'
 
 // The solar system in 3D: the star at the centre, each body on its orbit at
 // the time `days`, drawn at the squeezed scale of solarScale.js. Every
@@ -161,6 +161,8 @@ function buildBodies() {
       const star = createStar(r, colorOf(b), { blackHole: b.star_class === 'black_hole', dyson: !!b.dyson })
       stars.push(star)
       mesh = star.group
+      // A black hole is drawn apart from the rest, over its lensed sky.
+      if (b.star_class === 'black_hole') mesh.traverse((o) => o.layers.set(HOLE_LAYER))
     } else if (globe) {
       globe.mesh.scale.setScalar(r)
       mesh = globe.mesh
@@ -255,6 +257,12 @@ const TRAIL_STEPS = 128
 const TRAIL_COLOR = new THREE.Color(0xaebfe0)
 const trailMaterial = () => {
   const m = new LineMaterial({ color: 0xffffff, linewidth: 2, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })
+  // No round caps: on additive lines each joint's two caps added up to a
+  // bright dot, beading the orbit. At 128 segments the gaps don't show.
+  m.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace('if ( len2 > 1.0 ) discard;', 'discard;')
+  }
+  m.customProgramCacheKey = () => 'trail-no-caps'
   if (renderer) m.resolution.set(renderer.domElement.width, renderer.domElement.height)
   return m
 }
@@ -365,8 +373,12 @@ function buildMarkers() {
   if (hz) {
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(sceneDistance(hz.inner_km, star), sceneDistance(hz.outer_km, star), 128),
-      new THREE.MeshBasicMaterial({ color: 0x4caf6e, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }),
+      // A faint glow added to what is behind it, drawn right after the sky
+      // and before the bodies: it lies in the plane through every planet,
+      // and drawn over them it veiled their lower halves.
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(0x4caf6e).multiplyScalar(0.06), blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false }),
     )
+    ring.renderOrder = -0.5
     ring.userData.zone = true
     markerGroup.add(ring)
   }
@@ -498,8 +510,9 @@ function render() {
     if (!g.mesh.parent) continue
     g.material.uniforms.uLight.value.copy(g.mesh.worldToLocal(tmp.copy(sun)).normalize())
   }
-  // Inside a Dyson sphere the star gives no light.
-  const power = star?.dyson ? 0 : 1
+  // A star with no light of its own (a black hole, or one inside a Dyson
+  // sphere) leaves its planets dark.
+  const power = star && luminosity(star) > 0 ? 1 : 0
   for (const m of sunLit) {
     m.uniforms.uSun.value.copy(sun)
     m.uniforms.uPower.value = power
@@ -559,6 +572,7 @@ function onUp(e) {
   down = null
   const rect = canvasEl.value.getBoundingClientRect()
   const ray = new THREE.Raycaster()
+  ray.layers.enableAll()
   ray.setFromCamera(new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), camera)
   const hit = ray
     .intersectObjects(bodyGroup?.children.filter((o) => o.type !== 'Line' && !o.userData.trail) ?? [], true)
@@ -589,6 +603,7 @@ onMounted(() => {
   scene.background = new THREE.Color(0x02030a)
   camera = new THREE.PerspectiveCamera(45, 1, 0.005, 20000)
   camera.up.set(0, 0, 1)
+  camera.layers.enable(HOLE_LAYER)
   scene.add(new THREE.AmbientLight(0xffffff, 0.08))
   const sun = new THREE.PointLight(0xffffff, 3, 0, 0)
   scene.add(sun)

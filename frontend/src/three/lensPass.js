@@ -1,10 +1,16 @@
 // Gravitational lensing round a black hole, for the solar system's view: the
-// scene is drawn into a texture, then onto the screen with everything
-// behind the black hole bent round it (a point-mass lens: what is seen at a
-// distance th from it comes from th - E²/th, so close in, the far side
-// shows too). What is in front of it isn't bent, nor its own black disc and
-// photon ring. Only used while a black hole is in view.
+// scene without the black hole (camera layer 0) is drawn into a texture,
+// then onto the screen with everything behind the black hole bent round it
+// (a point-mass lens: what is seen at a distance th from it comes from
+// th - E²/th, so close in, the far side shows too, and right round it the
+// Einstein ring of what is straight behind). Then the black hole itself
+// (layer HOLE_LAYER: its disc and photon ring) is drawn on top, unbent,
+// behind whatever is nearer (the screen pass writes the scene's depth).
+// Bending a picture with the hole in it bent its dark disc into a wide
+// black band. Only used while a black hole is in view.
 import * as THREE from 'three'
+
+export const HOLE_LAYER = 1
 
 const VERTEX = `
 varying vec2 vUv;
@@ -34,6 +40,7 @@ void main() {
     uv = (c + off / th * beta) / uRes;
   }
   gl_FragColor = texture2D(uColor, uv);
+  gl_FragDepth = texture2D(uDepth, vUv).x;
 }`
 
 export function createLensPass() {
@@ -50,8 +57,11 @@ export function createLensPass() {
       uKeep: { value: 0 },
       uHoleDepth: { value: 1 },
     },
-    depthTest: false,
-    depthWrite: false,
+    // Always written, depth included, so the black hole drawn next hides
+    // behind what is nearer.
+    depthTest: true,
+    depthWrite: true,
+    depthFunc: THREE.AlwaysDepth,
   })
   const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material)
   quad.frustumCulled = false
@@ -77,10 +87,23 @@ export function createLensPass() {
       u.uE.value = (pxPerTan * (r * 3)) / dist
       u.uKeep.value = (pxPerTan * (r * 1.3)) / dist
       u.uHoleDepth.value = v.z * 0.5 + 0.5
+      const layers = camera.layers.mask
+      camera.layers.set(0)
       renderer.setRenderTarget(target)
       renderer.render(scene, camera)
       renderer.setRenderTarget(null)
       renderer.render(screen, flat)
+      // The black hole, over what was just drawn (no clearing: a colour
+      // background clears the screen even then).
+      const { autoClear } = renderer
+      const background = scene.background
+      renderer.autoClear = false
+      scene.background = null
+      camera.layers.set(HOLE_LAYER)
+      renderer.render(scene, camera)
+      scene.background = background
+      renderer.autoClear = autoClear
+      camera.layers.mask = layers
       return true
     },
     dispose() {
