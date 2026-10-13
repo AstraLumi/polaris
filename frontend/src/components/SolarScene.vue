@@ -588,18 +588,30 @@ function lightColor(star) {
   return light.multiplyScalar(1 / top).lerp(WHITE, 0.5)
 }
 
+// Where a body's label goes on screen (px), or null when behind the camera.
+function labelPoint(id, w, h) {
+  const m = meshes.get(id)
+  const p = positions.get(id)
+  if (!p || !m) return null
+  tmp.copy(p)
+  tmp.z += sceneRadius(m.body) * 1.2
+  tmp.project(camera)
+  return tmp.z <= 1 ? [((tmp.x + 1) / 2) * w, ((1 - tmp.y) / 2) * h] : null
+}
+
 function placeLabels() {
   const w = renderer.domElement.clientWidth
   const h = renderer.domElement.clientHeight
   for (const [id, el] of labelEls) {
-    const m = meshes.get(id)
-    const p = positions.get(id)
-    if (p && m) {
-      tmp.copy(p)
-      tmp.z += sceneRadius(m.body) * 1.2
-      tmp.project(camera)
+    let pt = labelPoint(id, w, h)
+    // A moon's label on top of its planet's (seen from afar) is left out,
+    // unless it is the one picked.
+    const body = meshes.get(id)?.body
+    if (pt && body?.kind === 'moon' && id !== props.selected) {
+      const q = labelPoint(body.parent_id, w, h)
+      if (q && Math.abs(pt[0] - q[0]) < 60 && Math.abs(pt[1] - q[1]) < 18) pt = null
     }
-    const at = p && m && tmp.z <= 1 ? `translate(${((tmp.x + 1) / 2) * w}px, ${((1 - tmp.y) / 2) * h}px)` : ''
+    const at = pt ? `translate(${pt[0]}px, ${pt[1]}px)` : ''
     if (labelAt.get(id) !== at) {
       labelAt.set(id, at)
       showLabel(el, at)
