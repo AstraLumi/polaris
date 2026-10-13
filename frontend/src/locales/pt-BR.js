@@ -1672,4 +1672,9 @@ export default {
   "Ascending node (°)": "Nodo ascendente (°)",
   "How far its orbit tilts from the system's plane, and the direction where it crosses the plane going north. Over 90° it runs backwards.": "Quanto sua órbita se inclina em relação ao plano do sistema, e a direção em que cruza esse plano indo para o norte. Acima de 90° ela corre ao contrário.",
   "the inclination must be between 0 and 180 degrees": "a inclinação da órbita deve estar entre 0 e 180 graus",
+  "Show the oceans and their names": "Mostrar os oceanos e seus nomes",
+  "Tint the oceans with their colour": "Tingir os oceanos com sua cor",
+  "Tint": "Tingir",
+  "Outline the oceans": "Contornar os oceanos",
+  "Outlines": "Contornos",
 }

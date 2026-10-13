@@ -51,6 +51,18 @@
         <button type="button" class="tool-btn" :class="{ active: equatorOpen }" :title="$t('Show and place the equator')" @click="equatorOpen = !equatorOpen">
           {{ $t('Equator') }}
         </button>
+        <div class="tool-sep"></div>
+        <button type="button" class="tool-btn" :class="{ active: oceanView.shown }" :title="$t('Show the oceans and their names')" @click="oceanView.shown = !oceanView.shown">
+          {{ $t('Oceans') }}
+        </button>
+        <template v-if="oceanView.shown">
+          <button type="button" class="tool-btn" :class="{ active: oceanView.tint }" :title="$t('Tint the oceans with their colour')" @click="oceanView.tint = !oceanView.tint">
+            {{ $t('Tint') }}
+          </button>
+          <button type="button" class="tool-btn" :class="{ active: oceanView.outline }" :title="$t('Outline the oceans')" @click="oceanView.outline = !oceanView.outline">
+            {{ $t('Outlines') }}
+          </button>
+        </template>
       </div>
 
       <div v-if="equatorOpen" class="equator-panel glass-panel panel-solid">
@@ -173,6 +185,7 @@ import HexPanel from '../components/HexPanel.vue'
 import MajorLocationModal from '../components/MajorLocationModal.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import { floodFill, BUCKET_WARN } from '../bucketFill'
+import { oceanView } from '../oceanView'
 
 const ZOOM_MIN = 0.15
 const ZOOM_MAX = 4
@@ -533,13 +546,15 @@ function roundRect(ctx, x, y, w, h, r) {
 const HEX_SIDES = [[1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]]
 
 // Each kingdom's, region's and ocean's name at the middle of its hexes,
-// while zoomed out (planetLabels.js tiers).
+// while zoomed out (planetLabels.js tiers). Oceans' go first, so the others
+// are drawn over them, and only while oceans are shown.
 function drawAreaNames(ctx, z, inView) {
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.lineJoin = 'round'
-  for (const m of majors.value) {
-    if (!m.color) continue
+  const isOcean = (m) => m.realm === 'ocean'
+  for (const m of [...majors.value.filter(isOcean), ...majors.value.filter((m) => !isOcean(m))]) {
+    if (!m.color || (isOcean(m) && !oceanView.shown)) continue
     const hexes = hexesOf(m.id)
     if (!hexes.length) continue
     let x = 0
@@ -739,13 +754,16 @@ function draw() {
   }
 
   // 2. Kingdom and region fills, batched per color. An ocean leaves its
-  //    water unpainted: its territory gets an outline in its colour.
+  //    water unpainted: its territory gets an outline in its colour, a
+  //    tint, both or neither (oceanView.js), or nothing while hidden.
   const oceanColors = new Set(majors.value.filter((m) => m.color && m.realm === 'ocean').map((m) => m.color))
   const groups = new Map()
   const oceans = new Map()
   for (const h of painted.values()) {
     if (!inView(h.x, h.y)) continue
-    const into = oceanColors.has(h.color) ? oceans : groups
+    const ocean = oceanColors.has(h.color)
+    if (ocean && !oceanView.shown) continue
+    const into = ocean ? oceans : groups
     let g = into.get(h.color)
     if (!g) {
       g = []
@@ -763,6 +781,15 @@ function draw() {
     ctx.stroke()
   }
   for (const [color, list] of oceans) {
+    if (oceanView.tint) {
+      ctx.beginPath()
+      for (const h of list) addHexPath(ctx, h.x, h.y, HEX_SIZE)
+      ctx.globalAlpha = 0.3
+      ctx.fillStyle = color
+      ctx.fill()
+      ctx.globalAlpha = 1
+    }
+    if (!oceanView.outline) continue
     ctx.beginPath()
     for (const h of list) {
       HEX_SIDES.forEach(([dq, dr], i) => {
@@ -1435,6 +1462,7 @@ async function placeLocation(loc) {
 // ---- Lifecycle --------------------------------------------------------------------------------------
 watch([tool, activeId, selectedHex, panning, brush], scheduleDraw)
 watch(equator, scheduleDraw)
+watch(oceanView, scheduleDraw)
 
 onMounted(async () => {
   updateSize()

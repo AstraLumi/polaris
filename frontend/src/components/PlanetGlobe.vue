@@ -64,7 +64,7 @@ const props = defineProps({
   outlined: { type: Array, default: () => [] },
   // A cell to face when the globe is first drawn.
   focus: { type: Number, default: null },
-  // Territory names: [{ key, name, color, cell (their middle), size (px) }]
+  // Territory names: [{ key, name, color, cell (their middle), size (px), ocean }]
   areas: { type: Array, default: () => [] },
   // Territories drawn as an outline only (oceans): [{ color, cells }]
   borders: { type: Array, default: () => [] },
@@ -285,7 +285,7 @@ function placeLabels(dist, cellPx) {
   const candidates = []
   for (const a of props.areas) {
     const at = onScreen(a.cell, 0.35)
-    if (at) candidates.push({ kind: 'area', key: 'a:' + a.key, name: a.name, x: at[0], y: at[1], size: a.size, color: a.color })
+    if (at) candidates.push({ kind: 'area', key: 'a:' + a.key, name: a.name, x: at[0], y: at[1], size: a.size, color: a.color, ocean: a.ocean })
   }
   for (const m of props.markers) {
     const at = onScreen(m.cell, 0.2)

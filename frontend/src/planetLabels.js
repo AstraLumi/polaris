@@ -14,13 +14,14 @@ export const TIERS = {
 // capital's includes its glow.
 export const ICON_PX = [10, 22, 34]
 
-// candidates: [{ kind: 'area' | 'marker', key, name, x, y, rank, size, color }],
+// candidates: [{ kind: 'area' | 'marker', key, name, x, y, rank, size, color, ocean }],
 // already on screen (x, y in pixels) and facing the viewer. Answers the ones
-// to show, most important first (territories by size), dropping names that
+// to show, most important first (kingdoms and regions by size, then oceans
+// by size, then places), dropping names that
 // would land on one already placed; a territory whose name doesn't fit is
 // left out until zooming in makes room.
 export function pickLabels(candidates, cellPx) {
-  const order = (c) => (c.kind === 'area' ? 3 + c.size / 100 : c.rank)
+  const order = (c) => (c.kind === 'area' ? (c.ocean ? 2.5 : 3) + c.size / 100 : c.rank)
   const shown = candidates
     .filter((c) => {
       if (c.kind === 'area') return cellPx < TIERS.areaUntil

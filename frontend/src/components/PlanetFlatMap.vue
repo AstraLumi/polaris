@@ -107,7 +107,7 @@ function draw() {
       for (const a of props.areas) {
         if (!a.cells?.length) continue
         const [x, y] = projected.labelPoint(a.cells)
-        if (inView(sx(x), sy(y))) candidates.push({ kind: 'area', key: a.key, name: a.name, x: sx(x), y: sy(y), size: a.size, color: a.color })
+        if (inView(sx(x), sy(y))) candidates.push({ kind: 'area', key: a.key, name: a.name, x: sx(x), y: sy(y), size: a.size, color: a.color, ocean: a.ocean })
       }
       for (const m of props.markers) {
         if (m.cell == null || m.cell >= grid.count) continue

@@ -80,6 +80,18 @@
         <button type="button" class="tool-btn" :class="{ active: lines.zones }" :title="$t('Show the tropics and polar circles')" @click="toggleLine('show_zones')">
           {{ $t('Zones') }}
         </button>
+        <div class="tool-sep"></div>
+        <button type="button" class="tool-btn" :class="{ active: oceanView.shown }" :title="$t('Show the oceans and their names')" @click="oceanView.shown = !oceanView.shown">
+          {{ $t('Oceans') }}
+        </button>
+        <template v-if="oceanView.shown">
+          <button type="button" class="tool-btn" :class="{ active: oceanView.tint }" :title="$t('Tint the oceans with their colour')" @click="oceanView.tint = !oceanView.tint">
+            {{ $t('Tint') }}
+          </button>
+          <button type="button" class="tool-btn" :class="{ active: oceanView.outline }" :title="$t('Outline the oceans')" @click="oceanView.outline = !oceanView.outline">
+            {{ $t('Outlines') }}
+          </button>
+        </template>
       </div>
 
       <div class="top-notes">
@@ -161,6 +173,7 @@ import { planetApi, mapApi } from '../api'
 import { worldMap, PROJECTIONS, realmLabel, applyMapSettings, mapName, skyUrl } from '../worldMap'
 import { PlanetGrid, latLon, middleCell } from '../planetGrid'
 import { cellColor } from '../planetColors'
+import { oceanView } from '../oceanView'
 import { areaFontPx } from '../planetLabels'
 import { formatLatitude, zoneOf } from '../planet'
 import PlanetGlobe from '../components/PlanetGlobe.vue'
@@ -392,13 +405,14 @@ function coloredOf(ids) {
 
 // What colour a cell is: its kingdom's or region's, land when something
 // without a colour is there, or '' for the sea. An ocean leaves its water
-// as it is; its territory is outlined instead (borders).
+// as it is, or tints it (oceanView.js); its territory is outlined (borders).
 function colorOf(cell) {
-  const base = cellColor(cellMembers.get(cell), locMap, minorsByCell.has(cell))
+  const base = cellColor(cellMembers.get(cell), locMap, minorsByCell.has(cell), oceanView.shown && oceanView.tint)
   return onLayer.value ? layerCellColor(base, layers.featureAt(layer.value, cell)) : base
 }
 
-// Each kingdom's, region's and ocean's name, at the middle of its land.
+// Each kingdom's, region's and ocean's name, at the middle of its land;
+// oceans' only while they are shown.
 const areas = computed(() => {
   version.value // eslint-disable-line no-unused-expressions
   if (onLayer.value) {
@@ -410,18 +424,18 @@ const areas = computed(() => {
       .filter((a) => a.cell != null)
   }
   return majors.value
-    .filter((m) => m.color)
+    .filter((m) => m.color && (m.realm !== 'ocean' || oceanView.shown))
     .map((m) => {
       const cells = cellsOf(m.id)
-      return { key: m.id, name: mapName(m), color: m.color, cell: middleCell(grid, cells), cells, size: areaFontPx(cells.length) }
+      return { key: m.id, name: mapName(m), color: m.color, cell: middleCell(grid, cells), cells, size: areaFontPx(cells.length), ocean: m.realm === 'ocean' }
     })
     .filter((a) => a.cell != null)
 })
 
-// Oceans are drawn as the outline of their water.
+// Oceans are drawn as the outline of their water, unless that is turned off.
 const borders = computed(() => {
   version.value // eslint-disable-line no-unused-expressions
-  if (onLayer.value) return []
+  if (onLayer.value || !oceanView.shown || !oceanView.outline) return []
   return majors.value.filter((m) => m.color && m.realm === 'ocean').map((m) => ({ color: m.color, cells: cellsOf(m.id) }))
 })
 
@@ -790,6 +804,8 @@ function setView(v) {
 }
 
 watch(flatProjection, (p) => remember(PROJ_KEY, p))
+// Every ocean cell changes colour.
+watch(() => [oceanView.shown, oceanView.tint], () => version.value++)
 
 async function toggleLine(key) {
   const p = { ...worldMap.planet, [key]: !worldMap.planet[key] }
