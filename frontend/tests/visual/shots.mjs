@@ -7,13 +7,17 @@
 //
 //   node frontend/tests/visual/shots.mjs [options]
 //     --views a,b,…    angle, above, side, or a body's name (Sun, Home, Luna,
-//                      Giant, Comet, Oceanus); name:2 is twice as far out.
+//                      Giant, Comet, Oceanus); name:2 is twice as far out,
+//                      name@sun looks at it from the star's side.
 //                      Default: angle,above,side,Giant,Home
 //     --days <n>       run the clock to day n first
 //     --gravity        with live gravity
 //     --star <class>   the star's class: yellow_dwarf (default), red_giant,
 //                      white_dwarf, brown_dwarf, neutron_star, black_hole
 //     --dyson          the star inside a Dyson sphere
+//     --set <changes>  change the test system: Body.field=value, comma
+//                      separated (Luna.phase=200 puts the Moon between Home
+//                      and the Sun: an eclipse)
 //     --panel          keep the side panel open (closed by default)
 //     --full           the whole page, not just the 3D view
 //     --size <WxH>     the window, default 1400x900
@@ -56,7 +60,7 @@ const out = resolve(option('out', join(here, 'out')))
 // gas giant, an ocean world, and an eccentric comet on a tilted orbit.
 function testSystem() {
   const star = fitToClass({ kind: 'star', name: 'Sun', body_type: 'star', star_class: starClass, free_values: 0, dyson: flag('dyson') })
-  return [
+  const bodies = [
     star,
     { kind: 'planet', parent: 'Sun', name: 'Home', body_type: 'rocky', radius_km: 6371, orbit_km: 1.496e8, phase: 20, is_main: true },
     { kind: 'moon', parent: 'Home', name: 'Luna', body_type: 'rocky', radius_km: 1737, orbit_km: 384400, phase: 90 },
@@ -64,6 +68,13 @@ function testSystem() {
     { kind: 'planet', parent: 'Sun', name: 'Comet', body_type: 'rocky', radius_km: 800, orbit_km: 4e8, phase: 330, eccentricity: 0.75, periapsis: 300, inclination: 35, ascending_node: 60 },
     { kind: 'planet', parent: 'Sun', name: 'Giant', body_type: 'gas', radius_km: 70000, orbit_km: 7.7e8, phase: 140, axial_tilt: 26, ring_inner: 1.2, ring_outer: 2.3 },
   ]
+  for (const change of option('set', '').split(',').filter(Boolean)) {
+    const [, name, field, value] = change.match(/^\s*(\w+)\.(\w+)=(.*)$/) ?? []
+    const body = bodies.find((b) => b.name === name)
+    if (!body) throw new Error(`--set: no body called ${name}`)
+    body[field] = value === 'true' || value === 'false' ? value === 'true' : Number.isNaN(Number(value)) ? value : Number(value)
+  }
+  return bodies
 }
 
 // ---- Servers -------------------------------------------------------------------------------
@@ -140,6 +151,15 @@ async function makeStory() {
     if (!res.ok) throw new Error(`${body.name}: ${await res.text()}`)
     for (const b of (await res.json()).bodies) ids.set(b.name, b.id)
   }
+  // Oceanus wears a map of its own (islands): the globe mesh, as the main
+  // planet's would on a 3D map.
+  const islands = Array.from({ length: 400 }, (_, k) => (k * 37) % 2000)
+  const paint = await fetch(`${api}/s/${story.id}/solar/bodies/${ids.get('Oceanus')}/map/paint`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ color: '#3f8f4a', cells: islands }),
+  })
+  if (!paint.ok) throw new Error(`paint: ${await paint.text()}`)
   return story.id
 }
 
@@ -178,8 +198,9 @@ async function shoot(storyId) {
   mkdirSync(out, { recursive: true })
   const saved = []
   for (const view of views) {
-    const [name, zoom] = view.split(':')
-    const ok = await page.evaluate(([n, z]) => window.__solarScene.view(n, { zoom: Number(z) || 1 }), [name, zoom])
+    const [where, fromSun] = view.split('@')
+    const [name, zoom] = where.split(':')
+    const ok = await page.evaluate(([n, z, f]) => window.__solarScene.view(n, { zoom: Number(z) || 1, fromSun: f }), [name, zoom, fromSun === 'sun'])
     if (!ok) {
       console.warn(`no view or body called ${name}`)
       continue

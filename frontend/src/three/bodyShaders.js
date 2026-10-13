@@ -1,9 +1,11 @@
 // How the solar system's bodies look (SolarScene.vue): stars, black holes
 // and Dyson spheres; planets lit by their star with a soft line between day
 // and night, their air, clouds and rings. uPower is how much light the star
-// gives (0 inside a Dyson sphere). Only lazily loaded pages import this
-// (three.js).
+// gives (0 inside a Dyson sphere). Whatever the star lights also falls into
+// the shadows of other bodies (three/shadows.js: eclipses). Only lazily
+// loaded pages import this (three.js).
 import * as THREE from 'three'
+import { SHADOW_GLSL, shadowUniforms } from './shadows'
 
 // ---- Stars ------------------------------------------------------------------------------
 
@@ -175,6 +177,7 @@ uniform float uBands;
 varying vec3 vNormal;
 varying vec3 vWorld;
 varying vec3 vLocal;
+${SHADOW_GLSL}
 void main() {
   vec3 base = uColor;
   if (uBands > 0.5) {
@@ -184,16 +187,19 @@ void main() {
     base = uColor * mix(0.7, 1.18, wide * 0.7 + fine * 0.3);
   }
   float d = dot(normalize(vNormal), normalize(uSun - vWorld));
-  float day = smoothstep(-0.12, 0.35, d) * uPower;
+  float sun = sunlight(vWorld, uSun);
+  float day = smoothstep(-0.12, 0.35, d) * uPower * sun * ringShade(vWorld, uSun);
   vec3 night = base * 0.05 + vec3(0.01, 0.015, 0.03);
-  gl_FragColor = vec4(mix(night, base * (0.25 + 0.85 * max(d, 0.0)), day), 1.0);
+  // In the shadow of a body with air: the dim red of an eclipse.
+  night += base * EARTHSHADOW * airGlow * (1.0 - sun) * smoothstep(-0.12, 0.35, d) * uPower;
+  gl_FragColor = vec4(mix(night, base * (0.25 + 0.85 * max(d, 0.0)) * uLightColor, day), 1.0);
 }`
 
 export function createPlanetMaterial(color, { bands = false } = {}) {
   return new THREE.ShaderMaterial({
     vertexShader: PLANET_VERTEX,
     fragmentShader: PLANET_FRAGMENT,
-    uniforms: { uColor: { value: new THREE.Color(color) }, uSun: { value: new THREE.Vector3() }, uPower: { value: 1 }, uBands: { value: bands ? 1 : 0 } },
+    uniforms: { uColor: { value: new THREE.Color(color) }, uSun: { value: new THREE.Vector3() }, uPower: { value: 1 }, uBands: { value: bands ? 1 : 0 }, ...shadowUniforms() },
   })
 }
 
@@ -206,11 +212,12 @@ uniform vec3 uSun;
 uniform float uPower;
 varying vec3 vNormal;
 varying vec3 vWorld;
+${SHADOW_GLSL}
 void main() {
   vec3 n = normalize(vNormal);
   float rim = pow(1.0 - max(dot(n, normalize(cameraPosition - vWorld)), 0.0), 3.0);
-  float lit = smoothstep(-0.3, 0.45, dot(n, normalize(uSun - vWorld)));
-  gl_FragColor = vec4(uColor * rim * (0.04 + 0.08 * uPower + 1.1 * lit * uPower), 1.0);
+  float lit = smoothstep(-0.3, 0.45, dot(n, normalize(uSun - vWorld))) * sunlight(vWorld, uSun);
+  gl_FragColor = vec4(uColor * rim * (0.04 + 0.08 * uPower + 1.1 * lit * uPower * uLightColor), 1.0);
 }`
 
 export function createAtmosphere(r, color) {
@@ -219,7 +226,7 @@ export function createAtmosphere(r, color) {
     new THREE.ShaderMaterial({
       vertexShader: PLANET_VERTEX,
       fragmentShader: ATMOSPHERE_FRAGMENT,
-      uniforms: { uColor: { value: new THREE.Color(color) }, uSun: { value: new THREE.Vector3() }, uPower: { value: 1 } },
+      uniforms: { uColor: { value: new THREE.Color(color) }, uSun: { value: new THREE.Vector3() }, uPower: { value: 1 }, ...shadowUniforms() },
       transparent: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
@@ -254,6 +261,7 @@ varying vec3 vNormal;
 varying vec3 vWorld;
 varying vec3 vLocal;
 varying float vCover;
+${SHADOW_GLSL}
 float hash(vec3 p) {
   p = fract(p * 0.3183099 + 0.1);
   p *= 17.0;
@@ -271,8 +279,8 @@ void main() {
   float detail = noise(p) * 0.5 + noise(p * 2.3) * 0.3 + noise(p * 5.1) * 0.2;
   float a = smoothstep(0.3, 0.7, vCover * 0.9 + (detail - 0.5) * 0.55);
   float d = dot(normalize(vNormal), normalize(uSun - vWorld));
-  float day = smoothstep(-0.15, 0.3, d) * uPower;
-  vec3 c = mix(vec3(0.02, 0.03, 0.06), vec3(0.6 + 0.4 * max(d, 0.0)), day);
+  float day = smoothstep(-0.15, 0.3, d) * uPower * sunlight(vWorld, uSun) * ringShade(vWorld, uSun);
+  vec3 c = mix(vec3(0.02, 0.03, 0.06), vec3(0.6 + 0.4 * max(d, 0.0)) * uLightColor, day);
   gl_FragColor = vec4(c, a * 0.88);
 }`
 
@@ -298,7 +306,7 @@ export function createClouds(r, coverOf) {
     new THREE.ShaderMaterial({
       vertexShader: CLOUD_VERTEX,
       fragmentShader: CLOUD_FRAGMENT,
-      uniforms: { uSun: { value: new THREE.Vector3() }, uTime: { value: 0 }, uPower: { value: 1 } },
+      uniforms: { uSun: { value: new THREE.Vector3() }, uTime: { value: 0 }, uPower: { value: 1 }, ...shadowUniforms() },
       transparent: true,
       depthWrite: false,
     }),
@@ -308,7 +316,7 @@ export function createClouds(r, coverOf) {
 // ---- Rings ------------------------------------------------------------------------------
 // A flat ring in the planet's equator (so it tilts with it), from inner to
 // outer radius: fine bands of dust and ice with a dark gap, lit by the star
-// from either side, and dark where the planet's shadow falls on it.
+// from either side, and dark where the planet's shadow (or a moon's) falls.
 const RING_VERTEX = `
 varying vec3 vWorld;
 varying vec3 vLocal;
@@ -325,22 +333,12 @@ uniform vec3 uSun;
 uniform float uPower;
 uniform float uInner;
 uniform float uOuter;
-uniform vec3 uPlanet;  // the planet's centre, in the world
-uniform float uRadius; // and its radius
 varying vec3 vWorld;
 varying vec3 vLocal;
+${SHADOW_GLSL}
 void main() {
-  float t = (length(vLocal.xy) - uInner) / (uOuter - uInner);
-  float bands = 0.55 + 0.25 * sin(t * 47.0 + sin(t * 13.0) * 2.0) + 0.2 * sin(t * 131.0);
-  float gap = smoothstep(0.015, 0.045, abs(t - 0.63));
-  float fade = smoothstep(0.0, 0.06, t) * (1.0 - smoothstep(0.9, 1.0, t));
-  float a = clamp(bands, 0.0, 1.0) * gap * fade * 0.85;
-  // In the planet's shadow: the way to the star passes through it.
-  vec3 toSun = normalize(uSun - vWorld);
-  vec3 oc = uPlanet - vWorld;
-  float along = dot(oc, toSun);
-  float shadow = along > 0.0 && length(oc - toSun * along) < uRadius ? 0.12 : 1.0;
-  vec3 c = uColor * (0.08 + 0.92 * uPower * shadow);
+  float a = ringAlpha((length(vLocal.xy) - uInner) / (uOuter - uInner));
+  vec3 c = uColor * (0.08 + 0.92 * uPower * sunlight(vWorld, uSun) * uLightColor);
   gl_FragColor = vec4(c, a);
 }`
 
@@ -357,8 +355,7 @@ export function createRings(r, inner, outer, color) {
         uPower: { value: 1 },
         uInner: { value: r * inner },
         uOuter: { value: r * outer },
-        uPlanet: { value: new THREE.Vector3() },
-        uRadius: { value: r },
+        ...shadowUniforms(),
       },
       transparent: true,
       depthWrite: false,

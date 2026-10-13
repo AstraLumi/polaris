@@ -4,6 +4,7 @@
 // and the solar system (SolarScene.vue). Only imported by pages that load
 // three.js lazily, so three stays out of the main bundle.
 import * as THREE from 'three'
+import { SHADOW_GLSL, shadowUniforms } from './shadows'
 
 export const SEA = [27, 45, 74]
 const COLUMNS = 2048 // the colour texture's width
@@ -21,7 +22,9 @@ uniform vec2 uSize;
 varying vec3 vColor;
 varying float vEdge;
 varying vec3 vNormal;
+varying vec3 vWorld;
 void main() {
+  vWorld = (modelMatrix * vec4(position, 1.0)).xyz;
   float x = mod(aCell, uSize.x);
   float y = floor(aCell / uSize.x);
   vColor = texture2D(uColors, vec2((x + 0.5) / uSize.x, (y + 0.5) / uSize.y)).rgb;
@@ -31,9 +34,12 @@ void main() {
 }`
 
 // uLight is the direction of the light in the mesh's own frame; uAmbient how
-// lit the far side still is (the map keeps it bright, space doesn't).
+// lit the far side still is (the map keeps it bright, space doesn't). In the
+// solar system, uSun (the star, in the world) and the occluders cast other
+// bodies' shadows on it (three/shadows.js); the map's globe has none.
 const FRAGMENT = `
 uniform vec3 uLight;
+uniform vec3 uSun;
 uniform float uGrid;
 uniform float uAmbient;
 uniform float uTwilight;
@@ -41,11 +47,13 @@ uniform float uPower;
 varying vec3 vColor;
 varying float vEdge;
 varying vec3 vNormal;
+varying vec3 vWorld;
+${SHADOW_GLSL}
 void main() {
   float d = dot(vNormal, uLight);
   float lit = uTwilight > 0.0 ? smoothstep(-uTwilight, uTwilight * 3.0, d) * (0.3 + 0.7 * max(d, 0.0)) : max(d, 0.0);
-  float light = uAmbient + (1.0 - uAmbient) * lit * uPower;
-  vec3 c = vColor * light;
+  lit *= sunlight(vWorld, uSun) * ringShade(vWorld, uSun);
+  vec3 c = vColor * (uAmbient + (1.0 - uAmbient) * lit * uPower * uLightColor);
   float line = smoothstep(0.84, 0.96, vEdge) * uGrid;
   gl_FragColor = vec4(mix(c, c * 0.5, line), 1.0);
 }`
@@ -105,6 +113,8 @@ export function createGlobeMesh(grid, colorOf, { ambient = 0.6, twilight = 0 } =
       uAmbient: { value: ambient },
       uTwilight: { value: twilight },
       uPower: { value: 1 },
+      uSun: { value: new THREE.Vector3() },
+      ...shadowUniforms(),
     },
   })
   const mesh = new THREE.Mesh(geo, material)

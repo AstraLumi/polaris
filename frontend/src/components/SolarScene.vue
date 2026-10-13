@@ -27,6 +27,8 @@ import { createStar, createPlanetMaterial, createAtmosphere, createClouds, creat
 import { cloudCoverage, genericCloudCover, mainPlanetCloudCover } from '../climate'
 import { loadSkyDome, disposeSkyDome } from '../three/skyDome'
 import { createLensPass, HOLE_LAYER } from '../three/lensPass'
+import { setOccluders, setRingShadow } from '../three/shadows'
+import { shadowCasters } from '../eclipses'
 
 // The solar system in 3D: the star at the centre, each body on its orbit at
 // the time `days`, drawn at the squeezed scale of solarScale.js. Every
@@ -94,7 +96,10 @@ const meshes = new Map() // body id -> { body, mesh, spin, orbit (trail, round i
 let follow = null // { id, last: Vector3 }
 let stars = [] // three/bodyShaders.js stars, their coronas facing the camera
 let sunLit = [] // materials told where the star is each frame (planets, air, clouds, rings)
-let rings = [] // { material, id }: told where their planet is, for its shadow
+// What falls in other bodies' shadows: per body, the materials it is drawn
+// with ({ id, radius, reach, materials, rings }: its rings also catch its
+// own shadow).
+let shadowed = []
 let cloudMaterials = [] // told the time, so clouds drift
 let markerGroup = null // the habitable zone and the gravity limits
 let limitsAround = null // the id of the body the limits are drawn round
@@ -150,13 +155,16 @@ function buildBodies() {
   meshes.clear()
   stars = []
   sunLit = []
-  rings = []
+  shadowed = []
   cloudMaterials = []
   const byId = new Map(props.bodies.map((b) => [b.id, b]))
   for (const b of props.bodies) {
     const r = sceneRadius(b)
     let mesh
     const globe = b.kind !== 'star' ? globeViews.get(b.id) : null
+    // Air (planets have it) bends red light into the shadow it casts.
+    const receives = { id: b.id, radius: r, reach: r, air: b.kind === 'planet', materials: [], rings: [] }
+    if (b.kind !== 'star') shadowed.push(receives)
     if (b.kind === 'star') {
       const star = createStar(r, colorOf(b), { blackHole: b.star_class === 'black_hole', dyson: !!b.dyson })
       stars.push(star)
@@ -166,9 +174,11 @@ function buildBodies() {
     } else if (globe) {
       globe.mesh.scale.setScalar(r)
       mesh = globe.mesh
+      receives.materials.push(globe.material)
     } else {
       const material = createPlanetMaterial(colorOf(b), { bands: b.body_type === 'gas' })
       sunLit.push(material)
+      receives.materials.push(material)
       mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 32, 16), material)
     }
     // holder (where it is) > tilt (its axis) > spin (its day) > the body.
@@ -184,10 +194,12 @@ function buildBodies() {
       if (b.kind === 'planet') {
         const air = createAtmosphere(r, atmosphereColor(b))
         sunLit.push(air.material)
+        receives.materials.push(air.material)
         tilt.add(air)
         const clouds = cloudsFor(b, r)
         if (clouds) {
           sunLit.push(clouds.material)
+          receives.materials.push(clouds.material)
           cloudMaterials.push(clouds.material)
           spin.add(clouds)
         }
@@ -196,7 +208,9 @@ function buildBodies() {
       if (b.kind === 'planet' && b.ring_outer > b.ring_inner && b.ring_inner >= 1) {
         const ring = createRings(r, b.ring_inner, b.ring_outer, b.ring_color || ringColor(b))
         sunLit.push(ring.material)
-        rings.push({ material: ring.material, id: b.id })
+        receives.rings.push(ring.material)
+        receives.reach = r * b.ring_outer
+        receives.ring = { mesh: ring, inner: r * b.ring_inner, outer: r * b.ring_outer, center: new THREE.Vector3(), normal: new THREE.Vector3() }
         tilt.add(ring)
       }
       tilt.add(spin)
@@ -517,8 +531,11 @@ function render() {
     m.uniforms.uSun.value.copy(sun)
     m.uniforms.uPower.value = power
   }
-  for (const g of globeViews.values()) g.material.uniforms.uPower.value = power
-  for (const ring of rings) ring.material.uniforms.uPlanet.value.copy(positions.get(ring.id) ?? sun)
+  for (const g of globeViews.values()) {
+    g.material.uniforms.uPower.value = power
+    g.material.uniforms.uSun.value.copy(sun)
+  }
+  castShadows(star, sun)
   // Clouds drift with the clock (slowly: a turn of the pattern is years).
   for (const m of cloudMaterials) m.uniforms.uTime.value = (props.days % 100000) * 0.004
   const time = performance.now() / 1000
@@ -527,6 +544,48 @@ function render() {
   const lensed = star?.star_class === 'black_hole' && lens.render(renderer, scene, camera, sun, sceneRadius(star))
   if (!lensed) renderer.render(scene, camera)
   placeLabels()
+}
+
+// Who shadows whom this frame (eclipses.js), told to each body's materials.
+// The light is a disc smaller than the star is drawn (the drawn star is
+// huge next to its squeezed orbits), so shadows have a core, not only a
+// soft edge.
+const LIGHT_SIZE = 0.35
+function castShadows(star, sun) {
+  const n = shadowed.length
+  const centers = new Float64Array((n + 1) * 3)
+  shadowed.forEach((s, i) => positions.get(s.id)?.toArray(centers, i * 3))
+  sun.toArray(centers, n * 3)
+  const radii = [...shadowed.map((s) => s.radius), 0]
+  const reach = [...shadowed.map((s) => s.reach), 0]
+  const lightRadius = star ? sceneRadius(star) * LIGHT_SIZE : 1
+  const color = lightColor(star)
+  const casters = shadowCasters({ centers, radii, reach, star: star ? n : -1, lightRadius })
+  const sphere = (j) => [centers[j * 3], centers[j * 3 + 1], centers[j * 3 + 2], shadowed[j]?.air ? -radii[j] : radii[j]]
+  shadowed.forEach((s, i) => {
+    const occluders = casters[i].map(sphere)
+    // A ringed planet lies in its rings' shadow, the rings in the planet's.
+    if (s.ring) {
+      s.ring.center.setFromMatrixPosition(s.ring.mesh.matrixWorld)
+      s.ring.normal.set(0, 0, 1).transformDirection(s.ring.mesh.matrixWorld)
+    }
+    for (const m of s.materials) {
+      setOccluders(m.uniforms, occluders, lightRadius, color)
+      setRingShadow(m.uniforms, s.ring)
+    }
+    for (const m of s.rings) setOccluders(m.uniforms, [[...sphere(i).slice(0, 3), radii[i]], ...occluders], lightRadius, color)
+  })
+}
+
+// The star's light, in its colour (half way to white: a red giant's
+// planets warm, not red).
+const light = new THREE.Color()
+const WHITE = new THREE.Color(1, 1, 1)
+function lightColor(star) {
+  if (!star) return WHITE
+  light.set(colorOf(star))
+  const top = Math.max(light.r, light.g, light.b) || 1
+  return light.multiplyScalar(1 / top).lerp(WHITE, 0.5)
 }
 
 function placeLabels() {
@@ -676,15 +735,18 @@ if (import.meta.env.DEV) {
     draw: () => requestRender(),
     skyLoaded: () => !props.sky || !!skyMesh,
     // 'angle' (the view it opens with), 'above', 'side' (edge-on), or a
-    // body's name: close to it, following it. zoom > 1 goes farther out.
-    view(name, { zoom = 1 } = {}) {
+    // body's name: close to it, following it (fromSun: from the star's
+    // side, its day side in view). zoom > 1 goes farther out.
+    view(name, { zoom = 1, fromSun = false } = {}) {
       follow = null
       const body = [...meshes.values()].find((m) => m.body.name === name)?.body
       if (body) {
         const at = positions.get(body.id)
         const d = Math.max(sceneRadius(body) * 8, 0.6) * zoom
         controls.target.copy(at)
-        camera.position.copy(at).add(new THREE.Vector3(0, -d * 0.85, d * 0.5))
+        const sun = (system.star && positions.get(system.star.id)) || origin
+        const from = fromSun ? sun.clone().sub(at).setLength(d).add(new THREE.Vector3(0, 0, d * 0.25)) : new THREE.Vector3(0, -d * 0.85, d * 0.5)
+        camera.position.copy(at).add(from)
         follow = { id: body.id, last: at.clone() }
       } else {
         let d = 1
