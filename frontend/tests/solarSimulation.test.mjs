@@ -32,14 +32,17 @@ const comet = { id: 4, kind: 'planet', body_type: 'rocky', radius_km: 3000, orbi
   const twin = { ...earth, id: 5, phase: 0.001 } // the same orbit, a hair ahead
   const s = createSimulation()
   s.setBodies([sun, earth, twin])
-  const hit = s.advanceTo(1)
+  s.advanceTo(1)
+  const hit = s.event
   assert.equal(hit?.type, 'collision')
   assert.deepEqual([hit.a, hit.b].sort(), [2, 5])
   s.dismiss()
-  assert.equal(s.advanceTo(2), null, 'dismissed: not shown again')
+  s.advanceTo(2)
+  assert.equal(s.event, null, 'dismissed: not shown again')
   s.restart()
   assert.equal(s.days, 0)
-  assert.equal(s.advanceTo(1)?.type, 'collision', 'shown again after a restart')
+  s.advanceTo(1)
+  assert.equal(s.event?.type, 'collision', 'shown again after a restart')
 }
 
 // Gravity: the same day reached straight or by going back from later gives
@@ -75,9 +78,26 @@ const comet = { id: 4, kind: 'planet', body_type: 'rocky', radius_km: 3000, orbi
   const g = s.relative(2)
   const k = keplerOrbit.position(earth, sun, 30)
   close(Math.hypot(g[0] - k[0], g[1] - k[1]), 0, 1.496e8 * 1e-3, 'gravity close to the orbit after a month')
-  assert.ok(s.orbitNow(2)?.bound)
+  s.advanceTo(31, { shapes: true })
+  assert.ok(s.shapes.get(2)?.bound, 'the orbit it is on now')
   s.setGravity(false)
-  assert.equal(s.orbitNow(2), null)
+  assert.equal(s.shapes, null)
+}
+
+// onChange is called whenever the state changes, and gravity run in
+// steps (the worker's way, here in one thread) reaches the clock in the end.
+{
+  let changes = 0
+  const s = createSimulation({ onChange: () => changes++, gravityOptions: { budgetMs: 0, chunk: 50 } })
+  s.setBodies([sun, earth, moon])
+  s.setGravity(true)
+  const before = changes
+  s.advanceTo(200)
+  assert.ok(changes > before, 'told')
+  assert.ok(s.lagging && s.days < 200, 'one small chunk does not get there')
+  for (let k = 0; k < 1000 && s.days < 200; k++) s.advanceTo(200)
+  close(s.days, 200, 1e-9, 'it gets there')
+  assert.equal(s.lagging, false)
 }
 
 console.log('solarSimulation: ok')

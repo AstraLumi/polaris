@@ -4,10 +4,16 @@
 // the clock and the scene draws; this decides where things are, so anything
 // later worked out from the bodies' places (moon phases, tides, the light
 // each planet gets) reads them here and agrees with the picture.
+//
+// Static orbits are worked out at once. Gravity runs in a worker
+// (gravityEngine.js) and catches up as it can: the day it reached, and the
+// places, come in later. Whenever anything changes, onChange is called;
+// read the state then.
 // No dependencies but orbits.js: node frontend/tests/solarSimulation.test.mjs
-import { compileSystem, createGravitySim, physicsKey } from './orbits.js'
+import { compileSystem, physicsKey } from './orbits.js'
+import { createGravityEngine } from './gravityEngine.js'
 
-export function createSimulation({ gravityOptions } = {}) {
+export function createSimulation({ gravityOptions, onChange = () => {} } = {}) {
   let bodies = []
   let key = null
   let system = compileSystem([])
@@ -15,29 +21,37 @@ export function createSimulation({ gravityOptions } = {}) {
   let rel = new Float64Array(0) // each body from its parent, km, in the system's order
   let abs = new Float64Array(0) // each from the star
   let gravity = false
-  let sim = null
+  let engine = null
   let days = 0
   let event = null
   let lagging = false
+  let shapes = null // with gravity: id -> the orbit it is on now
   const dismissed = new Set() // static meetings already shown ("a:b")
 
-  // Where everything is on the day reached, without looking for trouble.
-  function settle() {
-    if (sim) {
-      system.list.forEach((b, i) => sim.relativeInto(b.id, rel, i * 3))
-      abs.set(rel)
-      for (let i = 0; i < system.list.length; i++) {
-        const p = system.parent[i]
-        if (p >= 0) for (let k = 0; k < 3; k++) abs[i * 3 + k] += abs[p * 3 + k]
-      }
-    } else {
-      system.relative(days, rel)
-      system.absolute(days, abs)
+  // Each body from the star: the relative places added up the tree.
+  function sumUp() {
+    abs.set(rel)
+    for (let i = 0; i < system.list.length; i++) {
+      const p = system.parent[i]
+      if (p >= 0) for (let k = 0; k < 3; k++) abs[i * 3 + k] += abs[p * 3 + k]
     }
   }
 
+  // What the gravity engine reports (it may be from a run since replaced:
+  // only the current engine's count).
+  function take(from, state) {
+    if (from !== engine) return
+    days = state.days
+    event = state.event
+    lagging = state.lagging
+    if (state.rel.length === rel.length) rel.set(state.rel)
+    if (state.shapes) shapes = new Map(state.shapes)
+    sumUp()
+    onChange()
+  }
+
   // Made again from the bodies: gravity starts over from day 0 and catches
-  // up with the clock as far as one call goes.
+  // up with the clock.
   function rebuild() {
     system = compileSystem(bodies)
     pairs = system.meetingPairs()
@@ -45,13 +59,19 @@ export function createSimulation({ gravityOptions } = {}) {
     abs = new Float64Array(system.list.length * 3)
     event = null
     lagging = false
-    sim = gravity ? createGravitySim(bodies, gravityOptions) : null
-    if (sim) {
-      lagging = !sim.advanceTo(days) && !sim.event
-      days = sim.days
-      event = sim.event
+    shapes = null
+    engine?.dispose()
+    engine = null
+    if (gravity) {
+      const mine = createGravityEngine(bodies, system.list.map((b) => b.id), gravityOptions, (s) => take(mine, s))
+      engine = mine
+      lagging = days > 0
+      engine.advance(days, true)
+    } else {
+      system.relative(days, rel)
+      sumUp()
     }
-    settle()
+    onChange()
   }
 
   // With static orbits: two bodies that overlap where they are now.
@@ -76,7 +96,7 @@ export function createSimulation({ gravityOptions } = {}) {
     get event() {
       return event
     },
-    // Gravity couldn't reach the time asked for in one call.
+    // Gravity hasn't reached the time last asked for.
     get lagging() {
       return lagging
     },
@@ -85,6 +105,11 @@ export function createSimulation({ gravityOptions } = {}) {
     },
     get system() {
       return system
+    },
+    // With gravity, the orbit each body is on now, as last asked for with
+    // advanceTo(…, { shapes: true }) (orbits.js orbitNow); else null.
+    get shapes() {
+      return shapes
     },
     // The bodies to move. Only a change the physics reads (physicsKey)
     // starts it again; true when it did.
@@ -102,35 +127,32 @@ export function createSimulation({ gravityOptions } = {}) {
       gravity = on
       rebuild()
     },
-    // Moves the clock to `target` days (back as well as on). With gravity
-    // as far as one call goes. Returns what stopped it, if anything.
-    advanceTo(target) {
+    // Moves the clock to `target` days (back as well as on). Gravity gets
+    // there when it can; static orbits at once, stopping at a meeting.
+    advanceTo(target, { shapes: wantShapes = false } = {}) {
       if (target < days) event = null
-      if (sim) {
-        lagging = !sim.advanceTo(target) && !sim.event
-        days = sim.days
-        event = sim.event
-        settle()
-      } else {
-        days = target
-        settle()
-        event = touching()
-      }
-      return event
+      if (engine) return engine.advance(target, wantShapes)
+      days = target
+      system.relative(days, rel)
+      sumUp()
+      event = touching()
+      onChange()
     },
     // Back to day 0, with every static meeting shown again.
     restart() {
       dismissed.clear()
       event = null
       days = 0
-      sim?.reset()
-      settle()
+      if (engine) return engine.reset(true)
+      system.relative(0, rel)
+      sumUp()
+      onChange()
     },
     // The meeting shown is not shown again (static orbits; gravity stops
     // for good at its first).
     dismiss() {
       if (event?.key) dismissed.add(event.key)
-      if (!sim) event = null
+      if (!engine) event = null
     },
     // Where a body is from what it orbits, in km (a view into the array:
     // copy it to keep it).
@@ -143,9 +165,10 @@ export function createSimulation({ gravityOptions } = {}) {
       const i = system.index.get(id)
       return i == null ? [0, 0, 0] : abs.subarray(i * 3, i * 3 + 3)
     },
-    // With gravity, the orbit a body is on now (orbits.js orbitNow).
-    orbitNow(id) {
-      return sim ? sim.orbitNow(id) : null
+    // Stops the worker, if there is one.
+    dispose() {
+      engine?.dispose()
+      engine = null
     },
   }
 }

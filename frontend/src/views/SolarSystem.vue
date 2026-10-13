@@ -21,7 +21,7 @@
         :selected="selectedId"
         :globes="globes"
         :relative="where"
-        :shapes="live ? shapes : null"
+        :shapes="shapes"
         :show-zone="markers.zone"
         :show-limits="markers.limits"
         :sky="skyUrl()"
@@ -487,8 +487,10 @@ onMounted(async () => {
 // Static: every body on the orbit it was given. Gravity: every body pulls
 // on every other (orbits.js), from where the orbits put them on day 0, so
 // orbits bend as bodies pass; the orbit lines then show the orbit each is
-// on now.
-const simulation = createSimulation()
+// on now. Gravity runs in a worker and reports when it gets somewhere:
+// `days` is always the day the picture shows, `wanted` the one the clock
+// asks for.
+const simulation = createSimulation({ onChange: () => sync() })
 const days = ref(0)
 const playing = ref(false)
 const speed = ref(10)
@@ -497,26 +499,38 @@ const lagging = ref(false)
 const where = shallowRef((id) => simulation.relative(id))
 let raf = 0
 let last = 0
+let wanted = 0
 
-// Takes in what the simulation did: the day reached, and what stopped it.
+// Takes in what the simulation did: the day reached, where things are, the
+// orbits gravity has them on, and what stopped it.
+let shapesFrom = null
 function sync() {
   days.value = simulation.days
   lagging.value = simulation.lagging
   where.value = (id) => simulation.relative(id)
+  if (simulation.shapes !== shapesFrom) {
+    shapesFrom = simulation.shapes
+    shapes.value = shapesOf(shapesFrom)
+  }
   if (simulation.event) stopFor(simulation.event)
 }
 
 function moveTo(target) {
   if (target < days.value) unstable.value = null
-  simulation.advanceTo(target)
-  sync()
+  wanted = target
+  simulation.advanceTo(target, { shapes: true })
 }
 
 function tick(now) {
   if (last) {
     // The speeds count the world's days (the clock runs in Earth days).
-    moveTo(days.value + ((now - last) / 1000) * speed.value * dayFactor.value)
-    if (live.value && now - shapesAt > 200) updateShapes(now)
+    // Never more than a second ahead of where gravity got: when it can't
+    // keep up, time runs slower.
+    const perSecond = speed.value * dayFactor.value
+    wanted = Math.min(wanted + ((now - last) / 1000) * perSecond, days.value + perSecond)
+    const shapesDue = live.value && now - shapesAt > 200
+    if (shapesDue) shapesAt = now
+    simulation.advanceTo(wanted, { shapes: shapesDue })
   }
   last = now
   if (playing.value) raf = requestAnimationFrame(tick)
@@ -561,50 +575,47 @@ function dismissUnstable() {
 
 function restart() {
   unstable.value = null
+  wanted = 0
   simulation.restart()
-  sync()
-  updateShapes()
 }
 
 // ---- Gravity --------------------------------------------------------------------------------
-const shapes = ref(new Map())
+// The orbit lines: as set (null), or with gravity, the orbit each body is
+// on now (none for one that has none).
+const shapes = shallowRef(null)
 let shapesAt = 0
-function updateShapes(now = performance.now()) {
-  shapesAt = now
+function shapesOf(now) {
+  if (!now) return null
   const out = new Map()
-  if (simulation.gravity) {
-    for (const b of liveBodies.value) {
-      const o = simulation.orbitNow(b.id)
-      // As stretched as it is: capped, the line missed the body.
-      if (o?.bound && o.eccentricity < 0.9999) out.set(b.id, { orbit_km: o.orbit_km, eccentricity: o.eccentricity, periapsis: o.periapsis })
-    }
+  for (const [id, o] of now) {
+    // As stretched as it is: capped, the line missed the body.
+    if (o.bound && o.eccentricity < 0.9999) out.set(id, { orbit_km: o.orbit_km, eccentricity: o.eccentricity, periapsis: o.periapsis })
   }
-  shapes.value = out
+  return out
 }
 
 // The bodies go in as they are in the form; only a change the physics
 // reads starts it again (picking, renaming or recolouring leaves it
 // running). Gravity only runs in Run mode.
 watch(liveBodies, (list) => {
-  if (!simulation.setBodies(list)) return
-  unstable.value = null
-  sync()
-  updateShapes()
+  if (simulation.setBodies(list)) unstable.value = null
 }, { deep: true, immediate: true })
 watch(() => live.value && mode.value === 'run', (on) => {
   unstable.value = null
+  wanted = days.value
   simulation.setGravity(on)
-  sync()
-  updateShapes()
 })
 watch(playing, (on) => {
   cancelAnimationFrame(raf)
   last = 0
   if (on) raf = requestAnimationFrame(tick)
   // Stopped (by hand or by a warning): the lines show where things are now.
-  else if (live.value) updateShapes()
+  else if (live.value) simulation.advanceTo(wanted, { shapes: true })
 })
-onBeforeUnmount(() => cancelAnimationFrame(raf))
+onBeforeUnmount(() => {
+  cancelAnimationFrame(raf)
+  simulation.dispose()
+})
 
 // ---- Editing ----------------------------------------------------------------------------
 // A body with no colour of its own shows its type's.
