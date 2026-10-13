@@ -26,9 +26,9 @@
         </template>
       </g>
       <!-- Orbits, with a dot where each comes closest -->
-      <template v-for="c in children" :key="'o' + c.id">
-        <path :d="orbitD(c)" class="ring" :class="{ 'is-selected': c.id === selected }" :stroke-width="vu * 0.004" />
-        <circle v-if="c.eccentricity > 0" :cx="peri(c)[0]" :cy="peri(c)[1]" :r="vu * 0.006" class="peri" :class="{ 'is-selected': c.id === selected }" />
+      <template v-for="{ c, path, peri } in drawn" :key="'o' + c.id">
+        <path :d="path" class="ring" :class="{ 'is-selected': c.id === selected }" :stroke-width="vu * 0.004" />
+        <circle v-if="peri" :cx="peri[0]" :cy="peri[1]" :r="vu * 0.006" class="peri" :class="{ 'is-selected': c.id === selected }" />
       </template>
       <!-- What everything here orbits -->
       <g v-if="focus" class="body is-focus" @click="$emit('select', focus.id)">
@@ -37,18 +37,18 @@
       </g>
       <!-- The bodies on their orbits, at their starting angle -->
       <g
-        v-for="c in children"
+        v-for="{ c, at, moons } in drawn"
         :key="c.id"
         class="body"
         :class="{ 'is-selected': c.id === selected, 'is-dragging': drag?.id === c.id }"
-        :transform="`translate(${at(c)[0]} ${at(c)[1]})`"
+        :transform="`translate(${at[0]} ${at[1]})`"
         @pointerdown.stop="onDown($event, c)"
-        @dblclick.stop="childrenOf(c.id).length && $emit('focus', c.id)"
+        @dblclick.stop="moons && $emit('focus', c.id)"
       >
         <circle :r="hitSize(c)" fill="transparent" />
         <circle :r="size(c)" :fill="colorOf(c)" class="disc" :stroke-width="vu * 0.004" />
         <text :y="-hitSize(c) - vu * 0.012" :font-size="vu * 0.032" text-anchor="middle">
-          {{ c.name }}<tspan v-if="childrenOf(c.id).length" class="moons"> · {{ childrenOf(c.id).length }}☾</tspan>
+          {{ c.name }}<tspan v-if="moons" class="moons"> · {{ moons }}☾</tspan>
         </text>
       </g>
     </svg>
@@ -96,11 +96,30 @@ const children = computed(() => (focus.value ? childrenOf(focus.value.id) : []))
 
 // Where a body is on day 0, and its orbit, drawn (y down on screen, so
 // angles turn anticlockwise as seen from above the north pole).
+// Worked out when the bodies change, not on every redraw (zooming, panning).
+// An orbit's line is kept while its shape is the same: dragging a body
+// round its orbit only moves the body.
 const flip = ([x, y]) => [x, -y]
-const at = (c) => flip(scenePoint(keplerOrbit.position(c, focus.value, 0), focus.value, c))
-const dist = (c) => Math.hypot(...at(c))
-const orbitD = (c) => 'M ' + sceneOrbitPath(c, focus.value).map((p) => flip(p).join(' ')).join(' L ') + ' Z'
-const peri = (c) => flip(scenePoint(orbitPoint(c, 0), focus.value, c))
+const paths = new Map() // body id -> { key, d }
+function orbitD(c) {
+  const f = focus.value
+  const key = [f.id, f.radius_km, c.radius_km, c.orbit_km, c.eccentricity, c.periapsis].join(':')
+  const kept = paths.get(c.id)
+  if (kept?.key === key) return kept.d
+  const d = 'M ' + sceneOrbitPath(c, f).map((p) => flip(p).join(' ')).join(' L ') + ' Z'
+  paths.set(c.id, { key, d })
+  return d
+}
+const drawn = computed(() => {
+  const f = focus.value
+  return children.value.map((c) => ({
+    c,
+    at: flip(scenePoint(keplerOrbit.position(c, f, 0), f, c)),
+    path: orbitD(c),
+    peri: c.eccentricity > 0 ? flip(scenePoint(orbitPoint(c, 0), f, c)) : null,
+    moons: childrenOf(c.id).length,
+  }))
+})
 const reach = (c) => sceneDistance(c.orbit_km * (1 + (c.eccentricity || 0)), focus.value, c)
 
 // The markers, at the drawn scale. The habitable zone shows round the star;
