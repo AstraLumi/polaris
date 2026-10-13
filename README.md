@@ -110,6 +110,7 @@ already sets them, so you only need them when
 | Variable      | Default        | Description                                |
 |---------------|----------------|--------------------------------------------|
 | `PORT`        | `8091`         | Port the server listens on.                |
+| `LISTEN_HOST` | (all)          | Address to listen on, e.g. `127.0.0.1` to accept connections from this machine only. |
 | `DATA_DIR`    | `/data`        | Folder for the story databases.            |
 | `UPLOADS_DIR` | `/app/uploads` | Folder for uploaded pictures and icons.    |
 

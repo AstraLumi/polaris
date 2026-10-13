@@ -45,9 +45,12 @@ func main() {
 		log.Fatalf("failed to load embedded frontend assets: %v", err)
 	}
 
-	port := getEnv("PORT", "8091")
-	log.Printf("Polaris listening on :%s (data: %s, uploads: %s)", port, dataDir, uploadsRoot)
-	log.Fatal(http.ListenAndServe(":"+port, newRouter(mgr, staticFS)))
+	// Every network interface unless LISTEN_HOST names one (127.0.0.1 keeps
+	// it to this machine, and Windows doesn't ask to let it through the
+	// firewall).
+	addr := os.Getenv("LISTEN_HOST") + ":" + getEnv("PORT", "8091")
+	log.Printf("Polaris listening on %s (data: %s, uploads: %s)", addr, dataDir, uploadsRoot)
+	log.Fatal(http.ListenAndServe(addr, newRouter(mgr, staticFS)))
 }
 
 // newRouter is the whole server: the frontend, the story registry API, and

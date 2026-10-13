@@ -109,7 +109,8 @@ async function startBackend() {
   execFileSync('go', ['build', '-o', exe, '.'], { cwd: backend, stdio: 'inherit' })
   const proc = spawn(exe, [], {
     cwd: backend,
-    env: { ...process.env, PORT: String(API_PORT), DATA_DIR: join(data, 'data'), DB_PATH: join(data, 'data', 'polaris.db') },
+    // Only this machine: no firewall prompt for the throwaway server.
+    env: { ...process.env, LISTEN_HOST: '127.0.0.1', PORT: String(API_PORT), DATA_DIR: join(data, 'data'), DB_PATH: join(data, 'data', 'polaris.db') },
     stdio: ['ignore', 'ignore', 'pipe'],
   })
   let log = ''
@@ -119,7 +120,7 @@ async function startBackend() {
     proc.kill()
     await exited
   })
-  await waitFor('the backend', async () => (await fetch(`http://localhost:${API_PORT}/api/health`)).ok).catch((err) => {
+  await waitFor('the backend', async () => (await fetch(`http://127.0.0.1:${API_PORT}/api/health`)).ok).catch((err) => {
     throw new Error(`${err.message}\n${log}`)
   })
 }
@@ -129,9 +130,10 @@ async function startFrontend() {
     root: frontend,
     logLevel: 'error',
     server: {
+      host: '127.0.0.1',
       port: WEB_PORT,
       strictPort: true,
-      proxy: { '/api': `http://localhost:${API_PORT}`, '/uploads': `http://localhost:${API_PORT}` },
+      proxy: { '/api': `http://127.0.0.1:${API_PORT}`, '/uploads': `http://127.0.0.1:${API_PORT}` },
     },
   })
   await server.listen()
@@ -140,7 +142,7 @@ async function startFrontend() {
 
 // The test story and its solar system; returns the story's id.
 async function makeStory() {
-  const api = `http://localhost:${API_PORT}/api`
+  const api = `http://127.0.0.1:${API_PORT}/api`
   const form = new FormData()
   form.set('name', 'Screenshots')
   const story = await (await fetch(`${api}/stories`, { method: 'POST', body: form })).json()
@@ -178,7 +180,7 @@ async function shoot(storyId) {
   page.on('pageerror', (e) => errors.push(e.message))
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
 
-  await page.goto(`http://localhost:${WEB_PORT}/solar-system`)
+  await page.goto(`http://127.0.0.1:${WEB_PORT}/solar-system`)
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   await page.waitForFunction(() => window.__solarScene?.skyLoaded() && window.__solarPage)
   if (!flag('panel')) await page.locator('.system-panel .fold').click()
