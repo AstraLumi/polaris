@@ -277,15 +277,20 @@ void main() {
 }`
 
 // Clouds round a body of radius r: coverOf(direction on the unit sphere)
-// says how cloudy it is there (0 to 1).
+// says how cloudy it is there (0 to 1). Or coverOf is the cover of every
+// point already worked out (the aCover of clouds made before: it doesn't
+// depend on r), to save working it out again.
 export function createClouds(r, coverOf) {
   const geo = new THREE.SphereGeometry(r * 1.02, 96, 48)
   const pos = geo.attributes.position
-  const cover = new Float32Array(pos.count)
-  const v = new THREE.Vector3()
-  for (let i = 0; i < pos.count; i++) {
-    v.fromBufferAttribute(pos, i).normalize()
-    cover[i] = coverOf([v.x, v.y, v.z])
+  let cover = coverOf
+  if (typeof coverOf === 'function') {
+    cover = new Float32Array(pos.count)
+    const v = new THREE.Vector3()
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).normalize()
+      cover[i] = coverOf([v.x, v.y, v.z])
+    }
   }
   geo.setAttribute('aCover', new THREE.BufferAttribute(cover, 1))
   return new THREE.Mesh(

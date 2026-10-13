@@ -4,19 +4,19 @@
     <span
       v-for="l in labels"
       :key="l.id"
+      :ref="(el) => setLabelEl(l.id, el)"
       class="body-label"
       :class="{ 'is-selected': l.id === selected, 'is-star': l.star }"
-      :style="{ transform: `translate(${l.x}px, ${l.y}px)` }"
     >{{ l.name }}</span>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { Line2 } from 'three/addons/lines/Line2.js'
-import { LineGeometry } from 'three/addons/lines/LineGeometry.js'
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js'
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js'
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import { PlanetGrid } from '../planetGrid'
 import { sceneRadius, sceneDistance, sceneLayout, sceneOrbitPath, bodyColor } from '../solarScale'
@@ -58,7 +58,25 @@ const emit = defineEmits(['select'])
 
 const wrapEl = ref(null)
 const canvasEl = ref(null)
-const labels = ref([])
+// The labels: made when the bodies change, moved every frame without Vue
+// (placeLabels sets their transform).
+const labels = computed(() => props.bodies.map((b) => ({ id: b.id, name: b.name, star: b.kind === 'star' })))
+const labelEls = new Map() // body id -> its label's element
+const labelAt = new Map() // body id -> where the last frame put it (a transform, or '' when hidden)
+function setLabelEl(id, el) {
+  if (!el) return labelEls.delete(id)
+  labelEls.set(id, el)
+  // Where it was (Vue may hand over the element again), else the next frame.
+  if (labelAt.has(id)) showLabel(el, labelAt.get(id))
+  else {
+    showLabel(el, '')
+    requestRender()
+  }
+}
+function showLabel(el, transform) {
+  el.style.display = transform ? '' : 'none'
+  if (transform) el.style.transform = transform
+}
 
 const colorOf = bodyColor
 
@@ -205,24 +223,33 @@ const AIR = { rocky: '#7fb2ff', ocean: '#6fc8ff' }
 const atmosphereColor = (b) => AIR[b.body_type] || new THREE.Color(colorOf(b)).lerp(new THREE.Color('#ffffff'), 0.35).getStyle()
 
 // The planet's clouds (climate.js): the main planet's from the map's
-// hexes, any other's generic for its type. Null for a cloudless one.
+// hexes, any other's generic for its type. Null for a cloudless one. Each
+// cover is kept (they take a while), until the maps change.
+const cloudCovers = new Map() // key -> the clouds' aCover
 function cloudsFor(b, r) {
   const coverage = cloudCoverage(b)
   if (!(coverage > 0)) return null
   const grid = b.is_main ? globeGrids.get(b.id) : null
-  if (grid) {
+  const key = `${b.id}:${coverage}:${grid ? 'map' : 'generic'}`
+  let coverOf = cloudCovers.get(key)
+  if (!coverOf && grid) {
     const cover = mainPlanetCloudCover({ grid, body: b })
-    return createClouds(r, (dir) => cover(grid.cellAt(dir)))
+    coverOf = (dir) => cover(grid.cellAt(dir))
   }
-  return createClouds(r, (dir) => genericCloudCover(dir, coverage, b.id))
+  const clouds = createClouds(r, coverOf ?? ((dir) => genericCloudCover(dir, coverage, b.id)))
+  cloudCovers.set(key, clouds.geometry.attributes.aCover.array)
+  return clouds
 }
 
 // ---- Orbit trails -------------------------------------------------------------------------
 // Each orbit fades round from its body: brightest and thickest just behind
 // it (where it has been), fading all the way round to faint and thin just
-// ahead of it, with no edge in between. The path is computed when the
-// orbit changes; the fade moves with the body. Brightness is drawn as
-// colour on additive lines (lines can't fade their own opacity).
+// ahead of it, with no edge in between. Brightness is drawn as colour on
+// additive lines (lines can't fade their own opacity), so black is
+// invisible: the whole orbit is two lines of segments, thick and thin,
+// sharing one array of points, and each segment is lit on one and black on
+// the other. The points change only with the orbit; as the body moves on,
+// the colours are rewritten in place.
 const TRAIL_STEPS = 128
 const TRAIL_COLOR = new THREE.Color(0xaebfe0)
 const trailMaterial = () => {
@@ -234,55 +261,73 @@ const trailMaterial = () => {
 function makeTrail() {
   const group = new THREE.Group()
   group.userData.trail = true
-  const ahead = new THREE.Line(
-    new THREE.BufferGeometry(),
+  // Per segment: start and end, three numbers each.
+  const points = new Float32Array(TRAIL_STEPS * 6)
+  const thick = new Float32Array(TRAIL_STEPS * 6)
+  const thin = new Float32Array(TRAIL_STEPS * 6)
+  const aheadGeometry = new THREE.BufferGeometry()
+  aheadGeometry.setAttribute('position', new THREE.BufferAttribute(points, 3))
+  aheadGeometry.setAttribute('color', new THREE.BufferAttribute(thin, 3))
+  const ahead = new THREE.LineSegments(
+    aheadGeometry,
     new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
   )
-  const behind = new Line2(new LineGeometry(), trailMaterial())
+  const behindGeometry = new LineSegmentsGeometry()
+  behindGeometry.setPositions(points)
+  behindGeometry.setColors(thick)
+  const behind = new LineSegments2(behindGeometry, trailMaterial())
   group.add(ahead, behind)
-  return { group, ahead, behind, path: [], periapsis: 0, at: -1 }
-}
-
-// Colours along `count + 1` points, fading from strength a to b.
-function fade(count, a, b) {
-  const out = []
-  for (let k = 0; k <= count; k++) {
-    const t = a + (b - a) * (k / count)
-    out.push(TRAIL_COLOR.r * t, TRAIL_COLOR.g * t, TRAIL_COLOR.b * t)
-  }
-  return out
+  return { group, ahead, behind, points, thick, thin, periapsis: 0, at: -1 }
 }
 
 // The orbit's points, at even steps of the angle from periapsis.
 function setTrailPath(trail, body, parent, shape = body) {
-  trail.path = sceneOrbitPath({ ...body, ...shape }, parent, TRAIL_STEPS).slice(0, TRAIL_STEPS)
+  const path = sceneOrbitPath({ ...body, ...shape }, parent, TRAIL_STEPS)
+  for (let s = 0; s < TRAIL_STEPS; s++) {
+    trail.points.set(path[s], s * 6)
+    trail.points.set(path[s + 1], s * 6 + 3)
+  }
+  trail.ahead.geometry.attributes.position.needsUpdate = true
+  trail.behind.geometry.attributes.instanceStart.data.needsUpdate = true
+  trail.ahead.geometry.computeBoundingSphere()
+  trail.behind.geometry.computeBoundingBox()
+  trail.behind.geometry.computeBoundingSphere()
   trail.periapsis = ((shape.periapsis || 0) * Math.PI) / 180
   trail.at = -1
 }
 
-// Splits the trail where the body is (rel: its drawn place from its parent).
+// Lights the trail from where the body is (rel: its drawn place from its
+// parent). Orbits run anticlockwise: behind is the lower angles. The thick
+// half fades from the far side (0.32) up to the body (1); the thin half goes
+// on from the body's front (0.12) back up to the far side (0.32).
 function splitTrail(trail, rel) {
-  const n = trail.path.length
-  if (!n) return
+  const n = TRAIL_STEPS
   const nu = Math.atan2(rel.y, rel.x) - trail.periapsis
   const at = Math.round(((((nu / (2 * Math.PI)) % 1) + 1) % 1) * n) % n
   if (at === trail.at) return
   trail.at = at
   const half = n / 2
-  const pick = (from, count) => {
-    const out = []
-    for (let k = 0; k <= count; k++) out.push(...trail.path[(from + k + n) % n])
-    return out
+  const paint = (colors, s, a, b) => {
+    const o = s * 6
+    colors[o] = TRAIL_COLOR.r * a
+    colors[o + 1] = TRAIL_COLOR.g * a
+    colors[o + 2] = TRAIL_COLOR.b * a
+    colors[o + 3] = TRAIL_COLOR.r * b
+    colors[o + 4] = TRAIL_COLOR.g * b
+    colors[o + 5] = TRAIL_COLOR.b * b
   }
-  // Orbits run anticlockwise: behind is the lower angles. The thick half
-  // fades from the far side (0.32) up to the body (1); the thin half goes
-  // on from the body's front (0.12) back up to the far side (0.32).
-  trail.behind.geometry.setPositions(pick(at - half, half))
-  trail.behind.geometry.setColors(fade(half, 0.32, 1))
-  const ahead = pick(at, half)
-  trail.ahead.geometry.setAttribute('position', new THREE.Float32BufferAttribute(ahead, 3))
-  trail.ahead.geometry.setAttribute('color', new THREE.Float32BufferAttribute(fade(half, 0.12, 0.32), 3))
-  trail.ahead.geometry.computeBoundingSphere()
+  for (let s = 0; s < n; s++) {
+    const d = (s - at + n) % n // segments on from the body
+    if (d < half) {
+      paint(trail.thin, s, 0.12 + 0.2 * (d / half), 0.12 + 0.2 * ((d + 1) / half))
+      paint(trail.thick, s, 0, 0)
+    } else {
+      paint(trail.thick, s, 0.32 + 0.68 * ((d - half) / half), 0.32 + 0.68 * ((d + 1 - half) / half))
+      paint(trail.thin, s, 0, 0)
+    }
+  }
+  trail.ahead.geometry.attributes.color.needsUpdate = true
+  trail.behind.geometry.attributes.instanceColorStart.data.needsUpdate = true
 }
 
 // A body's axis, through its poles and a little beyond.
@@ -343,6 +388,7 @@ function buildGlobes() {
   }
   globeViews.clear()
   globeGrids.clear()
+  cloudCovers.clear()
   for (const [id, m] of props.globes) {
     const grid = new PlanetGrid(m.frequency)
     globeGrids.set(id, grid)
@@ -439,12 +485,11 @@ function render() {
   skyMesh?.position.copy(camera.position)
   scene.updateMatrixWorld()
   // The maps are lit by the star: its direction, in each globe's own frame.
-  const star = props.bodies.find((b) => b.kind === 'star')
-  const sun = (star && positions.get(star.id)) || new THREE.Vector3()
+  const star = system.star
+  const sun = (star && positions.get(star.id)) || origin
   for (const g of globeViews.values()) {
     if (!g.mesh.parent) continue
-    const local = g.mesh.worldToLocal(sun.clone())
-    g.material.uniforms.uLight.value.copy(local.normalize())
+    g.material.uniforms.uLight.value.copy(g.mesh.worldToLocal(tmp.copy(sun)).normalize())
   }
   // Inside a Dyson sphere the star gives no light.
   const power = star?.dyson ? 0 : 1
@@ -467,17 +512,20 @@ function render() {
 function placeLabels() {
   const w = renderer.domElement.clientWidth
   const h = renderer.domElement.clientHeight
-  const out = []
-  for (const { body } of meshes.values()) {
-    const p = positions.get(body.id)
-    if (!p) continue
-    tmp.copy(p)
-    tmp.z += sceneRadius(body) * 1.2
-    tmp.project(camera)
-    if (tmp.z > 1) continue
-    out.push({ id: body.id, name: body.name, star: body.kind === 'star', x: ((tmp.x + 1) / 2) * w, y: ((1 - tmp.y) / 2) * h })
+  for (const [id, el] of labelEls) {
+    const m = meshes.get(id)
+    const p = positions.get(id)
+    if (p && m) {
+      tmp.copy(p)
+      tmp.z += sceneRadius(m.body) * 1.2
+      tmp.project(camera)
+    }
+    const at = p && m && tmp.z <= 1 ? `translate(${((tmp.x + 1) / 2) * w}px, ${((1 - tmp.y) / 2) * h}px)` : ''
+    if (labelAt.get(id) !== at) {
+      labelAt.set(id, at)
+      showLabel(el, at)
+    }
   }
-  labels.value = out
 }
 
 function resize() {
