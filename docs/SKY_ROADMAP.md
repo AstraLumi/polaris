@@ -82,13 +82,24 @@ The squeezed solar view stays as an editor. The sky view is a separate
 renderer working from true positions (as directions), so a moon shows its
 true angular size and a planet is a point.
 
-**Emissive stars.** Yes, in this sense: stars need real brightness
-values (magnitude and colour) rather than pixels, because the atmosphere,
-twilight, moonlight and clouds decide which ones are visible and how they
-look. Stars are drawn as points from the catalogue (sharp at any
-resolution); a high-resolution texture is only needed for diffuse light
-(the galaxy's band, nebulae). Rendering is HDR, then exposed and tone
-mapped like a camera or an eye.
+**The sky is drawn by the author; stars are found in it.** The sky
+picture (the equirectangular texture) stays what the author controls:
+drawn by hand, or generated and then edited. The app reads the stars out
+of it: small bright spots standing out from their surroundings are
+detected, and each gives a direction (its centre), a brightness (its light
+summed over the spot) and a colour. That is the catalogue. What is left
+once the stars are taken out is the diffuse glow (the galaxy's band,
+nebulae), used as emissive light. A brightness scale set by the author
+maps pixels to magnitudes (an 8-bit picture has little range: "the
+brightest star I drew is as bright as Sirius"). An author can also give
+two pictures, stars only and glow only, to need no guessing.
+
+Why not the texture alone as emissive light: it would look right in one
+picture, but stars couldn't be named or charted, dimmed one by one by the
+atmosphere near the horizon, kept sharp at any resolution, or hidden by
+twilight (a pixel can't fade below black). So stars are drawn as points
+from the catalogue, the glow as a texture, and rendering is HDR, then
+exposed and tone mapped like a camera or an eye.
 
 **Atmosphere from composition.** Reasonable. Pressure, gravity
 (known), temperature and the gas mix give the Rayleigh scattering
@@ -126,7 +137,10 @@ band moving across, and whether anything shows through.
 
 **Star charting.** The catalogue gives every star an id and a fixed
 direction in the system's frame (they are too far for parallax). Names,
-constellations (lines between ids) and notes are stored per story. The
+constellations (lines between ids) and notes are stored per story, tied
+to a star's direction: when the picture is redrawn and scanned again, each
+name moves to the nearest star found (within a small angle), so editing
+the sky keeps the names; one that loses its star is flagged. The
 sky view labels them, and printable charts (per hemisphere and season)
 come from the same data.
 
@@ -143,13 +157,14 @@ usable.
    and azimuth). `seasons.js` follows the same orbit and axis so the
    timeline's seasons and the sky agree. Tests: the sun is highest at
    local noon, equinoxes and solstices fall where the calendar says.
-2. **The star catalogue** (`starCatalog.js`, schema): stars generated from
-   a stored seed (positions on the celestial sphere, magnitudes from a
-   realistic distribution, colours by temperature, a galactic band),
-   named stars and constellations stored per story with an editor. The
-   skybox texture is then rendered from the catalogue (skygen, kept in
-   step with the sky shader), so the solar view's background and the
-   charts agree.
+2. **The star catalogue** (`starCatalog.js`, schema): stars detected in
+   the story's sky picture (an uploaded drawing, or the generated one:
+   skygen keeps drawing it from a seed, and can write the catalogue
+   directly), with the author's brightness scale; the glow left over as
+   its own texture; named stars and constellations stored per story,
+   re-matched on every new picture. Detection is deterministic and
+   versioned like any generator. Tests: stars drawn at known places and
+   brightnesses are found there, in the right order of brightness.
 3. **Sky view, airless**: a "Sky" button on a hex with a date and time
    picker; renders stars, the sun, moons (true size, phase, eclipses),
    planets, horizon, compass and an alt/az grid, with star labels. Uses
