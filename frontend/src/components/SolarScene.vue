@@ -103,7 +103,23 @@ function orbitLine(radius, points = null) {
   )
 }
 
+// What the meshes are built from: everything but what only moves them (the
+// starting angle, the day) or labels them. Picking a body or typing its name
+// doesn't rebuild the scene.
+const sceneKey = (bodies) => JSON.stringify(bodies, (k, v) => (k === 'name' || k === 'phase' || k === 'day_hours' ? undefined : v))
+let builtKey = ''
+
+function onBodies() {
+  if (sceneKey(props.bodies) !== builtKey) return buildBodies()
+  for (const b of props.bodies) {
+    const m = meshes.get(b.id)
+    if (m) m.body = b
+  }
+  place()
+}
+
 function buildBodies() {
+  builtKey = sceneKey(props.bodies)
   if (bodyGroup) {
     for (const g of globeViews.values()) g.mesh.parent?.remove(g.mesh)
     scene.remove(bodyGroup)
@@ -527,7 +543,7 @@ onBeforeUnmount(() => {
   scene = null
 })
 
-watch(() => props.bodies, buildBodies, { deep: true })
+watch(() => props.bodies, onBodies, { deep: true })
 watch(() => props.globes, buildGlobes)
 watch(() => props.days, place)
 watch(() => props.relative, place)

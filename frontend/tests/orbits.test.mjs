@@ -1,7 +1,7 @@
 // The solar system's physics (src/orbits.js) and its drawing scale
 // (src/solarScale.js). No dependencies: node frontend/tests/orbits.test.mjs
 import assert from 'node:assert/strict'
-import { massOf, surfaceGravity, circularOrbit, keplerOrbit, positionsAt, hillRadius, moonProblem, systemTree, orbitLimits, orbitProblem, periapsisOf, apoapsisOf, orbitThrough, createGravitySim, orbitPoint } from '../src/orbits.js'
+import { massOf, surfaceGravity, circularOrbit, keplerOrbit, positionsAt, hillRadius, moonProblem, systemTree, orbitLimits, orbitProblem, periapsisOf, apoapsisOf, orbitThrough, createGravitySim, orbitPoint, physicsKey } from '../src/orbits.js'
 import { sceneRadius, sceneDistance, orbitForSceneDistance } from '../src/solarScale.js'
 import { SUN, AU_KM, luminosity, habitableZone, schwarzschildRadius, fitToClass, starColor } from '../src/stars.js'
 
@@ -146,4 +146,11 @@ for (const id of [7, 8]) {
   const onLine = dist(orbitPoint(shape, nu))
   close(onLine, dist(r), 1e-6, `body ${id} on its line (e ${o.eccentricity.toFixed(3)})`)
 }
+
+// The physics' key ignores what it doesn't read (a rename, a colour) and
+// sees what it does.
+const key = physicsKey([sun, earth, moon])
+assert.equal(physicsKey([sun, { ...earth, name: 'Terra', color: '#fff', day_hours: 30 }, moon]), key)
+assert.notEqual(physicsKey([sun, { ...earth, eccentricity: 0.1 }, moon]), key)
+assert.notEqual(physicsKey([sun, earth]), key)
 console.log('orbits: ok')

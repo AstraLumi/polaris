@@ -138,8 +138,8 @@
                 <span v-if="row.body.is_main" class="main-badge" :title="$t('The planet of the map')">{{ $t('Main') }}</span>
               </button>
               <span v-if="row.body.kind !== 'star'" class="order">
-                <button type="button" class="icon-btn" :disabled="busy || row.first" :aria-label="$t('Move closer in')" :title="$t('Swap orbits with the one closer in')" @click="swapOrbit(row.body, -1)">▲</button>
-                <button type="button" class="icon-btn" :disabled="busy || row.last" :aria-label="$t('Move farther out')" :title="$t('Swap orbits with the one farther out')" @click="swapOrbit(row.body, 1)">▼</button>
+                <button type="button" class="icon-btn" :disabled="busy || !row.up" :aria-label="$t('Move closer in')" :title="$t('Swap orbits with the one closer in')" @click="swapOrbit(row.body, -1)">▲</button>
+                <button type="button" class="icon-btn" :disabled="busy || !row.down" :aria-label="$t('Move farther out')" :title="$t('Swap orbits with the one farther out')" @click="swapOrbit(row.body, 1)">▼</button>
               </span>
             </li>
           </ul>
@@ -326,7 +326,7 @@ import { t, tn, tr } from '../i18n'
 import { solarApi, planetApi } from '../api'
 import { skyUrl, applyMapSettings } from '../worldMap'
 import { planetColorOf } from '../planetColors'
-import { bodyFacts, orbitProblem, systemTree, periapsisOf, apoapsisOf, createGravitySim, positionsAt } from '../orbits'
+import { bodyFacts, orbitProblem, systemTree, periapsisOf, apoapsisOf, createGravitySim, positionsAt, physicsKey } from '../orbits'
 import { useUnsavedGuard } from '../navigation'
 import { calendar } from '../calendar'
 import { wikiPath } from '../wiki'
@@ -384,12 +384,15 @@ function setMode(m) {
 }
 
 // The list, as a tree: the star, each planet, and its moons under it.
+// up and down: whether it can swap orbits with the one closer in or farther
+// out. Not with the main planet, whose distance is its year's.
 const rows = computed(() => {
   const out = []
-  const walk = (b, depth, first = true, last = true) => {
-    out.push({ body: b, depth, first, last })
+  const swaps = (a, b) => !!b && !a.is_main && !b.is_main
+  const walk = (b, depth, up = false, down = false) => {
+    out.push({ body: b, depth, up, down })
     const kids = tree.value.childrenOf(b.id)
-    kids.forEach((c, i) => walk(c, depth + 1, i === 0, i === kids.length - 1))
+    kids.forEach((c, i) => walk(c, depth + 1, swaps(c, kids[i - 1]), swaps(c, kids[i + 1])))
   }
   for (const root of tree.value.childrenOf(null)) walk(root, 0)
   return out
@@ -449,25 +452,21 @@ async function loadGlobes() {
   if (key === globeKey) return
   globeKey = key
   const out = new Map()
+  // All fetched at once; any that fails is drawn plain instead.
+  const loads = others.map(async (b) => {
+    const m = await solarApi.bodyMap(b.id)
+    const cells = new Map(m.cells)
+    out.set(b.id, { frequency: m.frequency, colorOf: (c) => cells.get(c) || '' })
+  })
   if (main.value.globe && mainBody) {
-    try {
-      const data = await planetApi.get()
+    loads.push(planetApi.get().then((data) => {
       applyMapSettings(data.settings)
       out.set(mainBody.id, { frequency: data.settings.planet.frequency, colorOf: planetColorOf(data) })
-    } catch {
-      // Drawn plain instead.
-    }
+    }))
   }
-  for (const b of others) {
-    try {
-      const m = await solarApi.bodyMap(b.id)
-      const cells = new Map(m.cells)
-      out.set(b.id, { frequency: m.frequency, colorOf: (c) => cells.get(c) || '' })
-    } catch {
-      // Drawn plain instead.
-    }
-  }
-  globes.value = out
+  await Promise.allSettled(loads)
+  // A later call, for a newer set, has the last word.
+  if (key === globeKey) globes.value = out
 }
 
 onMounted(async () => {
@@ -595,16 +594,18 @@ function updateShapes(now = performance.now()) {
 }
 function makeSim() {
   unstable.value = null
-  sim = live.value ? createGravitySim(liveBodies.value) : null
+  sim = live.value && mode.value === 'run' ? createGravitySim(liveBodies.value) : null
+  lagging.value = false
   if (sim) {
-    sim.advanceTo(days.value)
+    // Too far on to reach in one go: the clock shows where it got to.
+    if (!sim.advanceTo(days.value) && !sim.event) days.value = sim.days
     if (sim.event) stopFor(sim.event)
   }
-  lagging.value = false
   updateShapes()
 }
-watch(live, makeSim)
-watch(liveBodies, () => live.value && makeSim(), { deep: true })
+// Made again only when something it reads changes: picking a body, or
+// renaming or recolouring one, leaves it running. Not run while editing.
+watch(() => live.value && mode.value === 'run' && physicsKey(liveBodies.value), makeSim)
 // Going back (day 0) starts again; the clock moves it on otherwise.
 watch(days, (d) => {
   if (sim && d < sim.days) {

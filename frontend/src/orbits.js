@@ -361,6 +361,12 @@ export function hillRadius(body, parent) {
   return periapsisOf(body) * Math.cbrt(massOf(body) / (3 * massOf(parent)))
 }
 
+// What the physics reads of each body. Anything else (its name, colour,
+// spin, rings) can change without the orbits changing: a page compares
+// physicsKey before redoing any physics. A new physical value goes here.
+const PHYSICS_FIELDS = ['id', 'parent_id', 'kind', 'body_type', 'radius_km', 'mass_kg', 'orbit_km', 'phase', 'eccentricity', 'periapsis']
+export const physicsKey = (bodies) => JSON.stringify(bodies.map((b) => PHYSICS_FIELDS.map((k) => b[k] ?? null)))
+
 // ---- The system as a tree -------------------------------------------------------------
 
 // Bodies by id and the children of each, nearest orbit first: the order of
