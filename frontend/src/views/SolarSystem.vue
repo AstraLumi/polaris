@@ -631,6 +631,13 @@ onBeforeUnmount(() => {
   simulation.dispose()
 })
 
+// For the screenshots (the dev server only; tests/visual/shots.mjs): move
+// the clock and read where it got to. A build leaves it out.
+if (import.meta.env.DEV) {
+  window.__solarPage = { moveTo, days: () => days.value, live: (on) => (live.value = on) }
+  onBeforeUnmount(() => delete window.__solarPage)
+}
+
 // ---- Editing ----------------------------------------------------------------------------
 // A body with no colour of its own shows its type's.
 const plain = (b) => ({ ...b, color: b.color || '', orbit_km: b.orbit_km ?? null, phase: b.phase ?? 0 })

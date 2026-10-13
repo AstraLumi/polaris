@@ -26,7 +26,17 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/solarSimulation.test.mjs
     node frontend/tests/climate.test.mjs
 
-Run all of these before committing. `backend/static/` is build output (only
+Run all of these before committing.
+
+To see the Solar system's 3D view without a screen (headless Edge, a
+throwaway story, never real data), take screenshots and look at them:
+
+    node frontend/tests/visual/shots.mjs --views angle,side,Giant [--days 60 --gravity --star black_hole]
+
+Options are listed at the top of the script; the pictures land in
+`frontend/tests/visual/out/` (ignored by git). The camera views come from
+`window.__solarScene` / `window.__solarPage`, defined only on the dev
+server. `backend/static/` is build output (only
 `.gitkeep` is tracked); the tests do not need it.
 
 ## Rules that are easy to break

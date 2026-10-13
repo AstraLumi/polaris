@@ -475,9 +475,11 @@ function requestRender() {
 }
 
 const tmp = new THREE.Vector3()
+let framesDrawn = 0 // for the screenshots (below)
 function render() {
   raf = 0
   if (!renderer) return
+  framesDrawn++
   // Following a body: the camera moves along with it.
   if (follow && positions.has(follow.id)) {
     const now = positions.get(follow.id)
@@ -649,6 +651,42 @@ defineExpose({ frame: () => {
   frame()
   requestRender()
 } })
+
+// ---- For the screenshots (the dev server only) -------------------------------------------
+// tests/visual/shots.mjs points the camera through this and waits for frames
+// to be drawn; a build leaves it out.
+if (import.meta.env.DEV) {
+  window.__solarScene = {
+    frames: () => framesDrawn,
+    draw: () => requestRender(),
+    skyLoaded: () => !props.sky || !!skyMesh,
+    // 'angle' (the view it opens with), 'above', 'side' (edge-on), or a
+    // body's name: close to it, following it. zoom > 1 goes farther out.
+    view(name, { zoom = 1 } = {}) {
+      follow = null
+      const body = [...meshes.values()].find((m) => m.body.name === name)?.body
+      if (body) {
+        const at = positions.get(body.id)
+        const d = Math.max(sceneRadius(body) * 8, 0.6) * zoom
+        controls.target.copy(at)
+        camera.position.copy(at).add(new THREE.Vector3(0, -d * 0.85, d * 0.5))
+        follow = { id: body.id, last: at.clone() }
+      } else {
+        let d = 1
+        for (const p of positions.values()) d = Math.max(d, p.length())
+        d *= zoom
+        controls.target.set(0, 0, 0)
+        if (name === 'above') camera.position.set(0, -d * 0.001, d * 2.6)
+        else if (name === 'side') camera.position.set(0, -d * 2.6, 0)
+        else camera.position.set(0, -d * 1.5, d * 0.9)
+      }
+      controls.update()
+      requestRender()
+      return !!body || ['angle', 'above', 'side'].includes(name)
+    },
+  }
+  onBeforeUnmount(() => delete window.__solarScene)
+}
 </script>
 
 <style scoped>

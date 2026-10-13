@@ -26,3 +26,6 @@ Thumbs.db
 .idea/
 .vscode/
 *.log
+
+# Screenshots made by frontend/tests/visual/shots.mjs
+frontend/tests/visual/out/
