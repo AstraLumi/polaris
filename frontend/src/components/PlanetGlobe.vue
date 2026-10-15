@@ -36,6 +36,7 @@ import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import { PlanetGrid, cellsWithin, normalize, territoryEdges } from '../planetGrid'
 import { pickLabels } from '../planetLabels'
+import { placeOceanName, nameFrame, framePoint } from '../oceanNames'
 import { markerIcon } from '../mapMarkers'
 import { createGlobeMesh } from '../three/globeMesh'
 import { loadSkyDome, disposeSkyDome } from '../three/skyDome'
@@ -46,7 +47,9 @@ import { loadSkyDome, disposeSkyDome } from '../three/skyDome'
 // (hold Space to turn it): the component works out the cells under the
 // brush and emits them; the parent decides what painting means and calls
 // recolor. Places are markers; names show by zoom (planetLabels.js), the
-// names of kingdoms, regions and oceans at the middle of their land.
+// names of kingdoms and regions at the middle of their land. Oceans' names
+// are written on the water, bending with the planet (oceanNames.js), or
+// float like the others when they fit nowhere.
 const props = defineProps({
   frequency: { type: Number, required: true },
   // cell -> '#rrggbb', or '' for open sea
@@ -88,6 +91,7 @@ let renderer, scene, camera, controls
 let globe, globeMat
 let globeView = null // three/globeMesh.js
 let borderGroup = null
+let oceanGroup = null
 let skyMesh = null
 let lineGroup = null
 let hoverLine = null
@@ -208,6 +212,129 @@ function buildBorders() {
   requestRender()
 }
 
+// Oceans' names, written on the water (oceanNames.js): a picture of the
+// name laid on a strip of the sphere just above the surface. Where each
+// goes is kept until the ocean, its name or the grid changes.
+const NAME_PX = 96
+const NAME_FONT = `700 ${NAME_PX}px Fraunces, serif`
+const oceanSpots = new Map() // area key -> { sig, spot }
+let writtenOceans = new Set() // area keys whose name is on the water
+
+// The name drawn in its colour, lightened, with a dark edge to read on
+// any water; its width over its height comes with it.
+function nameCanvas(name, color) {
+  const text = name.toUpperCase()
+  const canvas = document.createElement('canvas')
+  let ctx = canvas.getContext('2d')
+  ctx.font = NAME_FONT
+  ctx.letterSpacing = `${NAME_PX * 0.08}px`
+  const wide = ctx.measureText(text).width + NAME_PX * 0.6
+  const k = Math.min(1, 4096 / wide)
+  canvas.width = Math.ceil(wide * k)
+  canvas.height = Math.ceil(NAME_PX * 1.4 * k)
+  ctx = canvas.getContext('2d')
+  ctx.font = `700 ${NAME_PX * k}px Fraunces, serif`
+  ctx.letterSpacing = `${NAME_PX * 0.08 * k}px`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.lineJoin = 'round'
+  ctx.lineWidth = NAME_PX * 0.1 * k
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)'
+  const x = canvas.width / 2
+  const y = canvas.height / 2 + NAME_PX * 0.04 * k
+  ctx.strokeText(text, x, y)
+  ctx.fillStyle = '#' + new THREE.Color(color || '#88aacc').lerp(new THREE.Color(0xffffff), 0.45).getHexString()
+  ctx.fillText(text, x, y)
+  return { canvas, ratio: canvas.width / canvas.height }
+}
+
+// The strip the name lies on, bending with the sphere.
+function nameMesh(spot, canvas) {
+  const f = nameFrame(spot.at, spot.tilt)
+  const cols = Math.min(256, Math.max(16, Math.ceil(spot.length / (Math.atan(2) / grid.n))))
+  const rows = 4
+  const pos = []
+  const uv = []
+  const index = []
+  for (let r = 0; r <= rows; r++) {
+    for (let k = 0; k <= cols; k++) {
+      const p = framePoint(f, (k / cols - 0.5) * spot.length, (r / rows - 0.5) * spot.height)
+      pos.push(p[0] * 1.001, p[1] * 1.001, p[2] * 1.001)
+      uv.push(k / cols, r / rows)
+      if (r < rows && k < cols) {
+        const a = r * (cols + 1) + k
+        index.push(a, a + 1, a + cols + 1, a + 1, a + cols + 2, a + cols + 1)
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
+  geo.setIndex(index)
+  const map = new THREE.CanvasTexture(canvas)
+  map.colorSpace = THREE.SRGBColorSpace
+  map.center.set(0.5, 0.5)
+  map.anisotropy = renderer.capabilities.getMaxAnisotropy()
+  const mat = new THREE.MeshBasicMaterial({
+    map,
+    transparent: true,
+    opacity: 0.9,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  })
+  const mesh = new THREE.Mesh(geo, mat)
+  // The middle of the name and a step up from it, to keep it upright.
+  mesh.userData = { at: new THREE.Vector3(...spot.at), above: new THREE.Vector3(...framePoint(f, 0, spot.height / 2)) }
+  return mesh
+}
+
+// A name seen with its top pointing down the screen (the globe looked at
+// from beyond a pole) turns round to read the right way up.
+const nameAt = new THREE.Vector3()
+const nameAbove = new THREE.Vector3()
+function uprightOceanNames() {
+  for (const mesh of oceanGroup?.children ?? []) {
+    nameAt.copy(mesh.userData.at).project(camera)
+    nameAbove.copy(mesh.userData.above).project(camera)
+    const turn = nameAbove.y < nameAt.y ? Math.PI : 0
+    if (mesh.material.map.rotation !== turn) mesh.material.map.rotation = turn
+  }
+}
+
+function buildOceanNames() {
+  if (oceanGroup) {
+    scene.remove(oceanGroup)
+    oceanGroup.traverse((o) => {
+      o.geometry?.dispose()
+      o.material?.map?.dispose()
+      o.material?.dispose?.()
+    })
+  }
+  oceanGroup = new THREE.Group()
+  const written = new Set()
+  for (const a of props.areas) {
+    if (!a.ocean || !a.cells?.length) continue
+    const { canvas, ratio } = nameCanvas(a.name, a.color)
+    let sum = 0
+    for (const c of a.cells) sum = (sum + c * 7919) % 1000000007
+    const sig = `${grid.n}|${ratio.toFixed(3)}|${a.cells.length}|${sum}`
+    let kept = oceanSpots.get(a.key)
+    if (!kept || kept.sig !== sig) {
+      kept = { sig, spot: placeOceanName(grid, a.cells.filter((x) => x < grid.count), ratio) }
+      oceanSpots.set(a.key, kept)
+    }
+    if (!kept.spot) continue
+    oceanGroup.add(nameMesh(kept.spot, canvas))
+    written.add(a.key)
+  }
+  writtenOceans = written
+  scene.add(oceanGroup)
+  requestRender()
+}
+
 // An outline round some cells, just above the surface.
 function outlineOf(cells, color, lift = 1.0015) {
   const pts = []
@@ -266,6 +393,8 @@ function render() {
   globeMat.uniforms.uGrid.value = Math.max(0, Math.min(1, (cellPx - 5) / 6))
   // Turning slows as you zoom in.
   controls.rotateSpeed = Math.max(0.05, Math.min(1, (dist - 1) * 0.5))
+  camera.updateMatrixWorld()
+  uprightOceanNames()
   renderer.render(scene, camera)
   placeLabels(dist, cellPx)
 }
@@ -284,6 +413,7 @@ function placeLabels(dist, cellPx) {
   }
   const candidates = []
   for (const a of props.areas) {
+    if (writtenOceans.has(a.key)) continue
     const at = onScreen(a.cell, 0.35)
     if (at) candidates.push({ kind: 'area', key: 'a:' + a.key, name: a.name, x: at[0], y: at[1], size: a.size, color: a.color, ocean: a.ocean })
   }
@@ -454,6 +584,7 @@ function rebuild() {
     buildGlobe()
     buildLines()
     buildBorders()
+    buildOceanNames()
     loadSky()
     drawSelected()
     drawOutlined()
@@ -471,6 +602,8 @@ onMounted(() => {
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
   window.addEventListener('blur', onBlur)
+  // Oceans' names are pictures: drawn again once the font is in.
+  document.fonts?.load(NAME_FONT).then(() => renderer && grid && buildOceanNames(), () => {})
 })
 
 onBeforeUnmount(() => {
@@ -492,7 +625,8 @@ onBeforeUnmount(() => {
 
 watch(() => props.frequency, rebuild)
 watch(() => props.version, recolorAll)
-watch(() => [props.markers, props.areas], requestRender)
+watch(() => props.markers, requestRender)
+watch(() => props.areas, () => grid && globeView && buildOceanNames())
 watch(() => props.borders, () => grid && buildBorders())
 watch(() => props.lines, () => grid && buildLines(), { deep: true })
 watch(() => props.selected, () => grid && drawSelected())
