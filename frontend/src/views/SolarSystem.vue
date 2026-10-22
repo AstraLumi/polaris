@@ -26,6 +26,7 @@
         :show-limits="markers.limits"
         :sky="skyUrl()"
         :enclosure="enclosure"
+        :cloud-step="cloudStep"
         @select="pick"
       />
 
@@ -339,7 +340,7 @@
 <script setup>
 import { ref, shallowRef, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { t, tn, tr } from '../i18n'
-import { solarApi, planetApi } from '../api'
+import { solarApi, planetApi, layersApi } from '../api'
 import { skyUrl, applyMapSettings } from '../worldMap'
 import { planetColorOf } from '../planetColors'
 import { bodyFacts, orbitProblem, systemTree, periapsisOf, apoapsisOf } from '../orbits'
@@ -353,6 +354,7 @@ import StarFields from '../components/StarFields.vue'
 import { bodyColor } from '../solarScale'
 import { luminosity, habitableZone, SUN } from '../stars'
 import { enclosureFor } from '../lighting'
+import { mainPlanetClimate, monthOfDays, stepOfMonth } from '../planetClimate'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 
 // The Solar system tab: a star, its planets and their moons, each sized and
@@ -488,6 +490,17 @@ async function loadGlobes() {
     loads.push(planetApi.get().then((data) => {
       applyMapSettings(data.settings)
       out.set(mainBody.id, { frequency: data.settings.planet.frequency, colorOf: planetColorOf(data) })
+      // Its clouds come from its climate, worked out in the background.
+      layersApi
+        .get()
+        .then((layerData) => mainPlanetClimate({ planet: data, layerData, solar: { bodies: bodies.value, main: main.value, enclosed: enclosed.value }, calendar }))
+        .then((climate) => {
+          if (key !== globeKey) return
+          const next = new Map(globes.value)
+          next.set(mainBody.id, { ...next.get(mainBody.id), climate })
+          globes.value = next
+        })
+        .catch(() => {})
     }))
   }
   await Promise.allSettled(loads)
@@ -560,6 +573,9 @@ function tick(now) {
   last = now
   if (playing.value) raf = requestAnimationFrame(tick)
 }
+
+// The main planet's clouds follow the month the clock is in.
+const cloudStep = computed(() => stepOfMonth(monthOfDays(days.value, calendar), calendar))
 
 // The clock in the world's calendar when there is a main planet: its days
 // are the calendar's hours long, its years the calendar's months.

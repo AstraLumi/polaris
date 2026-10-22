@@ -36,6 +36,10 @@
 //      down high icy slopes (katabatic winds); volcanic land gives off
 //      heat of its own and draws a little low pressure.
 // Steps 2–6 are repeated so each sees what the others make.
+//   7. Clouds, at the end (cloudCover): from how near the air is to
+//      saturation, how much it rains (towering storm clouds), and low
+//      decks over cold water under sinking air; few where the air sinks
+//      over dry land.
 //
 // Real units throughout (°C, m/s, mm, metres); the planet's size scales the
 // distances. Deterministic: the same map gives the same climate.
@@ -43,7 +47,7 @@
 import { PlanetGrid } from './planetGrid.js'
 
 // Bumped whenever the results change for the same map.
-export const CLIMATE_VERSION = 3
+export const CLIMATE_VERSION = 4
 
 const EARTH_RADIUS_KM = 6371
 const S_EARTH = 1361 // W/m², sunlight at Earth's distance
@@ -755,6 +759,23 @@ export function simulateClimate(input) {
   }
   }
 
+  // ---- Clouds per step.
+  const clouds = new Float64Array(steps * n)
+  for (let k = 0; k < steps; k++) {
+    const T = temp.subarray(k * n, (k + 1) * n)
+    clouds.set(
+      cloudCover(g, {
+        temp: T,
+        humidity: humid.subarray(k * n, (k + 1) * n),
+        precip: precip.subarray(k * n, (k + 1) * n).map((x) => (x * 30.44) / monthDays),
+        pressure: pressure.subarray(k * n, (k + 1) * n),
+        landFrac,
+        sea,
+      }),
+      k * n,
+    )
+  }
+
   // The map's own hexes: a volcanic hex is warmer than the cell round it.
   const fineWarmth = new Float32Array(fine.count)
   if (input.geothermal) for (let f = 0; f < fine.count; f++) fineWarmth[f] = (P.hotspot * Math.max(0, input.geothermal[f] ?? 0)) / 10
@@ -772,6 +793,7 @@ export function simulateClimate(input) {
       temp: Float32Array.from(temp),
       precip: Float32Array.from(precip),
       humidity: Float32Array.from(humid),
+      clouds: Float32Array.from(clouds),
       pressure: Float32Array.from(pressure),
       wind: Float32Array.from(wind),
       current: Float32Array.from(current),
@@ -1155,6 +1177,40 @@ export function rainfall(g, { temp, wind, lifting = wind, pressure, landFrac, la
   return { precip: P, humidity }
 }
 
+// ---- Clouds -----------------------------------------------------------------------------------
+// How much of the sky is cloud (0 to 1) over each cell, for one step:
+//   - layer clouds where the air is near saturation (a little cloud starts
+//     at 60% humidity; the sky is covered near 100%);
+//   - storm clouds where it rains hard (mm per 30-day month);
+//   - low grey decks over water colder than its latitude, under sinking
+//     air (the stratocumulus off cold coasts);
+//   - storm systems: deep lows are cloudy whatever the humidity says;
+//   - cold air makes thin ice cloud and low stratus easily (polar skies);
+//   - sinking air (high pressure) thins them, rising air (lows) thickens.
+export function cloudCover(g, { temp, humidity, precip, pressure, landFrac, sea }) {
+  const n = g.count
+  const anomaly = smooth(g, minusZonal(g, temp), 2)
+  const out = new Float64Array(n)
+  for (let c = 0; c < n; c++) {
+    const rh = humidity[c]
+    const chill = Math.max(0, Math.min(1, (-temp[c] - 2) / 18))
+    const start = 0.55 - 0.25 * chill // ice clouds form drier
+    const layer = Math.max(0, Math.min(1, (rh - start) / (0.98 - start))) ** 1.3
+    const storm = 1 - Math.exp(-Math.max(0, precip[c]) / 140)
+    const p = pressure[c]
+    const sinking = Math.max(0, Math.min(1, p / 10))
+    const cold = sea[c] ? Math.max(0, Math.min(1, -anomaly[c] / 4)) : 0
+    const deck = cold * (0.3 + 0.6 * sinking) * (1 - landFrac[c])
+    const cyclone = Math.max(0, Math.min(1, (-p - 2) / 14))
+    const polar = 0.35 * chill
+    let cover = 1 - (1 - 0.85 * layer) * (1 - 0.75 * storm) * (1 - deck) * (1 - 0.7 * cyclone) * (1 - polar)
+    cover *= 1 - 0.35 * sinking * (1 - cold)
+    cover *= 1 + 0.15 * Math.max(0, Math.min(1, -p / 10))
+    out[c] = Math.max(0, Math.min(1, cover))
+  }
+  return out
+}
+
 // ---- Reading the results on the map's hexes ----------------------------------------------------
 // A coarse field (one number per coarse cell, for one step) read on every
 // map cell.
@@ -1193,6 +1249,15 @@ export function precipitationAt(result, k = null) {
     field = new Float32Array(coarse.count)
     for (let s = 0; s < steps; s++) for (let c = 0; c < coarse.count; c++) field[c] += coarse.precip[s * coarse.count + c]
   } else field = stepSlice(result, coarse.precip, k)
+  return fineField(result, field)
+}
+
+// The cloud cover (0 to 1) on every map cell at step k, or the year's mean.
+export function cloudsAt(result, k = null) {
+  const { steps, coarse } = result
+  if (k != null) return fineField(result, stepSlice(result, coarse.clouds, k))
+  const field = new Float32Array(coarse.count)
+  for (let s = 0; s < steps; s++) for (let c = 0; c < coarse.count; c++) field[c] += coarse.clouds[s * coarse.count + c] / steps
   return fineField(result, field)
 }
 

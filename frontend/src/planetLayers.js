@@ -16,6 +16,7 @@ export const LAYERS = [
   { id: 'currents', label: tr('Ocean currents'), about: tr('The main ocean currents, warm and cold'), climate: true },
   { id: 'temperature', label: tr('Temperature'), about: tr('A heat map of the planet, month by month'), climate: true },
   { id: 'rain', label: tr('Rain'), about: tr('How much rain and snow falls, month by month'), climate: true },
+  { id: 'clouds', label: tr('Clouds'), about: tr('How much of the sky is cloud, month by month'), climate: true },
   { id: 'zones', label: tr('Climate types'), about: tr('Köppen climate types, from the temperatures and the rain'), climate: true },
 ]
 export const layerOf = (id) => LAYERS.find((l) => l.id === id) ?? LAYERS[0]

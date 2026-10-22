@@ -23,7 +23,7 @@ import { sceneRadius, sceneDistance, sceneLayout, sceneOrbitPath, bodyColor } fr
 import { orbitLimits, compileSystem, orbitFrame } from '../orbits'
 import { habitableZone, luminosity } from '../stars'
 import { createGlobeMesh } from '../three/globeMesh'
-import { createStar, createPlanetMaterial, createAtmosphere, createClouds, createRings } from '../three/bodyShaders'
+import { createStar, createPlanetMaterial, createAtmosphere, createClouds, createRings, setCloudCover } from '../three/bodyShaders'
 import { cloudCoverage, genericCloudCover, mainPlanetCloudCover } from '../climate'
 import { loadSkyDome, disposeSkyDome, setSkyGlow } from '../three/skyDome'
 import { createLensPass, HOLE_LAYER } from '../three/lensPass'
@@ -49,6 +49,8 @@ const props = defineProps({
   // picked body can orbit what it orbits.
   showZone: { type: Boolean, default: true },
   showLimits: { type: Boolean, default: true },
+  // The climate's step (month) the main planet's clouds are drawn for.
+  cloudStep: { type: Number, default: null },
   // A shell round the whole system, the sky itself, that glows by day
   // (lighting.js); null for none.
   enclosure: { type: Object, default: null },
@@ -161,6 +163,7 @@ function buildBodies() {
   sunLit = []
   shadowed = []
   cloudMaterials = []
+  mainClouds = null
   const byId = new Map(props.bodies.map((b) => [b.id, b]))
   for (const b of props.bodies) {
     const r = sceneRadius(b)
@@ -247,19 +250,32 @@ const atmosphereColor = (b) => AIR[b.body_type] || new THREE.Color(colorOf(b)).l
 // hexes, any other's generic for its type. Null for a cloudless one. Each
 // cover is kept (they take a while), until the maps change.
 const cloudCovers = new Map() // key -> the clouds' aCover
+let mainClouds = null // { mesh, body }: the main planet's, redrawn when the month changes
+function mainCoverOf(b) {
+  const grid = globeGrids.get(b.id)
+  const climate = props.globes.get(b.id)?.climate ?? null
+  const cover = mainPlanetCloudCover({ grid, body: b, climate, step: props.cloudStep })
+  return (dir) => cover(grid.cellAt(dir))
+}
 function cloudsFor(b, r) {
   const coverage = cloudCoverage(b)
   if (!(coverage > 0)) return null
   const grid = b.is_main ? globeGrids.get(b.id) : null
-  const key = `${b.id}:${coverage}:${grid ? 'map' : 'generic'}`
+  const climate = grid ? props.globes.get(b.id)?.climate : null
+  const key = `${b.id}:${coverage}:${grid ? (climate ? `climate:${props.cloudStep}` : 'map') : 'generic'}`
   let coverOf = cloudCovers.get(key)
-  if (!coverOf && grid) {
-    const cover = mainPlanetCloudCover({ grid, body: b })
-    coverOf = (dir) => cover(grid.cellAt(dir))
-  }
+  if (!coverOf && grid) coverOf = mainCoverOf(b)
   const clouds = createClouds(r, coverOf ?? ((dir) => genericCloudCover(dir, coverage, b.id)))
   cloudCovers.set(key, clouds.geometry.attributes.aCover.array)
+  if (b.is_main && grid) mainClouds = { mesh: clouds, body: b }
   return clouds
+}
+
+// The month moved on: the main planet's clouds follow its climate.
+function updateMainClouds() {
+  if (!mainClouds || !props.globes.get(mainClouds.body.id)?.climate) return
+  setCloudCover(mainClouds.mesh, mainCoverOf(mainClouds.body))
+  requestRender()
 }
 
 // ---- Orbit trails -------------------------------------------------------------------------
@@ -747,6 +763,7 @@ watch(() => [props.showZone, props.showLimits], () => {
 })
 watch(() => props.sky, loadSky)
 watch(() => props.enclosure, requestRender, { deep: true })
+watch(() => props.cloudStep, updateMainClouds)
 
 defineExpose({ frame: () => {
   follow = null

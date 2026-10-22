@@ -39,6 +39,13 @@ Missing for the goal:
 3. **Stars as data.** The background is a painted picture. Charting and
    naming need a catalogue: every star with a fixed direction, a
    brightness (magnitude), a colour, an id, maybe a name.
+   Done (`SkyView.vue`, `three/skyShaders.js`, from a picked hex on the
+   map): stars as points by magnitude, the glow behind, the star and every
+   moon and planet at its true direction, angular size and brightness,
+   moons lit from the star's side with phases and lunar eclipses (or from
+   all round inside the shell), the month's clouds from the climate, a
+   simple daylight and twilight sky (until stage 4), compass, alt/az grid,
+   zoom to under a degree.
 4. **Atmospheres** as physical parameters (pressure, composition).
 5. **Lighting other than one star** (the enclosed, glowing shell).
 6. **Climate**: temperature, wind, rain, clouds per hex and season.
@@ -157,6 +164,13 @@ usable.
    and azimuth). `seasons.js` follows the same orbit and axis so the
    timeline's seasons and the sky agree. Tests: the sun is highest at
    local noon, equinoxes and solstices fall where the calendar says.
+   Done (`skyFrames.js`, no schema change): day 0 of the solar system's
+   clock is 01-01-0001 at midnight on longitude 0; the axis leans away
+   from the star at the northern winter solstice, 10/365 of a year before
+   each year begins (as the climate has it); the planet turns once a
+   sidereal day; the sky picture is fixed to the stars in the equatorial
+   frame of day 0. Kepler orbits are worked out for any date directly, so
+   stable orbits come round exactly and far dates cost nothing.
 2. **The star catalogue** (`starCatalog.js`, schema): stars detected in
    the story's sky picture (an uploaded drawing, or the generated one:
    skygen keeps drawing it from a seed, and can write the catalogue
@@ -165,6 +179,10 @@ usable.
    re-matched on every new picture. Detection is deterministic and
    versioned like any generator. Tests: stars drawn at known places and
    brightnesses are found there, in the right order of brightness.
+   Done (`starCatalog.js`, worker, cache in memory): stars found in the
+   picture by brightness above the local background, the brightest set to
+   magnitude −1.46; the glow left once they (and painted moon discs) are
+   taken out. Named stars and constellations are still to come.
 3. **Sky view, airless**: a "Sky" button on a hex with a date and time
    picker; renders stars, the sun, moons (true size, phase, eclipses),
    planets, horizon, compass and an alt/az grid, with star labels. Uses

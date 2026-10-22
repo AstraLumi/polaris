@@ -292,16 +292,7 @@ void main() {
 // depend on r), to save working it out again.
 export function createClouds(r, coverOf) {
   const geo = new THREE.SphereGeometry(r * 1.02, 96, 48)
-  const pos = geo.attributes.position
-  let cover = coverOf
-  if (typeof coverOf === 'function') {
-    cover = new Float32Array(pos.count)
-    const v = new THREE.Vector3()
-    for (let i = 0; i < pos.count; i++) {
-      v.fromBufferAttribute(pos, i).normalize()
-      cover[i] = coverOf([v.x, v.y, v.z])
-    }
-  }
+  const cover = typeof coverOf === 'function' ? coverArray(geo, coverOf) : coverOf
   geo.setAttribute('aCover', new THREE.BufferAttribute(cover, 1))
   return new THREE.Mesh(
     geo,
@@ -313,6 +304,24 @@ export function createClouds(r, coverOf) {
       depthWrite: false,
     }),
   )
+}
+
+function coverArray(geo, coverOf) {
+  const pos = geo.attributes.position
+  const cover = new Float32Array(pos.count)
+  const v = new THREE.Vector3()
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).normalize()
+    cover[i] = coverOf([v.x, v.y, v.z])
+  }
+  return cover
+}
+
+// New cover for clouds already made (the month changed).
+export function setCloudCover(clouds, coverOf) {
+  const attr = clouds.geometry.attributes.aCover
+  attr.array.set(coverArray(clouds.geometry, coverOf))
+  attr.needsUpdate = true
 }
 
 // ---- Rings ------------------------------------------------------------------------------

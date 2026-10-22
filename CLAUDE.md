@@ -30,6 +30,8 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/climateModel.test.mjs
     node frontend/tests/flowLines.test.mjs
     node frontend/tests/lighting.test.mjs
+    node frontend/tests/skyFrames.test.mjs
+    node frontend/tests/starCatalog.test.mjs
 
 Run all of these before committing.
 
@@ -133,7 +135,15 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   `enclosed` from `GET /api/solar`, made into an enclosure by
   `enclosureFor`): even light on the main planet's day and night, only
   the painted stars' light at night; moons then have no phases
-  (`moonlightOf`). three.js is only loaded with the planet
+  (`moonlightOf`).
+- **The sky view** (`SkyView.vue`, "Sky from this hex" on the planet map):
+  time and frames in `skyFrames.js` (day 0 = 01-01-0001, axis from the
+  solstice rule shared with the climate, sidereal spin, the sky picture
+  fixed to the stars at day 0), stars found in the sky picture by
+  `starCatalog.js`, drawing in `three/skyShaders.js`. Positions are Kepler
+  orbits in km, double precision; only directions and angular sizes reach
+  the GPU. Screenshots: `climateShots.mjs --sky lon,lat --at
+  DD-MM-YYYY,hour --look az,alt,fov`. three.js is only loaded with the planet
   (`MapPage.vue`, `PlanetTerritory.vue` load it lazily); keep it out of the
   main bundle.
 - **The solar system** (`backend/solar.go`, the Solar system tab) keeps

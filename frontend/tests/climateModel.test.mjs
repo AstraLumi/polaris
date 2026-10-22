@@ -9,6 +9,7 @@ import {
   temperatureAt,
   precipitationAt,
   windAt,
+  cloudsAt,
   koppen,
   gridGeometry,
   sampleVector,
@@ -164,6 +165,21 @@ assert.ok(globalP > 600 && globalP < 1800, `global rain ${globalP}`)
 // The monsoon brings India's rain in summer.
 const mumbai = at(73, 19)
 assert.ok(precipitationAt(r, 6)[mumbai] > 5 * precipitationAt(r, 0)[mumbai] + 20, 'Mumbai is wet in July, dry in January')
+
+// Clouds: clear over the subtropical deserts, thick in the storm tracks and
+// the rain belt, a monsoon's clouds in its season only.
+{
+  const cy = cloudsAt(r)
+  let mean = 0
+  for (const x of cy) mean += x / cy.length
+  assert.ok(mean > 0.45 && mean < 0.8, `global cloud ${mean}`)
+  assert.ok(cy[at(10, 23)] < 0.3, `Sahara skies are clear (${cy[at(10, 23)]})`)
+  assert.ok(cy[at(-150, 6)] > 0.55, 'the rain belt is cloudy')
+  assert.ok(cy[at(-30, 55)] > 0.6, 'the North Atlantic storm track is cloudy')
+  const mumbai = at(73, 19)
+  assert.ok(cloudsAt(r, 6)[mumbai] > cloudsAt(r, 0)[mumbai] + 0.25, 'monsoon clouds in July')
+  for (const x of cy) assert.ok(x >= 0 && x <= 1)
+}
 
 // Plants make rain: the same map with the Amazon's forest cleared to desert
 // rains less there.

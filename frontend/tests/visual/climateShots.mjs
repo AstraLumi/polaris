@@ -12,6 +12,13 @@
 //     --face <lon,lat> where the globe looks (default -30,25: the Atlantic)
 //     --flat           the flat map instead of the globe
 //     --hover <x,y>    rest the pointer there (to see a hex's readout)
+//     --sky <lon,lat>  also open the sky view from that hex (the story gets
+//                      a Sun, the planet and a Moon), with:
+//     --at <date,hour> its date (DD-MM-YYYY) and local hour, default
+//                      01-01-0001,0
+//     --look <az,alt,fov>  where it looks, default 180,30,90
+//     --dyson, --shell the Sun in a Dyson sphere; the system in its shell
+//     --solar          then the planet in the Solar system's 3D view
 //     --size <WxH>     the window, default 1400x900
 //     --out <dir>      where the pictures go (default tests/visual/out)
 //
@@ -38,7 +45,7 @@ const option = (name, fallback) => {
   const i = args.indexOf(`--${name}`)
   return i >= 0 && args[i + 1] ? args[i + 1] : fallback
 }
-const LABELS = { continents: 'Continents', wind: 'Winds', currents: 'Ocean currents', temperature: 'Temperature', rain: 'Rain', zones: 'Climate types' }
+const LABELS = { continents: 'Continents', wind: 'Winds', currents: 'Ocean currents', temperature: 'Temperature', rain: 'Rain', clouds: 'Clouds', zones: 'Climate types' }
 const layers = option('layers', Object.keys(LABELS).join(',')).split(',').map((v) => v.trim()).filter(Boolean)
 const month = Number(option('month', 0))
 const [faceLon, faceLat] = option('face', '-30,25').split(',').map(Number)
@@ -144,6 +151,17 @@ async function makeStory() {
     }
   }
   for (const [biome, cells] of byBiome) await send('POST', '/planet/biomes/paint', { biome, height: null, cells })
+  if (option('sky', '')) {
+    // A Sun, the planet going round it, and a Moon on Earth's tilted orbit.
+    const sun = await send('POST', '/solar/bodies', { kind: 'star', name: 'Sun', body_type: 'star', star_class: 'yellow_dwarf', radius_km: 696000, temperature_k: 5772, mass_kg: 1.989e30, free_values: 0, dyson: flag('dyson') })
+    const sunId = sun.bodies.find((b) => b.name === 'Sun').id
+    const home = await send('POST', '/solar/bodies', { kind: 'planet', parent_id: sunId, name: 'Terra', body_type: 'rocky', radius_km: 6371, orbit_km: 1.496e8, phase: 0, is_main: true })
+    const homeId = home.bodies.find((b) => b.name === 'Terra').id
+    await send('POST', '/solar/bodies', { kind: 'moon', parent_id: homeId, name: 'Luna', body_type: 'rocky', radius_km: 1737, orbit_km: 384400, phase: Number(option('moon', '0')), inclination: 5.14, ascending_node: 90 })
+    await send('POST', '/solar/bodies', { kind: 'planet', parent_id: sunId, name: 'Rubra', body_type: 'rocky', radius_km: 3390, orbit_km: 2.28e8, phase: 200 })
+    await send('POST', '/solar/bodies', { kind: 'planet', parent_id: sunId, name: 'Vesper', body_type: 'rocky', radius_km: 6052, orbit_km: 1.08e8, phase: 330 })
+    if (flag('shell')) await send('PUT', '/solar/enclosure', { enclosed: true })
+  }
   for (const [height, cells] of byHeight) await send('POST', '/planet/relief/paint', { relief: 'mountains', height, cells })
   return story.id
 }
@@ -188,6 +206,38 @@ async function shoot(storyId) {
     } else await page.mouse.move(width - 2, height - 2)
     await page.waitForTimeout(800)
     const file = join(out, `climate_${id}${month ? '_m' + month : ''}${flag('flat') ? '_flat' : ''}.png`)
+    await page.screenshot({ path: file })
+    saved.push(file)
+  }
+  const sky = option('sky', '')
+  if (sky) {
+    const [lon, lat] = sky.split(',').map(Number)
+    const [date, hour] = option('at', '01-01-0001,0').split(',')
+    const [az, alt, fov] = option('look', '180,30,90').split(',').map(Number)
+    await page.evaluate(([lo, la]) => window.__planetMap.openSky(lo, la), [lon, lat])
+    await page.waitForFunction(() => window.__skyView?.ready() && window.__planetMap.climateReady(), null, { timeout: 90000 })
+    await page.evaluate((s) => window.__skyView.set(s), { date, hour: Number(hour), az, alt, fov })
+    await page.mouse.move(width - 2, height - 2)
+    await page.waitForTimeout(1200)
+    const file = join(out, `sky_${date}_${hour}_${az}_${alt}${flag('shell') ? '_shell' : ''}.png`)
+    await page.screenshot({ path: file })
+    saved.push(file)
+    const info = await page.evaluate(() => {
+      const s = window.__skyView.sky()
+      return { sun: [s.sun.alt, s.sun.az].map((x) => +(x * 57.2958).toFixed(1)), bodies: s.bodies.map((b) => [b.body.name, +(b.alt * 57.2958).toFixed(1), +(b.az * 57.2958).toFixed(1), +b.lit.toFixed(2), +b.mag.toFixed(1)]) }
+    })
+    console.log(JSON.stringify(info))
+    await page.keyboard.press('Escape')
+  }
+  if (flag('solar') && sky) {
+    // The planet in the solar system's 3D view, its clouds from its climate.
+    await page.goto(`http://127.0.0.1:${WEB_PORT}/solar-system`)
+    await page.getByRole('button', { name: 'Run', exact: true }).click()
+    await page.waitForFunction(() => window.__solarScene?.skyLoaded() && window.__solarPage)
+    await page.waitForTimeout(6000)
+    await page.evaluate(() => window.__solarScene.view('Terra', { zoom: 1 }))
+    await page.waitForTimeout(1500)
+    const file = join(out, 'solar_terra.png')
     await page.screenshot({ path: file })
     saved.push(file)
   }

@@ -58,14 +58,16 @@ export function genericCloudCover(dir, coverage, seed = 1) {
 
 // ---- The main planet -----------------------------------------------------------------
 // The cloud cover of every hex of the map: (cell) -> 0..1. `grid` is the
-// planet's (planetGrid.js); `body` the main planet. Generic for now, from
-// its type. Later: read the layers (wind currents, mountain ranges) and the
-// humidity and temperature maps here, and return what they make.
-export function mainPlanetCloudCover({ grid, body }) {
+// planet's (planetGrid.js); `body` the main planet. With its worked-out
+// climate (planetClimate.js's ClimateView) and a step (a month), each hex
+// is as cloudy as the climate says there, broken into drifting shapes by
+// the same noise as generic clouds; without, generic for its type.
+export function mainPlanetCloudCover({ grid, body, climate = null, step = null }) {
   const coverage = cloudCoverage(body)
+  const local = climate?.clouds(step) ?? null
   const cache = new Map()
   return (cell) => {
-    if (!cache.has(cell)) cache.set(cell, genericCloudCover(grid.center(cell), coverage, 7))
+    if (!cache.has(cell)) cache.set(cell, genericCloudCover(grid.center(cell), local ? 0.85 * local[cell] : coverage, 7))
     return cache.get(cell)
   }
 }

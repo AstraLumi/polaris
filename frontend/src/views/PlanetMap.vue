@@ -99,6 +99,9 @@
         <p class="hint-line">{{ hint }}</p>
         <p v-if="hoverLatitude" class="lat-line">{{ hoverLatitude }}</p>
         <p v-if="notice" class="error-banner notice">{{ notice }}</p>
+        <button v-if="selectedCell != null && view === 'globe'" type="button" class="btn btn-primary small sky-btn" @click="openSky">
+          ✦ {{ $t('Sky from this hex') }}
+        </button>
       </div>
 
       <MapHoverPane :entries="hoverEntries" />
@@ -150,6 +153,8 @@
         </template>
       </MajorLocationList>
     </div>
+
+    <SkyView v-if="skyCell != null" :cell="skyCell" :frequency="frequency" :climate="climate.view.value" @close="skyCell = null" />
 
     <FeatureModal
       v-if="featureModal"
@@ -206,6 +211,7 @@ import PlanetSwitch from '../components/PlanetSwitch.vue'
 import FeatureModal from '../components/FeatureModal.vue'
 import BiomePalette from '../components/BiomePalette.vue'
 import ClimatePanel from '../components/ClimatePanel.vue'
+import SkyView from '../components/SkyView.vue'
 import { useLayers, layerOf, layerCellColor, mixColor } from '../planetLayers'
 import { biomeOf, landformOf, PLAIN_LAND } from '../biomes'
 import { calendar } from '../calendar'
@@ -398,6 +404,18 @@ async function workOutClimate() {
   climate.run(input, input.height)
 }
 
+// The sky from the picked hex (SkyView.vue); its clouds need the climate.
+const skyCell = ref(null)
+async function openSky() {
+  skyCell.value = selectedCell.value
+  try {
+    await layers.ensure()
+    workOutClimate()
+  } catch {
+    // The sky works without its clouds.
+  }
+}
+
 // A finished climate recolours the map.
 watch(climate.view, () => version.value++)
 watch(climateMonth, () => version.value++)
@@ -583,6 +601,10 @@ function climateColorOf(cell, base) {
       const c = rainColor(v.rain(step)[cell], step == null)
       return land ? c : mixColor(c, SEA_DARK, 0.65)
     }
+    case 'clouds': {
+      const under = land ? landUnder(cell, base) : mixColor('#1b2d4a', SEA_DARK, 0.3)
+      return mixColor(under, '#f4f6fa', 0.9 * Math.max(0, (v.clouds(step)[cell] - 0.1) / 0.9) ** 1.4)
+    }
     case 'zones':
       return land ? koppenColor(v.koppenOf(cell, true, grid)) : mixColor('#1b2d4a', SEA_DARK, 0.4)
     case 'currents':
@@ -732,6 +754,7 @@ function describeClimate(cell) {
   rows.push({ label: 'Coldest to warmest month', value: `${formatTemperature(low[cell], unit)} … ${formatTemperature(high[cell], unit)}` })
   rows.push({ label: step == null ? 'Rain in a year' : 'Rain in the month', value: formatRain(v.rain(step)[cell]) })
   rows.push({ label: 'Humidity', value: `${Math.round(v.humidity(step)[cell] * 100)}%` })
+  rows.push({ label: 'Cloud cover', value: `${Math.round(v.clouds(step)[cell] * 100)}%` })
   const w = v.vectorAt(v.wind(step), p)
   const ws = Math.hypot(w.east, w.north)
   if (ws >= 0.5) rows.push({ label: 'Wind from', value: `${compassPoint(-w.east, -w.north)} · ${Math.round(ws)} m/s` })
@@ -1213,6 +1236,17 @@ async function applyFocus() {
 
 onMounted(async () => {
   window.addEventListener('keydown', onKeyDown)
+  // For the screenshot scripts (tests/visual), on the dev server only.
+  if (import.meta.env.DEV) {
+    window.__planetMap = {
+      openSky(lonDeg, latDeg) {
+        const d = Math.PI / 180
+        selectedCell.value = grid.cellAt([Math.cos(latDeg * d) * Math.cos(lonDeg * d), Math.cos(latDeg * d) * Math.sin(lonDeg * d), Math.sin(latDeg * d)])
+        openSky()
+      },
+      climateReady: () => !!climate.view.value,
+    }
+  }
   await load()
   applyFocus()
 })
@@ -1228,6 +1262,11 @@ watch(() => route.query.focus, applyFocus)
 <style scoped src="../mapChrome.css"></style>
 
 <style scoped>
+.sky-btn {
+  pointer-events: auto;
+  align-self: center;
+}
+
 .proj-select {
   max-width: 7.5rem;
   min-height: 1.9rem;

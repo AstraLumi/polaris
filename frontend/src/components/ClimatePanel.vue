@@ -36,6 +36,10 @@
         </div>
         <p class="note">{{ month == null ? $t('In a year') : $t('In the month') }}</p>
       </template>
+      <template v-else-if="layer === 'clouds'">
+        <div class="bar" style="background: linear-gradient(to right, #24324a, #f4f6fa)"></div>
+        <div class="ticks"><span>{{ $t('Clear') }}</span><span>50%</span><span>{{ $t('Overcast') }}</span></div>
+      </template>
       <ul v-else-if="layer === 'zones'" class="keys">
         <li v-for="k in KOPPEN_LEGEND" :key="k.name">
           <i class="chip" :style="{ background: k.color }"></i>

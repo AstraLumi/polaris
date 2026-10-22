@@ -1,7 +1,7 @@
 import { ref, shallowRef } from 'vue'
 import { biomeOf, PLAIN_LAND, groundHeight } from './biomes'
 import { PlanetGrid, latLon } from './planetGrid'
-import { temperatureAt, precipitationAt, windAt, koppen, gridGeometry, sampleVector, fineField } from './climateModel.js'
+import { temperatureAt, precipitationAt, windAt, cloudsAt, koppen, gridGeometry, sampleVector, fineField } from './climateModel.js'
 import { flowLines } from './flowLines.js'
 import { mainLighting } from './lighting.js'
 
@@ -78,6 +78,76 @@ export function heatOf(solar) {
   const even = lit?.heat.even ?? 0
   if (!(star > 0) && !(even > 0)) return { insolation: 1, evenHeat: 0, assumed: true }
   return { insolation: star, evenHeat: even, assumed: false }
+}
+
+// ---- Without the Map page ------------------------------------------------------------------
+// What the Map page knows, from the raw answers of GET /api/planet and GET
+// /api/planet/layers: whether a hex is land (a continent, or a kingdom,
+// region, unknown land or place on the map) and its biome and terrain.
+export function mapReader(planet, layerData) {
+  const locById = new Map(planet.locations.map((l) => [l.id, l]))
+  const land = new Set()
+  for (const [id, c] of planet.cells) {
+    const l = locById.get(id)
+    if (l?.color && l.realm !== 'ocean') land.add(c)
+  }
+  for (const l of planet.locations) if (l.kind === 'minor' && l.cell != null) land.add(l.cell)
+  const continents = new Set(layerData.features.filter((f) => f.layer === 'continents').map((f) => f.id))
+  for (const [id, c] of layerData.cells) if (continents.has(id)) land.add(c)
+  const tags = { biome: new Map(), relief: new Map() }
+  for (const [c, key, height] of layerData.biomes ?? []) tags.biome.set(c, { key, height })
+  for (const [c, key, height] of layerData.relief ?? []) tags.relief.set(c, { key, height })
+  return { isLand: (c) => land.has(c), tagAt: (kind, c) => tags[kind].get(c) ?? null }
+}
+
+// The main planet's climate worked out once, off the page's thread, from
+// the raw answers (above) and the solar system (GET /api/solar). `calendar`
+// is calendar.js's. Resolves to a ClimateView.
+export function mainPlanetClimate({ planet, layerData, solar, calendar }) {
+  const { isLand, tagAt } = mapReader(planet, layerData)
+  const heat = heatOf(solar)
+  const p = planet.settings.planet
+  const input = climateInput({
+    frequency: p.frequency,
+    isLand,
+    tagAt,
+    tilt: p.tilt,
+    dayHours: calendar.hours_per_day,
+    months: Math.min(24, calendar.months_per_year),
+    daysPerMonth: calendar.days_per_month,
+    planetKm: p.planet_km,
+    insolation: heat.insolation,
+    evenHeat: heat.evenHeat,
+  })
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('./climate.worker.js', import.meta.url), { type: 'module' })
+    worker.onmessage = (e) => {
+      worker.terminate()
+      if (e.data.error) reject(new Error(e.data.error))
+      else resolve(new ClimateView(e.data.result, input.height))
+    }
+    worker.onerror = (e) => {
+      worker.terminate()
+      reject(new Error(e.message || 'the climate could not be worked out'))
+    }
+    worker.postMessage({ id: 1, input })
+  })
+}
+
+// The calendar month (0-based) a moment of the solar system's clock falls
+// in: `days` Earth days since 01-01-0001, a world day `hours_per_day` long.
+export function monthOfDays(days, calendar) {
+  const worldDays = Math.floor(days / ((calendar.hours_per_day || 24) / 24))
+  const perYear = calendar.months_per_year * calendar.days_per_month
+  const inYear = ((worldDays % perYear) + perYear) % perYear
+  return Math.floor(inYear / calendar.days_per_month)
+}
+
+// The climate's step (its months are capped at 24) for a calendar month.
+export function stepOfMonth(month, calendar) {
+  const months = calendar.months_per_year
+  const steps = Math.min(24, months)
+  return month == null ? null : Math.min(steps - 1, Math.floor(((month + 0.5) * steps) / months))
 }
 
 // ---- Running it ---------------------------------------------------------------------------
@@ -157,6 +227,12 @@ export class ClimateView {
       for (let s = 0; s < steps; s++) for (let c = 0; c < coarse.count; c++) mean[c] += coarse.humidity[s * coarse.count + c] / steps
       return fineField(this.result, mean)
     })
+  }
+
+  // How much of the sky is cloud (0 to 1) on every hex, in the month or on
+  // average over the year.
+  clouds(step) {
+    return this.once('c' + step, () => cloudsAt(this.result, step))
   }
 
   // mm on every hex, in the month (or the year).

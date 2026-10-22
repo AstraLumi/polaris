@@ -7,7 +7,7 @@ self.onmessage = (e) => {
   try {
     const result = simulateClimate(input)
     const c = result.coarse
-    const transfer = [c.landFrac, c.temp, c.precip, c.humidity, c.pressure, c.wind, c.current, c.sea, result.interp.idx, result.interp.w].map((a) => a.buffer)
+    const transfer = [c.landFrac, c.temp, c.precip, c.humidity, c.clouds, c.pressure, c.wind, c.current, c.sea, result.interp.idx, result.interp.w].map((a) => a.buffer)
     self.postMessage({ id, result }, transfer)
   } catch (err) {
     self.postMessage({ id, error: String(err?.message || err) })
