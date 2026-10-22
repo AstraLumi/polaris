@@ -31,6 +31,7 @@ const routes = [
   { path: '/stories', name: 'stories', component: StoryPicker, meta: { bare: true, title: tr('Stories') } },
   { path: '/', name: 'home', component: Home, meta: { title: tr('Home') } },
   { path: '/characters', name: 'characters', component: Characters, meta: { title: tr('Characters') } },
+  { path: '/characters/heights', name: 'height-chart', component: () => import('./views/HeightChart.vue'), meta: { title: tr('Height chart') } },
   { path: '/characters/:id', name: 'character-view', component: CharacterView, meta: { title: tr('Characters') }, props: true },
   { path: '/characters/:id/family', name: 'family-tree', component: FamilyTree, meta: { title: tr('Family tree') }, props: true },
   { path: '/characters/:id/versions', name: 'version-list', component: VersionList, meta: { title: tr('Versions') }, props: true },

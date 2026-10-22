@@ -5,9 +5,26 @@ import (
 	"testing"
 )
 
+// rollBackSchema40 turns a fresh database back into schema 39: body types
+// without outlines.
+func rollBackSchema40(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, q := range []string{
+		`ALTER TABLE body_types DROP COLUMN outline_sex`,
+		`ALTER TABLE body_types DROP COLUMN outline_age`,
+		`ALTER TABLE body_types DROP COLUMN outline_build`,
+		`UPDATE schema_meta SET value = '39' WHERE key = 'schema_version'`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+}
+
 // rollBackSchema39 turns a fresh database back into schema 38: no relief.
 func rollBackSchema39(t *testing.T, db *sql.DB) {
 	t.Helper()
+	rollBackSchema40(t, db)
 	for _, q := range []string{
 		`DROP TABLE cell_relief`,
 		`UPDATE schema_meta SET value = '38' WHERE key = 'schema_version'`,

@@ -120,7 +120,12 @@
       <AssetEmptyState v-if="!loading && bodyTypes.length === 0" kind="bodyTypes" />
       <ul class="asset-list">
         <li v-for="b in bodyTypes" :key="b.id" class="asset-row glass-panel">
-          <span class="asset-name">{{ b.name }}</span>
+          <span class="asset-name-group">
+            <svg class="body-outline" viewBox="-14 -1 28 42" aria-hidden="true">
+              <OutlineFigure :outline="outlineFor(b.outline)" :ground="40" :height="40" :line="1" />
+            </svg>
+            <span class="asset-name">{{ b.name }}</span>
+          </span>
           <div class="asset-actions">
             <RowActions kind="bodyType" :item="b" />
           </div>
@@ -265,6 +270,8 @@ import {
   fetchCatalogs, classesApi, racesApi, bodyTypesApi, specializationsApi, subclassesApi, spellsApi, gearApi,
 } from '../api'
 import SimpleAssetFormModal from '../components/SimpleAssetFormModal.vue'
+import OutlineFigure from '../components/OutlineFigure.vue'
+import { outlineFor } from '../bodyOutlines'
 import IconImage from '../components/IconImage.vue'
 import SpecializationFormModal from '../components/SpecializationFormModal.vue'
 import SubclassFormModal from '../components/SubclassFormModal.vue'
@@ -610,6 +617,12 @@ onMounted(load)
   align-items: center;
   gap: 0.6rem;
   flex-wrap: wrap;
+}
+
+.body-outline {
+  width: 1.3rem;
+  height: 2rem;
+  flex-shrink: 0;
 }
 
 .asset-name {

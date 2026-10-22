@@ -17,6 +17,14 @@ export async function fetchCharacters() {
   return res.json()
 }
 
+// Every version's height, gender, age and body type, and the body types'
+// outlines, for the height chart.
+export async function fetchCharacterHeights() {
+  const res = await fetch(`${BASE}/characters/heights`)
+  if (!res.ok) throw apiError('failed to load characters')
+  return res.json()
+}
+
 export async function createCharacter({ name, nickname, level, className, subclassName, specializationName, versionDate, versionReference, picture }) {
   const formData = new FormData()
   formData.append('name', name)

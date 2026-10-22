@@ -81,6 +81,7 @@ type assetPayload struct {
 	Name      string             `json:"name"`
 	Modifiers map[string]float64 `json:"modifiers"`
 	KingdomID *int64             `json:"kingdom_id"` // races only
+	Outline   *bodyOutline       `json:"outline"`    // body types only
 }
 
 // kingdomRef is the kingdom a race or specialization is native to: the id
@@ -116,6 +117,8 @@ type simpleAssetDetail struct {
 	// The kingdom a race is native to (races only).
 	KingdomID   *int64 `json:"kingdom_id"`
 	KingdomName string `json:"kingdom_name"`
+	// The figure the height chart draws (body types only).
+	Outline *bodyOutline `json:"outline,omitempty"`
 }
 
 func getSimpleAssetHandler(db *sql.DB, table, sourceType string) http.HandlerFunc {
@@ -141,6 +144,10 @@ func getSimpleAssetHandler(db *sql.DB, table, sourceType string) http.HandlerFun
 		if table == "races" {
 			d.KingdomID, d.KingdomName = kingdomOf(db, table, d.ID)
 		}
+		if table == "body_types" {
+			o := loadBodyOutline(db, d.ID)
+			d.Outline = &o
+		}
 		writeJSON(w, d)
 	}
 }
@@ -158,6 +165,11 @@ func createSimpleAssetHandler(db *sql.DB, table, sourceType string) http.Handler
 			return
 		}
 
+		if payload.Outline != nil && !payload.Outline.valid() {
+			http.Error(w, "unknown outline", http.StatusBadRequest)
+			return
+		}
+
 		tx, err := db.Begin()
 		if err != nil {
 			http.Error(w, "failed to start transaction", http.StatusInternalServerError)
@@ -170,6 +182,13 @@ func createSimpleAssetHandler(db *sql.DB, table, sourceType string) http.Handler
 			return
 		}
 		id, _ := res.LastInsertId()
+		if table == "body_types" && payload.Outline != nil {
+			if err := saveBodyOutline(tx, id, *payload.Outline); err != nil {
+				tx.Rollback()
+				http.Error(w, "failed to save", http.StatusInternalServerError)
+				return
+			}
+		}
 		if table == "races" {
 			if _, err := tx.Exec(`UPDATE races SET kingdom_id = ? WHERE id = ?`, kingdomRef(db, payload.KingdomID), id); err != nil {
 				tx.Rollback()
@@ -206,6 +225,11 @@ func updateSimpleAssetHandler(db *sql.DB, table, sourceType string) http.Handler
 			return
 		}
 
+		if payload.Outline != nil && !payload.Outline.valid() {
+			http.Error(w, "unknown outline", http.StatusBadRequest)
+			return
+		}
+
 		tx, err := db.Begin()
 		if err != nil {
 			http.Error(w, "failed to start transaction", http.StatusInternalServerError)
@@ -218,6 +242,13 @@ func updateSimpleAssetHandler(db *sql.DB, table, sourceType string) http.Handler
 		}
 		var assetID int64
 		tx.QueryRow(`SELECT id FROM `+table+` WHERE id = ?`, id).Scan(&assetID)
+		if table == "body_types" && payload.Outline != nil {
+			if err := saveBodyOutline(tx, assetID, *payload.Outline); err != nil {
+				tx.Rollback()
+				http.Error(w, "failed to save", http.StatusInternalServerError)
+				return
+			}
+		}
 		if table == "races" {
 			if _, err := tx.Exec(`UPDATE races SET kingdom_id = ? WHERE id = ?`, kingdomRef(db, payload.KingdomID), assetID); err != nil {
 				tx.Rollback()

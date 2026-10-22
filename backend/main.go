@@ -76,6 +76,8 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	mux.HandleFunc("POST /api/characters", createCharacterHandler(db, uploadsDir))
 	mux.HandleFunc("DELETE /api/characters", deleteCharactersHandler(db, uploadsDir))
 	mux.HandleFunc("GET /api/characters/{id}/current", getCurrentVersionHandler(db))
+	// Every version's height and figure, for the height chart (bodyoutlines.go).
+	mux.HandleFunc("GET /api/characters/heights", characterHeightsHandler(db))
 	mux.HandleFunc("PUT /api/characters/{id}/shared", updateSharedCharacterHandler(db))
 
 	// Lookup catalogs, for the combo-box fields on the character forms.
@@ -83,7 +85,7 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	mux.HandleFunc("GET /api/subclasses", listSubclassesHandler(db))
 	mux.HandleFunc("GET /api/specializations", listClassScopedLookupHandler(db, "specializations"))
 	mux.HandleFunc("GET /api/races", listSimpleLookupHandler(db, "races"))
-	mux.HandleFunc("GET /api/body-types", listSimpleLookupHandler(db, "body_types"))
+	mux.HandleFunc("GET /api/body-types", listBodyTypesHandler(db))
 
 	// Character Assets: full CRUD + stat modifiers for every asset type
 	// except Spells.

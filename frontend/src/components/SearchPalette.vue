@@ -66,6 +66,7 @@ const router = useRouter()
 const PAGES = [
   { name: tr('Home'), path: '/' },
   { name: tr('Characters'), path: '/characters' },
+  { name: tr('Height chart'), path: '/characters/heights' },
   { name: tr('Factions'), path: '/factions' },
   { name: tr('Chapters'), path: '/chapters' },
   { name: tr('Character Assets'), path: '/assets' },

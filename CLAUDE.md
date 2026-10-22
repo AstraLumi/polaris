@@ -32,6 +32,7 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/lighting.test.mjs
     node frontend/tests/skyFrames.test.mjs
     node frontend/tests/starCatalog.test.mjs
+    node frontend/tests/bodyOutlines.test.mjs
 
 Run all of these before committing.
 
@@ -169,6 +170,13 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   (`frontend/public/sky/default-sky.jpg`, also the downloadable template:
   `cd backend && go run ./cmd/skygen ../frontend/public/sky/default-sky.jpg`),
   and by the sky shader in `PlanetGlobe.vue`. Change both together.
+- **The height chart** (`HeightChart.vue`, `/characters/heights`) draws
+  each picked version at its height with a plain outline from
+  `frontend/src/bodyOutlines.js` (sex, age, build; pure, tested). A body
+  type stores its outline (`outline_sex/age/build` on `body_types`,
+  schema 40, `backend/bodyoutlines.go`); an empty part comes from the
+  character (gender, age). The keys exist in both files: change both.
+  Screenshots: `node frontend/tests/visual/heightShots.mjs [--ft]`.
 - Birth date, blood type and Born in belong to the character (`characters`
   columns, schema 23), not to a version; the version form edits them for
   all versions.

@@ -27,6 +27,8 @@
           kingdom-only
         />
 
+        <OutlinePicker v-if="kind === 'body type'" v-model="outline" />
+
         <p class="hint">
           {{ text.hint }}
         </p>
@@ -52,6 +54,7 @@ import { t } from '../i18n'
 import ModifierForm from './ModifierForm.vue'
 import IconImage from './IconImage.vue'
 import LocationSelect from './LocationSelect.vue'
+import OutlinePicker from './OutlinePicker.vue'
 import { fetchLocationOptions } from '../api'
 
 const props = defineProps({
@@ -95,6 +98,8 @@ const name = ref(props.asset?.name ?? '')
 const modifiers = ref({ ...(props.asset?.modifiers ?? {}) })
 // Races: the kingdom they're native to.
 const kingdomId = ref(props.asset?.kingdom_id ?? null)
+// Body types: the figure the height chart draws.
+const outline = ref({ sex: '', age: '', build: '', ...(props.asset?.outline ?? {}) })
 const locationOptions = ref([])
 if (props.kind === 'race') fetchLocationOptions().then((o) => (locationOptions.value = o))
 const submitting = ref(false)
@@ -143,7 +148,7 @@ async function submit() {
   submitting.value = true
   error.value = ''
   try {
-    const extra = props.kind === 'race' ? { kingdom_id: kingdomId.value } : {}
+    const extra = props.kind === 'race' ? { kingdom_id: kingdomId.value } : props.kind === 'body type' ? { outline: outline.value } : {}
     const saved = props.asset
       ? await props.api.update(props.asset.id, name.value.trim(), modifiers.value, extra)
       : await props.api.create(name.value.trim(), modifiers.value, extra)

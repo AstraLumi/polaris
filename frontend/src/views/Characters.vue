@@ -16,6 +16,7 @@
         >
           {{ $t('Delete selected ({n})', { n: selectedIds.size }) }}
         </button>
+        <router-link v-if="!selectMode && characters.length" to="/characters/heights" class="btn btn-ghost">{{ $t('Height chart') }}</router-link>
         <button class="btn btn-ghost" @click="toggleSelectMode">
           {{ selectMode ? $t('Cancel') : $t('Delete characters') }}
         </button>
