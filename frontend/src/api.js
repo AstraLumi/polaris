@@ -505,6 +505,8 @@ export const solarApi = {
   update: (id, body) => mapRequest(`/solar/bodies/${id}`, jsonBody('PUT', body), 'failed to save the body'),
   remove: (id) => mapRequest(`/solar/bodies/${id}`, { method: 'DELETE' }, 'failed to delete the body'),
   setName: (name) => mapRequest('/solar/system', jsonBody('PUT', { name }), 'failed to save the name'),
+  // The system inside a shell that is its sky (lighting.js).
+  setEnclosed: (enclosed) => mapRequest('/solar/enclosure', jsonBody('PUT', { enclosed }), 'failed to save the shell'),
   // A planet's own map (not the main one's): { body_id, frequency, cells: [[cell, color]], colors }.
   bodyMap: (id) => mapRequest(`/solar/bodies/${id}/map`, undefined, 'failed to load the map'),
   paintBody: (id, color, cells) => mapRequest(`/solar/bodies/${id}/map/paint`, jsonBody('POST', { color, cells }), 'failed to paint'),

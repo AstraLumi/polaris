@@ -82,6 +82,50 @@ func updateSystemHandler(db *sql.DB) http.HandlerFunc {
 	}
 }
 
+// ---- The shell round the system ------------------------------------------------------
+
+// The whole system can sit inside a shell whose inside is the sky picture:
+// it lights everything evenly on the main planet's day and night (one
+// global cycle, no time zones), and by night gives only the light of its
+// painted stars. frontend/src/lighting.js works out what that lights; this
+// only keeps whether it is there.
+const settingEnclosed = "solar_enclosed"
+
+func systemEnclosed(db *sql.DB) bool {
+	var raw string
+	return db.QueryRow(`SELECT value FROM app_settings WHERE key = ?`, settingEnclosed).Scan(&raw) == nil && raw == "1"
+}
+
+// updateEnclosureHandler turns the shell on or off and answers with the
+// solar system.
+func updateEnclosureHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Enclosed *bool `json:"enclosed"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil || in.Enclosed == nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		value := "0"
+		if *in.Enclosed {
+			value = "1"
+		}
+		if _, err := db.Exec(`INSERT INTO app_settings (key, value) VALUES (?, ?)
+			ON CONFLICT(key) DO UPDATE SET value = excluded.value`, settingEnclosed, value); err != nil {
+			log.Printf("save enclosure: %v", err)
+			http.Error(w, "failed to save the shell", http.StatusInternalServerError)
+			return
+		}
+		s, err := loadSolarSystem(db)
+		if err != nil {
+			http.Error(w, "saved, but failed to reload the solar system", http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, s)
+	}
+}
+
 // ---- Body maps ----------------------------------------------------------------------
 
 // bodyGrid is the grid a body's map is on: the one it was painted on, else

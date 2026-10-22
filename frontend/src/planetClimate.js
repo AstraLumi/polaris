@@ -3,7 +3,7 @@ import { biomeOf, PLAIN_LAND, groundHeight } from './biomes'
 import { PlanetGrid, latLon } from './planetGrid'
 import { temperatureAt, precipitationAt, windAt, koppen, gridGeometry, sampleVector } from './climateModel.js'
 import { flowLines } from './flowLines.js'
-import { luminosity, AU_KM } from './stars'
+import { mainLighting } from './lighting.js'
 
 // The main planet's climate on the Map page: what the model
 // (climateModel.js) is given from the map, the continents and the biomes,
@@ -15,7 +15,7 @@ import { luminosity, AU_KM } from './stars'
 // isLand(cell) and biomeAt(cell) -> { biome, height } | null come from the
 // page. Answers the model's input, and the ground's height on every cell
 // (for the temperature up high).
-export function climateInput({ frequency, isLand, biomeAt, tilt, dayHours, months, daysPerMonth, planetKm, insolation }) {
+export function climateInput({ frequency, isLand, biomeAt, tilt, dayHours, months, daysPerMonth, planetKm, insolation, evenHeat = 0 }) {
   const count = new PlanetGrid(frequency).count
   const land = new Uint8Array(count)
   const veg = new Float32Array(count)
@@ -43,6 +43,7 @@ export function climateInput({ frequency, isLand, biomeAt, tilt, dayHours, month
     dayHours: dayHours || 24,
     steps: months,
     insolation,
+    evenHeat,
     radiusKm: planetKm / (2 * Math.PI),
     monthDays: (daysPerMonth * (dayHours || 24)) / 24,
   }
@@ -57,28 +58,21 @@ export function inputKey(input) {
   }
   for (const arr of [input.land, input.water]) for (let i = 0; i < arr.length; i++) eat(arr[i])
   for (const arr of [input.veg, input.height]) for (let i = 0; i < arr.length; i += 1) eat(Math.round(arr[i] * 100))
-  return [input.frequency, input.tilt, input.dayHours, input.steps, input.insolation.toFixed(4), input.radiusKm.toFixed(1), input.monthDays.toFixed(3), h >>> 0].join('|')
+  return [input.frequency, input.tilt, input.dayHours, input.steps, input.insolation.toFixed(4), input.evenHeat.toFixed(4), input.radiusKm.toFixed(1), input.monthDays.toFixed(3), h >>> 0].join('|')
 }
 
-// How much sunlight the main planet gets, relative to Earth, from the
-// solar system (GET /api/solar): its star's light over its distance
-// squared. A planet with no star, or a star giving no light (a black hole,
-// a Dyson sphere), is given Earth's, and `assumed` says so.
-export function sunlightOf(solar) {
-  const bodies = solar?.bodies ?? []
-  const byId = new Map(bodies.map((b) => [b.id, b]))
-  let body = bodies.find((b) => b.is_main)
-  while (body) {
-    const parent = byId.get(body.parent_id)
-    if (!parent) break
-    if (parent.kind === 'star') {
-      const l = luminosity(parent)
-      if (l > 0 && body.orbit_km > 0) return { insolation: l / (body.orbit_km / AU_KM) ** 2, assumed: false }
-      break
-    }
-    body = parent
-  }
-  return { insolation: 1, assumed: true }
+// How much heat the main planet gets, relative to Earth's sunlight, from
+// the solar system (GET /api/solar) through the lighting model
+// (lighting.js): the star's, directional (a Dyson sphere's still comes
+// through its vents), and any even warmth of an enclosing shell. A planet
+// warmed by nothing (no star, a black hole) is given Earth's, and
+// `assumed` says so.
+export function heatOf(solar) {
+  const lit = mainLighting(solar)
+  const star = lit?.heat.star ?? 0
+  const even = lit?.heat.even ?? 0
+  if (!(star > 0) && !(even > 0)) return { insolation: 1, evenHeat: 0, assumed: true }
+  return { insolation: star, evenHeat: even, assumed: false }
 }
 
 // ---- Running it ---------------------------------------------------------------------------

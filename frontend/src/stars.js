@@ -78,22 +78,31 @@ export function fitToClass(star) {
   return out
 }
 
-// How bright a star is, in Suns: its surface times its temperature to the
-// fourth (Stefan–Boltzmann). A black hole gives no light of its own.
-export function luminosity(star) {
-  // Closed in a Dyson sphere, none of it gets out.
-  if (star.dyson) return 0
+// All a star gives off, in Suns: its surface times its temperature to the
+// fourth (Stefan–Boltzmann). A black hole gives nothing of its own.
+export function radiantOutput(star) {
   const t = star.temperature_k || 0
   if (!(t > 0) || !(star.radius_km > 0)) return 0
   const r = star.radius_km * 1000
   return (4 * Math.PI * r * r * SIGMA * t ** 4) / SUN_LUMINOSITY
 }
 
+// How bright a star looks, in Suns. Closed in a Dyson sphere, none of its
+// light gets out.
+export const luminosity = (star) => (star.dyson ? 0 : radiantOutput(star))
+
+// How much heat a star sends out, in Suns. A Dyson sphere stops the light
+// but not the heat: what it soaks up leaves through its vents (and its
+// warm skin), still from the star's place. `vents` is the part that gets
+// out (1 when not set: all of it, as the sphere must shed it somewhere).
+export const heatOutput = (star) => radiantOutput(star) * (star.dyson ? Math.max(0, Math.min(1, star.vents ?? 1)) : 1)
+
 // The habitable ("Goldilocks") zone: where a planet like Earth gets the
-// light to keep water liquid, in km from the star (Kasting's conservative
-// edges, 1.1 and 0.53 of the light Earth gets). Null with no light.
+// warmth to keep water liquid, in km from the star (Kasting's conservative
+// edges, 1.1 and 0.53 of what Earth gets). It follows the star's heat, so
+// a Dyson sphere's planets keep theirs. Null with no heat.
 export function habitableZone(star) {
-  const l = luminosity(star)
+  const l = heatOutput(star)
   if (!(l > 0)) return null
   return { inner_km: Math.sqrt(l / 1.1) * AU_KM, outer_km: Math.sqrt(l / 0.53) * AU_KM }
 }

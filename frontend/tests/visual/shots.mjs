@@ -15,6 +15,8 @@
 //     --star <class>   the star's class: yellow_dwarf (default), red_giant,
 //                      white_dwarf, brown_dwarf, neutron_star, black_hole
 //     --dyson          the star inside a Dyson sphere
+//     --shell <hour>   the system inside its shell sky (lighting.js), at
+//                      that hour of the main planet's day (12 is noon)
 //     --set <changes>  change the test system: Body.field=value, comma
 //                      separated (Luna.phase=200 puts the Moon between Home
 //                      and the Sun: an eclipse)
@@ -187,6 +189,14 @@ async function shoot(storyId) {
   // The pointer out of the way: no tooltips in the pictures.
   await page.mouse.move(width - 2, height - 2)
   if (flag('gravity')) await page.evaluate(() => window.__solarPage.live(true))
+  if (option('shell', '') !== '') {
+    // The shell's cycle runs on the clock: start at the hour asked for.
+    const hour = Number(option('shell', '6'))
+    await page.evaluate((h) => {
+      window.__solarPage.enclose(true)
+      window.__solarPage.moveTo(window.__solarPage.days() + h / 24)
+    }, hour)
+  }
   if (days > 0) {
     // Gravity gets there a little at a time: keep asking.
     await page.evaluate(async (target) => {

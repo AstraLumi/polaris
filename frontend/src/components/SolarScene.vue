@@ -25,9 +25,10 @@ import { habitableZone, luminosity } from '../stars'
 import { createGlobeMesh } from '../three/globeMesh'
 import { createStar, createPlanetMaterial, createAtmosphere, createClouds, createRings } from '../three/bodyShaders'
 import { cloudCoverage, genericCloudCover, mainPlanetCloudCover } from '../climate'
-import { loadSkyDome, disposeSkyDome } from '../three/skyDome'
+import { loadSkyDome, disposeSkyDome, setSkyGlow } from '../three/skyDome'
 import { createLensPass, HOLE_LAYER } from '../three/lensPass'
-import { setOccluders, setRingShadow } from '../three/shadows'
+import { setOccluders, setRingShadow, setFill } from '../three/shadows'
+import { enclosureOf, shellGlow, shellLight } from '../lighting'
 import { shadowCasters } from '../eclipses'
 
 // The solar system in 3D: the star at the centre, each body on its orbit at
@@ -48,6 +49,9 @@ const props = defineProps({
   // picked body can orbit what it orbits.
   showZone: { type: Boolean, default: true },
   showLimits: { type: Boolean, default: true },
+  // A shell round the whole system, the sky itself, that glows by day
+  // (lighting.js); null for none.
+  enclosure: { type: Object, default: null },
   // Where each body is (id -> km from what it orbits: solarSimulation.js);
   // null to follow the orbits as set, at `days`.
   relative: { type: Function, default: null },
@@ -433,6 +437,7 @@ function buildGlobes() {
 // The bodies compiled for moving (orbits.js), made again whenever they
 // change, and the arrays each frame writes into.
 let system = null
+const fillColor = new THREE.Color(1, 1, 1)
 let relKm = null // each body from its parent, km
 let drawn = null // each body in the scene
 const positions = new Map() // body id -> where it is drawn (the same vector every frame)
@@ -525,15 +530,25 @@ function render() {
     g.material.uniforms.uLight.value.copy(g.mesh.worldToLocal(tmp.copy(sun)).normalize())
   }
   // A star with no light of its own (a black hole, or one inside a Dyson
-  // sphere) leaves its planets dark.
+  // sphere) leaves its planets dark, unless the shell lights them from all
+  // round (lighting.js; the same for every body, at the clock's hour of the
+  // shell's day; full daylight is about 0.6 of Earth's sun). The shell is
+  // the sky: it glows by day too.
   const power = star && luminosity(star) > 0 ? 1 : 0
+  const shell = enclosureOf(props.enclosure)
+  const hours = props.days * 24
+  const fill = shell.kind === 'shell' ? Math.min(1.5, shellLight(shell, hours) / 0.6) : 0
+  if (shell.kind === 'shell') fillColor.set(shell.color)
+  if (skyMesh) setSkyGlow(skyMesh, shell.kind === 'shell' ? shellGlow(shell, hours) : 0, fillColor)
   for (const m of sunLit) {
     m.uniforms.uSun.value.copy(sun)
     m.uniforms.uPower.value = power
+    setFill(m.uniforms, fill, fillColor)
   }
   for (const g of globeViews.values()) {
     g.material.uniforms.uPower.value = power
     g.material.uniforms.uSun.value.copy(sun)
+    setFill(g.material.uniforms, fill, fillColor)
   }
   castShadows(star, sun)
   // Clouds drift with the clock (slowly: a turn of the pattern is years).
@@ -731,6 +746,7 @@ watch(() => [props.showZone, props.showLimits], () => {
   place()
 })
 watch(() => props.sky, loadSky)
+watch(() => props.enclosure, requestRender, { deep: true })
 
 defineExpose({ frame: () => {
   follow = null

@@ -42,6 +42,30 @@ func TestSolarSystemWiki(t *testing.T) {
 	}
 }
 
+// The shell round the system is a switch kept with the story.
+func TestSolarEnclosure(t *testing.T) {
+	_, h := newTestServer(t)
+	st := createStory(t, h, map[string]string{"name": "Shelled"})
+	base := "/api/s/" + st.ID + "/solar"
+	_, s := solarSave(t, h, "GET", base, ``)
+	if s.Enclosed {
+		t.Fatal("a new system is open")
+	}
+	if _, s = solarSave(t, h, "PUT", base+"/enclosure", `{"enclosed":true}`); !s.Enclosed {
+		t.Fatal("not enclosed after turning it on")
+	}
+	// Naming the system leaves it as it is.
+	if _, s = solarSave(t, h, "PUT", base+"/system", `{"name":"Kept"}`); !s.Enclosed {
+		t.Fatal("naming opened the shell")
+	}
+	if _, s = solarSave(t, h, "PUT", base+"/enclosure", `{"enclosed":false}`); s.Enclosed {
+		t.Fatal("still enclosed after turning it off")
+	}
+	if rec := do(t, h, "PUT", base+"/enclosure", strings.NewReader(`{}`), "application/json"); rec.Code != 400 {
+		t.Errorf("no value: %d", rec.Code)
+	}
+}
+
 // Every planet but the main one has a map to paint; it keeps the grid it
 // was first painted on.
 func TestBodyMaps(t *testing.T) {

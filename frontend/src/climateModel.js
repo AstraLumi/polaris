@@ -278,7 +278,11 @@ export const vapourPressure = (t) => 6.112 * Math.exp((17.62 * t) / (243.12 + t)
 //   tilt        axial tilt, degrees
 //   dayHours    the length of the day
 //   steps       months in the year (worked out as up to 24 steps)
-//   insolation  sunlight relative to Earth's (1 = Earth)
+//   insolation  the star's heat relative to Earth's sunlight (1 = Earth):
+//               directional, so it follows latitude, day and season
+//   evenHeat    heat from all round (an enclosing shell's warm light),
+//               relative to Earth's sunlight, a mean over the day: the same
+//               at every latitude and in every season (lighting.js)
 //   radiusKm    the planet's radius
 //   monthDays   Earth days in a month (for rain per month)
 export function simulateClimate(input) {
@@ -361,7 +365,8 @@ export function simulateClimate(input) {
   const decl = new Float64Array(steps)
   for (let k = 0; k < steps; k++) decl[k] = declination(tilt, yearPhase(k, steps))
   const sun = new Float64Array(steps * n)
-  for (let k = 0; k < steps; k++) for (let c = 0; c < n; c++) sun[k * n + c] = insolation(g.lat[c], decl[k], flux)
+  const even = S_EARTH * Math.max(0, input.evenHeat ?? 0)
+  for (let k = 0; k < steps; k++) for (let c = 0; c < n; c++) sun[k * n + c] = insolation(g.lat[c], decl[k], flux) + even
   const sunYear = new Float64Array(n)
   for (let c = 0; c < n; c++) {
     let s = 0

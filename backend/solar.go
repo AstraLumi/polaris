@@ -162,6 +162,8 @@ type celestialBody struct {
 type solarSystem struct {
 	Name   string          `json:"name"`
 	Bodies []celestialBody `json:"bodies"`
+	// Inside a shell that is the sky (bodymaps.go).
+	Enclosed bool `json:"enclosed"`
 	Main   struct {
 		RadiusKm float64 `json:"radius_km"`
 		Tilt     float64 `json:"tilt"`
@@ -179,6 +181,7 @@ func loadSolarSystem(db *sql.DB) (solarSystem, error) {
 	out.Main.Tilt = m.Planet.Tilt
 	out.Main.Globe = m.Mode == "3d"
 	out.Name = systemName(db)
+	out.Enclosed = systemEnclosed(db)
 	cal := loadCalendar(db)
 	out.Main.DayHours = cal.HoursPerDay
 	out.Main.YearDays = float64(cal.MonthsPerYear * cal.DaysPerMonth)

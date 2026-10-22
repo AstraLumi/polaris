@@ -174,6 +174,29 @@ usable.
    extinction and the sky's brightness hiding faint stars, moonlight.
 5. **Lighting models**: `enclosure` (none, star, shell), the shell's
    cycle and look, used by the solar view, the sky view and climate.
+   Groundwork done: `lighting.js` keeps light and heat apart. The star
+   lights and warms from its place; a Dyson sphere stops its light but
+   not its heat (it leaves through the vents, `heatOutput` in
+   `stars.js`, `vents` 0–1); a shell lights everything evenly on its own
+   cycle, warming only as much as its `warmth` says (the author's world:
+   cold light from the shell, heat from the vented star). The climate
+   takes the star's heat as directional and the shell's as even
+   (`evenHeat`); the solar view's shaders take the shell's light as
+   `uFill` (`three/shadows.js`).
+   The shell is a switch (Solar system → "Inside a shell", stored as
+   `solar_enclosed` in the story's settings): the sky picture *is* the
+   shell. It lights on one global day and night, the main planet's
+   (midnight at the start of each day, lit 6:00 to 18:00 on a 24-hour
+   day); by day the whole sky glows and its painted stars fade, by night
+   only the painted stars give light (`nightGlow`). In the solar view the
+   sky picture glows with it. Still to do: the vents as a setting (today
+   all the heat gets out), the shell's brightness and colour as settings.
+   **Moonlight in the sky view** (`moonlightOf`): with no shell a moon
+   reflects the star from one side and has phases. Inside the shell it is
+   lit from all round, evenly, with no phases: by the glowing shell by
+   day, and at night only by the shell's painted starlight, so a night
+   moon is as dim as the starlight makes it. A star that still shines
+   inside the shell (no Dyson sphere) adds its light from one side.
 6. **Climate** (`climate.js` grows, in a worker): sunlight per latitude
    and season from the lighting model; temperature from it, altitude
    (mountain layer), oceans (depth layer) and land cover; prevailing

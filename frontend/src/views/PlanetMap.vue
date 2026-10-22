@@ -209,7 +209,7 @@ import ClimatePanel from '../components/ClimatePanel.vue'
 import { useLayers, layerOf, layerCellColor, mixColor } from '../planetLayers'
 import { biomeOf, PLAIN_LAND } from '../biomes'
 import { calendar } from '../calendar'
-import { usePlanetClimate, climateInput, sunlightOf } from '../planetClimate'
+import { usePlanetClimate, climateInput, heatOf } from '../planetClimate'
 import { temperatureColor, rainColor, koppenColor, koppenName, formatTemperature, formatRain, compassPoint } from '../climateColors'
 
 // The map when the story is a planet (backend/planetmap.go): painted on the
@@ -358,7 +358,7 @@ function isLand(cell) {
 }
 
 const climate = usePlanetClimate()
-const sunlight = ref({ insolation: 1, assumed: true })
+const sunlight = ref({ insolation: 1, evenHeat: 0, assumed: true })
 let solarLoaded = false
 
 const monthStep = (m) => {
@@ -372,7 +372,7 @@ async function workOutClimate() {
   if (!solarLoaded) {
     solarLoaded = true
     try {
-      sunlight.value = sunlightOf(await solarApi.get())
+      sunlight.value = heatOf(await solarApi.get())
     } catch {
       // No solar system to read: Earth's sunlight.
     }
@@ -387,6 +387,7 @@ async function workOutClimate() {
     daysPerMonth: calendar.days_per_month,
     planetKm: worldMap.planet.planet_km,
     insolation: sunlight.value.insolation,
+    evenHeat: sunlight.value.evenHeat,
   })
   climate.run(input, input.height)
 }

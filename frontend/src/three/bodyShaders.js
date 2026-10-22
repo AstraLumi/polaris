@@ -192,7 +192,8 @@ void main() {
   vec3 night = base * 0.05 + vec3(0.01, 0.015, 0.03);
   // In the shadow of a body with air: the dim red of an eclipse.
   night += base * EARTHSHADOW * airGlow * (1.0 - sun) * smoothstep(-0.12, 0.35, d) * uPower;
-  gl_FragColor = vec4(mix(night, base * (0.25 + 0.85 * max(d, 0.0)) * uLightColor, day), 1.0);
+  vec3 c = mix(night, base * (0.25 + 0.85 * max(d, 0.0)) * uLightColor, day);
+  gl_FragColor = vec4(c + base * 0.9 * uFill * uFillColor, 1.0);
 }`
 
 export function createPlanetMaterial(color, { bands = false } = {}) {
@@ -217,7 +218,7 @@ void main() {
   vec3 n = normalize(vNormal);
   float rim = pow(1.0 - max(dot(n, normalize(cameraPosition - vWorld)), 0.0), 3.0);
   float lit = smoothstep(-0.3, 0.45, dot(n, normalize(uSun - vWorld))) * sunlight(vWorld, uSun);
-  gl_FragColor = vec4(uColor * rim * (0.04 + 0.08 * uPower + 1.1 * lit * uPower * uLightColor), 1.0);
+  gl_FragColor = vec4(uColor * rim * (0.04 + 0.08 * uPower + 1.1 * lit * uPower * uLightColor + 0.7 * uFill * uFillColor), 1.0);
 }`
 
 export function createAtmosphere(r, color) {
@@ -281,6 +282,7 @@ void main() {
   float d = dot(normalize(vNormal), normalize(uSun - vWorld));
   float day = smoothstep(-0.15, 0.3, d) * uPower * sunlight(vWorld, uSun) * ringShade(vWorld, uSun);
   vec3 c = mix(vec3(0.02, 0.03, 0.06), vec3(0.6 + 0.4 * max(d, 0.0)) * uLightColor, day);
+  c += vec3(0.75) * uFill * uFillColor;
   gl_FragColor = vec4(c, a * 0.88);
 }`
 
@@ -338,7 +340,7 @@ varying vec3 vLocal;
 ${SHADOW_GLSL}
 void main() {
   float a = ringAlpha((length(vLocal.xy) - uInner) / (uOuter - uInner));
-  vec3 c = uColor * (0.08 + 0.92 * uPower * sunlight(vWorld, uSun) * uLightColor);
+  vec3 c = uColor * (0.08 + 0.92 * uPower * sunlight(vWorld, uSun) * uLightColor + 0.9 * uFill * uFillColor);
   gl_FragColor = vec4(c, a);
 }`
 

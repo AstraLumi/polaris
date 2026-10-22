@@ -191,6 +191,27 @@ assert.ok(precipitationAt(r, 6)[mumbai] > 5 * precipitationAt(r, 0)[mumbai] + 20
   assert.ok(most < 2, `no seasons without tilt (${most})`)
 }
 
+// Heat from all round (an enclosing shell, lighting.js) warms every
+// latitude alike and brings no seasons of its own; with no star's heat at
+// all, it alone keeps the planet from freezing, evenly.
+{
+  const small = earthLike(12)
+  const mean = (t) => t.reduce((x, y) => x + y, 0) / t.length
+  const plain = simulateClimate({ frequency: 12, ...small, steps: 4 })
+  const warmed = simulateClimate({ frequency: 12, ...small, steps: 4, evenHeat: 0.05 })
+  assert.ok(mean(temperatureAt(warmed, null)) > mean(temperatureAt(plain, null)) + 3, 'even heat warms')
+  const shellOnly = simulateClimate({ frequency: 12, ...small, tilt: 23.44, steps: 4, insolation: 0, evenHeat: 0.3 })
+  const t = temperatureAt(shellOnly, null)
+  const pole = t[cellAtDeg(small.grid, 0, -85)]
+  const equator = t[cellAtDeg(small.grid, -150, 0)]
+  assert.ok(Math.abs(pole - equator) < 15, `no star: poles near the equator's warmth (${pole} / ${equator})`)
+  const t0 = temperatureAt(shellOnly, null, 0)
+  const t2 = temperatureAt(shellOnly, null, 2)
+  let most = 0
+  for (let c = 0; c < t0.length; c++) most = Math.max(most, Math.abs(t0[c] - t2[c]))
+  assert.ok(most < 2, `no star: no seasons (${most})`)
+}
+
 // A map finer than the climate's grid reads it smoothly.
 {
   const fine = earthLike(48)

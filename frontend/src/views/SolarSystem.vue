@@ -25,6 +25,7 @@
         :show-zone="markers.zone"
         :show-limits="markers.limits"
         :sky="skyUrl()"
+        :enclosure="enclosure"
         @select="pick"
       />
 
@@ -124,6 +125,10 @@
             @change="saveName"
             @keydown.enter="$event.target.blur()"
           />
+          <label class="shell-toggle" :title="$t('The sky picture is a shell round the whole system. It lights everything evenly from all round, on the main planet\'s day and night; at night only its painted stars shine.')">
+            <input type="checkbox" :checked="enclosed" :disabled="busy" @change="setEnclosed($event.target.checked)" />
+            <span>{{ $t('Inside a shell (the sky lights the system)') }}</span>
+          </label>
           <ul class="tree">
             <li v-for="row in rows" :key="row.body.id" class="tree-item">
               <button
@@ -347,6 +352,7 @@ import SolarEditor2D from '../components/SolarEditor2D.vue'
 import StarFields from '../components/StarFields.vue'
 import { bodyColor } from '../solarScale'
 import { luminosity, habitableZone, SUN } from '../stars'
+import { enclosureFor } from '../lighting'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 
 // The Solar system tab: a star, its planets and their moons, each sized and
@@ -367,6 +373,13 @@ const ready = ref(false)
 const loadError = ref('')
 const bodies = ref([])
 const main = ref({ radius_km: 0, tilt: 0, globe: false })
+// Inside a shell that is the sky (lighting.js): it lights on the main
+// planet's day.
+const enclosed = ref(false)
+const enclosure = computed(() => enclosureFor({ enclosed: enclosed.value, main: main.value }))
+async function setEnclosed(on) {
+  await run(() => solarApi.setEnclosed(on))
+}
 // The maps the bodies wear (id -> { frequency, colorOf }): the story's on
 // the main planet, and every other planet's or moon's own, once painted.
 const globes = ref(new Map())
@@ -450,6 +463,7 @@ function take(system) {
   systemName.value = system.name || ''
   bodies.value = system.bodies
   main.value = system.main
+  enclosed.value = !!system.enclosed
   if (selectedId.value != null && !tree.value.byId.has(selectedId.value)) selectedId.value = null
   if (focusId.value != null && !tree.value.byId.has(focusId.value)) focusId.value = null
   resetDraft()
@@ -634,7 +648,8 @@ onBeforeUnmount(() => {
 // For the screenshots (the dev server only; tests/visual/shots.mjs): move
 // the clock and read where it got to. A build leaves it out.
 if (import.meta.env.DEV) {
-  window.__solarPage = { moveTo, days: () => days.value, live: (on) => (live.value = on) }
+  // enclose(on): the shell on or off on screen only (not saved).
+  window.__solarPage = { moveTo, days: () => days.value, live: (on) => (live.value = on), enclose: (on) => (enclosed.value = on) }
   onBeforeUnmount(() => delete window.__solarPage)
 }
 
@@ -965,6 +980,16 @@ const problem = computed(() => {
 .system-name {
   font-family: 'Fraunces', serif;
   font-size: 1rem;
+}
+
+.shell-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.35rem 0 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  cursor: pointer;
 }
 
 .wiki-link {

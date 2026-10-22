@@ -29,6 +29,7 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/oceanNames.test.mjs
     node frontend/tests/climateModel.test.mjs
     node frontend/tests/flowLines.test.mjs
+    node frontend/tests/lighting.test.mjs
 
 Run all of these before committing.
 
@@ -115,7 +116,16 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   constants are calibrated against the rough Earth in
   `frontend/tests/earthLike.mjs` (`climateModel.test.mjs` checks the
   patterns an atlas shows). Arrows: paths in `flowLines.js`, meshes in
-  `three/flowArrows.js`. three.js is only loaded with the planet
+  `three/flowArrows.js`.
+- **Light and heat are separate** (`frontend/src/lighting.js`): ask it,
+  not the star, for what lights a body (directional from the star, even
+  from an enclosing shell) and what warms it (the star's heat gets out of
+  a Dyson sphere; light doesn't). The climate uses heat, the drawing
+  light. The system can sit inside a shell that is its sky (a switch,
+  `enclosed` from `GET /api/solar`, made into an enclosure by
+  `enclosureFor`): even light on the main planet's day and night, only
+  the painted stars' light at night; moons then have no phases
+  (`moonlightOf`). three.js is only loaded with the planet
   (`MapPage.vue`, `PlanetTerritory.vue` load it lazily); keep it out of the
   main bundle.
 - **The solar system** (`backend/solar.go`, the Solar system tab) keeps

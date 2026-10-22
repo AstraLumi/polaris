@@ -1734,7 +1734,7 @@ export default {
   "Cold current": "Corriente fría",
   "Working out the climate…": "Calculando el clima…",
   "Couldn't work out the climate.": "No se pudo calcular el clima.",
-  "No star lights this planet in the solar system, so the climate uses Earth's sunlight.": "Ninguna estrella ilumina este planeta en el sistema solar, así que el clima usa la luz solar de la Tierra.",
+  "Nothing in the solar system warms this planet, so the climate uses Earth's sunlight.": "Nada en el sistema solar calienta este planeta, así que el clima usa la luz solar de la Tierra.",
   "Worked out from the continents, their biomes, the axial tilt, the day's length and the star. The year starts just after the northern winter solstice.": "Calculado a partir de los continentes, sus biomas, la inclinación axial, la duración del día y la estrella. El año empieza justo después del solsticio de invierno del norte.",
   "Biome": "Bioma",
   "Mean temperature": "Temperatura media",
@@ -1759,4 +1759,6 @@ export default {
   "Biomes go on land: draw a continent there first.": "Los biomas van en tierra: dibuja primero un continente ahí.",
   "Area": "Área",
   "Continents on it": "Continentes sobre ella",
+  "The sky picture is a shell round the whole system. It lights everything evenly from all round, on the main planet's day and night; at night only its painted stars shine.": "La imagen del cielo es una cáscara alrededor de todo el sistema. Lo ilumina todo por igual, desde todas partes, en el día y la noche del planeta principal; de noche solo brillan sus estrellas pintadas.",
+  "Inside a shell (the sky lights the system)": "Dentro de una cáscara (el cielo ilumina el sistema)",
 }

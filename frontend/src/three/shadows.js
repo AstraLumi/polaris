@@ -9,6 +9,11 @@
 // bends a little red light into its shadow: sunlight() leaves how much of
 // the disc such bodies hide in airGlow, for a blood-red eclipsed moon.
 //
+// Light from all round (an enclosing shell that glows, lighting.js) comes
+// on top of the star's: uFill is how strong it is (1 about a clear day's
+// light), uFillColor its colour. No direction, so no shadows and no night
+// side; 0 when nothing encloses the system.
+//
 // Rings shadow their own planet too: ringShade(p, sun) is how much light
 // gets through the rings (uRingOuter 0 for a planet without any), with the
 // same bands ringAlpha draws them with.
@@ -20,6 +25,8 @@ uniform vec4 uOccluders[${MAX_CASTERS}];
 uniform int uOccluderCount;
 uniform float uLightRadius;
 uniform vec3 uLightColor;
+uniform float uFill;
+uniform vec3 uFillColor;
 uniform vec3 uRingCenter;
 uniform vec3 uRingNormal;
 uniform float uRingInner;
@@ -86,6 +93,8 @@ export const shadowUniforms = () => ({
   uOccluderCount: { value: 0 },
   uLightRadius: { value: 1 },
   uLightColor: { value: new THREE.Color(1, 1, 1) },
+  uFill: { value: 0 },
+  uFillColor: { value: new THREE.Color(1, 1, 1) },
   uRingCenter: { value: new THREE.Vector3() },
   uRingNormal: { value: new THREE.Vector3(0, 0, 1) },
   uRingInner: { value: 0 },
@@ -100,6 +109,12 @@ export function setOccluders(uniforms, occluders, lightRadius, lightColor) {
   uniforms.uOccluderCount.value = n
   uniforms.uLightRadius.value = lightRadius
   if (lightColor) uniforms.uLightColor.value.copy(lightColor)
+}
+
+// The light from all round a material gets: its strength and colour.
+export function setFill(uniforms, fill, color) {
+  uniforms.uFill.value = fill
+  if (color) uniforms.uFillColor.value.copy(color)
 }
 
 // The rings that shadow a planet: their centre and the normal of their

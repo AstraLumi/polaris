@@ -33,6 +33,7 @@ void main() {
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }`
 
+// uFill is light from all round (an enclosing shell; three/shadows.js).
 // uLight is the direction of the light in the mesh's own frame; uAmbient how
 // lit the far side still is (the map keeps it bright, space doesn't). In the
 // solar system, uSun (the star, in the world) and the occluders cast other
@@ -53,7 +54,7 @@ void main() {
   float d = dot(vNormal, uLight);
   float lit = uTwilight > 0.0 ? smoothstep(-uTwilight, uTwilight * 3.0, d) * (0.3 + 0.7 * max(d, 0.0)) : max(d, 0.0);
   lit *= sunlight(vWorld, uSun) * ringShade(vWorld, uSun);
-  vec3 c = vColor * (uAmbient + (1.0 - uAmbient) * lit * uPower * uLightColor);
+  vec3 c = vColor * (uAmbient + (1.0 - uAmbient) * (lit * uPower * uLightColor + uFill * uFillColor));
   float line = smoothstep(0.84, 0.96, vEdge) * uGrid;
   gl_FragColor = vec4(mix(c, c * 0.5, line), 1.0);
 }`
