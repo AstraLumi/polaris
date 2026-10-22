@@ -5,9 +5,32 @@ import (
 	"testing"
 )
 
+// rollBackSchema38 turns a fresh database back into schema 37: no biomes,
+// and the layers' CHECK allows mountain ranges again.
+func rollBackSchema38(t *testing.T, db *sql.DB) {
+	t.Helper()
+	if _, err := db.Exec(`DROP TABLE cell_biomes`); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rewriteFeatureLayersCheck(tx, featureLayersNew, featureLayersOld); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`UPDATE schema_meta SET value = '37' WHERE key = 'schema_version'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // rollBackSchema37 turns a fresh database back into schema 36.
 func rollBackSchema37(t *testing.T, db *sql.DB) {
 	t.Helper()
+	rollBackSchema38(t, db)
 	for _, q := range []string{
 		`ALTER TABLE celestial_bodies DROP COLUMN inclination`,
 		`ALTER TABLE celestial_bodies DROP COLUMN ascending_node`,

@@ -40,6 +40,7 @@ import { placeOceanName, nameFrame, framePoint } from '../oceanNames'
 import { markerIcon } from '../mapMarkers'
 import { createGlobeMesh } from '../three/globeMesh'
 import { loadSkyDome, disposeSkyDome } from '../three/skyDome'
+import { createFlowArrows } from '../three/flowArrows'
 
 // The planet drawn in 3D: every cell of the grid (planetGrid.js) coloured by
 // colorOf, with an outline once cells are big enough on screen. Drag to turn
@@ -76,6 +77,9 @@ const props = defineProps({
   // The sky behind the planet: an equirectangular picture (the format is
   // described in backend/cmd/skygen); '' for none.
   sky: { type: String, default: '' },
+  // Arrows lying on the surface (winds, currents; flowLines.js):
+  // [{ points: [[x, y, z], …] tail to head, color }]
+  flows: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['hover', 'select', 'paint-start', 'paint', 'paint-end'])
 
@@ -97,6 +101,7 @@ let lineGroup = null
 let hoverLine = null
 let selectLine = null
 let outlineLines = null
+let flowMesh = null
 let raf = 0
 let resizeObserver = null
 
@@ -332,6 +337,21 @@ function buildOceanNames() {
   }
   writtenOceans = written
   scene.add(oceanGroup)
+  requestRender()
+}
+
+// Winds and currents, as arrows following the surface.
+function buildFlows() {
+  if (flowMesh) {
+    scene.remove(flowMesh)
+    flowMesh.geometry.dispose()
+    flowMesh.material.dispose()
+    flowMesh = null
+  }
+  if (props.flows.length) {
+    flowMesh = createFlowArrows(props.flows, { width: 0.0042 })
+    scene.add(flowMesh)
+  }
   requestRender()
 }
 
@@ -585,6 +605,7 @@ function rebuild() {
     buildLines()
     buildBorders()
     buildOceanNames()
+    buildFlows()
     loadSky()
     drawSelected()
     drawOutlined()
@@ -602,6 +623,18 @@ onMounted(() => {
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
   window.addEventListener('blur', onBlur)
+  // For the screenshot scripts (tests/visual), on the dev server only.
+  if (import.meta.env.DEV) {
+    window.__planetGlobe = {
+      facePoint(p) {
+        const dist = camera.position.length()
+        camera.position.set(...p).multiplyScalar(dist)
+        camera.lookAt(0, 0, 0)
+        controls.update()
+        requestRender()
+      },
+    }
+  }
   // Oceans' names are pictures: drawn again once the font is in.
   document.fonts?.load(NAME_FONT).then(() => renderer && grid && buildOceanNames(), () => {})
 })
@@ -628,6 +661,7 @@ watch(() => props.version, recolorAll)
 watch(() => props.markers, requestRender)
 watch(() => props.areas, () => grid && globeView && buildOceanNames())
 watch(() => props.borders, () => grid && buildBorders())
+watch(() => props.flows, () => scene && buildFlows())
 watch(() => props.lines, () => grid && buildLines(), { deep: true })
 watch(() => props.selected, () => grid && drawSelected())
 watch(() => props.outlined, () => grid && drawOutlined())

@@ -18,6 +18,7 @@
         :borders="borders"
         :inset-right="listInset"
         :sky="skyUrl()"
+        :flows="flows"
         @hover="onHover"
         @select="onSelect"
         @paint-start="onPaintStart"
@@ -48,7 +49,7 @@
         </button>
         <div class="tool-sep"></div>
         <template v-if="view === 'globe'">
-          <button v-for="t in tools" :key="t.key" type="button" class="tool-btn" :class="{ active: tool === t.key }" :title="$t(t.title)" @click="tool = t.key">
+          <button v-for="t in shownTools" :key="t.key" type="button" class="tool-btn" :class="{ active: tool === t.key }" :title="$t(t.title)" @click="tool = t.key">
             {{ $t(t.label) }}
           </button>
           <template v-if="tool === 'paint' || tool === 'erase'">
@@ -116,17 +117,33 @@
       />
 
       <MajorLocationList
-        :majors="onLayer ? layerFeatures : majors"
+        :majors="onClimate ? [] : onLayer ? layerFeatures : majors"
         :active-id="onLayer ? activeFeatureId : activeId"
-        :title="onLayer ? layerInfo.label : undefined"
-        :empty-text="onLayer ? tr('Nothing drawn on this layer yet') : undefined"
+        :title="onLayer || onClimate ? layerInfo.label : undefined"
+        :empty-text="onClimate ? '' : onLayer ? tr('Nothing drawn on this layer yet') : undefined"
         :groups="onLayer ? [{ id: layer, label: layerInfo.label }] : null"
         :group-of="onLayer ? (f) => f.layer : null"
+        :can-add="!onClimate"
         @pick="onListPick"
         @edit="onListEdit"
         @new="onListNew"
         @closed="listClosed = $event"
       >
+        <template v-if="layer === 'continents'" #extra>
+          <BiomePalette v-model="pickedBiome" v-model:height="biomeHeight" :counts="biomeCounts" />
+        </template>
+        <template v-else-if="onClimate" #extra>
+          <ClimatePanel
+            v-model:month="climateMonth"
+            v-model:arrows="arrows"
+            :layer="layer"
+            :months="calendar.months_per_year"
+            :working="climate.working.value"
+            :error="climate.error.value"
+            :assumed="sunlight.assumed"
+            :unit="calendar.seasons?.unit || 'C'"
+          />
+        </template>
         <template #footer>
           <LayerPicker v-model="layer" />
           <PlanetSwitch />
@@ -169,7 +186,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { t, tr } from '../i18n'
-import { planetApi, mapApi } from '../api'
+import { planetApi, mapApi, solarApi } from '../api'
 import { worldMap, PROJECTIONS, realmLabel, applyMapSettings, mapName, skyUrl } from '../worldMap'
 import { PlanetGrid, latLon, middleCell } from '../planetGrid'
 import { cellColor } from '../planetColors'
@@ -187,7 +204,13 @@ import MajorLocationModal from '../components/MajorLocationModal.vue'
 import LayerPicker from '../components/LayerPicker.vue'
 import PlanetSwitch from '../components/PlanetSwitch.vue'
 import FeatureModal from '../components/FeatureModal.vue'
-import { useLayers, layerOf, layerCellColor } from '../planetLayers'
+import BiomePalette from '../components/BiomePalette.vue'
+import ClimatePanel from '../components/ClimatePanel.vue'
+import { useLayers, layerOf, layerCellColor, mixColor } from '../planetLayers'
+import { biomeOf, PLAIN_LAND } from '../biomes'
+import { calendar } from '../calendar'
+import { usePlanetClimate, climateInput, sunlightOf } from '../planetClimate'
+import { temperatureColor, rainColor, koppenColor, koppenName, formatTemperature, formatRain, compassPoint } from '../climateColors'
 
 // The map when the story is a planet (backend/planetmap.go): painted on the
 // globe; the flat views are projections to look at. Mirrors MapView.vue
@@ -257,30 +280,127 @@ let saveChain = Promise.resolve()
 let noticeTimer = null
 
 // ---- Layers ---------------------------------------------------------------------------
-// Plates, mountain ranges and ocean depths are drawn over the map
-// (planetLayers.js); the map shows faintly under them.
+// Plates, continents and ocean depths are drawn over the map
+// (planetLayers.js); the map shows faintly under them. The continents
+// layer also paints each hex's biome. The climate layers are worked out
+// from all of it and only looked at.
 const layer = ref('map')
 const layers = useLayers()
-const onLayer = computed(() => layer.value !== 'map')
 const layerInfo = computed(() => layerOf(layer.value))
+const onClimate = computed(() => !!layerInfo.value.climate)
+const onLayer = computed(() => layer.value !== 'map' && !onClimate.value)
 const layerFeatures = computed(() => layers.features.value.filter((f) => f.layer === layer.value))
 const activeFeatureId = ref(null)
 const featureModal = ref(null) // { feature } (null feature for a new one)
+const pickedBiome = ref(null) // a biome key, on the continents layer
+const biomeHeight = ref(null) // the ground height it is painted with (m), or its usual one
+const shownTools = computed(() => (onClimate.value ? tools.filter((x) => x.key === 'select') : tools))
+
+// Which arrows each climate layer starts with.
+const ARROWS = { wind: { wind: true, currents: false }, currents: { wind: false, currents: true } }
+const arrows = ref({ wind: false, currents: false })
+const climateMonth = ref(null) // 0-based calendar month, or null for the year
 
 watch(layer, async () => {
   activeFeatureId.value = null
+  pickedBiome.value = null
+  if (onClimate.value) {
+    tool.value = 'select'
+    arrows.value = { ...(ARROWS[layer.value] ?? { wind: false, currents: false }) }
+  }
   try {
-    if (onLayer.value) await layers.ensure()
+    if (layer.value !== 'map') await layers.ensure()
   } catch (err) {
     flash(err.message || t("Couldn't load the layers."))
   }
+  if (onClimate.value) workOutClimate()
   version.value++
 })
 
 function onListPick(item) {
   if (!onLayer.value) return toggleActive(item)
   activeFeatureId.value = activeFeatureId.value === item.id ? null : item.id
+  if (activeFeatureId.value != null) pickedBiome.value = null
 }
+
+watch(pickedBiome, (b) => {
+  if (b) {
+    activeFeatureId.value = null
+    if (tool.value === 'select') tool.value = 'paint'
+  }
+  biomeHeight.value = null
+})
+
+// How many hexes each biome covers (on land).
+const biomeCounts = computed(() => {
+  version.value // eslint-disable-line no-unused-expressions
+  const out = new Map()
+  if (layer.value !== 'continents') return out
+  for (const c of layers.biomeCells()) {
+    if (!isLand(c)) continue
+    const b = layers.biomeAt(c).biome
+    out.set(b, (out.get(b) ?? 0) + 1)
+  }
+  return out
+})
+
+// ---- Land and climate ---------------------------------------------------------------------
+// Land is wherever a continent is drawn, or the map has a kingdom, a region,
+// an unknown land or a place.
+function isLand(cell) {
+  if (layers.featureAt('continents', cell)) return true
+  if (minorsByCell.has(cell)) return true
+  for (const id of cellMembers.get(cell) ?? []) {
+    const l = locMap.get(id)
+    if (l?.color && l.realm !== 'ocean') return true
+  }
+  return false
+}
+
+const climate = usePlanetClimate()
+const sunlight = ref({ insolation: 1, assumed: true })
+let solarLoaded = false
+
+const monthStep = (m) => {
+  const months = calendar.months_per_year
+  const steps = Math.min(24, months)
+  return m == null ? null : Math.min(steps - 1, Math.floor(((m + 0.5) * steps) / months))
+}
+const climateStep = computed(() => monthStep(climateMonth.value))
+
+async function workOutClimate() {
+  if (!solarLoaded) {
+    solarLoaded = true
+    try {
+      sunlight.value = sunlightOf(await solarApi.get())
+    } catch {
+      // No solar system to read: Earth's sunlight.
+    }
+  }
+  const input = climateInput({
+    frequency: grid.n,
+    isLand,
+    biomeAt: (c) => layers.biomeAt(c),
+    tilt: worldMap.planet.tilt,
+    dayHours: calendar.hours_per_day,
+    months: Math.min(24, calendar.months_per_year),
+    daysPerMonth: calendar.days_per_month,
+    planetKm: worldMap.planet.planet_km,
+    insolation: sunlight.value.insolation,
+  })
+  climate.run(input, input.height)
+}
+
+// A finished climate recolours the map.
+watch(climate.view, () => version.value++)
+watch(climateMonth, () => version.value++)
+
+const flows = computed(() => {
+  const v = climate.view.value
+  if (!onClimate.value || !v) return []
+  const step = climateStep.value
+  return [...(arrows.value.wind ? v.windArrows(step) : []), ...(arrows.value.currents ? v.currentArrows(step) : [])]
+})
 
 function onListEdit(item) {
   if (onLayer.value) featureModal.value = { feature: item }
@@ -327,8 +447,10 @@ const markers = computed(() => {
 // Every cell with something on it (for the flat view).
 const coloredCells = computed(() => {
   version.value // eslint-disable-line no-unused-expressions
+  if (onClimate.value && climate.view.value) return [...Array(grid.count).keys()]
   const drawn = onLayer.value ? layerFeatures.value.flatMap((f) => layers.cellsOfFeature(f)) : []
-  return [...new Set([...cellMembers.keys(), ...minorsByCell.keys(), ...drawn])]
+  const painted = layer.value === 'continents' ? layers.biomeCells().filter(isLand) : []
+  return [...new Set([...cellMembers.keys(), ...minorsByCell.keys(), ...drawn, ...painted])]
 })
 
 // The middle of everything painted, for the globe to face when it opens.
@@ -368,13 +490,15 @@ function flash(message) {
   noticeTimer = setTimeout(() => notice.value === message && (notice.value = ''), 4500)
 }
 
-const activeName = computed(() =>
-  onLayer.value
+const activeName = computed(() => {
+  if (pickedBiome.value) return t(biomeOf(pickedBiome.value)?.label ?? '')
+  return onLayer.value
     ? layerFeatures.value.find((f) => f.id === activeFeatureId.value)?.name ?? ''
-    : majors.value.find((m) => m.id === activeId.value)?.name ?? '',
-)
+    : majors.value.find((m) => m.id === activeId.value)?.name ?? ''
+})
 const hint = computed(() => {
   if (view.value === 'flat') return t('A projection of the planet, to look at. Paint on the globe.')
+  if (onClimate.value) return t('Scroll to zoom · Drag to turn the globe · Hover a hex to read its climate')
   if (tool.value === 'paint') {
     return activeName.value
       ? t('Scroll to zoom · Hold Space to turn the globe · Painting {name}', { name: activeName.value })
@@ -408,7 +532,46 @@ function coloredOf(ids) {
 // as it is, or tints it (oceanView.js); its territory is outlined (borders).
 function colorOf(cell) {
   const base = cellColor(cellMembers.get(cell), locMap, minorsByCell.has(cell), oceanView.shown && oceanView.tint)
+  if (onClimate.value) return climateColorOf(cell, base)
+  if (layer.value === 'continents') {
+    const b = layers.biomeAt(cell)
+    if (b && isLand(cell)) return biomeOf(b.biome)?.color ?? base
+  }
   return onLayer.value ? layerCellColor(base, layers.featureAt(layer.value, cell)) : base
+}
+
+const SEA_DARK = '#0a1426'
+
+// Land under the arrows: its biome's colour (or the map's), dimmed.
+function landUnder(cell, base) {
+  const b = layers.biomeAt(cell)
+  const color = (b && biomeOf(b.biome)?.color) || base || PLAIN_LAND.color
+  return mixColor(color, SEA_DARK, 0.45)
+}
+
+// A cell on a climate layer: a heat map, rain, climate types; winds and
+// currents over the land's biomes, dimmed.
+function climateColorOf(cell, base) {
+  const v = climate.view.value
+  if (!v) return layerCellColor(base, null)
+  const step = climateStep.value
+  const land = isLand(cell)
+  switch (layer.value) {
+    case 'temperature': {
+      const c = temperatureColor(v.temperature(step)[cell])
+      return land ? c : mixColor(c, SEA_DARK, 0.25)
+    }
+    case 'rain': {
+      const c = rainColor(v.rain(step)[cell], step == null)
+      return land ? c : mixColor(c, SEA_DARK, 0.65)
+    }
+    case 'zones':
+      return land ? koppenColor(v.koppenOf(cell, true, grid)) : mixColor('#1b2d4a', SEA_DARK, 0.4)
+    case 'currents':
+      return land ? landUnder(cell, base) : layerCellColor('', null)
+    default:
+      return land ? landUnder(cell, base) : layerCellColor('', null)
+  }
 }
 
 // Each kingdom's, region's and ocean's name, at the middle of its land;
@@ -435,7 +598,8 @@ const areas = computed(() => {
 // Oceans are drawn as the outline of their water, unless that is turned off.
 const borders = computed(() => {
   version.value // eslint-disable-line no-unused-expressions
-  if (onLayer.value || !oceanView.shown || !oceanView.outline) return []
+  if (layer.value === 'continents') return layerFeatures.value.map((f) => ({ color: f.color, cells: layers.cellsOfFeature(f) }))
+  if (onLayer.value || onClimate.value || !oceanView.shown || !oceanView.outline) return []
   return majors.value.filter((m) => m.color && m.realm === 'ocean').map((m) => ({ color: m.color, cells: cellsOf(m.id) }))
 })
 
@@ -495,8 +659,17 @@ function belongsToName(m) {
 
 function describeCell(cell) {
   const entries = []
+  if (onClimate.value) entries.push(...describeClimate(cell))
   const f = onLayer.value ? layers.featureAt(layer.value, cell) : null
   if (f) entries.push({ type: layerInfo.value.one, name: f.name, color: f.color })
+  if (layer.value === 'continents' && isLand(cell)) {
+    const b = layers.biomeAt(cell)
+    const info = b && biomeOf(b.biome)
+    if (info) {
+      const h = b.height != null ? ` · ${Math.round(b.height).toLocaleString()} m` : ''
+      entries.push({ type: 'Biome', name: t(info.label) + h, color: info.color, bare: true })
+    }
+  }
   for (const m of minorsByCell.get(cell) ?? []) {
     entries.push({
       type: m.is_capital ? 'Capital' : m.is_city ? 'City' : 'Location',
@@ -519,6 +692,43 @@ function describeCell(cell) {
   }
   if (!entries.length) entries.push({ type: 'Ocean', name: t('Unnamed ocean'), color: '', bare: true })
   return entries
+}
+
+// What a hex's climate is: temperature, rain, wind, current, climate type.
+function describeClimate(cell) {
+  const v = climate.view.value
+  if (!v) return []
+  const unit = calendar.seasons?.unit || 'C'
+  const step = climateStep.value
+  const land = isLand(cell)
+  const p = grid.center(cell)
+  const rows = []
+  const { low, high } = v.range()
+  rows.push({
+    label: step == null ? 'Mean temperature' : 'Temperature',
+    value: formatTemperature(v.temperature(step)[cell], unit),
+  })
+  rows.push({ label: 'Coldest to warmest month', value: `${formatTemperature(low[cell], unit)} … ${formatTemperature(high[cell], unit)}` })
+  rows.push({ label: step == null ? 'Rain in a year' : 'Rain in the month', value: formatRain(v.rain(step)[cell]) })
+  const w = v.vectorAt(v.wind(step), p)
+  const ws = Math.hypot(w.east, w.north)
+  if (ws >= 0.5) rows.push({ label: 'Wind from', value: `${compassPoint(-w.east, -w.north)} · ${Math.round(ws)} m/s` })
+  else rows.push({ label: 'Wind', value: t('Calm') })
+  if (!land) {
+    const c = v.vectorAt(v.current, p)
+    const cs = Math.hypot(c.east, c.north)
+    if (cs >= 0.03) rows.push({ label: 'Current towards', value: `${compassPoint(c.east, c.north)} · ${cs.toFixed(1)} m/s` })
+  }
+  const code = land ? v.koppenOf(cell, true, grid) : ''
+  return [
+    {
+      type: 'Climate',
+      name: code ? `${t(koppenName(code))} (${code})` : t('Open sea'),
+      color: code ? koppenColor(code) : '',
+      bare: true,
+      rows,
+    },
+  ]
 }
 
 function onHover(cell) {
@@ -585,6 +795,14 @@ function eraseLocal(c, locId) {
 }
 
 function onPaintStart() {
+  if (onClimate.value) {
+    stroke = null
+    return
+  }
+  if (layer.value === 'continents' && pickedBiome.value) {
+    stroke = { biomes: true, type: tool.value, value: { biome: pickedBiome.value, height: biomeHeight.value }, before: new Map(), changed: new Set(), skipped: 0 }
+    return
+  }
   if (onLayer.value) {
     if (tool.value === 'paint' && activeFeatureId.value == null) {
       flash(t('Pick one in the list to paint with.'))
@@ -620,8 +838,30 @@ function paintLayerCells(cells) {
   if (touched.length) globeRef.value?.recolor(touched)
 }
 
+// A biome stroke: land cells take the biome, or lose it (only the picked one).
+function paintBiomeCells(cells) {
+  const touched = []
+  for (const c of cells) {
+    if (!isLand(c)) {
+      stroke.skipped++
+      continue
+    }
+    const now = layers.biomeAt(c)
+    if (!stroke.before.has(c)) stroke.before.set(c, now)
+    let changed
+    if (stroke.type === 'paint') changed = layers.setBiomeLocal(c, stroke.value)
+    else changed = now?.biome === stroke.value.biome && layers.setBiomeLocal(c, null)
+    if (changed) {
+      stroke.changed.add(c)
+      touched.push(c)
+    }
+  }
+  if (touched.length) globeRef.value?.recolor(touched)
+}
+
 function onPaint(cells) {
   if (!stroke) return
+  if (stroke.biomes) return paintBiomeCells(cells)
   if (stroke.layer) return paintLayerCells(cells)
   const touched = []
   for (const c of cells) {
@@ -638,7 +878,18 @@ function onPaint(cells) {
 function onPaintEnd() {
   const s = stroke
   stroke = null
+  if (s?.biomes && s.skipped && !s.changed.size) flash(t('Biomes go on land: draw a continent there first.'))
   if (!s || !s.changed.size) return
+  if (s.biomes) {
+    const changes = [...s.changed].map((c) => ({ c, before: s.before.get(c), after: layers.biomeAt(c) }))
+    pushUndo({ biomes: true, cells: changes })
+    version.value++
+    layers.saveBiomes(changes, () => {
+      flash(t("Couldn't save that stroke, so the map was reloaded."))
+      version.value++
+    })
+    return
+  }
   if (s.layer) {
     const changes = [...s.changed].map((c) => ({ c, before: s.before.get(c), after: layers.featureAt(s.layer, c)?.id ?? null }))
     pushUndo({ layer: s.layer, cells: changes })
@@ -672,6 +923,16 @@ const bucketAsk = ref(null) // { cells, locId, name }: a big fill waiting for a 
 
 function bucketAt(cell) {
   if (cell == null) return
+  if (layer.value === 'continents' && pickedBiome.value) {
+    const name = t(biomeOf(pickedBiome.value)?.label ?? '')
+    const empty = (c) => isLand(c) && !layers.biomeAt(c)
+    if (!empty(cell)) return flash(isLand(cell) ? t('The bucket only fills empty hexes.') : t('Biomes go on land: draw a continent there first.'))
+    const { cells, tooBig } = floodFill(cell, { neighbors: (c) => grid.neighbors(c), empty })
+    if (tooBig) return flash(t('That area is too big to fill at once.'))
+    if (cells.length > BUCKET_WARN) bucketAsk.value = { cells, name, biome: { biome: pickedBiome.value, height: biomeHeight.value } }
+    else fillBiome(cells, { biome: pickedBiome.value, height: biomeHeight.value })
+    return
+  }
   if (onLayer.value) {
     const f = layerFeatures.value.find((x) => x.id === activeFeatureId.value)
     if (!f) return flash(t('Pick one in the list to paint with.'))
@@ -696,9 +957,16 @@ function bucketAt(cell) {
 }
 
 function confirmBucket() {
-  const { cells, locId, layer: on } = bucketAsk.value
+  const { cells, locId, layer: on, biome } = bucketAsk.value
   bucketAsk.value = null
-  fill(cells, locId, on)
+  if (biome) fillBiome(cells, biome)
+  else fill(cells, locId, on)
+}
+
+function fillBiome(cells, value) {
+  stroke = { biomes: true, type: 'paint', value, before: new Map(), changed: new Set(), skipped: 0 }
+  onPaint(cells)
+  onPaintEnd()
 }
 
 // Painted like one stroke, so Undo takes it back whole.
@@ -733,7 +1001,20 @@ function restoreLayer(entry, which) {
   })
 }
 
+// A biome stroke back or forth: each cell to the biome it had.
+function restoreBiomes(entry, which) {
+  const changes = entry.cells.map((h) => ({ c: h.c, after: h[which] ?? null }))
+  for (const { c, after } of changes) layers.setBiomeLocal(c, after)
+  globeRef.value?.recolor(changes.map((h) => h.c))
+  version.value++
+  layers.saveBiomes(changes, () => {
+    flash(t("Couldn't save that change, so the map was reloaded."))
+    version.value++
+  })
+}
+
 function restore(cells, which) {
+  if (cells.biomes) return restoreBiomes(cells, which)
   if (cells.layer) return restoreLayer(cells, which)
   const erase = new Map()
   const paint = new Map()

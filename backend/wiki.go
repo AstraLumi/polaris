@@ -96,8 +96,8 @@ var wikiTypes = []wikiTypeDef{
 	{Key: "celestial_body", Table: "celestial_bodies", IDCol: "id", OwnTrigger: true,
 		Select: `SELECT id, name, '' FROM celestial_bodies`,
 		Fields: []string{"appearance", "geography", "history", "lore", "trivia"}},
-	// The planet's layers (planetlayers.go): tectonic plates, mountain
-	// ranges, ocean depths.
+	// The planet's layers (planetlayers.go): tectonic plates, continents,
+	// ocean depths.
 	{Key: "map_feature", Table: "map_features", IDCol: "id", OwnTrigger: true,
 		Select: `SELECT id, name, '' FROM map_features`,
 		Fields: []string{"geography", "history", "lore", "trivia"}},

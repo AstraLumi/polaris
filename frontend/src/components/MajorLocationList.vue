@@ -5,12 +5,12 @@
         {{ closed ? '‹' : '›' }}
       </button>
       <strong v-if="!closed">{{ $t(title) }}</strong>
-      <button v-if="!closed" type="button" class="btn btn-primary small add" @click="$emit('new')">{{ $t('New') }}</button>
+      <button v-if="!closed && canAdd" type="button" class="btn btn-primary small add" @click="$emit('new')">{{ $t('New') }}</button>
     </header>
 
     <template v-if="!closed">
       <input v-if="majors.length > 6" v-model="filter" type="search" class="filter" :placeholder="$t('Find…')" :aria-label="$t('Find a major location')" />
-      <p v-if="!majors.length" class="empty">{{ $t(emptyText) }}</p>
+      <p v-if="!majors.length && emptyText" class="empty">{{ $t(emptyText) }}</p>
 
       <div class="groups">
         <section v-for="g in groups" :key="g.id" class="group">
@@ -34,6 +34,10 @@
             </li>
           </ul>
         </section>
+      </div>
+      <!-- More to pick from (biomes), or what a climate layer shows. -->
+      <div v-if="$slots.extra" class="list-extra">
+        <slot name="extra" />
       </div>
       <!-- What the map shows (layers, other planets), under the list. -->
       <div v-if="$slots.footer" class="list-footer">
@@ -60,6 +64,7 @@ const props = defineProps({
   emptyText: { type: String, default: tr('No major locations yet') },
   groups: { type: Array, default: null }, // [{ id, label }]
   groupOf: { type: Function, default: null },
+  canAdd: { type: Boolean, default: true },
 })
 const emit = defineEmits(['pick', 'edit', 'new', 'closed'])
 
@@ -285,6 +290,18 @@ ul {
 
 .edit:hover {
   color: var(--text-primary);
+}
+
+.groups:empty {
+  display: none;
+}
+
+.list-extra {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--glass-border);
 }
 
 .list-footer {

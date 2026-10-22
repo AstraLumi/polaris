@@ -1,6 +1,7 @@
 import { tr, t } from './i18n'
 import { STORY_API } from './stories'
 import { mapPath } from './navigation'
+import { biomeOf } from './biomes'
 
 // The wiki has no pages of its own: the server builds an article for every
 // character, location, event and asset (see backend/wiki.go) and stores only
@@ -129,7 +130,9 @@ export const FACT_LABELS = {
   star: tr('Star'),
   planet_count: tr('Planets'),
   plate: tr('Tectonic plate'),
-  height: tr('Highest peak'),
+  area: tr('Area'),
+  continent: tr('Continent'),
+  biomes: tr('Biomes'),
   depth: tr('Depth'),
 }
 
@@ -141,7 +144,7 @@ export const FACT_GROUPS = [
   { label: tr('Personal'), keys: ['gender', 'age', 'race', 'body_type', 'blood_type'] },
   { label: tr('Birth'), keys: ['born', 'born_in', 'nation', 'earth_name', 'human_birth_date'] },
   { label: tr('Abilities'), keys: ['class', 'subclass', 'specialization'] },
-  { label: tr('Geography'), keys: ['hemisphere', 'latitude', 'climate_zone', 'plate', 'height', 'depth'] },
+  { label: tr('Geography'), keys: ['hemisphere', 'latitude', 'climate_zone', 'plate', 'continent', 'area', 'biomes', 'depth'] },
   { label: tr('Orbit'), keys: ['system', 'orbits', 'orbit_radius', 'eccentricity', 'closest', 'farthest', 'axial_tilt', 'day_length'] },
 ]
 
@@ -155,11 +158,23 @@ export const WORD_LABELS = [
   tr('Region'), tr('Ocean'),
   tr('Star'), tr('Planet'), tr('Moon'), tr('Rocky'), tr('Gas giant'), tr('Ocean world'), tr('The world of the map'),
   tr('Yellow dwarf (like the Sun)'), tr('Red giant'), tr('White dwarf'), tr('Brown dwarf'), tr('Neutron star'), tr('Black hole'),
-  tr('Tectonic plate'), tr('Mountain range'), tr('Ocean depth'), tr('Inside a Dyson sphere'),
+  tr('Tectonic plate'), tr('Continent'), tr('Ocean depth'), tr('Inside a Dyson sphere'),
 ]
 
 // A 'words' value: several of the words above, joined by '|'.
 export const factWords = (value) => value.split('|').map((w) => t(w)).join(', ')
+
+// A 'biomes' value: "desert:40,savanna:25", each biome's share in percent.
+export const biomeShares = (value) =>
+  value
+    .split(',')
+    .map((part) => {
+      const [key, pct] = part.split(':')
+      const biome = biomeOf(key)
+      return biome ? `${t(biome.label)} ${pct}%` : ''
+    })
+    .filter(Boolean)
+    .join(', ')
 
 // Related lists.
 export const GROUP_LABELS = {
@@ -190,9 +205,9 @@ export const GROUP_LABELS = {
   planets: tr('Planets'),
   moons: tr('Moons'),
   plates: tr('Tectonic plates'),
-  mountain_ranges: tr('Mountain ranges'),
+  continents: tr('Continents'),
   lands_on: tr('Lands on it'),
-  ranges_on: tr('Mountain ranges on it'),
+  continents_on: tr('Continents on it'),
 }
 
 // Text that already exists on the sheet or event and is shown read-only.

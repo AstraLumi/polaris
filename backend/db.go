@@ -15,7 +15,7 @@ import (
 // oldest migration (or a brand new one) gets wiped and recreated from
 // freshSchema — so every schema change from here on should ship with a
 // migration instead of relying on that reset.
-const currentSchemaVersion = "37"
+const currentSchemaVersion = "38"
 
 const freshSchema = `
 CREATE TABLE classes (
@@ -527,6 +527,13 @@ var migrations = map[string]migration{
 		// Inclined orbits (solar.go).
 		statements: schema37Statements,
 	},
+	"37": {
+		to: "38",
+		// Continents instead of mountain ranges, and a biome for every hex
+		// (planetlayers.go).
+		before:     widenFeatureLayers,
+		statements: slices.Concat(schema38Statements, moveMountainRangesStatements),
+	},
 }
 
 // schema20Statements create what schema 20 added. The fresh schema runs them
@@ -609,6 +616,7 @@ func applyMigration(db *sql.DB, m migration) error {
 // tablesInDependencyOrder lists every app-owned table, children before
 // parents, so dropping them in this order never trips a foreign key.
 var tablesInDependencyOrder = []string{
+	"cell_biomes",
 	"feature_cells",
 	"map_features",
 	"body_cells",
@@ -765,7 +773,7 @@ func ensureSchema(db *sql.DB) error {
 			return fmt.Errorf("create schema: %w", err)
 		}
 	}
-	later := [][]string{wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements, schema24Statements, {gearDescriptionSQL}, schema26Statements, schema27Statements, schema28Statements, schema29Statements, schema30Statements, schema31Statements, schema32Statements, schema33Statements, schema34Statements, schema35Statements, schema36Statements, schema37Statements}
+	later := [][]string{wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements, schema24Statements, {gearDescriptionSQL}, schema26Statements, schema27Statements, schema28Statements, schema29Statements, schema30Statements, schema31Statements, schema32Statements, schema33Statements, schema34Statements, schema35Statements, schema36Statements, schema37Statements, schema38Statements}
 	for _, stmt := range slices.Concat(later...) {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("create wiki schema: %w", err)
@@ -777,6 +785,11 @@ func ensureSchema(db *sql.DB) error {
 		return fmt.Errorf("create schema: %w", err)
 	}
 	if err := widenRealms(tx); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("create schema: %w", err)
+	}
+	// Schema 38's continents layer, the same way.
+	if err := widenFeatureLayers(tx); err != nil {
 		tx.Rollback()
 		return fmt.Errorf("create schema: %w", err)
 	}

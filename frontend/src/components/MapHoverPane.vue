@@ -6,6 +6,10 @@
         <span class="type">{{ $t(e.type) }}</span>
       </div>
       <h4 class="name">{{ e.name }}</h4>
+      <p v-for="r in e.rows ?? []" :key="r.label" class="row">
+        <span>{{ $t(r.label) }}</span>
+        <strong>{{ r.value }}</strong>
+      </p>
       <template v-if="!e.bare">
         <p v-if="['Location', 'City', 'Capital'].includes(e.type)" class="row">
           <span>{{ $t('Belongs to') }}</span>
@@ -29,6 +33,7 @@ import { tr } from '../i18n'
 defineProps({
   // [{ type: 'Kingdom' | 'Region' | 'Ocean' | 'Major location' | 'Location' | 'City' | 'Capital', name, color,
   //    belongsTo, founding_date, description }]; bare: the name alone (the unnamed ocean).
+  //    rows: [{ label, value }] shown under the name (a hex's climate).
   entries: { type: Array, default: () => [] },
 })
 
@@ -40,6 +45,17 @@ tr('Major location')
 tr('Location')
 tr('City')
 tr('Capital')
+tr('Biome')
+tr('Climate')
+// Rows of a hex's climate (PlanetMap.vue).
+tr('Mean temperature')
+tr('Temperature')
+tr('Coldest to warmest month')
+tr('Rain in a year')
+tr('Rain in the month')
+tr('Wind from')
+tr('Wind')
+tr('Current towards')
 </script>
 
 <style scoped>

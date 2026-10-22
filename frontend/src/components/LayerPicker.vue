@@ -1,32 +1,40 @@
 <template>
   <div class="layer-picker">
-    <span class="picker-title">{{ $t('Layer') }}</span>
-    <div class="layers" role="radiogroup" :aria-label="$t('Layer')">
-      <button
-        v-for="l in LAYERS"
-        :key="l.id"
-        type="button"
-        role="radio"
-        class="layer-btn"
-        :class="{ active: modelValue === l.id }"
-        :aria-checked="modelValue === l.id"
-        :disabled="l.later"
-        :title="l.later ? $t('Coming later') : $t(l.about)"
-        @click="$emit('update:modelValue', l.id)"
-      >
-        {{ $t(l.label) }}<span v-if="l.later" class="later">{{ $t('later') }}</span>
-      </button>
-    </div>
+    <template v-for="g in groups" :key="g.title">
+      <span class="picker-title">{{ $t(g.title) }}</span>
+      <div class="layers" role="radiogroup" :aria-label="$t(g.title)">
+        <button
+          v-for="l in g.layers"
+          :key="l.id"
+          type="button"
+          role="radio"
+          class="layer-btn"
+          :class="{ active: modelValue === l.id }"
+          :aria-checked="modelValue === l.id"
+          :title="$t(l.about)"
+          @click="$emit('update:modelValue', l.id)"
+        >
+          {{ $t(l.label) }}
+        </button>
+      </div>
+    </template>
   </div>
 </template>
 
 <script setup>
+import { tr } from '../i18n'
 import { LAYERS } from '../planetLayers'
 
 // The planet map's layers (planetLayers.js): the map itself, or one drawn
-// over it while the map shows faintly underneath.
+// over it while the map shows faintly underneath; then the climate worked
+// out from them.
 defineProps({ modelValue: { type: String, default: 'map' } })
 defineEmits(['update:modelValue'])
+
+const groups = [
+  { title: tr('Layer'), layers: LAYERS.filter((l) => !l.climate) },
+  { title: tr('Climate'), layers: LAYERS.filter((l) => l.climate) },
+]
 </script>
 
 <style scoped>
@@ -65,16 +73,5 @@ defineEmits(['update:modelValue'])
   color: var(--text-primary);
   border-color: var(--accent);
   background: var(--accent-soft);
-}
-
-.layer-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.later {
-  margin-left: 0.3rem;
-  font-size: 0.62rem;
-  color: var(--text-faint);
 }
 </style>

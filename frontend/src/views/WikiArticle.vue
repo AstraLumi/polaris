@@ -380,7 +380,7 @@ import { chapterLabel, loadChapters } from '../chapters'
 import { t } from '../i18n'
 import {
   TYPE_LABELS, FIELD_LABELS, FACT_LABELS, FACT_GROUPS, GROUP_LABELS, SHEET_LABELS,
-  wikiApi, wikiPath, sourcePath, sourceLabel, makeLinkResolver, factWords,
+  wikiApi, wikiPath, sourcePath, sourceLabel, makeLinkResolver, factWords, biomeShares,
 } from '../wiki'
 
 const props = defineProps({
@@ -501,6 +501,7 @@ const editedAt = computed(() => {
 function factText(f) {
   if (f.kind === 'date') return dateParts(f.value) ? fullDate(f.value) : f.value
   if (f.kind === 'word') return t(f.value)
+  if (f.kind === 'biomes') return biomeShares(f.value)
   if (f.kind === 'words') return factWords(f.value)
   return f.value
 }

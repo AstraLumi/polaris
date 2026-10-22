@@ -27,6 +27,8 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/eclipses.test.mjs
     node frontend/tests/climate.test.mjs
     node frontend/tests/oceanNames.test.mjs
+    node frontend/tests/climateModel.test.mjs
+    node frontend/tests/flowLines.test.mjs
 
 Run all of these before committing.
 
@@ -38,7 +40,11 @@ throwaway story, never real data), take screenshots and look at them:
 Options are listed at the top of the script; the pictures land in
 `frontend/tests/visual/out/` (ignored by git). The camera views come from
 `window.__solarScene` / `window.__solarPage`, defined only on the dev
-server. `backend/static/` is build output (only
+server. The map's continents and climate layers have their own script,
+on a rough Earth (`frontend/tests/earthLike.mjs`):
+
+    node frontend/tests/visual/climateShots.mjs --layers continents,wind,temperature [--month 7 --flat]
+ `backend/static/` is build output (only
 `.gitkeep` is tracked); the tests do not need it.
 
 ## Rules that are easy to break
@@ -94,10 +100,22 @@ server. `backend/static/` is build output (only
   projections exist twice, in Go (`planetgrid.go`, `projection.go`) and JS
   (`planetGrid.js`, `projection.js`): change both, and keep the shared
   fixtures in their tests equal. The planet's layers (tectonic plates,
-  mountain ranges, ocean depths: `map_features`/`feature_cells`,
+  continents, ocean depths: `map_features`/`feature_cells`,
   `backend/planetlayers.go`, `planetLayers.js`) are planet-only, one
-  feature per layer per cell, and must be resampled with everything else
-  when the hex size changes (`resampleLayers`). three.js is only loaded with the planet
+  feature per layer per cell; each hex can also carry a biome
+  (`cell_biomes`, with an optional ground height). Biome keys exist twice,
+  `frontend/src/biomes.js` and `biomeKeys` in `planetlayers.go`: change
+  both. All of it must be resampled with everything else when the hex
+  size changes (`resampleLayers`).
+- **The climate** (winds, ocean currents, temperature, rain, Köppen types)
+  is derived, never stored: `frontend/src/climateModel.js` works it out
+  from land, biomes, heights, tilt, day length and the star
+  (`planetClimate.js` gathers those, runs it in `climate.worker.js` and
+  reads it on the hexes). Keep it a pure module with no drawing; its
+  constants are calibrated against the rough Earth in
+  `frontend/tests/earthLike.mjs` (`climateModel.test.mjs` checks the
+  patterns an atlas shows). Arrows: paths in `flowLines.js`, meshes in
+  `three/flowArrows.js`. three.js is only loaded with the planet
   (`MapPage.vue`, `PlanetTerritory.vue` load it lazily); keep it out of the
   main bundle.
 - **The solar system** (`backend/solar.go`, the Solar system tab) keeps

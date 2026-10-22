@@ -4,14 +4,19 @@ import { layersApi } from './api'
 
 // The planet's layers (backend/planetlayers.go): features drawn over the
 // map like major locations, one per layer on each hex. The map itself is
-// the 'map' layer; the currents are for a later system.
+// the 'map' layer. The continents layer also carries each hex's biome
+// (biomes.js). The climate layers are worked out from all of it
+// (planetClimate.js) and are only looked at, never painted.
 export const LAYERS = [
   { id: 'map', label: tr('Map'), about: tr('Kingdoms, regions, oceans and places') },
   { id: 'plates', label: tr('Tectonic plates'), about: tr('Draw and name the plates the crust is made of'), one: tr('Tectonic plate') },
-  { id: 'mountains', label: tr('Mountain ranges'), about: tr('Draw and name the mountain ranges'), one: tr('Mountain range'), value: tr('Highest peak (m)') },
+  { id: 'continents', label: tr('Continents'), about: tr('Draw and name the continents, and paint what their land is: forests, deserts, mountains…'), one: tr('Continent') },
   { id: 'depth', label: tr('Ocean depth'), about: tr('Draw and name the depths of the seas'), one: tr('Ocean depth'), value: tr('Depth (m)') },
-  { id: 'wind', label: tr('Wind currents'), later: true },
-  { id: 'currents', label: tr('Ocean currents'), later: true },
+  { id: 'wind', label: tr('Winds'), about: tr('The prevailing winds the geography makes'), climate: true },
+  { id: 'currents', label: tr('Ocean currents'), about: tr('The main ocean currents, warm and cold'), climate: true },
+  { id: 'temperature', label: tr('Temperature'), about: tr('A heat map of the planet, month by month'), climate: true },
+  { id: 'rain', label: tr('Rain'), about: tr('How much rain and snow falls, month by month'), climate: true },
+  { id: 'zones', label: tr('Climate types'), about: tr('Köppen climate types, from the temperatures and the rain'), climate: true },
 ]
 export const layerOf = (id) => LAYERS.find((l) => l.id === id) ?? LAYERS[0]
 
@@ -41,6 +46,7 @@ export function useLayers() {
   const features = ref([])
   const byId = new Map()
   const cells = new Map() // layer -> Map(cell -> feature id)
+  const biomes = new Map() // cell -> { biome, height }
   let loaded = false
   let saveChain = Promise.resolve()
 
@@ -59,6 +65,8 @@ export function useLayers() {
       const f = byId.get(id)
       if (f) layerCells(f.layer).set(cell, id)
     }
+    biomes.clear()
+    for (const [cell, biome, height] of data.biomes ?? []) biomes.set(cell, { biome, height })
     loaded = true
   }
 
@@ -97,6 +105,43 @@ export function useLayers() {
     return saveChain
   }
 
+  // ---- Biomes: one per hex, with an optional ground height.
+  const biomeAt = (cell) => biomes.get(cell) ?? null
+  const sameBiome = (a, b) => (a?.biome ?? null) === (b?.biome ?? null) && (a?.height ?? null) === (b?.height ?? null)
+
+  // Sets a cell's biome ({ biome, height } or null); true when it changed.
+  function setBiomeLocal(cell, value) {
+    if (sameBiome(biomes.get(cell), value)) return false
+    if (value) biomes.set(cell, { biome: value.biome, height: value.height ?? null })
+    else biomes.delete(cell)
+    return true
+  }
+
+  // Saves cells set to `after` ({ biome, height } or null), in order with
+  // the other strokes.
+  function saveBiomes(changes, onError) {
+    const paint = new Map()
+    const erase = []
+    for (const { c, after } of changes) {
+      if (!after) erase.push(c)
+      else {
+        const key = `${after.biome}|${after.height ?? ''}`
+        if (!paint.has(key)) paint.set(key, { biome: after.biome, height: after.height ?? null, cells: [] })
+        paint.get(key).cells.push(c)
+      }
+    }
+    saveChain = saveChain.then(async () => {
+      try {
+        if (erase.length) await layersApi.eraseBiomes(erase)
+        for (const p of paint.values()) await layersApi.paintBiomes(p.biome, p.height, p.cells)
+      } catch (err) {
+        await load().catch(() => {})
+        onError(err)
+      }
+    })
+    return saveChain
+  }
+
   async function saveFeature(f) {
     const saved = f.id ? await layersApi.update(f.id, f) : await layersApi.create(f)
     await load()
@@ -108,5 +153,21 @@ export function useLayers() {
     await load()
   }
 
-  return { features, load, ensure, featureAt, featuresOf, cellsOfFeature, setLocal, save, saveFeature, removeFeature }
+  return {
+    features,
+    load,
+    ensure,
+    featureAt,
+    featuresOf,
+    cellsOfFeature,
+    setLocal,
+    save,
+    saveFeature,
+    removeFeature,
+    biomeAt,
+    setBiomeLocal,
+    saveBiomes,
+    sameBiome,
+    biomeCells: () => [...biomes.keys()],
+  }
 }
