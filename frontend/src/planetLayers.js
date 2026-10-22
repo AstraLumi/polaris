@@ -4,8 +4,8 @@ import { layersApi } from './api'
 
 // The planet's layers (backend/planetlayers.go): features drawn over the
 // map like major locations, one per layer on each hex. The map itself is
-// the 'map' layer. The continents layer also carries each hex's biome
-// (biomes.js). The climate layers are worked out from all of it
+// the 'map' layer. The continents layer also carries each hex's biome and
+// terrain (biomes.js). The climate layers are worked out from all of it
 // (planetClimate.js) and are only looked at, never painted.
 export const LAYERS = [
   { id: 'map', label: tr('Map'), about: tr('Kingdoms, regions, oceans and places') },
@@ -46,7 +46,9 @@ export function useLayers() {
   const features = ref([])
   const byId = new Map()
   const cells = new Map() // layer -> Map(cell -> feature id)
-  const biomes = new Map() // cell -> { biome, height }
+  // A hex's tags, apart from the features: its biome and its terrain, each
+  // cell -> { key, height }.
+  const tags = { biome: new Map(), relief: new Map() }
   let loaded = false
   let saveChain = Promise.resolve()
 
@@ -65,8 +67,10 @@ export function useLayers() {
       const f = byId.get(id)
       if (f) layerCells(f.layer).set(cell, id)
     }
-    biomes.clear()
-    for (const [cell, biome, height] of data.biomes ?? []) biomes.set(cell, { biome, height })
+    tags.biome.clear()
+    tags.relief.clear()
+    for (const [cell, key, height] of data.biomes ?? []) tags.biome.set(cell, { key, height })
+    for (const [cell, key, height] of data.relief ?? []) tags.relief.set(cell, { key, height })
     loaded = true
   }
 
@@ -105,35 +109,41 @@ export function useLayers() {
     return saveChain
   }
 
-  // ---- Biomes: one per hex, with an optional ground height.
-  const biomeAt = (cell) => biomes.get(cell) ?? null
-  const sameBiome = (a, b) => (a?.biome ?? null) === (b?.biome ?? null) && (a?.height ?? null) === (b?.height ?? null)
+  // ---- Tags: a biome and a terrain per hex, each { key, height }.
+  // kind is 'biome' or 'relief'.
+  const tagAt = (kind, cell) => tags[kind].get(cell) ?? null
+  const sameTag = (a, b) => (a?.key ?? null) === (b?.key ?? null) && (a?.height ?? null) === (b?.height ?? null)
 
-  // Sets a cell's biome ({ biome, height } or null); true when it changed.
-  function setBiomeLocal(cell, value) {
-    if (sameBiome(biomes.get(cell), value)) return false
-    if (value) biomes.set(cell, { biome: value.biome, height: value.height ?? null })
-    else biomes.delete(cell)
+  // Sets a cell's tag ({ key, height } or null); true when it changed.
+  function setTagLocal(kind, cell, value) {
+    if (sameTag(tags[kind].get(cell), value)) return false
+    if (value) tags[kind].set(cell, { key: value.key, height: value.height ?? null })
+    else tags[kind].delete(cell)
     return true
   }
 
-  // Saves cells set to `after` ({ biome, height } or null), in order with
+  const TAG_API = {
+    biome: { paint: (key, height, cells) => layersApi.paintBiomes(key, height, cells), erase: (cells) => layersApi.eraseBiomes(cells) },
+    relief: { paint: (key, height, cells) => layersApi.paintRelief(key, height, cells), erase: (cells) => layersApi.eraseRelief(cells) },
+  }
+
+  // Saves cells set to `after` ({ key, height } or null), in order with
   // the other strokes.
-  function saveBiomes(changes, onError) {
+  function saveTags(kind, changes, onError) {
     const paint = new Map()
     const erase = []
     for (const { c, after } of changes) {
       if (!after) erase.push(c)
       else {
-        const key = `${after.biome}|${after.height ?? ''}`
-        if (!paint.has(key)) paint.set(key, { biome: after.biome, height: after.height ?? null, cells: [] })
-        paint.get(key).cells.push(c)
+        const id = `${after.key}|${after.height ?? ''}`
+        if (!paint.has(id)) paint.set(id, { key: after.key, height: after.height ?? null, cells: [] })
+        paint.get(id).cells.push(c)
       }
     }
     saveChain = saveChain.then(async () => {
       try {
-        if (erase.length) await layersApi.eraseBiomes(erase)
-        for (const p of paint.values()) await layersApi.paintBiomes(p.biome, p.height, p.cells)
+        if (erase.length) await TAG_API[kind].erase(erase)
+        for (const p of paint.values()) await TAG_API[kind].paint(p.key, p.height, p.cells)
       } catch (err) {
         await load().catch(() => {})
         onError(err)
@@ -164,10 +174,9 @@ export function useLayers() {
     save,
     saveFeature,
     removeFeature,
-    biomeAt,
-    setBiomeLocal,
-    saveBiomes,
-    sameBiome,
-    biomeCells: () => [...biomes.keys()],
+    tagAt,
+    setTagLocal,
+    saveTags,
+    tagCells: (kind) => [...tags[kind].keys()],
   }
 }

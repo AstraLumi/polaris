@@ -76,7 +76,7 @@ var storyOnlyTables = []string{
 	// The solar system round the world.
 	"celestial_bodies", "body_cells", "solar_systems",
 	// The planet's layers.
-	"map_features", "feature_cells", "cell_biomes",
+	"map_features", "feature_cells", "cell_biomes", "cell_relief",
 }
 
 func isNullCol(t assetTable, col string) bool {

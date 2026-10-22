@@ -18,9 +18,10 @@ import (
 // (metres). The wind and ocean currents layers are for a later system and
 // have no features.
 //
-// Next to the layers, every cell can carry a biome (cell_biomes), with the
-// height of its ground when it was painted with one. Biomes are independent
-// of the feature layers.
+// Next to the layers, every cell can carry a biome (cell_biomes: what covers
+// the ground) and a relief (cell_relief: the shape of the land), each with
+// the height of its ground when it was painted with one. Both are
+// independent of the feature layers and of each other.
 //
 // Only the planet (3D) has layers; the 2D map doesn't.
 
@@ -52,6 +53,29 @@ var schema38Statements = []string{
 		biome  TEXT NOT NULL,
 		height REAL
 	)`,
+}
+
+// schema39Statements upgrade a database to schema 39: the relief, the shape
+// of the land, apart from the biome that covers it. The fresh schema runs
+// them too. (moveBiomesToReliefStatements only the migration needs.)
+var schema39Statements = []string{
+	`CREATE TABLE cell_relief (
+		cell   INTEGER PRIMARY KEY,
+		relief TEXT NOT NULL,
+		height REAL
+	)`,
+}
+
+// moveBiomesToReliefStatements move hills, plateaus and mountains, which were
+// biomes until schema 39, over to the relief with their heights. Hills and
+// plateaus leave the biomes (the hex is left with none); mountains become
+// bare rock (Barren) so they keep their look.
+var moveBiomesToReliefStatements = []string{
+	`INSERT OR IGNORE INTO cell_relief (cell, relief, height)
+		SELECT cell, biome, height FROM cell_biomes
+		WHERE biome IN ('hills', 'plateau', 'mountains') ORDER BY cell`,
+	`DELETE FROM cell_biomes WHERE biome IN ('hills', 'plateau')`,
+	`UPDATE cell_biomes SET biome = 'barren', height = NULL WHERE biome = 'mountains'`,
 }
 
 // moveMountainRangesStatements turn the mountain ranges into Mountains hexes
@@ -114,9 +138,12 @@ var biomeKeys = map[string]bool{
 	"rainforest": true, "dry_forest": true, "temperate_rainforest": true, "temperate_forest": true,
 	"boreal_forest": true, "mangrove": true, "savanna": true, "grassland": true, "steppe": true,
 	"shrubland": true, "farmland": true, "desert": true, "cold_desert": true, "salt_flat": true,
-	"barren": true, "tundra": true, "ice": true, "wetland": true, "lake": true, "mountains": true,
-	"hills": true, "plateau": true, "volcanic": true,
+	"barren": true, "tundra": true, "ice": true, "wetland": true, "lake": true, "volcanic": true,
 }
+
+// The landforms a cell can have (its relief): the same keys as the landforms
+// in frontend/src/biomes.js.
+var reliefKeys = map[string]bool{"hills": true, "plateau": true, "mountains": true}
 
 // The highest or deepest ground a hex can be painted with, in metres.
 const maxBiomeHeight = 20000
@@ -140,10 +167,12 @@ type layersPayload struct {
 	Cells [][2]int64 `json:"cells"`
 	// Every cell with a biome, as [cell, biome, height or null].
 	Biomes [][3]any `json:"biomes"`
+	// Every cell with a relief, as [cell, landform, height or null].
+	Relief [][3]any `json:"relief"`
 }
 
 func loadLayers(db *sql.DB) (layersPayload, error) {
-	out := layersPayload{Features: []mapFeature{}, Cells: [][2]int64{}, Biomes: [][3]any{}}
+	out := layersPayload{Features: []mapFeature{}, Cells: [][2]int64{}, Biomes: [][3]any{}, Relief: [][3]any{}}
 	rows, err := db.Query(`SELECT id, layer, name, color, value FROM map_features ORDER BY name COLLATE NOCASE`)
 	if err != nil {
 		return out, err
@@ -176,25 +205,36 @@ func loadLayers(db *sql.DB) (layersPayload, error) {
 	if err := cells.Err(); err != nil {
 		return out, err
 	}
-	biomes, err := db.Query(`SELECT cell, biome, height FROM cell_biomes ORDER BY cell`)
+	if out.Biomes, err = loadCellKinds(db, biomeKinds); err != nil {
+		return out, err
+	}
+	out.Relief, err = loadCellKinds(db, reliefKinds)
+	return out, err
+}
+
+// loadCellKinds reads the biomes or the relief as [cell, key, height or
+// null], ordered by cell.
+func loadCellKinds(db *sql.DB, k cellKinds) ([][3]any, error) {
+	out := [][3]any{}
+	rows, err := db.Query(`SELECT cell, ` + k.col + `, height FROM ` + k.table + ` ORDER BY cell`)
 	if err != nil {
 		return out, err
 	}
-	defer biomes.Close()
-	for biomes.Next() {
+	defer rows.Close()
+	for rows.Next() {
 		var cell int64
-		var biome string
+		var key string
 		var h sql.NullFloat64
-		if err := biomes.Scan(&cell, &biome, &h); err != nil {
+		if err := rows.Scan(&cell, &key, &h); err != nil {
 			return out, err
 		}
 		var height any
 		if h.Valid {
 			height = h.Float64
 		}
-		out.Biomes = append(out.Biomes, [3]any{cell, biome, height})
+		out = append(out, [3]any{cell, key, height})
 	}
-	return out, biomes.Err()
+	return out, rows.Err()
 }
 
 func getLayersHandler(db *sql.DB) http.HandlerFunc {
@@ -373,12 +413,35 @@ func checkCells(w http.ResponseWriter, db *sql.DB, cells []int64) bool {
 	return true
 }
 
-// paintBiomesHandler sets the biome (and the ground's height, when one is
-// given) of cells; with erase, it clears their biomes.
+// cellKinds describes a per-cell table the paint, resample and wiki code
+// share: the biomes and the relief.
+type cellKinds struct {
+	table   string          // cell_biomes or cell_relief
+	col     string          // the column holding the key
+	keys    map[string]bool // the keys that may be painted
+	unknown string          // the answer to a key that isn't one
+}
+
+var (
+	biomeKinds  = cellKinds{"cell_biomes", "biome", biomeKeys, "unknown biome"}
+	reliefKinds = cellKinds{"cell_relief", "relief", reliefKeys, "unknown terrain"}
+)
+
 func paintBiomesHandler(db *sql.DB, erase bool) http.HandlerFunc {
+	return paintCellKindsHandler(db, biomeKinds, erase)
+}
+
+func paintReliefHandler(db *sql.DB, erase bool) http.HandlerFunc {
+	return paintCellKindsHandler(db, reliefKinds, erase)
+}
+
+// paintCellKindsHandler sets the biome or relief (and the ground's height,
+// when one is given) of cells; with erase, it clears theirs.
+func paintCellKindsHandler(db *sql.DB, k cellKinds, erase bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Biome  string   `json:"biome"`
+			Relief string   `json:"relief"`
 			Height *float64 `json:"height"`
 			Cells  []int64  `json:"cells"`
 		}
@@ -386,9 +449,13 @@ func paintBiomesHandler(db *sql.DB, erase bool) http.HandlerFunc {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
+		key := in.Biome
+		if k.col == "relief" {
+			key = in.Relief
+		}
 		if !erase {
-			if !biomeKeys[in.Biome] {
-				http.Error(w, "unknown biome", http.StatusBadRequest)
+			if !k.keys[key] {
+				http.Error(w, k.unknown, http.StatusBadRequest)
 				return
 			}
 			if in.Height != nil && (math.IsNaN(*in.Height) || math.Abs(*in.Height) > maxBiomeHeight) {
@@ -407,13 +474,13 @@ func paintBiomesHandler(db *sql.DB, erase bool) http.HandlerFunc {
 		defer tx.Rollback()
 		for _, c := range in.Cells {
 			if erase {
-				_, err = tx.Exec(`DELETE FROM cell_biomes WHERE cell = ?`, c)
+				_, err = tx.Exec(`DELETE FROM `+k.table+` WHERE cell = ?`, c)
 			} else {
-				_, err = tx.Exec(`INSERT INTO cell_biomes (cell, biome, height) VALUES (?, ?, ?)
-					ON CONFLICT(cell) DO UPDATE SET biome = excluded.biome, height = excluded.height`, c, in.Biome, in.Height)
+				_, err = tx.Exec(`INSERT INTO `+k.table+` (cell, `+k.col+`, height) VALUES (?, ?, ?)
+					ON CONFLICT(cell) DO UPDATE SET `+k.col+` = excluded.`+k.col+`, height = excluded.height`, c, key, in.Height)
 			}
 			if err != nil {
-				log.Printf("paint biomes: %v", err)
+				log.Printf("paint %s: %v", k.table, err)
 				http.Error(w, "failed to paint", http.StatusInternalServerError)
 				return
 			}
@@ -426,10 +493,13 @@ func paintBiomesHandler(db *sql.DB, erase bool) http.HandlerFunc {
 	}
 }
 
-// resampleLayers moves the layers (and the biomes) onto a new grid, as
-// resamplePlanet does for everything else.
+// resampleLayers moves the layers (and the biomes and relief) onto a new
+// grid, as resamplePlanet does for everything else.
 func resampleLayers(tx *sql.Tx, a, b planetGrid) error {
-	if err := resampleBiomes(tx, a, b); err != nil {
+	if err := resampleCellKinds(tx, a, b, biomeKinds); err != nil {
+		return err
+	}
+	if err := resampleCellKinds(tx, a, b, reliefKinds); err != nil {
 		return err
 	}
 	type row struct {
@@ -472,14 +542,14 @@ func resampleLayers(tx *sql.Tx, a, b planetGrid) error {
 	return nil
 }
 
-// resampleBiomes gives every new cell the biome (and height) of the old cell
-// under its centre.
-func resampleBiomes(tx *sql.Tx, a, b planetGrid) error {
+// resampleCellKinds gives every new cell the biome or relief (and height) of
+// the old cell under its centre.
+func resampleCellKinds(tx *sql.Tx, a, b planetGrid, k cellKinds) error {
 	type biome struct {
 		key    string
 		height sql.NullFloat64
 	}
-	rows, err := tx.Query(`SELECT cell, biome, height FROM cell_biomes`)
+	rows, err := tx.Query(`SELECT cell, ` + k.col + `, height FROM ` + k.table)
 	if err != nil {
 		return err
 	}
@@ -494,13 +564,13 @@ func resampleBiomes(tx *sql.Tx, a, b planetGrid) error {
 		old[cell] = bm
 	}
 	rows.Close()
-	if _, err := tx.Exec(`DELETE FROM cell_biomes`); err != nil {
+	if _, err := tx.Exec(`DELETE FROM ` + k.table); err != nil {
 		return err
 	}
 	if len(old) == 0 {
 		return nil
 	}
-	ins, err := tx.Prepare(`INSERT OR IGNORE INTO cell_biomes (cell, biome, height) VALUES (?, ?, ?)`)
+	ins, err := tx.Prepare(`INSERT OR IGNORE INTO ` + k.table + ` (cell, ` + k.col + `, height) VALUES (?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -549,7 +619,7 @@ func featureFacts(db *sql.DB, a *wikiArticle) {
 			WHERE f.layer = 'continents' AND p.feature_id = ? ORDER BY f.name COLLATE NOCASE`, a.ID))
 	}
 	if layer == "continents" {
-		addBiomesFact(db, a, cellsOf, a.ID)
+		addCellShareFacts(db, a, cellsOf, a.ID)
 	}
 }
 
@@ -581,23 +651,29 @@ func locationLayerFacts(db *sql.DB, a *wikiArticle, kind string) {
 	if len(continents) > 1 {
 		a.addGroup("continents", continents)
 	}
-	addBiomesFact(db, a, cellsOf, a.ID)
+	addCellShareFacts(db, a, cellsOf, a.ID)
 }
 
-// addBiomesFact adds the "biomes" fact: each biome's share of the cells that
-// cellsOf selects (its one argument is ?1), in whole percent, largest first,
-// at most 6, those under 1% left out. Written as "desert:40,savanna:25"; the
-// frontend turns each key into its name. Nothing is added when no cell has a
-// biome.
-func addBiomesFact(db *sql.DB, a *wikiArticle, cellsOf string, arg any) {
+// addCellShareFacts adds the "biomes" and "terrain" facts of the cells that
+// cellsOf selects (its one argument is ?1).
+func addCellShareFacts(db *sql.DB, a *wikiArticle, cellsOf string, arg any) {
+	addSharesFact(db, a, cellsOf, arg, biomeKinds, "biomes")
+	addSharesFact(db, a, cellsOf, arg, reliefKinds, "terrain")
+}
+
+// addSharesFact adds a fact with each biome's (or landform's) share of the
+// cells that cellsOf selects, in whole percent, largest first, at most 6,
+// those under 1% left out. Written as "desert:40,savanna:25"; the frontend
+// turns each key into its name. Nothing is added when no cell has one.
+func addSharesFact(db *sql.DB, a *wikiArticle, cellsOf string, arg any, k cellKinds, fact string) {
 	var total int
 	db.QueryRow(`SELECT COUNT(*) FROM (`+cellsOf+`)`, arg).Scan(&total)
 	if total == 0 {
 		return
 	}
-	rows, err := db.Query(`SELECT biome, COUNT(*) FROM cell_biomes WHERE cell IN (`+cellsOf+`) GROUP BY biome`, arg)
+	rows, err := db.Query(`SELECT `+k.col+`, COUNT(*) FROM `+k.table+` WHERE cell IN (`+cellsOf+`) GROUP BY `+k.col, arg)
 	if err != nil {
-		log.Printf("wiki biomes: %v", err)
+		log.Printf("wiki %s: %v", fact, err)
 		return
 	}
 	defer rows.Close()
@@ -608,7 +684,7 @@ func addBiomesFact(db *sql.DB, a *wikiArticle, cellsOf string, arg any) {
 	var shares []share
 	for rows.Next() {
 		var s share
-		if rows.Scan(&s.key, &s.n) == nil && biomeKeys[s.key] {
+		if rows.Scan(&s.key, &s.n) == nil && k.keys[s.key] {
 			shares = append(shares, s)
 		}
 	}
@@ -626,7 +702,9 @@ func addBiomesFact(db *sql.DB, a *wikiArticle, cellsOf string, arg any) {
 		}
 		parts = append(parts, s.key+":"+strconv.Itoa(int(math.Round(pct))))
 	}
-	a.addFact("biomes", strings.Join(parts, ","), "biomes", nil)
+	if len(parts) > 0 {
+		a.addFact(fact, strings.Join(parts, ","), fact, nil)
+	}
 }
 
 // hexAreaKm2 is the area of one hex: the planet's surface (a sphere with the

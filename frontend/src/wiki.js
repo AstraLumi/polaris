@@ -1,7 +1,7 @@
 import { tr, t } from './i18n'
 import { STORY_API } from './stories'
 import { mapPath } from './navigation'
-import { biomeOf } from './biomes'
+import { biomeOf, landformOf } from './biomes'
 
 // The wiki has no pages of its own: the server builds an article for every
 // character, location, event and asset (see backend/wiki.go) and stores only
@@ -133,6 +133,7 @@ export const FACT_LABELS = {
   area: tr('Area'),
   continent: tr('Continent'),
   biomes: tr('Biomes'),
+  terrain: tr('Terrain'),
   depth: tr('Depth'),
 }
 
@@ -144,7 +145,7 @@ export const FACT_GROUPS = [
   { label: tr('Personal'), keys: ['gender', 'age', 'race', 'body_type', 'blood_type'] },
   { label: tr('Birth'), keys: ['born', 'born_in', 'nation', 'earth_name', 'human_birth_date'] },
   { label: tr('Abilities'), keys: ['class', 'subclass', 'specialization'] },
-  { label: tr('Geography'), keys: ['hemisphere', 'latitude', 'climate_zone', 'plate', 'continent', 'area', 'biomes', 'depth'] },
+  { label: tr('Geography'), keys: ['hemisphere', 'latitude', 'climate_zone', 'plate', 'continent', 'area', 'terrain', 'biomes', 'depth'] },
   { label: tr('Orbit'), keys: ['system', 'orbits', 'orbit_radius', 'eccentricity', 'closest', 'farthest', 'axial_tilt', 'day_length'] },
 ]
 
@@ -164,17 +165,21 @@ export const WORD_LABELS = [
 // A 'words' value: several of the words above, joined by '|'.
 export const factWords = (value) => value.split('|').map((w) => t(w)).join(', ')
 
-// A 'biomes' value: "desert:40,savanna:25", each biome's share in percent.
-export const biomeShares = (value) =>
+// A 'biomes' or 'terrain' value: "desert:40,savanna:25", each one's share in
+// percent.
+const shares = (value, find) =>
   value
     .split(',')
     .map((part) => {
       const [key, pct] = part.split(':')
-      const biome = biomeOf(key)
-      return biome ? `${t(biome.label)} ${pct}%` : ''
+      const found = find(key)
+      return found ? `${t(found.label)} ${pct}%` : ''
     })
     .filter(Boolean)
     .join(', ')
+
+export const biomeShares = (value) => shares(value, biomeOf)
+export const terrainShares = (value) => shares(value, landformOf)
 
 // Related lists.
 export const GROUP_LABELS = {

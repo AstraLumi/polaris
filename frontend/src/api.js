@@ -536,10 +536,12 @@ export const layersApi = {
   erase: (layer, cells) => mapRequest('/planet/features/erase', jsonBody('POST', { layer, cells }), 'failed to erase'),
   paintBiomes: (biome, height, cells) => mapRequest('/planet/biomes/paint', jsonBody('POST', { biome, height, cells }), 'failed to paint'),
   eraseBiomes: (cells) => mapRequest('/planet/biomes/erase', jsonBody('POST', { cells }), 'failed to erase'),
+  paintRelief: (relief, height, cells) => mapRequest('/planet/relief/paint', jsonBody('POST', { relief, height, cells }), 'failed to paint'),
+  eraseRelief: (cells) => mapRequest('/planet/relief/erase', jsonBody('POST', { cells }), 'failed to erase'),
 }
 
 // Messages the layers can send back; listed so they get translated.
-void [tr("rings run from the planet's surface outwards: inner edge at least 1 radius, outer edge beyond it, at most 20"), tr('a day must last more than 0 hours'), tr('the axial tilt must be between 0 and 180 degrees'), tr('unknown layer'), tr('feature not found'), tr('too many features'), tr('feature_id is required'), tr('unknown biome'), tr('that height is out of range')]
+void [tr("rings run from the planet's surface outwards: inner edge at least 1 radius, outer edge beyond it, at most 20"), tr('a day must last more than 0 hours'), tr('the axial tilt must be between 0 and 180 degrees'), tr('unknown layer'), tr('feature not found'), tr('too many features'), tr('feature_id is required'), tr('unknown biome'), tr('unknown terrain'), tr('that height is out of range')]
 
 export const planetApi = {
   get: () => mapRequest('/planet', undefined, 'failed to load the planet'),

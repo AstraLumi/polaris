@@ -203,6 +203,8 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	mux.HandleFunc("POST /api/planet/features/erase", paintFeatureHandler(db, true))
 	mux.HandleFunc("POST /api/planet/biomes/paint", paintBiomesHandler(db, false))
 	mux.HandleFunc("POST /api/planet/biomes/erase", paintBiomesHandler(db, true))
+	mux.HandleFunc("POST /api/planet/relief/paint", paintReliefHandler(db, false))
+	mux.HandleFunc("POST /api/planet/relief/erase", paintReliefHandler(db, true))
 	mux.HandleFunc("GET /api/solar", getSolarHandler(db))
 	mux.HandleFunc("POST /api/solar/bodies", saveBodyHandler(db))
 	mux.HandleFunc("PUT /api/solar/bodies/{id}", saveBodyHandler(db))

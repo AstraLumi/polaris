@@ -104,9 +104,11 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   continents, ocean depths: `map_features`/`feature_cells`,
   `backend/planetlayers.go`, `planetLayers.js`) are planet-only, one
   feature per layer per cell; each hex can also carry a biome
-  (`cell_biomes`, with an optional ground height). Biome keys exist twice,
-  `frontend/src/biomes.js` and `biomeKeys` in `planetlayers.go`: change
-  both. All of it must be resampled with everything else when the hex
+  (`cell_biomes`: what covers it) and, apart from it, a terrain
+  (`cell_relief`: hills, plateau, mountains, with an optional ground
+  height), so a plateau can be forested. Biome and terrain keys exist
+  twice, `frontend/src/biomes.js` (`BIOME_GROUPS`, `LANDFORMS`) and
+  `biomeKeys`/`reliefKeys` in `planetlayers.go`: change both. All of it must be resampled with everything else when the hex
   size changes (`resampleLayers`).
 - **The climate** (winds, ocean currents, temperature, rain, Köppen types)
   is derived, never stored: `frontend/src/climateModel.js` works it out

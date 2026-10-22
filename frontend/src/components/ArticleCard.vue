@@ -21,7 +21,7 @@
 <script setup>
 import { computed } from 'vue'
 import IconImage from './IconImage.vue'
-import { TYPE_LABELS, FACT_LABELS, factWords, biomeShares } from '../wiki'
+import { TYPE_LABELS, FACT_LABELS, factWords, biomeShares, terrainShares } from '../wiki'
 import { articleText } from '../articlePreview'
 import { fullDate, dateParts } from '../calendar'
 import { t } from '../i18n'
@@ -40,6 +40,7 @@ const facts = computed(() =>
       if (f.kind === 'word') value = t(f.value)
       if (f.kind === 'words') value = factWords(f.value)
       if (f.kind === 'biomes') value = biomeShares(f.value)
+      if (f.kind === 'terrain') value = terrainShares(f.value)
       return { key: f.key, text: value }
     })
     .filter((f) => f.text && FACT_LABELS[f.key])

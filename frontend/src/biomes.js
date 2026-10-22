@@ -1,14 +1,18 @@
 import { tr } from './i18n'
 
-// What the land of the planet is, hex by hex: the biomes painted on the
-// Continents layer (backend/planetlayers.go keeps the same keys in
-// `biomeKeys`; change both together). Grouped into categories for the
-// picker. Each biome carries what the climate (climateModel.js) reads from
-// it:
+// What the land of the planet is, hex by hex, painted on the Continents
+// layer, in two independent parts (backend/planetlayers.go keeps the same
+// keys in `biomeKeys` and `reliefKeys`; change both together):
+//   the biome    what covers the ground: forest, grassland, desert, ice…
+//   the terrain  the ground's shape and height: hills, a plateau,
+//                mountains (LANDFORMS), or lowland when none is painted.
+// So a high plateau can be covered in boreal forest, mountains in ice.
+//
+// Each biome carries what the climate (climateModel.js) reads from it:
 //   veg     how dense its plants are, 0 to 1: plants give moisture back to
 //           the air, so dense vegetation keeps rain going further inland
-//   height  the usual height of its ground in metres, when the hex has none
-//           of its own (mountains painted with a peak height keep theirs)
+//   height  the usual height of its ground in metres, when the hex has no
+//           terrain painted (lowlands; an ice sheet stands high by itself)
 //   albedo  how much sunlight its ground reflects
 //   water   inland water: it gives moisture like the sea does
 //   heat    the ground's own heat in W/m² (volcanic land): it warms the
@@ -46,6 +50,7 @@ export const BIOME_GROUPS = [
       { key: 'cold_desert', label: tr('Cold desert'), color: '#c8b99a', veg: 0.05, height: 1000, albedo: 0.3 },
       { key: 'salt_flat', label: tr('Salt flats'), color: '#e8e4d8', veg: 0, height: 200, albedo: 0.45 },
       { key: 'barren', label: tr('Barren rock'), color: '#8c8580', veg: 0, height: 500, albedo: 0.25 },
+      { key: 'volcanic', label: tr('Volcanic land'), color: '#5a4a48', veg: 0.05, height: 500, albedo: 0.12, heat: 40 },
     ],
   },
   {
@@ -64,25 +69,34 @@ export const BIOME_GROUPS = [
       { key: 'lake', label: tr('Lake'), color: '#4a7fb0', veg: 0, height: 100, albedo: 0.08, water: true },
     ],
   },
-  {
-    id: 'highlands',
-    label: tr('Highlands'),
-    biomes: [
-      { key: 'mountains', label: tr('Mountains'), color: '#8a7f75', veg: 0.2, height: 3000, albedo: 0.22, peak: true },
-      { key: 'hills', label: tr('Hills'), color: '#9c8f6c', veg: 0.4, height: 600, albedo: 0.18, peak: true },
-      { key: 'plateau', label: tr('Plateau'), color: '#a8906a', veg: 0.25, height: 1500, albedo: 0.22, peak: true },
-      { key: 'volcanic', label: tr('Volcanic land'), color: '#5a4a48', veg: 0.05, height: 1500, albedo: 0.12, peak: true, heat: 40 },
-    ],
-  },
 ]
 
 export const BIOMES = BIOME_GROUPS.flatMap((g) => g.biomes.map((b) => ({ ...b, group: g.id })))
 const byKey = new Map(BIOMES.map((b) => [b.key, b]))
 export const biomeOf = (key) => byKey.get(key) ?? null
 
+// The shapes of the land, from low to high, each with its usual height
+// (metres; a hex can be painted with its own), how much it lightens the
+// biome's colour on the map (shade), and its own colour where no biome is
+// painted.
+export const LANDFORMS = [
+  { key: 'hills', label: tr('Hills'), height: 600, shade: 0.16, color: '#9c8f6c' },
+  { key: 'plateau', label: tr('Plateau'), height: 1500, shade: 0.3, color: '#a8906a' },
+  { key: 'mountains', label: tr('Mountains'), height: 3000, shade: 0.45, color: '#8a7f75' },
+]
+const landformByKey = new Map(LANDFORMS.map((l) => [l.key, l]))
+export const landformOf = (key) => landformByKey.get(key) ?? null
+
 // Land painted on a continent but given no biome: what the climate assumes.
 export const PLAIN_LAND = { key: '', label: tr('Land'), color: '#7d8a5a', veg: 0.45, height: 300, albedo: 0.2 }
 
-// The height of a hex's ground: its own (painted with a height), or its
-// biome's usual one.
-export const groundHeight = (biome, height) => (height != null ? height : (biome ?? PLAIN_LAND).height)
+// The height of a hex's ground from what is painted on it (each tag
+// { key, height }, planetLayers.js): its terrain at its own height or its
+// landform's usual one; with no terrain, the biome's (a height kept from
+// before terrain existed, else the biome's usual one); else plain land's.
+export function groundHeight(biome, relief) {
+  const form = relief && landformOf(relief.key)
+  if (form) return relief.height != null ? relief.height : form.height
+  if (biome?.height != null) return biome.height
+  return (biomeOf(biome?.key) ?? PLAIN_LAND).height
+}

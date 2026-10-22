@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 	"testing"
@@ -39,25 +40,13 @@ func TestMigrationTurnsMountainRangesIntoBiomes(t *testing.T) {
 		t.Fatalf("version %s", v)
 	}
 
-	rows, err := app.db.Query(`SELECT cell, biome, height FROM cell_biomes ORDER BY cell`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	var got []string
-	for rows.Next() {
-		var cell int
-		var biome string
-		var h *float64
-		rows.Scan(&cell, &biome, &h)
-		s := fmt.Sprintf("%d:%s", cell, biome)
-		if h != nil {
-			s += fmt.Sprintf("@%g", *h)
-		}
-		got = append(got, s)
-	}
-	if strings.Join(got, " ") != "10:mountains@4200 11:mountains@4200 20:mountains" {
+	// The ranges became Mountains hexes (schema 38), which schema 39 then
+	// moved to the relief, leaving bare rock in the biomes.
+	if got := cellKindsOf(t, app.db, "cell_biomes", "biome"); got != "10:barren 11:barren 20:barren" {
 		t.Errorf("biomes: %v", got)
+	}
+	if got := cellKindsOf(t, app.db, "cell_relief", "relief"); got != "10:mountains@4200 11:mountains@4200 20:mountains" {
+		t.Errorf("relief: %v", got)
 	}
 
 	count := func(q string) (n int) {
@@ -93,6 +82,58 @@ func TestMigrationTurnsMountainRangesIntoBiomes(t *testing.T) {
 	}
 }
 
+// cellKindsOf lists a per-cell table as "cell:key@height", ordered by cell.
+func cellKindsOf(t *testing.T, db *sql.DB, table, col string) string {
+	t.Helper()
+	rows, err := db.Query(`SELECT cell, ` + col + `, height FROM ` + table + ` ORDER BY cell`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var got []string
+	for rows.Next() {
+		var cell int
+		var key string
+		var h *float64
+		rows.Scan(&cell, &key, &h)
+		s := fmt.Sprintf("%d:%s", cell, key)
+		if h != nil {
+			s += fmt.Sprintf("@%g", *h)
+		}
+		got = append(got, s)
+	}
+	return strings.Join(got, " ")
+}
+
+// Schema 39 moves hills, plateaus and mountains from the biomes to the
+// relief, with their heights; the mountains stay as bare rock.
+func TestMigrationMovesLandformsToRelief(t *testing.T) {
+	mgr, _ := newTestServer(t)
+	app, _ := mgr.open(createStoryDirect(t, mgr, "Old"))
+	rollBackSchema39(t, app.db)
+	if _, err := app.db.Exec(`INSERT INTO cell_relief (cell, relief) VALUES (1, 'hills')`); err == nil {
+		t.Fatal("schema 38 should not know the relief")
+	}
+	if _, err := app.db.Exec(`INSERT INTO cell_biomes (cell, biome, height) VALUES
+		(1, 'hills', 700), (2, 'plateau', NULL), (3, 'mountains', 4200), (4, 'desert', NULL), (5, 'tundra', 30)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureSchema(app.db); err != nil {
+		t.Fatal(err)
+	}
+	var v string
+	app.db.QueryRow(`SELECT value FROM schema_meta WHERE key = 'schema_version'`).Scan(&v)
+	if v != currentSchemaVersion {
+		t.Fatalf("version %s", v)
+	}
+	if got := cellKindsOf(t, app.db, "cell_relief", "relief"); got != "1:hills@700 2:plateau 3:mountains@4200" {
+		t.Errorf("relief: %v", got)
+	}
+	if got := cellKindsOf(t, app.db, "cell_biomes", "biome"); got != "3:barren 4:desert 5:tundra@30" {
+		t.Errorf("biomes: %v", got)
+	}
+}
+
 // Erasing clears the biomes of the cells it is given and no others.
 func TestEraseBiomes(t *testing.T) {
 	app, h, base := planetSetup(t)
@@ -119,6 +160,43 @@ func TestEraseBiomes(t *testing.T) {
 	}
 	if len(cells) != 1 || cells[0] != 1 {
 		t.Errorf("cells left: %v", cells)
+	}
+}
+
+// The relief is painted, replaced and erased like the biomes, but only the
+// three landforms are accepted.
+func TestPaintRelief(t *testing.T) {
+	app, h, base := planetSetup(t)
+	putMap(t, h, base, nil)
+	post := func(path, body string) int {
+		return do(t, h, "POST", base+"/planet/relief/"+path, strings.NewReader(body), "application/json").Code
+	}
+	if c := post("paint", `{"relief":"plateau","height":1800,"cells":[1,2,3]}`); c != 200 {
+		t.Fatal(c)
+	}
+	if c := post("paint", `{"relief":"hills","height":null,"cells":[3]}`); c != 200 {
+		t.Fatal(c)
+	}
+	for _, bad := range []string{
+		`{"relief":"desert","cells":[1]}`, `{"relief":"","cells":[1]}`, `{"biome":"hills","cells":[1]}`,
+		`{"relief":"hills","height":20001,"cells":[1]}`, `{"relief":"hills","cells":[-1]}`,
+	} {
+		if c := post("paint", bad); c != 400 {
+			t.Errorf("%s: %d", bad, c)
+		}
+	}
+	if rec := do(t, h, "POST", base+"/planet/relief/paint", strings.NewReader(`{"relief":"swamp","cells":[1]}`), "application/json"); !strings.Contains(rec.Body.String(), "unknown terrain") {
+		t.Errorf("answer: %s", rec.Body.String())
+	}
+	if c := post("erase", `{"cells":[2]}`); c != 200 {
+		t.Fatal(c)
+	}
+	if got := cellKindsOf(t, app.db, "cell_relief", "relief"); got != "1:plateau@1800 3:hills" {
+		t.Errorf("relief: %v", got)
+	}
+	// The biomes are a separate layer: they know nothing of relief.
+	if n := cellKindsOf(t, app.db, "cell_biomes", "biome"); n != "" {
+		t.Errorf("biomes: %v", n)
 	}
 }
 

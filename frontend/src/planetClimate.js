@@ -12,10 +12,11 @@ import { mainLighting } from './lighting.js'
 // map and is worked out again when the map changes.
 
 // ---- What the model is given ---------------------------------------------------------------
-// isLand(cell) and biomeAt(cell) -> { biome, height } | null come from the
-// page. Answers the model's input, and the ground's height on every cell
-// (for the temperature up high).
-export function climateInput({ frequency, isLand, biomeAt, tilt, dayHours, months, daysPerMonth, planetKm, insolation, evenHeat = 0 }) {
+// isLand(cell) and tagAt(kind, cell) -> { key, height } | null (kind
+// 'biome' or 'relief', planetLayers.js) come from the page. Answers the
+// model's input, and the ground's height on every cell (for the
+// temperature up high).
+export function climateInput({ frequency, isLand, tagAt, tilt, dayHours, months, daysPerMonth, planetKm, insolation, evenHeat = 0 }) {
   const count = new PlanetGrid(frequency).count
   const land = new Uint8Array(count)
   const veg = new Float32Array(count)
@@ -25,12 +26,13 @@ export function climateInput({ frequency, isLand, biomeAt, tilt, dayHours, month
   const geothermal = new Float32Array(count)
   for (let c = 0; c < count; c++) {
     if (!isLand(c)) continue
-    const painted = biomeAt(c)
-    const b = (painted && biomeOf(painted.biome)) || PLAIN_LAND
+    const painted = tagAt('biome', c)
+    const relief = tagAt('relief', c)
+    const b = (painted && biomeOf(painted.key)) || PLAIN_LAND
     land[c] = 1
     veg[c] = b.veg
     albedo[c] = b.albedo
-    height[c] = Math.max(0, groundHeight(painted ? b : null, painted?.height ?? null))
+    height[c] = Math.max(0, groundHeight(painted, relief))
     water[c] = b.water ? 1 : 0
     geothermal[c] = b.heat ?? 0
   }

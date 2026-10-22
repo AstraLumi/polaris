@@ -46,6 +46,7 @@ tr('Location')
 tr('City')
 tr('Capital')
 tr('Biome')
+tr('Terrain')
 tr('Climate')
 // Rows of a hex's climate (PlanetMap.vue).
 tr('Mean temperature')

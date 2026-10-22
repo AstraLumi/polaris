@@ -130,7 +130,7 @@
         @closed="listClosed = $event"
       >
         <template v-if="layer === 'continents'" #extra>
-          <BiomePalette v-model="pickedBiome" v-model:height="biomeHeight" :counts="biomeCounts" />
+          <BiomePalette v-model="pickedTag" v-model:height="tagHeight" :counts="tagCounts" />
         </template>
         <template v-else-if="onClimate" #extra>
           <ClimatePanel
@@ -207,7 +207,7 @@ import FeatureModal from '../components/FeatureModal.vue'
 import BiomePalette from '../components/BiomePalette.vue'
 import ClimatePanel from '../components/ClimatePanel.vue'
 import { useLayers, layerOf, layerCellColor, mixColor } from '../planetLayers'
-import { biomeOf, PLAIN_LAND } from '../biomes'
+import { biomeOf, landformOf, PLAIN_LAND } from '../biomes'
 import { calendar } from '../calendar'
 import { usePlanetClimate, climateInput, heatOf } from '../planetClimate'
 import { temperatureColor, rainColor, koppenColor, koppenName, formatTemperature, formatRain, compassPoint } from '../climateColors'
@@ -292,8 +292,12 @@ const onLayer = computed(() => layer.value !== 'map' && !onClimate.value)
 const layerFeatures = computed(() => layers.features.value.filter((f) => f.layer === layer.value))
 const activeFeatureId = ref(null)
 const featureModal = ref(null) // { feature } (null feature for a new one)
-const pickedBiome = ref(null) // a biome key, on the continents layer
-const biomeHeight = ref(null) // the ground height it is painted with (m), or its usual one
+// On the continents layer: the biome or terrain to paint with,
+// { kind: 'biome' | 'relief', key }, and the ground height terrain is
+// painted with (m; null for the landform's usual one).
+const pickedTag = ref(null)
+const tagHeight = ref(null)
+const tagLabel = (tag) => (tag.kind === 'relief' ? landformOf(tag.key) : biomeOf(tag.key))?.label ?? ''
 const shownTools = computed(() => (onClimate.value ? tools.filter((x) => x.key === 'select') : tools))
 
 // Which arrows each climate layer starts with.
@@ -303,7 +307,7 @@ const climateMonth = ref(null) // 0-based calendar month, or null for the year
 
 watch(layer, async () => {
   activeFeatureId.value = null
-  pickedBiome.value = null
+  pickedTag.value = null
   if (onClimate.value) {
     tool.value = 'select'
     arrows.value = { ...(ARROWS[layer.value] ?? { wind: false, currents: false }) }
@@ -320,26 +324,28 @@ watch(layer, async () => {
 function onListPick(item) {
   if (!onLayer.value) return toggleActive(item)
   activeFeatureId.value = activeFeatureId.value === item.id ? null : item.id
-  if (activeFeatureId.value != null) pickedBiome.value = null
+  if (activeFeatureId.value != null) pickedTag.value = null
 }
 
-watch(pickedBiome, (b) => {
-  if (b) {
+watch(pickedTag, (tag) => {
+  if (tag) {
     activeFeatureId.value = null
     if (tool.value === 'select') tool.value = 'paint'
   }
-  biomeHeight.value = null
+  tagHeight.value = null
 })
 
-// How many hexes each biome covers (on land).
-const biomeCounts = computed(() => {
+// How many land hexes each biome and terrain covers: 'kind:key' -> hexes.
+const tagCounts = computed(() => {
   version.value // eslint-disable-line no-unused-expressions
   const out = new Map()
   if (layer.value !== 'continents') return out
-  for (const c of layers.biomeCells()) {
-    if (!isLand(c)) continue
-    const b = layers.biomeAt(c).biome
-    out.set(b, (out.get(b) ?? 0) + 1)
+  for (const kind of ['biome', 'relief']) {
+    for (const c of layers.tagCells(kind)) {
+      if (!isLand(c)) continue
+      const id = `${kind}:${layers.tagAt(kind, c).key}`
+      out.set(id, (out.get(id) ?? 0) + 1)
+    }
   }
   return out
 })
@@ -380,7 +386,7 @@ async function workOutClimate() {
   const input = climateInput({
     frequency: grid.n,
     isLand,
-    biomeAt: (c) => layers.biomeAt(c),
+    tagAt: (kind, c) => layers.tagAt(kind, c),
     tilt: worldMap.planet.tilt,
     dayHours: calendar.hours_per_day,
     months: Math.min(24, calendar.months_per_year),
@@ -450,7 +456,7 @@ const coloredCells = computed(() => {
   version.value // eslint-disable-line no-unused-expressions
   if (onClimate.value && climate.view.value) return [...Array(grid.count).keys()]
   const drawn = onLayer.value ? layerFeatures.value.flatMap((f) => layers.cellsOfFeature(f)) : []
-  const painted = layer.value === 'continents' ? layers.biomeCells().filter(isLand) : []
+  const painted = layer.value === 'continents' ? [...layers.tagCells('biome'), ...layers.tagCells('relief')].filter(isLand) : []
   return [...new Set([...cellMembers.keys(), ...minorsByCell.keys(), ...drawn, ...painted])]
 })
 
@@ -492,7 +498,7 @@ function flash(message) {
 }
 
 const activeName = computed(() => {
-  if (pickedBiome.value) return t(biomeOf(pickedBiome.value)?.label ?? '')
+  if (pickedTag.value) return t(tagLabel(pickedTag.value))
   return onLayer.value
     ? layerFeatures.value.find((f) => f.id === activeFeatureId.value)?.name ?? ''
     : majors.value.find((m) => m.id === activeId.value)?.name ?? ''
@@ -534,20 +540,31 @@ function coloredOf(ids) {
 function colorOf(cell) {
   const base = cellColor(cellMembers.get(cell), locMap, minorsByCell.has(cell), oceanView.shown && oceanView.tint)
   if (onClimate.value) return climateColorOf(cell, base)
-  if (layer.value === 'continents') {
-    const b = layers.biomeAt(cell)
-    if (b && isLand(cell)) return biomeOf(b.biome)?.color ?? base
+  if (layer.value === 'continents' && isLand(cell)) {
+    const painted = landColor(cell, '')
+    if (painted) return painted
   }
   return onLayer.value ? layerCellColor(base, layers.featureAt(layer.value, cell)) : base
 }
 
 const SEA_DARK = '#0a1426'
 
-// Land under the arrows: its biome's colour (or the map's), dimmed.
+// A land hex's painted colour: its biome's (or its landform's, with no
+// biome), lighter the higher its terrain; `fallback` when nothing is
+// painted.
+function landColor(cell, fallback) {
+  const b = layers.tagAt('biome', cell)
+  const r = layers.tagAt('relief', cell)
+  const form = r && landformOf(r.key)
+  const color = (b && biomeOf(b.key)?.color) || form?.color || fallback
+  if (!color || !form || !b) return color
+  const up = r.height != null ? Math.min(1, r.height / 3000) * 0.45 : form.shade
+  return mixColor(color, '#e8e0d0', Math.max(0.08, up))
+}
+
+// Land under the arrows: its painted colour (or the map's), dimmed.
 function landUnder(cell, base) {
-  const b = layers.biomeAt(cell)
-  const color = (b && biomeOf(b.biome)?.color) || base || PLAIN_LAND.color
-  return mixColor(color, SEA_DARK, 0.45)
+  return mixColor(landColor(cell, base || PLAIN_LAND.color), SEA_DARK, 0.45)
 }
 
 // A cell on a climate layer: a heat map, rain, climate types; winds and
@@ -664,10 +681,13 @@ function describeCell(cell) {
   const f = onLayer.value ? layers.featureAt(layer.value, cell) : null
   if (f) entries.push({ type: layerInfo.value.one, name: f.name, color: f.color })
   if (layer.value === 'continents' && isLand(cell)) {
-    const b = layers.biomeAt(cell)
-    const info = b && biomeOf(b.biome)
+    const r = layers.tagAt('relief', cell)
+    const form = r && landformOf(r.key)
+    if (form) entries.push({ type: 'Terrain', name: `${t(form.label)} · ${Math.round(r.height ?? form.height).toLocaleString()} m`, color: form.color, bare: true })
+    const b = layers.tagAt('biome', cell)
+    const info = b && biomeOf(b.key)
     if (info) {
-      const h = b.height != null ? ` · ${Math.round(b.height).toLocaleString()} m` : ''
+      const h = b.height != null && !form ? ` · ${Math.round(b.height).toLocaleString()} m` : ''
       entries.push({ type: 'Biome', name: t(info.label) + h, color: info.color, bare: true })
     }
   }
@@ -801,8 +821,8 @@ function onPaintStart() {
     stroke = null
     return
   }
-  if (layer.value === 'continents' && pickedBiome.value) {
-    stroke = { biomes: true, type: tool.value, value: { biome: pickedBiome.value, height: biomeHeight.value }, before: new Map(), changed: new Set(), skipped: 0 }
+  if (layer.value === 'continents' && pickedTag.value) {
+    stroke = { tags: pickedTag.value.kind, type: tool.value, value: pickedValue(), before: new Map(), changed: new Set(), skipped: 0 }
     return
   }
   if (onLayer.value) {
@@ -840,19 +860,25 @@ function paintLayerCells(cells) {
   if (touched.length) globeRef.value?.recolor(touched)
 }
 
-// A biome stroke: land cells take the biome, or lose it (only the picked one).
-function paintBiomeCells(cells) {
+// What the picked biome or terrain paints: { key, height } (only terrain
+// takes a height).
+const pickedValue = () => ({ key: pickedTag.value.key, height: pickedTag.value.kind === 'relief' ? tagHeight.value : null })
+
+// A biome or terrain stroke: land cells take it, or lose it (only the
+// picked one).
+function paintTagCells(cells) {
   const touched = []
+  const kind = stroke.tags
   for (const c of cells) {
     if (!isLand(c)) {
       stroke.skipped++
       continue
     }
-    const now = layers.biomeAt(c)
+    const now = layers.tagAt(kind, c)
     if (!stroke.before.has(c)) stroke.before.set(c, now)
     let changed
-    if (stroke.type === 'paint') changed = layers.setBiomeLocal(c, stroke.value)
-    else changed = now?.biome === stroke.value.biome && layers.setBiomeLocal(c, null)
+    if (stroke.type === 'paint') changed = layers.setTagLocal(kind, c, stroke.value)
+    else changed = now?.key === stroke.value.key && layers.setTagLocal(kind, c, null)
     if (changed) {
       stroke.changed.add(c)
       touched.push(c)
@@ -863,7 +889,7 @@ function paintBiomeCells(cells) {
 
 function onPaint(cells) {
   if (!stroke) return
-  if (stroke.biomes) return paintBiomeCells(cells)
+  if (stroke.tags) return paintTagCells(cells)
   if (stroke.layer) return paintLayerCells(cells)
   const touched = []
   for (const c of cells) {
@@ -880,13 +906,13 @@ function onPaint(cells) {
 function onPaintEnd() {
   const s = stroke
   stroke = null
-  if (s?.biomes && s.skipped && !s.changed.size) flash(t('Biomes go on land: draw a continent there first.'))
+  if (s?.tags && s.skipped && !s.changed.size) flash(t('Biomes and terrain go on land: draw a continent there first.'))
   if (!s || !s.changed.size) return
-  if (s.biomes) {
-    const changes = [...s.changed].map((c) => ({ c, before: s.before.get(c), after: layers.biomeAt(c) }))
-    pushUndo({ biomes: true, cells: changes })
+  if (s.tags) {
+    const changes = [...s.changed].map((c) => ({ c, before: s.before.get(c), after: layers.tagAt(s.tags, c) }))
+    pushUndo({ tags: s.tags, cells: changes })
     version.value++
-    layers.saveBiomes(changes, () => {
+    layers.saveTags(s.tags, changes, () => {
       flash(t("Couldn't save that stroke, so the map was reloaded."))
       version.value++
     })
@@ -925,14 +951,16 @@ const bucketAsk = ref(null) // { cells, locId, name }: a big fill waiting for a 
 
 function bucketAt(cell) {
   if (cell == null) return
-  if (layer.value === 'continents' && pickedBiome.value) {
-    const name = t(biomeOf(pickedBiome.value)?.label ?? '')
-    const empty = (c) => isLand(c) && !layers.biomeAt(c)
-    if (!empty(cell)) return flash(isLand(cell) ? t('The bucket only fills empty hexes.') : t('Biomes go on land: draw a continent there first.'))
+  if (layer.value === 'continents' && pickedTag.value) {
+    const kind = pickedTag.value.kind
+    const name = t(tagLabel(pickedTag.value))
+    const empty = (c) => isLand(c) && !layers.tagAt(kind, c)
+    if (!empty(cell)) return flash(isLand(cell) ? t('The bucket only fills empty hexes.') : t('Biomes and terrain go on land: draw a continent there first.'))
     const { cells, tooBig } = floodFill(cell, { neighbors: (c) => grid.neighbors(c), empty })
     if (tooBig) return flash(t('That area is too big to fill at once.'))
-    if (cells.length > BUCKET_WARN) bucketAsk.value = { cells, name, biome: { biome: pickedBiome.value, height: biomeHeight.value } }
-    else fillBiome(cells, { biome: pickedBiome.value, height: biomeHeight.value })
+    const tag = { kind, value: pickedValue() }
+    if (cells.length > BUCKET_WARN) bucketAsk.value = { cells, name, tag }
+    else fillTag(cells, tag)
     return
   }
   if (onLayer.value) {
@@ -959,14 +987,14 @@ function bucketAt(cell) {
 }
 
 function confirmBucket() {
-  const { cells, locId, layer: on, biome } = bucketAsk.value
+  const { cells, locId, layer: on, tag } = bucketAsk.value
   bucketAsk.value = null
-  if (biome) fillBiome(cells, biome)
+  if (tag) fillTag(cells, tag)
   else fill(cells, locId, on)
 }
 
-function fillBiome(cells, value) {
-  stroke = { biomes: true, type: 'paint', value, before: new Map(), changed: new Set(), skipped: 0 }
+function fillTag(cells, { kind, value }) {
+  stroke = { tags: kind, type: 'paint', value, before: new Map(), changed: new Set(), skipped: 0 }
   onPaint(cells)
   onPaintEnd()
 }
@@ -1003,20 +1031,20 @@ function restoreLayer(entry, which) {
   })
 }
 
-// A biome stroke back or forth: each cell to the biome it had.
-function restoreBiomes(entry, which) {
+// A biome or terrain stroke back or forth: each cell to what it had.
+function restoreTags(entry, which) {
   const changes = entry.cells.map((h) => ({ c: h.c, after: h[which] ?? null }))
-  for (const { c, after } of changes) layers.setBiomeLocal(c, after)
+  for (const { c, after } of changes) layers.setTagLocal(entry.tags, c, after)
   globeRef.value?.recolor(changes.map((h) => h.c))
   version.value++
-  layers.saveBiomes(changes, () => {
+  layers.saveTags(entry.tags, changes, () => {
     flash(t("Couldn't save that change, so the map was reloaded."))
     version.value++
   })
 }
 
 function restore(cells, which) {
-  if (cells.biomes) return restoreBiomes(cells, which)
+  if (cells.tags) return restoreTags(cells, which)
   if (cells.layer) return restoreLayer(cells, which)
   const erase = new Map()
   const paint = new Map()

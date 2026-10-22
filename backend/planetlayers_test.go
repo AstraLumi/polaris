@@ -99,8 +99,20 @@ func TestPlanetLayers(t *testing.T) {
 	if rec := biomePost("paint", `{"biome":"desert","height":null,"cells":[11,12]}`); rec.Code != 200 || strings.TrimSpace(rec.Body.String()) != `{"changed":2}` {
 		t.Fatalf("paint biomes: %d %s", rec.Code, rec.Body.String())
 	}
-	if rec := biomePost("paint", `{"biome":"mountains","height":4200,"cells":[13]}`); rec.Code != 200 {
+	if rec := biomePost("paint", `{"biome":"barren","height":4200,"cells":[13]}`); rec.Code != 200 {
 		t.Fatalf("paint biomes: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := biomePost("paint", `{"biome":"mountains","cells":[13]}`); rec.Code != 400 {
+		t.Errorf("mountains are relief now, not a biome: %d", rec.Code)
+	}
+	reliefPost := func(path, body string) *httptest.ResponseRecorder {
+		return do(t, h, "POST", base+"/planet/relief/"+path, strings.NewReader(body), "application/json")
+	}
+	if rec := reliefPost("paint", `{"relief":"plateau","height":1800,"cells":[11,12]}`); rec.Code != 200 || strings.TrimSpace(rec.Body.String()) != `{"changed":2}` {
+		t.Fatalf("paint relief: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := reliefPost("paint", `{"relief":"mountains","height":4200,"cells":[13]}`); rec.Code != 200 {
+		t.Fatalf("paint relief: %d %s", rec.Code, rec.Body.String())
 	}
 	biomePost("paint", `{"biome":"savanna","cells":[11]}`) // paints over: one biome per hex
 	for _, bad := range []string{
@@ -114,8 +126,11 @@ func TestPlanetLayers(t *testing.T) {
 	}
 	var bl layersPayload
 	json.Unmarshal(do(t, h, "GET", base+"/planet/layers", nil, "").Body.Bytes(), &bl)
-	if raw, _ := json.Marshal(bl.Biomes); string(raw) != `[[11,"savanna",null],[12,"desert",null],[13,"mountains",4200]]` {
+	if raw, _ := json.Marshal(bl.Biomes); string(raw) != `[[11,"savanna",null],[12,"desert",null],[13,"barren",4200]]` {
 		t.Errorf("biomes: %s", raw)
+	}
+	if raw, _ := json.Marshal(bl.Relief); string(raw) != `[[11,"plateau",1800],[12,"plateau",1800],[13,"mountains",4200]]` {
+		t.Errorf("relief: %s", raw)
 	}
 	factOf := func(a wikiArticle, key string) string {
 		for _, f := range a.Facts {
@@ -126,12 +141,23 @@ func TestPlanetLayers(t *testing.T) {
 		return ""
 	}
 	// The kingdom (11–13) has a third each; the continent (12, 13) half and half.
-	if v := factOf(wikiGet(t, h, story, "location", 1), "biomes"); v != "desert:33,mountains:33,savanna:33" {
+	if v := factOf(wikiGet(t, h, story, "location", 1), "biomes"); v != "barren:33,desert:33,savanna:33" {
 		t.Errorf("kingdom biomes: %q", v)
 	}
 	c := wikiGet(t, h, story, "map_feature", laurasia.ID)
-	if v := factOf(c, "biomes"); v != "desert:50,mountains:50" {
+	if v := factOf(c, "biomes"); v != "barren:50,desert:50" {
 		t.Errorf("continent biomes: %q", v)
+	}
+	if v := factOf(wikiGet(t, h, story, "location", 1), "terrain"); v != "plateau:67,mountains:33" {
+		t.Errorf("kingdom terrain: %q", v)
+	}
+	if v := factOf(c, "terrain"); v != "mountains:50,plateau:50" {
+		t.Errorf("continent terrain: %q", v)
+	}
+	for _, f := range c.Facts {
+		if f.Key == "terrain" && f.Kind != "terrain" {
+			t.Errorf("terrain fact kind %q", f.Kind)
+		}
 	}
 	want2 := "≈ " + formatKm2(2*hexAreaKm2(loadMapSettings(app.db))) + " km²"
 	if v := factOf(c, "area"); v != want2 || factOf(c, "type") != "Continent" {
@@ -150,11 +176,21 @@ func TestPlanetLayers(t *testing.T) {
 		t.Errorf("after resampling: %d biome hexes", n)
 	}
 	var mtn float64
-	if app.db.QueryRow(`SELECT height FROM cell_biomes WHERE biome = 'mountains' LIMIT 1`).Scan(&mtn) != nil || mtn != 4200 {
+	if app.db.QueryRow(`SELECT height FROM cell_biomes WHERE biome = 'barren' LIMIT 1`).Scan(&mtn) != nil || mtn != 4200 {
+		t.Errorf("the barren hex's height after resampling: %v", mtn)
+	}
+	app.db.QueryRow(`SELECT COUNT(*) FROM cell_relief`).Scan(&n)
+	if n < 3 {
+		t.Errorf("after resampling: %d relief hexes", n)
+	}
+	if app.db.QueryRow(`SELECT height FROM cell_relief WHERE relief = 'mountains' LIMIT 1`).Scan(&mtn) != nil || mtn != 4200 {
 		t.Errorf("the mountains' height after resampling: %v", mtn)
 	}
 	if rec := biomePost("erase", `{"cells":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]}`); rec.Code != 200 {
 		t.Errorf("erase biomes: %d", rec.Code)
+	}
+	if rec := reliefPost("erase", `{"cells":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]}`); rec.Code != 200 {
+		t.Errorf("erase relief: %d", rec.Code)
 	}
 	if rec := do(t, h, "DELETE", base+"/planet/features/"+idStr(laurasia.ID), nil, ""); rec.Code != 204 {
 		t.Fatalf("delete: %d", rec.Code)

@@ -100,12 +100,14 @@ async function startFrontend() {
   cleanups.push(() => server.close())
 }
 
-// The biomes of the rough Earth, from what earthLike() sets.
+// The biomes of the rough Earth, from what earthLike() sets; its high
+// ground (not the ice) is painted as mountains terrain at its height,
+// covered in boreal forest.
 function biomeOfCell(map, c) {
   if (map.albedo[c] >= 0.69) return 'ice'
   if (map.veg[c] <= 0.02) return 'desert'
   if (map.veg[c] >= 1) return 'rainforest'
-  if (map.height[c] >= 2000) return 'mountains'
+  if (map.height[c] >= 2000) return 'boreal_forest'
   return null
 }
 
@@ -129,17 +131,20 @@ async function makeStory() {
   const continent = await send('POST', '/planet/features', { layer: 'continents', name: 'Terra', color: '#8a9a5b' })
   await send('POST', '/planet/features/paint', { feature_id: continent.id, cells: land })
   const byBiome = new Map()
+  const byHeight = new Map()
   for (const c of land) {
     const b = biomeOfCell(map, c)
-    if (!b) continue
-    const key = b === 'mountains' ? `${b}|${map.height[c]}` : b
-    if (!byBiome.has(key)) byBiome.set(key, [])
-    byBiome.get(key).push(c)
+    if (b) {
+      if (!byBiome.has(b)) byBiome.set(b, [])
+      byBiome.get(b).push(c)
+    }
+    if (map.height[c] >= 2000 && map.albedo[c] < 0.69) {
+      if (!byHeight.has(map.height[c])) byHeight.set(map.height[c], [])
+      byHeight.get(map.height[c]).push(c)
+    }
   }
-  for (const [key, cells] of byBiome) {
-    const [biome, h] = key.split('|')
-    await send('POST', '/planet/biomes/paint', { biome, height: h ? Number(h) : null, cells })
-  }
+  for (const [biome, cells] of byBiome) await send('POST', '/planet/biomes/paint', { biome, height: null, cells })
+  for (const [height, cells] of byHeight) await send('POST', '/planet/relief/paint', { relief: 'mountains', height, cells })
   return story.id
 }
 

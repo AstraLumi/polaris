@@ -5,10 +5,24 @@ import (
 	"testing"
 )
 
+// rollBackSchema39 turns a fresh database back into schema 38: no relief.
+func rollBackSchema39(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, q := range []string{
+		`DROP TABLE cell_relief`,
+		`UPDATE schema_meta SET value = '38' WHERE key = 'schema_version'`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+}
+
 // rollBackSchema38 turns a fresh database back into schema 37: no biomes,
 // and the layers' CHECK allows mountain ranges again.
 func rollBackSchema38(t *testing.T, db *sql.DB) {
 	t.Helper()
+	rollBackSchema39(t, db)
 	if _, err := db.Exec(`DROP TABLE cell_biomes`); err != nil {
 		t.Fatal(err)
 	}
