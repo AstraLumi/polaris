@@ -1735,7 +1735,6 @@ export default {
   "Working out the climate…": "Calculando o clima…",
   "Couldn't work out the climate.": "Não foi possível calcular o clima.",
   "Nothing in the solar system warms this planet, so the climate uses Earth's sunlight.": "Nada no sistema solar aquece este planeta, então o clima usa a luz solar da Terra.",
-  "Worked out from the continents, their biomes, the axial tilt, the day's length and the star. The year starts just after the northern winter solstice.": "Calculado a partir dos continentes, de seus biomas, da inclinação axial, da duração do dia e da estrela. O ano começa logo após o solstício de inverno do norte.",
   "Biome": "Bioma",
   "Mean temperature": "Temperatura média",
   "Coldest to warmest month": "Do mês mais frio ao mais quente",
@@ -1761,4 +1760,6 @@ export default {
   "Continents on it": "Continentes nela",
   "The sky picture is a shell round the whole system. It lights everything evenly from all round, on the main planet's day and night; at night only its painted stars shine.": "A imagem do céu é uma casca em volta de todo o sistema. Ela ilumina tudo por igual, de todos os lados, no dia e na noite do planeta principal; à noite só brilham as estrelas pintadas nela.",
   "Inside a shell (the sky lights the system)": "Dentro de uma casca (o céu ilumina o sistema)",
+  "Humidity": "Umidade",
+  "Worked out from the continents, their biomes, mountains and volcanoes, the axial tilt, the day's length and the star. The year starts just after the northern winter solstice.": "Calculado a partir dos continentes, seus biomas, montanhas e vulcões, da inclinação axial, da duração do dia e da estrela. O ano começa logo após o solstício de inverno do norte.",
 }

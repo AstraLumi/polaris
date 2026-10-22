@@ -711,6 +711,7 @@ function describeClimate(cell) {
   })
   rows.push({ label: 'Coldest to warmest month', value: `${formatTemperature(low[cell], unit)} … ${formatTemperature(high[cell], unit)}` })
   rows.push({ label: step == null ? 'Rain in a year' : 'Rain in the month', value: formatRain(v.rain(step)[cell]) })
+  rows.push({ label: 'Humidity', value: `${Math.round(v.humidity(step)[cell] * 100)}%` })
   const w = v.vectorAt(v.wind(step), p)
   const ws = Math.hypot(w.east, w.north)
   if (ws >= 0.5) rows.push({ label: 'Wind from', value: `${compassPoint(-w.east, -w.north)} · ${Math.round(ws)} m/s` })

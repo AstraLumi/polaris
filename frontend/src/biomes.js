@@ -11,6 +11,8 @@ import { tr } from './i18n'
 //           of its own (mountains painted with a peak height keep theirs)
 //   albedo  how much sunlight its ground reflects
 //   water   inland water: it gives moisture like the sea does
+//   heat    the ground's own heat in W/m² (volcanic land): it warms the
+//           hex and its surroundings, melts snow, draws in a little wind
 // No dependencies besides the translations' tr().
 export const BIOME_GROUPS = [
   {
@@ -69,7 +71,7 @@ export const BIOME_GROUPS = [
       { key: 'mountains', label: tr('Mountains'), color: '#8a7f75', veg: 0.2, height: 3000, albedo: 0.22, peak: true },
       { key: 'hills', label: tr('Hills'), color: '#9c8f6c', veg: 0.4, height: 600, albedo: 0.18, peak: true },
       { key: 'plateau', label: tr('Plateau'), color: '#a8906a', veg: 0.25, height: 1500, albedo: 0.22, peak: true },
-      { key: 'volcanic', label: tr('Volcanic land'), color: '#5a4a48', veg: 0.05, height: 1500, albedo: 0.12, peak: true },
+      { key: 'volcanic', label: tr('Volcanic land'), color: '#5a4a48', veg: 0.05, height: 1500, albedo: 0.12, peak: true, heat: 40 },
     ],
   },
 ]

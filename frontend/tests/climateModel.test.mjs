@@ -3,7 +3,7 @@
 // out of the model, within generous bounds. No dependencies:
 // node frontend/tests/climateModel.test.mjs
 import assert from 'node:assert/strict'
-import { PlanetGrid } from '../src/planetGrid.js'
+import { PlanetGrid, latLon } from '../src/planetGrid.js'
 import {
   simulateClimate,
   temperatureAt,
@@ -210,6 +210,87 @@ assert.ok(precipitationAt(r, 6)[mumbai] > 5 * precipitationAt(r, 0)[mumbai] + 20
   let most = 0
   for (let c = 0; c < t0.length; c++) most = Math.max(most, Math.abs(t0[c] - t2[c]))
   assert.ok(most < 2, `no star: no seasons (${most})`)
+}
+
+// High ground steers the wind. A continent across the westerlies with a
+// thin north–south range down its middle (narrower than the climate's
+// cells) and a pass through it: the wind turns to run along the range,
+// speeds up through the pass, rains on the windward side and leaves the
+// lee dry. The same land without the range is the yardstick.
+{
+  const F2 = 48
+  function walled(wall) {
+    const grid = new PlanetGrid(F2)
+    const n = grid.count
+    const map = { grid, land: new Uint8Array(n), veg: new Float32Array(n).fill(0.5), albedo: new Float32Array(n).fill(0.2), height: new Float32Array(n), water: new Uint8Array(n) }
+    for (let c = 0; c < n; c++) {
+      const [la, lo] = latLon(grid.center(c))
+      const lat = la / DEG
+      const lon = lo / DEG
+      if (lon <= -30 || lon >= 30 || lat <= -50 || lat >= 70) continue
+      map.land[c] = 1
+      map.height[c] = wall && lon > -3 && lon < 3 && !(lat > 40 && lat < 47) ? 4000 : 300
+    }
+    return { map, r: simulateClimate({ frequency: F2, ...map, steps: 4 }) }
+  }
+  const flat = walled(false)
+  const wall = walled(true)
+  const g2 = gridGeometry(new PlanetGrid(wall.r.coarse.frequency))
+  const windOf = (run, lon, lat) => {
+    const p = [Math.cos(lat * DEG) * Math.cos(lon * DEG), Math.cos(lat * DEG) * Math.sin(lon * DEG), Math.sin(lat * DEG)]
+    const v = sampleVector(g2, windAt(run.r), p)
+    const e = [-p[1] / Math.hypot(p[0], p[1]), p[0] / Math.hypot(p[0], p[1]), 0]
+    const nn = [-p[2] * e[1], p[2] * e[0], p[0] * e[1] - p[1] * e[0]]
+    const east = v[0] * e[0] + v[1] * e[1]
+    const north = v[0] * nn[0] + v[1] * nn[1] + v[2] * nn[2]
+    return { east, north, speed: Math.hypot(east, north) }
+  }
+  const rainOf = (run, lon, lat) => precipitationAt(run.r)[cellAtDeg(run.map.grid, lon, lat)]
+
+  const before = windOf(wall, -6, 52)
+  const open = windOf(flat, -6, 52)
+  assert.ok(before.east < 0.3 * open.east, `the westerlies stop at the range (${before.east} vs ${open.east})`)
+  assert.ok(Math.abs(before.north) >= Math.abs(open.north), 'and turn to run along it')
+  const pass = windOf(wall, 0, 43)
+  const plain = windOf(flat, 0, 43)
+  assert.ok(pass.speed > 1.15 * plain.speed, `faster through the pass (${pass.speed} vs ${plain.speed})`)
+  assert.ok(rainOf(wall, -6, 52) > rainOf(flat, -6, 52), 'more rain on the windward side')
+  assert.ok(rainOf(wall, 7, 52) < 0.5 * rainOf(flat, 7, 52), 'a rain shadow in the lee')
+}
+
+// What feeds back into the temperature and the winds.
+{
+  // Volcanic ground warms its own hexes, and the cell round them a little.
+  const volcanic = earthLike(F)
+  volcanic.geothermal = new Float32Array(volcanic.grid.count)
+  const spot = []
+  for (let c = 0; c < volcanic.grid.count; c++) {
+    const [la, lo] = latLon(volcanic.grid.center(c))
+    if (volcanic.land[c] && Math.abs(la / DEG - 50) < 5 && Math.abs(lo / DEG - 90) < 8) {
+      volcanic.geothermal[c] = 40
+      spot.push(c)
+    }
+  }
+  assert.ok(spot.length > 3)
+  const hot = simulateClimate({ frequency: F, ...volcanic, steps: 4 })
+  const plainT = temperatureAt(simulateClimate({ frequency: F, ...earthLike(F), steps: 4 }), null)
+  const hotT = temperatureAt(hot, null)
+  const warmer = spot.reduce((sum, c) => sum + hotT[c] - plainT[c], 0) / spot.length
+  assert.ok(warmer > 3, `volcanic land is warmer (${warmer} °C)`)
+
+  // Dry air lets heat go: without water vapour's greenhouse the dry poles
+  // would be warmer, the humid tropics cooler.
+  const noVapour = simulateClimate({ frequency: F, ...map, tilt: 23.44, steps: 12, tune: { vapourGreenhouse: 0 } })
+  const t0 = temperatureAt(noVapour, map.height)
+  assert.ok(yearT[at(0, 89)] < t0[at(0, 89)] - 1, 'dry polar air is colder')
+  assert.ok(yearT[at(-150, 0)] > t0[at(-150, 0)], 'humid tropics are warmer')
+
+  // Katabatic winds: in the southern winter, cold air pours off the high
+  // Antarctic ice towards the sea.
+  const july = windAt(r, 6)
+  let outward = 0
+  for (let lon = -180; lon < 180; lon += 20) outward += northward(july, lon, -74) > 0 ? 1 : 0
+  assert.ok(outward >= 12, `off the ice on ${outward} of 18 meridians`)
 }
 
 // A map finer than the climate's grid reads it smoothly.

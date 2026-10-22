@@ -1,7 +1,7 @@
 import { ref, shallowRef } from 'vue'
 import { biomeOf, PLAIN_LAND, groundHeight } from './biomes'
 import { PlanetGrid, latLon } from './planetGrid'
-import { temperatureAt, precipitationAt, windAt, koppen, gridGeometry, sampleVector } from './climateModel.js'
+import { temperatureAt, precipitationAt, windAt, koppen, gridGeometry, sampleVector, fineField } from './climateModel.js'
 import { flowLines } from './flowLines.js'
 import { mainLighting } from './lighting.js'
 
@@ -22,6 +22,7 @@ export function climateInput({ frequency, isLand, biomeAt, tilt, dayHours, month
   const albedo = new Float32Array(count)
   const height = new Float32Array(count)
   const water = new Uint8Array(count)
+  const geothermal = new Float32Array(count)
   for (let c = 0; c < count; c++) {
     if (!isLand(c)) continue
     const painted = biomeAt(c)
@@ -31,6 +32,7 @@ export function climateInput({ frequency, isLand, biomeAt, tilt, dayHours, month
     albedo[c] = b.albedo
     height[c] = Math.max(0, groundHeight(painted ? b : null, painted?.height ?? null))
     water[c] = b.water ? 1 : 0
+    geothermal[c] = b.heat ?? 0
   }
   return {
     frequency,
@@ -39,6 +41,7 @@ export function climateInput({ frequency, isLand, biomeAt, tilt, dayHours, month
     albedo,
     height,
     water,
+    geothermal,
     tilt,
     dayHours: dayHours || 24,
     steps: months,
@@ -57,7 +60,7 @@ export function inputKey(input) {
     h = Math.imul(h, 16777619)
   }
   for (const arr of [input.land, input.water]) for (let i = 0; i < arr.length; i++) eat(arr[i])
-  for (const arr of [input.veg, input.height]) for (let i = 0; i < arr.length; i += 1) eat(Math.round(arr[i] * 100))
+  for (const arr of [input.veg, input.height, input.geothermal]) for (let i = 0; i < arr.length; i += 1) eat(Math.round(arr[i] * 100))
   return [input.frequency, input.tilt, input.dayHours, input.steps, input.insolation.toFixed(4), input.evenHeat.toFixed(4), input.radiusKm.toFixed(1), input.monthDays.toFixed(3), h >>> 0].join('|')
 }
 
@@ -140,6 +143,18 @@ export class ClimateView {
   // °C on every hex.
   temperature(step) {
     return this.once('t' + step, () => temperatureAt(this.result, this.heights, step))
+  }
+
+  // How humid the air is on every hex, 0 to 1 (relative humidity), in the
+  // month or on average over the year.
+  humidity(step) {
+    return this.once('h' + step, () => {
+      const { steps, coarse } = this.result
+      if (step != null) return fineField(this.result, coarse.humidity.subarray(step * coarse.count, (step + 1) * coarse.count))
+      const mean = new Float32Array(coarse.count)
+      for (let s = 0; s < steps; s++) for (let c = 0; c < coarse.count; c++) mean[c] += coarse.humidity[s * coarse.count + c] / steps
+      return fineField(this.result, mean)
+    })
   }
 
   // mm on every hex, in the month (or the year).

@@ -115,7 +115,13 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   reads it on the hexes). Keep it a pure module with no drawing; its
   constants are calibrated against the rough Earth in
   `frontend/tests/earthLike.mjs` (`climateModel.test.mjs` checks the
-  patterns an atlas shows). Arrows: paths in `flowLines.js`, meshes in
+  patterns an atlas shows). High ground steers the winds
+  (`steerByTerrain`: along ranges, through passes, calm in the lee), read
+  from each climate cell's ridges, not its mean height, so thin ranges
+  count (a walled test planet checks it). Feedbacks between rounds: the
+  air's water keeps heat in (dry air lets it go), heavy rain lowers the
+  pressure, lee slopes warm (foehn), freezing high slopes pour katabatic
+  winds, volcanic biomes give ground heat (`heat` in `biomes.js`). Arrows: paths in `flowLines.js`, meshes in
   `three/flowArrows.js`.
 - **Light and heat are separate** (`frontend/src/lighting.js`): ask it,
   not the star, for what lights a body (directional from the star, even
