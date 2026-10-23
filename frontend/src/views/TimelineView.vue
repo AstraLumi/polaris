@@ -23,6 +23,7 @@
     <p v-else-if="!data" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <template v-else>
+      <FoldOnPhone v-if="data.nodes.length" :label="$t('Controls')" :active="(personId ? 1 : 0) + (placeId ? 1 : 0) + (highlightTag ? 1 : 0) + hiddenKinds.size">
       <section class="controls glass-panel panel-solid">
         <label class="ctl">
           <span>{{ $t('Zoom') }}</span>
@@ -43,6 +44,14 @@
           <span>{{ $t('Coil gaps over') }}</span>
           <input v-model.number="collapseYears" type="number" min="0" step="1" class="num" />
           <span class="ctl-value">{{ $t('years') }}</span>
+        </label>
+
+        <label class="ctl" :title="$t('Also in Settings, under Language & look')">
+          <span>{{ $t('Rows') }}</span>
+          <select v-model="timelineRows">
+            <option value="snake">{{ $t('Back and forth') }}</option>
+            <option value="ltr">{{ $t('Left to right') }}</option>
+          </select>
         </label>
 
         <label v-if="allTags.length" class="ctl">
@@ -94,6 +103,7 @@
           </button>
         </div>
       </section>
+      </FoldOnPhone>
 
       <p v-if="data.undated" class="note">
         {{ $tn('{n} event has no readable date and isn\'t shown.', '{n} events have no readable date and aren\'t shown.', data.undated) }}
@@ -115,6 +125,7 @@
       <div v-else ref="scrollerEl" class="scroller">
         <div ref="stageEl" class="stage" :style="{ width: layout.width + 'px', height: layout.height + 'px' }">
           <svg class="lines" :width="layout.width" :height="layout.height" aria-hidden="true">
+            <path v-if="layout.returnsD" :d="layout.returnsD" class="line-return" />
             <path :d="layout.pathD" class="line-glow" />
             <path :d="layout.pathD" class="line" />
             <line
@@ -255,11 +266,13 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import FoldOnPhone from '../components/FoldOnPhone.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { timelineApi, eventsApi } from '../api'
 import { shortDate, fullDate } from '../calendar'
 import { t, tn } from '../i18n'
 import { layoutTimeline, autoPxPerYear, minimumWidth, DEFAULTS } from '../timelineLayout'
+import { timelineRows } from '../timelinePrefs'
 import { viewPicture, mapPath } from '../navigation'
 import { wikiPath } from '../wiki'
 
@@ -315,7 +328,7 @@ const pxPerYear = computed(() => {
 
 const layout = computed(() => {
   const yd = data.value ? data.value.year_days : 360
-  return layoutTimeline(nodes.value, yd, layoutWidth.value, { ...opts.value, pxPerYear: pxPerYear.value })
+  return layoutTimeline(nodes.value, yd, layoutWidth.value, { ...opts.value, pxPerYear: pxPerYear.value, rows: timelineRows.value })
 })
 
 // The slider is logarithmic: 2 px/yr at the left, 400 at the right.
@@ -726,6 +739,15 @@ onBeforeUnmount(() => {
 .stem {
   stroke: color-mix(in srgb, var(--tint) 28%, transparent);
   stroke-width: 1;
+}
+
+/* Rows read left to right: the faint way back from a row's end. */
+.line-return {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 6;
+  opacity: 0.35;
 }
 
 .coil-caption {

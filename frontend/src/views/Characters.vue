@@ -41,6 +41,7 @@
         :placeholder="$t('Search names, nicknames and classes…')"
         :aria-label="$t('Search characters')"
       />
+      <FoldOnPhone :label="$t('Filters')" :active="[classFilter, raceFilter, factionFilter, tagFilter, statusFilter].filter(Boolean).length" class="filter-fold">
       <select v-if="classOptions.length" :value="classFilter" :aria-label="$t('Class')" @change="setQuery('class', $event.target.value)">
         <option value="">{{ $t('All classes') }}</option>
         <option v-for="c in classOptions" :key="c" :value="c">{{ c }}</option>
@@ -61,6 +62,7 @@
         <option value="">{{ $t('Any status') }}</option>
         <option v-for="s in STATUSES" :key="s.key" :value="s.key">{{ $t(s.label) }}</option>
       </select>
+      </FoldOnPhone>
       <button v-if="filtering" type="button" class="btn btn-ghost small" @click="clearFilters">{{ $t('Clear filter') }}</button>
     </div>
 
@@ -101,6 +103,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import FoldOnPhone from '../components/FoldOnPhone.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { t, tr } from '../i18n'
 import { STATUSES } from '../characterStatus'
@@ -243,6 +246,24 @@ useQuickAdd(() => (addOpen.value = true))
   gap: 0.6rem;
   align-items: center;
   margin-bottom: 1.25rem;
+}
+
+/* The folding wrapper lays its selects out in the same row. */
+.filter-fold,
+.filter-fold :deep(.fold-body) {
+  display: contents;
+}
+
+@media (max-width: 720px) {
+  .filter-fold {
+    display: block;
+    width: 100%;
+  }
+  .filter-fold :deep(.fold-body) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+  }
 }
 
 .controls .search {

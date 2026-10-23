@@ -136,4 +136,6 @@ export default {
   "Scroll to zoom · Drag to turn the globe · Hover a hex to read its climate": "Desplázate para hacer zoom · Arrastra para girar el globo · Pasa el mouse sobre un hexágono para leer su clima",
   "Add everyone with a height": "Agregar a todos con altura",
   "Add characters to stand them side by side. Their height comes from their version, their outline from its body type.": "Agrega personajes para ponerlos lado a lado. La altura sale de su versión, la silueta de su tipo corporal.",
+  "Add your first character": "Agrega tu primer personaje",
+  "Add an event": "Agrega un evento",
 }

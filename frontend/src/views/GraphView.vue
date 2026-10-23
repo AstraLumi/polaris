@@ -75,6 +75,9 @@
         @pointerleave="onLeave"
       ></canvas>
       <p v-if="!data && !loadError" class="overlay-note">{{ $t('Loading…') }}</p>
+      <p v-else-if="data && !data.nodes.length" class="overlay-note">
+        {{ $t('Nothing to connect yet: add characters, places or events and they show up here, joined by what links them.') }}
+      </p>
       <p v-else-if="data && !shownCount" class="overlay-note">{{ $t('Nothing to show with these filters.') }}</p>
       <div class="zoom">
         <button type="button" class="tool-btn" :title="$t('Zoom in')" @click="zoomBy(1.3)">+</button>

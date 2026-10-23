@@ -31,7 +31,8 @@
         :placeholder="$t('Search names and descriptions…')"
         :aria-label="$t('Search events')"
       />
-      <div v-if="allTags.length" class="tag-row">
+      <FoldOnPhone v-if="allTags.length" :label="$t('Tags')" :active="activeTag ? 1 : 0">
+      <div class="tag-row">
         <button
           v-for="t in allTags"
           :key="t.tag"
@@ -45,6 +46,7 @@
         </button>
         <button v-if="activeTag" type="button" class="clear" @click="toggleTag(activeTag)">{{ $t('Clear filter') }}</button>
       </div>
+      </FoldOnPhone>
     </div>
 
     <p v-if="activeChapter" class="chapter-filter">
@@ -81,7 +83,7 @@
           />
           <div class="date-block">
             <template v-if="parts(e)">
-              <span class="year">{{ parts(e).year }}</span>
+              <span class="year">{{ parts(e).yearText }}</span>
               <span class="quarter">{{ $t('Q{n}', { n: parts(e).quarter }) }}</span>
             </template>
             <span v-else class="quarter">{{ $t('undated') }}</span>
@@ -118,6 +120,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import FoldOnPhone from '../components/FoldOnPhone.vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { eventsApi } from '../api'
 import { dateParts } from '../calendar'

@@ -22,13 +22,13 @@
     <template v-else>
       <section class="nav-bar glass-panel panel-solid">
         <div class="nav-group">
-          <button type="button" class="btn btn-ghost small" :disabled="!prevPoint" :title="$t('The closest earlier month with something in it')" @click="goPoint(prevPoint)">
+          <button type="button" class="btn btn-ghost small jump-prev" :disabled="!prevPoint" :title="$t('The closest earlier month with something in it')" @click="goPoint(prevPoint)">
             ⇤ {{ $t('Earlier events') }}
           </button>
-          <button type="button" class="btn btn-ghost small" :aria-label="$t('Previous month')" :title="$t('Previous month')" @click="shift(-1)">‹</button>
-          <h2 class="month-title">{{ $t('Month {n}', { n: month }) }}, {{ yearLabel }}</h2>
-          <button type="button" class="btn btn-ghost small" :aria-label="$t('Next month')" :title="$t('Next month')" @click="shift(1)">›</button>
-          <button type="button" class="btn btn-ghost small" :disabled="!nextPoint" :title="$t('The closest later month with something in it')" @click="goPoint(nextPoint)">
+          <button type="button" class="btn btn-ghost small step-prev" :aria-label="$t('Previous month')" :title="$t('Previous month')" @click="shift(-1)">‹</button>
+          <h2 class="month-title">{{ $t('Month {n}', { n: month }) }}, {{ yearText }}</h2>
+          <button type="button" class="btn btn-ghost small step-next" :aria-label="$t('Next month')" :title="$t('Next month')" @click="shift(1)">›</button>
+          <button type="button" class="btn btn-ghost small jump-next" :disabled="!nextPoint" :title="$t('The closest later month with something in it')" @click="goPoint(nextPoint)">
             {{ $t('Later events') }} ⇥
           </button>
         </div>
@@ -48,7 +48,7 @@
         </div>
       </div>
 
-      <div class="months" role="tablist" :aria-label="$t('Months of {year}', { year: yearLabel })">
+      <div class="months" role="tablist" :aria-label="$t('Months of {year}', { year: yearText })">
         <button
           v-for="m in calendar.months_per_year"
           :key="m"
@@ -118,7 +118,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { timelineApi } from '../api'
-import { calendar, parseStoryDate, formatStoryDate, fullDate, dayColumns } from '../calendar'
+import { calendar, parseStoryDate, formatStoryDate, fullDate, dayColumns, yearLabel } from '../calendar'
 import { seasonCycle, seasonOn, monthSeasons, dayIndex } from '../seasons'
 import { mapPath } from '../navigation'
 import { wikiPath } from '../wiki'
@@ -144,7 +144,7 @@ const picked = ref(null)
 const num = (v) => (typeof v === 'string' && /^-?\d+$/.test(v) ? Number(v) : null)
 const year = computed(() => num(route.query.y) ?? fallback.value.year)
 const month = computed(() => Math.min(calendar.months_per_year, Math.max(1, num(route.query.m) ?? fallback.value.month)))
-const yearLabel = computed(() => (year.value < 0 ? `${year.value}` : String(year.value)))
+const yearText = computed(() => yearLabel(year.value))
 
 // Points with a readable date, sorted by when.
 const points = computed(() =>
@@ -299,6 +299,7 @@ timelineApi
 
 .head-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
 }
 
@@ -598,6 +599,41 @@ timelineApi
 }
 
 @media (max-width: 720px) {
+  /* The month and its arrows on one line, the jumps to the nearest
+     events under them. */
+  .nav-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .nav-group {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas: 'sp title sn' 'jp jp jn';
+  }
+  .nav-group .step-prev {
+    grid-area: sp;
+  }
+  .nav-group .month-title {
+    grid-area: title;
+    min-width: 0;
+    text-align: center;
+    font-size: 1.05rem;
+  }
+  .nav-group .step-next {
+    grid-area: sn;
+  }
+  .nav-group .jump-prev {
+    grid-area: jp;
+    justify-self: start;
+  }
+  .nav-group .jump-next {
+    grid-area: jn;
+    justify-self: end;
+  }
+  .year-jump input {
+    flex: 1;
+    width: auto;
+  }
   .grid {
     --cols: 4 !important;
   }

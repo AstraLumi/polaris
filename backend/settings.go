@@ -6,6 +6,9 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // App-wide settings live in a small key/value table so a new setting
@@ -19,6 +22,11 @@ const (
 	settingMonthsPerYear = "calendar_months_per_year"
 	settingDaysPerMonth  = "calendar_days_per_month"
 	settingHoursPerDay   = "calendar_hours_per_day"
+	// Era names written after a year: before year 1 (e.g. "BC") and from
+	// year 1 on (e.g. "AD"); empty, a year before 1 shows with a minus.
+	settingYearBefore = "calendar_year_before"
+	settingYearAfter  = "calendar_year_after"
+	maxEraRunes       = 24
 
 	defaultMonthsPerYear = 12
 	defaultDaysPerMonth  = 30
@@ -39,6 +47,31 @@ type calendarSettings struct {
 	// How long a day is on the world of the map: its spin, and with the
 	// months and days, its year round the star (solar.go).
 	HoursPerDay float64 `json:"hours_per_day"`
+	// How years are written (frontend/src/calendar.js, yearLabel).
+	YearBefore string `json:"year_before"`
+	YearAfter  string `json:"year_after"`
+}
+
+// readEra reads an era name, "" when unset.
+func readEra(db *sql.DB, key string) string {
+	var v string
+	db.QueryRow(`SELECT value FROM app_settings WHERE key = ?`, key).Scan(&v)
+	return v
+}
+
+// cleanEra trims an era name and refuses one that is too long or has
+// line breaks or other control characters.
+func cleanEra(s string) (string, bool) {
+	s = strings.TrimSpace(s)
+	if utf8.RuneCountInString(s) > maxEraRunes {
+		return "", false
+	}
+	for _, r := range s {
+		if unicode.IsControl(r) {
+			return "", false
+		}
+	}
+	return s, true
 }
 
 // yearSeconds is how long the world's year is.
@@ -90,6 +123,8 @@ func loadCalendar(db *sql.DB) calendarSettings {
 		MonthsPerYear: readIntSetting(db, settingMonthsPerYear, defaultMonthsPerYear, 1, maxMonthsPerYear),
 		DaysPerMonth:  readIntSetting(db, settingDaysPerMonth, defaultDaysPerMonth, 1, maxDaysPerMonth),
 		HoursPerDay:   readHoursPerDay(db),
+		YearBefore:    readEra(db, settingYearBefore),
+		YearAfter:     readEra(db, settingYearAfter),
 	}
 }
 
@@ -101,10 +136,27 @@ func getSettingsHandler(db *sql.DB) http.HandlerFunc {
 
 func updateSettingsHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var in calendarSettings
+		// The era names are pointers: left out (an older page), they stay.
+		var in struct {
+			calendarSettings
+			YearBefore *string `json:"year_before"`
+			YearAfter  *string `json:"year_after"`
+		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
+		}
+		eras := map[string]string{}
+		for key, v := range map[string]*string{settingYearBefore: in.YearBefore, settingYearAfter: in.YearAfter} {
+			if v == nil {
+				continue
+			}
+			clean, ok := cleanEra(*v)
+			if !ok {
+				http.Error(w, "an era name is at most 24 characters, on one line", http.StatusBadRequest)
+				return
+			}
+			eras[key] = clean
 		}
 		if in.MonthsPerYear < 1 || in.MonthsPerYear > maxMonthsPerYear {
 			http.Error(w, "months per year must be between 1 and "+strconv.Itoa(maxMonthsPerYear), http.StatusBadRequest)
@@ -128,11 +180,15 @@ func updateSettingsHandler(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "failed to start transaction", http.StatusInternalServerError)
 			return
 		}
-		for key, val := range map[string]string{
+		values := map[string]string{
 			settingMonthsPerYear: strconv.Itoa(in.MonthsPerYear),
 			settingDaysPerMonth:  strconv.Itoa(in.DaysPerMonth),
 			settingHoursPerDay:   strconv.FormatFloat(in.HoursPerDay, 'g', -1, 64),
-		} {
+		}
+		for key, v := range eras {
+			values[key] = v
+		}
+		for key, val := range values {
 			if _, err := tx.Exec(
 				`INSERT INTO app_settings (key, value) VALUES (?, ?)
 				 ON CONFLICT(key) DO UPDATE SET value = excluded.value`,

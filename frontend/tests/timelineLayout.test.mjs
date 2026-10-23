@@ -102,4 +102,19 @@ const W = 1000
     ok(height === 26 && depth > 0 && depth < height, `height ${height}, depth ${depth}`)
   }
 }
+// 11. rows 'ltr': every row runs left to right, starting at the left edge;
+//     the ways back are drawn apart, one per row change
+{
+  const nodes = Array.from({ length: 40 }, (_, i) => node(1000 + i))
+  const L = layoutTimeline(nodes, YD, W, { pxPerYear: 60, collapseYears: 0, rows: 'ltr' })
+  ok(L.rowCount >= 3, `several rows (${L.rowCount})`)
+  ok(L.nodes.every((n) => n.dir === 1), 'every row runs left to right')
+  const byRow = new Map()
+  for (const n of L.nodes) byRow.set(n.row, [...(byRow.get(n.row) || []), n.x])
+  ok([...byRow.values()].every((xs) => xs.every((x, i) => i === 0 || x > xs[i - 1])), 'x grows along each row')
+  ok((L.returnsD.match(/M /g) || []).length === L.rowCount - 1, 'one way back per row change')
+  ok(!L.pathD.includes(' A '), 'no U-turns')
+  const S = layoutTimeline(nodes, YD, W, { pxPerYear: 60, collapseYears: 0 })
+  ok(S.returnsD === '' && S.nodes.some((n) => n.dir === -1), 'the snake is still the default')
+}
 process.exit(failed ? 1 : 0)

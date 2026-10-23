@@ -11,6 +11,11 @@
 //    short zigzag break (the "coil") with a "≈ N years" caption, so a century of nothing
 //    doesn't cost pages of scrolling. (collapseYears of 0 turns this off.)
 // U-turns are not counted as time: only straight runs are to scale.
+//
+// With `rows: 'ltr'` every row runs left to right instead, like lines of
+// text: a row ends at the right edge and the next starts at the left. The
+// way back is drawn apart (returnsD), as a faint stroke between the rows,
+// and doesn't count as time either.
 
 export const DEFAULTS = {
   pxPerYear: 40,
@@ -26,6 +31,7 @@ export const DEFAULTS = {
   bottomPad: 190,
   labelMin: 80,
   labelMax: 170,
+  rows: 'snake', // 'snake' (U-turns, every other row right to left) or 'ltr'
 }
 
 // Label lanes, tried in order. up1/down1 sit close to the line; up2/down2
@@ -73,8 +79,10 @@ export function layoutTimeline(nodes, yearDays, width, userOpts = {}) {
   const xmax = Math.max(width - o.pad - r, xmin + 320)
 
   const d = []
+  const returns = [] // rows 'ltr': the way back from each row's end
   const coils = []
   const placed = []
+  const ltr = o.rows === 'ltr'
 
   let x = xmin
   let y = o.topPad
@@ -85,6 +93,21 @@ export function layoutTimeline(nodes, yearDays, width, userOpts = {}) {
   d.push(`M ${f(x)} ${f(y)}`)
 
   function turn() {
+    if (ltr) {
+      // Down past the row's end, back along the middle, down into the next
+      // row's start.
+      const k = r * 0.55
+      const mid = y + r
+      returns.push(
+        `M ${f(x)} ${f(y)} C ${f(x + k)} ${f(y)} ${f(x + k)} ${f(mid)} ${f(x)} ${f(mid)}` +
+          ` L ${f(xmin)} ${f(mid)} C ${f(xmin - k)} ${f(mid)} ${f(xmin - k)} ${f(y + 2 * r)} ${f(xmin)} ${f(y + 2 * r)}`,
+      )
+      y += 2 * r
+      x = xmin
+      d.push(`M ${f(x)} ${f(y)}`)
+      row++
+      return
+    }
     const sweep = dir > 0 ? 1 : 0
     d.push(`A ${r} ${r} 0 0 ${sweep} ${f(x)} ${f(y + 2 * r)}`)
     y += 2 * r
@@ -184,6 +207,7 @@ export function layoutTimeline(nodes, yearDays, width, userOpts = {}) {
     width,
     height,
     pathD: d.join(' '),
+    returnsD: returns.join(' '),
     nodes: placed,
     coils,
     rowCount: row + 1,

@@ -3,6 +3,7 @@ import { t, tr } from './i18n'
 import { STORY_API } from './stories'
 import { applyMapSettings } from './worldMap'
 import { applyBloodTypes } from './bloodTypes'
+import { yearText, dayText } from './storyDates'
 
 // The story world's calendar. Loaded once at startup (App.vue) and again
 // whenever Settings saves, so every date input and the timeline agree on
@@ -12,6 +13,9 @@ export const calendar = reactive({
   days_per_month: 30,
   // How long the world's day is (its spin, and with the rest, its year).
   hours_per_day: 24,
+  // Era names after a year (before year 1, from year 1 on); '' for none.
+  year_before: '',
+  year_after: '',
   // The story's seasons (seasons.js): { seasons, start, hemisphere, unit }.
   seasons: { seasons: [], start: '', hemisphere: 'north', unit: 'C' },
   loaded: false,
@@ -25,6 +29,8 @@ export async function loadCalendar() {
       calendar.months_per_year = data.months_per_year
       calendar.days_per_month = data.days_per_month
       calendar.hours_per_day = data.hours_per_day || 24
+      calendar.year_before = data.year_before || ''
+      calendar.year_after = data.year_after || ''
       if (data.seasons) calendar.seasons = data.seasons
       applyMapSettings(data.map)
       applyBloodTypes(data.blood_types)
@@ -76,30 +82,32 @@ export function quarterOf(month) {
   return Math.min(4, Math.max(1, q))
 }
 
+// A year as the story writes it: "1054", "−54", or with its era names
+// ("54 BC") from Settings → Calendar (storyDates.js).
+export const yearLabel = (year) => yearText(year, { before: calendar.year_before, after: calendar.year_after })
+
 // "1033 Q2" — what the timeline shows instead of the full date.
 export function shortDate(text) {
   const d = parseStoryDate(text)
   if (!d) return text || ''
-  return `${d.year} ${t('Q{n}', { n: quarterOf(d.month) })}`
+  return `${yearLabel(d.year)} ${t('Q{n}', { n: quarterOf(d.month) })}`
 }
 
-// "15 / 03 / 1054" for anything readable, the raw text otherwise. This is
-// for display only ("01 / 01 / -2000" before year 1); stored dates keep the
-// DD-MM-YYYY form.
+// "15/03/1054" for anything readable ("1054" for a year alone, "−54" or
+// "54 BC" before year 1), the raw text otherwise. For display only; stored
+// dates keep the DD-MM-YYYY form.
 export function fullDate(text) {
   const d = parseStoryDate(text)
   if (!d) return text || ''
-  const dd = String(d.day).padStart(2, '0')
-  const mm = String(d.month).padStart(2, '0')
-  // Slashes with spaces read cleanly even before year 1: "01 / 01 / -2000".
-  return `${dd} / ${mm} / ${padYear(d.year)}`
+  const yearOnly = !/^\s*\d{1,3}-\d{1,3}-/.test(text)
+  return dayText(d, yearOnly, { before: calendar.year_before, after: calendar.year_after })
 }
 
-// { year, quarter } for the big year / small "Q2" blocks, or null when the
-// text isn't a readable date.
+// { year, yearText, quarter } for the big year / small "Q2" blocks, or null
+// when the text isn't a readable date.
 export function dateParts(text) {
   const d = parseStoryDate(text)
-  return d ? { year: d.year, quarter: quarterOf(d.month) } : null
+  return d ? { year: d.year, yearText: yearLabel(d.year), quarter: quarterOf(d.month) } : null
 }
 
 // Messages the server can send back about seasons, climates and the
@@ -119,4 +127,5 @@ export const SEASON_MESSAGES = [
   tr('failed to save the equator'),
   tr("the hex size and the planet's size must be more than 0"),
   tr('the axial tilt is between 0 and 90 degrees'),
+  tr('an era name is at most 24 characters, on one line'),
 ]

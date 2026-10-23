@@ -120,6 +120,7 @@
 
 <script setup>
 import IconImage from '../components/IconImage.vue'
+import { fullDate } from '../calendar'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import ItemLinks from '../components/ItemLinks.vue'
 import NotFoundPanel from '../components/NotFoundPanel.vue'
@@ -177,7 +178,7 @@ const storyGroups = computed(() => {
     },
     {
       label: t('Birth'),
-      fields: [f(t('Birth date (in-story)'), s.birth_date), f(t('Born in'), s.born_in_name || s.born_in), f(t('Nation'), s.nation_name || s.nation)],
+      fields: [f(t('Birth date (in-story)'), s.birth_date ? fullDate(s.birth_date) : ''), f(t('Born in'), s.born_in_name || s.born_in), f(t('Nation'), s.nation_name || s.nation)],
     },
     { label: t('On Earth'), fields: [f(t('Earth Name'), s.earth_name), f(t('Earth Birthdate'), s.human_birth_date)] },
   ]
@@ -382,7 +383,21 @@ function print() {
 }
 
 /* Phones: the buttons move under the name. */
+/* A label with its value right under it, not a paragraph's gap apart. */
+.story-tab :deep(.read-value) {
+  margin: 0;
+}
+
+.story-tab :deep(.field) {
+  margin-bottom: 0.5rem;
+}
+
 @media (max-width: 720px) {
+  /* Two short fields to a row; the long ones keep the whole width. */
+  .story-tab .field-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.25rem 0.9rem;
+  }
   .identity {
     flex-wrap: wrap;
   }

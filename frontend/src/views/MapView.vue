@@ -1628,7 +1628,8 @@ onBeforeUnmount(() => {
 
 @media (max-width: 720px) {
   .equator-panel {
-    left: 80px;
+    top: 64px;
+    left: 8px;
     right: 8px;
     width: auto;
   }

@@ -77,7 +77,7 @@
             <span class="version-meta">
               {{ $t('Lv.') }} {{ v.level }}
               <span v-if="v.class_name"> · {{ v.class_name }}</span>
-              <span v-if="v.version_date"> · {{ v.version_date }}</span>
+              <span v-if="v.version_date"> · {{ fullDate(v.version_date) }}</span>
               <span v-if="v.version_reference"> · {{ v.version_reference }}</span>
               <span v-if="v.chapter_id && chapterLabel(v.chapter_id)"> · {{ chapterLabel(v.chapter_id) }}</span>
             </span>
@@ -132,6 +132,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { fullDate } from '../calendar'
 import { t } from '../i18n'
 import {
   fetchVersions, deleteVersion, setCurrentVersion, fetchCurrentVersion, fetchCharacters, fetchLocationOptions, updateSharedCharacter, isMissing,

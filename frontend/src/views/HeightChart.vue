@@ -28,6 +28,7 @@
     <div v-if="!loading && characters.length === 0" class="empty-state glass-panel">
       <p class="empty-title">{{ $t('No characters yet.') }}</p>
       <p class="empty-hint">{{ $t('Add your first one to start building their story and stats.') }}</p>
+      <RouterLink :to="{ path: '/characters', query: { new: '1' } }" class="btn btn-primary small">{{ $t('Add character') }}</RouterLink>
     </div>
 
     <template v-else-if="!loading">
@@ -38,7 +39,13 @@
             {{ c.current.name }}{{ c.current.height ? '' : ' ' + $t('(no height)') }}
           </option>
         </select>
-        <button type="button" class="btn btn-ghost small" :disabled="!withHeightLeft" @click="addAll">
+        <button
+          type="button"
+          class="btn btn-ghost small"
+          :disabled="!withHeightLeft"
+          :title="withHeightLeft ? '' : $t('Nobody left to add has a height: set one on their version first.')"
+          @click="addAll"
+        >
           {{ $t('Add everyone with a height') }}
         </button>
         <button type="button" class="btn btn-ghost small" :disabled="drawn.length < 2" @click="sortByHeight">
@@ -133,6 +140,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { fullDate } from '../calendar'
 import { useRoute, useRouter } from 'vue-router'
 import { t, tr } from '../i18n'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
@@ -359,7 +367,7 @@ function clip(name, slot) {
 
 function versionLabel(v) {
   const parts = [v.name]
-  if (v.version_date) parts.push(v.version_date)
+  if (v.version_date) parts.push(fullDate(v.version_date))
   if (v.version_reference) parts.push(v.version_reference)
   if (v.is_current) parts.push(t('current'))
   return parts.join(' · ')

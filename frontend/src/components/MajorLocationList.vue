@@ -86,7 +86,9 @@ function readState() {
 }
 const saved = readState()
 const folded = ref(saved.folded || {})
-const closed = ref(!!saved.closed)
+// Never set on this device: open on a wide screen, folded on a phone, where
+// it would cover most of the map.
+const closed = ref('closed' in saved ? !!saved.closed : window.matchMedia('(max-width: 720px)').matches)
 const filter = ref('')
 
 function store() {
@@ -318,7 +320,7 @@ ul {
     top: auto;
     right: 8px;
     bottom: 8px;
-    left: 80px;
+    left: 8px;
     width: auto;
     max-height: 42%;
   }

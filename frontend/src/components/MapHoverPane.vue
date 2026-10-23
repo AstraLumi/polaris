@@ -17,7 +17,7 @@
         </p>
         <p class="row">
           <span>{{ $t('Founded') }}</span>
-          <strong>{{ e.founding_date || $t('Unknown') }}</strong>
+          <strong>{{ e.founding_date ? fullDate(e.founding_date) : $t('Unknown') }}</strong>
         </p>
         <p class="desc" :class="{ empty: !e.description }">
           {{ e.description || $t('No description.') }}
@@ -29,6 +29,7 @@
 
 <script setup>
 import { tr } from '../i18n'
+import { fullDate } from '../calendar'
 
 defineProps({
   // [{ type: 'Kingdom' | 'Region' | 'Ocean' | 'Major location' | 'Location' | 'City' | 'Capital', name, color,

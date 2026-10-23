@@ -34,6 +34,7 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/starCatalog.test.mjs
     node frontend/tests/bodyOutlines.test.mjs
     node frontend/tests/recent.test.mjs
+    node frontend/tests/storyDates.test.mjs
 
 Run all of these before committing.
 
@@ -98,6 +99,11 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   but read from the right, the last four being the year (`dateDigits.js`);
   a year alone is emitted as just the year. Its calendar button opens a
   month of the story's calendar with the seasons tinted in their colours.
+  On screen a date reads one way everywhere: `fullDate` ("15/03/1054", a
+  year alone as the year, no leading zeros) and `shortDate` ("1054 Q2")
+  in `calendar.js`, built on `storyDates.js`; a year before 1 gets a real
+  minus or the story's era names (Settings → Calendar, `year_before` /
+  `year_after`). Never print a stored date raw.
 - **The map is 2D only or a planet** (`map_mode`, `backend/planetmap.go`).
   The 2D tables (`location_hexes`, `locations.q/r`, `creature_hexes`) and
   the planet's (`planet_cells`, `locations.cell`, `creature_cells`) are kept

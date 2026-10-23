@@ -81,6 +81,7 @@
 // and computed), gear and spells. Which two is kept in the URL (?a=&b=), so
 // the page can be linked to and survives a reload.
 import { ref, computed, watch, onMounted } from 'vue'
+import { fullDate } from '../calendar'
 import { useRoute, useRouter } from 'vue-router'
 import { t } from '../i18n'
 import { fetchVersions, fetchVersion, isMissing } from '../api'
@@ -124,7 +125,7 @@ function swap() {
 }
 
 const versionLabel = (v) =>
-  [v.is_current ? `★ ${v.name}` : v.name, v.version_date, v.version_reference, t('Lv. {level}', { level: v.level })]
+  [v.is_current ? `★ ${v.name}` : v.name, fullDate(v.version_date), v.version_reference, t('Lv. {level}', { level: v.level })]
     .filter(Boolean)
     .join(' · ')
 
@@ -172,7 +173,7 @@ const groups = computed(() => {
         row(t('Class'), x.class_name, y.class_name),
         row(t('Subclass'), x.subclass_name, y.subclass_name),
         row(t('Specialization'), x.specialization_name, y.specialization_name),
-        row(t('Version date'), x.version_date, y.version_date),
+        row(t('Version date'), fullDate(x.version_date), fullDate(y.version_date)),
         row(t('Reference'), x.version_reference, y.version_reference),
         row(t('Chapter'), chapterLabel(x.chapter_id), chapterLabel(y.chapter_id)),
       ],

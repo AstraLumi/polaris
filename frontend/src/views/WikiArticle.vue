@@ -147,7 +147,7 @@
             </section>
 
             <p v-if="article.updated_at" class="foot">
-              {{ $t('Last edited {when}', { when: editedAt }) }}
+              <span :title="exactTime(article.updated_at)">{{ $t('Last edited {when}', { when: editedAt }) }}</span>
             </p>
           </template>
 
@@ -384,6 +384,7 @@ import { renderMarkdown } from '../markdown'
 import { calendar, fullDate, dateParts } from '../calendar'
 import { chapterLabel, loadChapters } from '../chapters'
 import { t } from '../i18n'
+import { timeAgo, exactTime } from '../timeAgo'
 import {
   TYPE_LABELS, TYPE_PLURALS, FIELD_LABELS, FACT_LABELS, FACT_GROUPS, GROUP_LABELS, SHEET_LABELS,
   wikiApi, wikiPath, sourcePath, sourceLabel, makeLinkResolver, factWords, biomeShares, terrainShares,
@@ -503,8 +504,7 @@ const toc = computed(() => {
 
 // The server stores UTC ("2026-10-08 21:33:54").
 const editedAt = computed(() => {
-  const d = new Date(`${article.value.updated_at.replace(' ', 'T')}Z`)
-  return Number.isNaN(d.getTime()) ? article.value.updated_at : d.toLocaleString()
+  return timeAgo(article.value.updated_at) || article.value.updated_at
 })
 
 function factText(f) {

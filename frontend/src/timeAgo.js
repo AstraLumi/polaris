@@ -13,3 +13,9 @@ export function timeAgo(stamp) {
   const days = Math.round(hrs / 24)
   return days < 30 ? t('{n}d ago', { n: days }) : new Date(ts).toLocaleDateString()
 }
+
+// The full local date and time of a stamp, for a tooltip beside timeAgo.
+export function exactTime(stamp) {
+  const d = new Date(String(stamp).replace(' ', 'T') + 'Z')
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString()
+}

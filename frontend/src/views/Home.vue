@@ -17,6 +17,33 @@
     <p v-else-if="!data" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <template v-else>
+      <section v-if="isNew" class="glass-panel block start-here">
+        <h2>{{ $t('Where to start') }}</h2>
+        <p class="start-lede">{{ $t('A new story. Any order works; these are the usual first steps.') }}</p>
+        <ol class="start-steps">
+          <li>
+            <RouterLink :to="{ path: '/settings', hash: '#calendar' }">{{ $t('Set up the calendar') }}</RouterLink>
+            <span>{{ $t('months, days, seasons and era names, before dates pile up') }}</span>
+          </li>
+          <li>
+            <RouterLink to="/map">{{ $t('Paint the map') }}</RouterLink>
+            <span>{{ $t('kingdoms, regions and places, flat or as a planet') }}</span>
+          </li>
+          <li>
+            <RouterLink :to="{ path: '/characters', query: { new: '1' } }">{{ $t('Add your first character') }}</RouterLink>
+            <span>{{ $t('a name is enough to begin') }}</span>
+          </li>
+          <li>
+            <RouterLink to="/events/new">{{ $t('Add an event') }}</RouterLink>
+            <span>{{ $t('with a date, it lands on the timeline and the calendar') }}</span>
+          </li>
+          <li>
+            <RouterLink :to="{ path: '/chapters', query: { new: '1' } }">{{ $t('Start a chapter') }}</RouterLink>
+            <span>{{ $t('notes per chapter, and what happens in each') }}</span>
+          </li>
+        </ol>
+      </section>
+
       <section class="tiles">
         <RouterLink v-for="t in tiles" :key="t.label" :to="t.to" class="tile glass-panel">
           <span class="tile-value">{{ t.value }}</span>
@@ -137,6 +164,12 @@ function looseLink(l) {
 const data = ref(null)
 const error = ref('')
 
+// Nothing in the story yet: Home shows where to start.
+const isNew = computed(() => {
+  const c = data.value?.counts
+  return !!c && !c.characters && !c.events && !c.locations
+})
+
 const tiles = computed(() => {
   const c = data.value.counts
   return [
@@ -182,6 +215,55 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.start-here {
+  margin-bottom: 1.25rem;
+}
+
+.start-here h2 {
+  margin: 0 0 0.25rem;
+}
+
+.start-lede {
+  margin: 0 0 0.75rem;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.start-steps {
+  margin: 0;
+  padding-left: 1.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.start-steps li::marker {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.start-steps a {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.start-steps a:hover {
+  color: var(--accent);
+}
+
+.start-steps span {
+  margin-left: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--text-faint);
+}
+
+@media (max-width: 720px) {
+  .start-steps span {
+    display: block;
+    margin-left: 0;
+  }
+}
+
 
 .sub a {
   color: var(--accent);

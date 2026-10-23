@@ -68,6 +68,31 @@
           <span class="theme-blurb">{{ $t(t.blurb) }}</span>
         </button>
       </div>
+
+      <h3 id="timeline-rows" class="sub-title">{{ $t('Timeline rows') }}</h3>
+      <p class="lede">{{ $t('How the timeline runs from one row to the next. Remembered on this device only.') }}</p>
+      <div class="row-styles" role="radiogroup" :aria-label="$t('Timeline rows')">
+        <button
+          v-for="r in TIMELINE_ROWS"
+          :key="r.id"
+          type="button"
+          class="theme-card row-style"
+          :class="{ 'is-selected': timelineRows === r.id }"
+          role="radio"
+          :aria-checked="timelineRows === r.id"
+          @click="timelineRows = r.id"
+        >
+          <svg viewBox="0 0 120 54" class="row-preview" aria-hidden="true">
+            <path v-if="r.id === 'snake'" d="M10 10 H95 A11 11 0 0 1 95 32 H25 A11 11 0 0 0 25 54" />
+            <template v-else>
+              <path d="M10 10 H110 M10 32 H110 M10 54 H60" />
+              <path class="row-return" d="M110 10 C118 10 118 21 110 21 H10 C2 21 2 32 10 32 M110 32 C118 32 118 43 110 43 H10 C2 43 2 54 10 54" />
+            </template>
+          </svg>
+          <span class="theme-name">{{ $t(r.name) }}<span v-if="timelineRows === r.id" class="theme-check">✓</span></span>
+          <span class="theme-blurb">{{ $t(r.blurb) }}</span>
+        </button>
+      </div>
     </section>
 
     <section id="calendar" class="glass-panel card" :class="{ 'is-flash': flash === 'calendar' }">
@@ -92,6 +117,18 @@
             <input v-model.number="hours" type="number" min="0.01" step="any" />
           </label>
         </div>
+
+        <div class="field-row narrow eras">
+          <label class="field" :title="$t('Written after a year before 1. Left empty, those years show with a minus sign.')">
+            <span>{{ $t('Era before year 1') }}</span>
+            <input v-model="yearBefore" type="text" maxlength="24" :placeholder="$t('e.g. BC')" />
+          </label>
+          <label class="field" :title="$t('Written after every year from 1 on. Usually left empty.')">
+            <span>{{ $t('Era from year 1') }}</span>
+            <input v-model="yearAfter" type="text" maxlength="24" :placeholder="$t('e.g. AD')" />
+          </label>
+        </div>
+        <p class="note">{{ $t('Dates read like this: {example}.', { example: eraExample }) }}</p>
 
         <div class="quarters">
           <span class="quarters-title">{{ $t('Quarters') }}</span>
@@ -376,6 +413,8 @@
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useUnsavedGuard, useSaveShortcut } from '../navigation'
+import { timelineRows } from '../timelinePrefs'
+import { dayText, yearText } from '../storyDates'
 import { fetchSettings, saveSettings, saveSeasons, saveBloodTypes, planetApi } from '../api'
 import RestoreDefaultDialog from '../components/RestoreDefaultDialog.vue'
 import { applyBloodTypes, bloodTypeNote, DEFAULT_BLOOD_TYPES } from '../bloodTypes'
@@ -394,7 +433,7 @@ import { newSeasonId } from '../seasons'
 // The side index. Stats is a tab of its own (a big editor that stays mounted),
 // the rest are sections of the General page; `ids` are the cards a label covers.
 const SECTIONS = [
-  { id: 'language', label: tr('Language & look'), ids: ['language', 'appearance'] },
+  { id: 'language', label: tr('Language & look'), ids: ['language', 'appearance', 'timeline-rows'] },
   { id: 'calendar', label: tr('Calendar'), ids: ['calendar'] },
   { id: 'seasons', label: tr('Seasons'), ids: ['seasons'] },
   { id: 'map', label: tr('Map'), ids: ['map'] },
@@ -457,12 +496,18 @@ const appVersion = `v${pkg.version}`
 const REPO_URL = 'https://github.com/AstraLumi/polaris'
 const REPO_OWNER_URL = 'https://github.com/AstraLumi'
 
+// The timeline's two ways of turning from one row to the next.
+const TIMELINE_ROWS = [
+  { id: 'snake', name: tr('Back and forth'), blurb: tr('The line turns at the end of each row and comes back, so every other row runs right to left. The default.') },
+  { id: 'ltr', name: tr('Left to right'), blurb: tr('Every row runs left to right, like lines of text; a faint line leads back to the next row.') },
+]
+
 // What each section held when last loaded or saved, so edits not yet
 // saved are noticed: a note beside its Save button, and a question before
 // leaving the page.
 const savedState = ref({})
 const sectionState = {
-  calendar: () => JSON.stringify([months.value, days.value, hours.value]),
+  calendar: () => JSON.stringify([months.value, days.value, hours.value, yearBefore.value.trim(), yearAfter.value.trim()]),
   seasons: () => JSON.stringify([seasonList.value, seasonStart.value, hemisphere.value, unit.value]),
   map: () => JSON.stringify(mapForm.value),
   blood: () => JSON.stringify(bloodList.value.map((b) => [b.name, b.note])),
@@ -482,6 +527,13 @@ useSaveShortcut(() => {
 })
 
 const months = ref(calendar.months_per_year)
+const yearBefore = ref(calendar.year_before)
+const yearAfter = ref(calendar.year_after)
+// How dates will read with the era names typed (storyDates.js).
+const eraExample = computed(() => {
+  const eras = { before: yearBefore.value.trim(), after: yearAfter.value.trim() }
+  return [dayText({ day: 15, month: 3, year: 1054 }, false, eras), dayText({ day: 1, month: 1, year: -54 }, false, eras), `${yearText(1054, eras)} ${t('Q{n}', { n: 2 })}`].join(' · ')
+})
 const days = ref(calendar.days_per_month)
 const hours = ref(calendar.hours_per_day)
 const loadError = ref('')
@@ -751,11 +803,13 @@ const restoring = ref('')
 const RESTORES = {
   calendar: {
     title: tr('Restore the default calendar?'),
-    message: tr('The calendar goes back to 12 months of 30 days of 24 hours and is saved. Dates already saved are not rewritten.'),
+    message: tr('The calendar goes back to 12 months of 30 days of 24 hours, with no era names, and is saved. Dates already saved are not rewritten.'),
     run: () => {
       months.value = 12
       days.value = 30
       hours.value = 24
+      yearBefore.value = ''
+      yearAfter.value = ''
       return save()
     },
   },
@@ -803,7 +857,13 @@ async function save() {
   saveError.value = ''
   saved.value = false
   try {
-    await saveSettings({ months_per_year: months.value, days_per_month: days.value, hours_per_day: hours.value })
+    await saveSettings({
+      months_per_year: months.value,
+      days_per_month: days.value,
+      hours_per_day: hours.value,
+      year_before: yearBefore.value.trim(),
+      year_after: yearAfter.value.trim(),
+    })
     await loadCalendar()
     markSaved('calendar')
     saved.value = true
@@ -821,6 +881,8 @@ onMounted(async () => {
     months.value = s.months_per_year
     days.value = s.days_per_month
     hours.value = s.hours_per_day || 24
+    yearBefore.value = s.year_before || ''
+    yearAfter.value = s.year_after || ''
     markSaved('calendar')
     if (s.seasons) takeSeasons(s.seasons)
     takeMap(s.map)
@@ -999,6 +1061,39 @@ onBeforeUnmount(() => {
   font-family: inherit;
   cursor: pointer;
   transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.sub-title {
+  margin: 1.5rem 0 0.3rem;
+  font-family: 'Fraunces', serif;
+  font-weight: 500;
+  font-size: 1.05rem;
+}
+
+.row-styles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 0.75rem;
+}
+
+.row-preview {
+  width: 100%;
+  max-width: 9rem;
+  height: auto;
+  overflow: visible;
+}
+
+.row-preview path {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.row-preview .row-return {
+  stroke-width: 1.2;
+  stroke-dasharray: 2 3;
+  opacity: 0.5;
 }
 
 .theme-card:hover {

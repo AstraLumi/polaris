@@ -217,6 +217,7 @@
 
 <script setup>
 import { reactive, ref, computed, watch, onMounted, nextTick } from 'vue'
+import { fullDate } from '../calendar'
 import FilePick from '../components/FilePick.vue'
 import { t } from '../i18n'
 import { useRouter } from 'vue-router'
@@ -375,7 +376,7 @@ const versionLabel = (v) =>
   [
     v.is_current ? `★ ${v.name}` : v.name,
     (v.chapter_id && chapterLabel(v.chapter_id, { short: true })) || '',
-    v.version_date,
+    fullDate(v.version_date),
     v.version_reference,
     t('Lv. {level}', { level: v.level }),
   ]
