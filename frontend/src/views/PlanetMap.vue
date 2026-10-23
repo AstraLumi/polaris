@@ -154,7 +154,7 @@
       </MajorLocationList>
     </div>
 
-    <SkyView v-if="skyCell != null" :cell="skyCell" :frequency="frequency" :climate="climate.view.value" @close="skyCell = null" />
+    <SkyView v-if="skyCell != null" :cell="skyCell" :frequency="frequency" :climate="climate.view.value" :ground="skyGround" @close="skyCell = null" />
 
     <FeatureModal
       v-if="featureModal"
@@ -213,7 +213,7 @@ import BiomePalette from '../components/BiomePalette.vue'
 import ClimatePanel from '../components/ClimatePanel.vue'
 import SkyView from '../components/SkyView.vue'
 import { useLayers, layerOf, layerCellColor, mixColor } from '../planetLayers'
-import { biomeOf, landformOf, PLAIN_LAND } from '../biomes'
+import { biomeOf, landformOf, PLAIN_LAND, groundHeight } from '../biomes'
 import { calendar } from '../calendar'
 import { usePlanetClimate, climateInput, heatOf } from '../planetClimate'
 import { temperatureColor, rainColor, koppenColor, koppenName, formatTemperature, formatRain, compassPoint } from '../climateColors'
@@ -406,14 +406,28 @@ async function workOutClimate() {
 
 // The sky from the picked hex (SkyView.vue); its clouds need the climate.
 const skyCell = ref(null)
+const skyGround = ref(null)
 async function openSky() {
   skyCell.value = selectedCell.value
+  skyGround.value = null
   try {
     await layers.ensure()
+    skyGround.value = groundOf(skyCell.value)
     workOutClimate()
   } catch {
     // The sky works without its clouds.
   }
+}
+
+// The ground the sky is seen from: its height (the terrain's, or the
+// biome's usual one; the sea's surface at sea), colour and name.
+function groundOf(cell) {
+  if (!isLand(cell)) return { height: 0, color: '#1c3048', name: t('Sea') }
+  const b = layers.tagAt('biome', cell)
+  const r = layers.tagAt('relief', cell)
+  const form = r && landformOf(r.key)
+  const names = [form && t(form.label), b && biomeOf(b.key) && t(biomeOf(b.key).label)].filter(Boolean)
+  return { height: Math.max(0, groundHeight(b, r)), color: landColor(cell, PLAIN_LAND.color), name: names.join(' · ') || t('Land') }
 }
 
 // A finished climate recolours the map.

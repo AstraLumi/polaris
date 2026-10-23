@@ -19,9 +19,12 @@ export function pictureToThree(m) {
 
 // Clouds: a deck seen from below, thin noise laid on a plane overhead, so
 // they foreshorten towards the horizon. uCover is how much of the sky they
-// hide (the climate's cloud cover there that month).
+// hide (the climate's cloud cover there that month). uDip, here and below,
+// is the sine of how far the real horizon lies under the level: seen from
+// high up, the planet curves away and more of the sky shows.
 const CLOUD_GLSL = `
 uniform float uCover;
+uniform float uDip;
 uniform vec2 uCloudShift;
 float cHash(vec3 p) {
   p = fract(p * 0.3183099 + 0.1);
@@ -36,8 +39,9 @@ float cNoise(vec3 x) {
              mix(mix(cHash(i + vec3(0, 0, 1)), cHash(i + vec3(1, 0, 1)), f.x), mix(cHash(i + vec3(0, 1, 1)), cHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
 }
 float cloudAt(vec3 d) {
-  if (uCover <= 0.001 || d.y <= 0.0) return 0.0;
-  vec2 q = d.xz / (d.y + 0.06) * 1.4 + uCloudShift;
+  float y = d.y + uDip;
+  if (uCover <= 0.001 || y <= 0.0) return 0.0;
+  vec2 q = d.xz / (y + 0.06) * 1.4 + uCloudShift;
   float n = cNoise(vec3(q, 0.0)) * 0.5 + cNoise(vec3(q * 2.3, 1.7)) * 0.3 + cNoise(vec3(q * 5.1, 3.1)) * 0.2;
   float t = n + (uCover - 0.5) * 0.95;
   return smoothstep(0.32, 0.62, t) * min(1.0, 0.25 + uCover * 1.5);
@@ -61,6 +65,7 @@ uniform vec3 uAir;
 uniform vec3 uSunDir;
 uniform float uShell;
 uniform vec3 uShellColor;
+uniform float uDip;
 varying vec3 vDir;
 void main() {
   vec3 d = normalize(vDir);
@@ -71,7 +76,7 @@ void main() {
   // A shell sky glows by its own day, its painted stars fading.
   sky = mix(sky, uShellColor * 0.8 + sky * 0.2, uShell * 0.9);
   // Daylight in the air: brighter low down and round the sun.
-  float low = 1.0 - clamp(d.y, 0.0, 1.0);
+  float low = 1.0 - clamp(d.y + uDip, 0.0, 1.0);
   float toward = max(dot(d, uSunDir), 0.0);
   vec3 air = uAir * (0.6 + 0.5 * low) + vec3(1.0, 0.86, 0.65) * pow(toward, 6.0) * 0.55;
   gl_FragColor = vec4(mix(sky, air, uDay), 1.0);
@@ -92,6 +97,7 @@ export function createSkyDome(texture) {
         uSunDir: { value: new THREE.Vector3(0, -1, 0) },
         uShell: { value: 0 },
         uShellColor: { value: new THREE.Color(1, 0.95, 0.88) },
+        uDip: { value: 0 },
       },
       side: THREE.BackSide,
       depthWrite: false,
@@ -122,7 +128,7 @@ ${CLOUD_GLSL}
 void main() {
   vec3 d = uFromPicture * position;
   float bright = uLimit - aMag;
-  vAlpha = clamp(bright / 2.2, 0.0, 1.0) * uVisible * smoothstep(-0.004, 0.08, d.y) * (1.0 - cloudAt(d));
+  vAlpha = clamp(bright / 2.2, 0.0, 1.0) * uVisible * smoothstep(-0.004, 0.08, d.y + uDip) * (1.0 - cloudAt(d));
   gl_PointSize = clamp(1.4 + bright * 0.6, 1.0, 10.0) * uPx;
   vColor = aColor;
   gl_Position = projectionMatrix * viewMatrix * vec4(d * 500.0, 1.0);
@@ -156,6 +162,7 @@ export function createPoints(dirs, mags, colors) {
         uVisible: { value: 1 },
         uCover: { value: 0 },
         uCloudShift: { value: new THREE.Vector2() },
+        uDip: { value: 0 },
       },
       transparent: true,
       depthWrite: false,
@@ -249,7 +256,7 @@ void main() {
   float a = cloudAt(d);
   if (a < 0.003) discard;
   vec3 night = vec3(0.025, 0.03, 0.045) + vec3(0.16, 0.17, 0.2) * uMoon;
-  vec3 day = mix(vec3(0.72, 0.74, 0.78), vec3(0.95), d.y) * uTint;
+  vec3 day = mix(vec3(0.72, 0.74, 0.78), vec3(0.95), clamp(d.y + uDip, 0.0, 1.0)) * uTint;
   gl_FragColor = vec4(mix(night, day, uDay), a * 0.97);
 }`
 
@@ -259,7 +266,7 @@ export function createClouds() {
     new THREE.ShaderMaterial({
       vertexShader: DOME_VERTEX,
       fragmentShader: CLOUD_FRAGMENT,
-      uniforms: { uCover: { value: 0 }, uCloudShift: { value: new THREE.Vector2() }, uDay: { value: 0 }, uMoon: { value: 0 }, uTint: { value: new THREE.Color(1, 1, 1) } },
+      uniforms: { uCover: { value: 0 }, uCloudShift: { value: new THREE.Vector2() }, uDip: { value: 0 }, uDay: { value: 0 }, uMoon: { value: 0 }, uTint: { value: new THREE.Color(1, 1, 1) } },
       side: THREE.BackSide,
       transparent: true,
       depthWrite: false,
@@ -272,17 +279,23 @@ export function createClouds() {
 }
 
 // ---- The ground ---------------------------------------------------------------------------------------
+// The ground runs out to the real horizon, uDip under the level; uGround is
+// the colour of what covers the hex.
 const GROUND_FRAGMENT = `
 uniform float uDay;
 uniform vec3 uGround;
+uniform float uDip;
 varying vec3 vDir;
 void main() {
   vec3 d = normalize(vDir);
-  if (d.y > 0.0) discard;
-  float edge = smoothstep(-0.02, 0.0, d.y);
-  vec3 c = mix(vec3(0.012, 0.014, 0.02), uGround, uDay) * (0.55 + 0.45 * smoothstep(-0.5, 0.0, d.y));
+  float y = d.y + uDip;
+  // Its edge smoothed over a pixel, so a tilted horizon doesn't step.
+  float a = clamp(-y / max(fwidth(y), 1e-6), 0.0, 1.0);
+  if (a <= 0.0) discard;
+  float edge = smoothstep(-0.02, 0.0, y);
+  vec3 c = mix(vec3(0.012, 0.014, 0.02), uGround, uDay) * (0.55 + 0.45 * smoothstep(-0.5, 0.0, y));
   c += vec3(0.08, 0.09, 0.12) * edge * (0.3 + uDay);
-  gl_FragColor = vec4(c, 1.0);
+  gl_FragColor = vec4(c, a);
 }`
 
 export function createGround() {
@@ -291,7 +304,7 @@ export function createGround() {
     new THREE.ShaderMaterial({
       vertexShader: DOME_VERTEX,
       fragmentShader: GROUND_FRAGMENT,
-      uniforms: { uDay: { value: 0 }, uGround: { value: new THREE.Color(0.2, 0.22, 0.16) } },
+      uniforms: { uDay: { value: 0 }, uGround: { value: new THREE.Color(0.2, 0.22, 0.16) }, uDip: { value: 0 } },
       side: THREE.BackSide,
       // Transparent only to be drawn last, over all else below the horizon.
       transparent: true,

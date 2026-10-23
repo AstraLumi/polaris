@@ -140,4 +140,21 @@ assert.equal(hiddenPart(1, 1, 3), 0)
   close(half[2][0], -1, 1e-6, 'the stars turn round in a sidereal day')
 }
 
+// ---- Seen from high up -----------------------------------------------------------------------------
+// At sea level the horizon is the level; from a 4 km peak on Earth it lies
+// about 2° below and some 226 km away, and a body that has just set at sea
+// level is still up there. The Moon's place moves a little with the eye
+// (its parallax), the Sun's not at all.
+{
+  const low = skyAt(bodies, 30 * DEG, 0, 0.3, opts)
+  close(low.observer.dip, 0, 1e-12, 'no dip at sea level')
+  const high = skyAt(bodies, 30 * DEG, 0, 0.3, { ...opts, heightKm: 4 })
+  close(high.observer.dip / DEG, 2.03, 0.02, 'the dip from 4 km')
+  close(high.observer.horizonKm, 225.8, 0.5, 'the horizon from 4 km')
+  close(high.sun.alt, low.sun.alt, 1e-6, "the Sun doesn't move")
+  const m0 = low.bodies.find((b) => b.body.id === 3)
+  const m1 = high.bodies.find((b) => b.body.id === 3)
+  assert.ok(Math.abs(m1.alt - m0.alt) > 1e-7 && Math.abs(m1.alt - m0.alt) < 0.01 * DEG, 'a tiny parallax')
+}
+
 console.log('skyFrames: all tests passed')

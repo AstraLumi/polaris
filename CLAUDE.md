@@ -145,8 +145,11 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   fixed to the stars at day 0), stars found in the sky picture by
   `starCatalog.js`, drawing in `three/skyShaders.js`. Positions are Kepler
   orbits in km, double precision; only directions and angular sizes reach
-  the GPU. Screenshots: `climateShots.mjs --sky lon,lat --at
-  DD-MM-YYYY,hour --look az,alt,fov`. three.js is only loaded with the planet
+  the GPU. The eye is at the hex's centre, at its ground's height
+  (`groundHeight`; the sea's surface at sea) plus a person's 1.7 m, so the
+  real horizon dips below the level (`observer` from `skyAt`; the shaders'
+  `uDip`). Screenshots: `climateShots.mjs --sky lon,lat --at
+  DD-MM-YYYY,hour --look az,alt,fov [--human]`. three.js is only loaded with the planet
   (`MapPage.vue`, `PlanetTerritory.vue` load it lazily); keep it out of the
   main bundle.
 - **The solar system** (`backend/solar.go`, the Solar system tab) keeps

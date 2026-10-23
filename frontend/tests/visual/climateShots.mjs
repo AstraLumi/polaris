@@ -19,6 +19,7 @@
 //     --look <az,alt,fov>  where it looks, default 180,30,90
 //     --dyson, --shell the Sun in a Dyson sphere; the system in its shell
 //     --glow           the Moon shines on its own
+//     --human          the human eye's field of view (--look's fov unused)
 //     --solar          then the planet in the Solar system's 3D view
 //     --view <name>    the body it looks at there (default Terra)
 //     --size <WxH>     the window, default 1400x900
@@ -218,10 +219,10 @@ async function shoot(storyId) {
     const [az, alt, fov] = option('look', '180,30,90').split(',').map(Number)
     await page.evaluate(([lo, la]) => window.__planetMap.openSky(lo, la), [lon, lat])
     await page.waitForFunction(() => window.__skyView?.ready() && window.__planetMap.climateReady(), null, { timeout: 90000 })
-    await page.evaluate((s) => window.__skyView.set(s), { date, hour: Number(hour), az, alt, fov })
+    await page.evaluate((s) => window.__skyView.set(s), { date, hour: Number(hour), az, alt, fov, human: flag('human') })
     await page.mouse.move(width - 2, height - 2)
     await page.waitForTimeout(1200)
-    const file = join(out, `sky_${date}_${hour}_${az}_${alt}${flag('shell') ? '_shell' : ''}.png`)
+    const file = join(out, `sky_${date}_${hour}_${az}_${alt}${flag('shell') ? '_shell' : ''}${flag('human') ? '_human' : ''}.png`)
     await page.screenshot({ path: file })
     saved.push(file)
     const info = await page.evaluate(() => {

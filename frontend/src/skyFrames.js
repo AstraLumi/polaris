@@ -192,14 +192,21 @@ const ALBEDO = { rocky: 0.12, ocean: 0.3, gas: 0.5 }
 //               shell's), eclipsed (0 to 1 of the star hidden from it),
 //               mag (apparent magnitude) }, brightest first
 //   shell       { glow: 0 night … 1 day } inside a shell, else null
-export function skyAt(bodies, lat, lon, days, { tilt = 23.44, dayHours = 24, enclosure = null } = {}) {
+//   observer    { heightKm, dip, horizonKm }: how high the eye is above
+//               sea level, how far below the level (radians) the planet's
+//               curved edge lies from there, and how far off it is
+// heightKm (an option) is the eye's height above sea level: the ground's,
+// plus the person's. Things down to -dip are above the real horizon.
+export function skyAt(bodies, lat, lon, days, { tilt = 23.44, dayHours = 24, enclosure = null, heightKm = 0 } = {}) {
   const frame = planetFrame(bodies, { tilt, dayHours })
   if (!frame) return null
   const h = horizonFrame(frame, lat, lon, days)
   const { all } = frame.at(days)
   const posOf = (i) => [all[i * 3], all[i * 3 + 1], all[i * 3 + 2]]
   const planetPos = posOf(frame.mainIndex)
-  const observer = add(planetPos, scale(h.up, frame.main.radius_km))
+  const R = frame.main.radius_km
+  const eye = Math.max(0, heightKm)
+  const observer = add(planetPos, scale(h.up, R + eye))
   const starPos = posOf(frame.starIndex)
   const star = frame.star
   const shell = enclosureOf(enclosure)
@@ -276,6 +283,7 @@ export function skyAt(bodies, lat, lon, days, { tilt = 23.44, dayHours = 24, enc
     sun,
     bodies: others,
     shell: shell.kind === 'shell' ? { glow: shellGlow(shell, hours) } : null,
+    observer: { heightKm: eye, dip: Math.acos(R / (R + eye)), horizonKm: Math.sqrt(eye * (2 * R + eye)) },
     frame,
   }
 }

@@ -28,6 +28,15 @@
         <button type="button" class="tool-btn" :class="{ active: show.grid }" @click="show.grid = !show.grid">{{ $t('Grid') }}</button>
         <button type="button" class="tool-btn" :class="{ active: show.labels }" @click="show.labels = !show.labels">{{ $t('Names') }}</button>
         <button type="button" class="tool-btn" :class="{ active: show.clouds }" @click="show.clouds = !show.clouds">{{ $t('Clouds') }}</button>
+        <button
+          type="button"
+          class="tool-btn"
+          :class="{ active: human }"
+          :title="$t('See as much as a person does at once: about {n}° across. Scrolling to zoom turns it off.', { n: HUMAN_FOV })"
+          @click="setHuman(!human)"
+        >
+          {{ $t('Human eye') }}
+        </button>
       </div>
       <button type="button" class="btn btn-ghost close" @click="$emit('close')">{{ $t('Close') }}</button>
     </header>
@@ -35,7 +44,9 @@
     <aside class="sky-info glass-panel panel-solid">
       <p v-if="error" class="error-banner">{{ error }}</p>
       <template v-else-if="sky">
-        <p class="row"><span>{{ $t('Field of view') }}</span><strong>{{ Math.round(fov) }}°</strong></p>
+        <p class="row"><span>{{ $t('Standing on') }}</span><strong>{{ groundText }}</strong></p>
+        <p class="row"><span>{{ $t('Horizon') }}</span><strong>{{ horizonText }}</strong></p>
+        <p class="row"><span>{{ $t('Field of view') }}</span><strong>{{ fovText }}</strong></p>
         <p class="row"><span>{{ sunName }}</span><strong>{{ sunText }}</strong></p>
         <p v-if="sky.shell" class="row"><span>{{ $t('The shell') }}</span><strong>{{ sky.shell.glow > 0.5 ? $t('Day') : sky.shell.glow > 0 ? $t('Dawn or dusk') : $t('Night: only its painted stars shine') }}</strong></p>
         <p class="row"><span>{{ $t('Cloud cover') }}</span><strong>{{ cloudText }}</strong></p>
@@ -52,6 +63,7 @@
           <span class="facts">{{ planetText(p) }}</span>
         </div>
         <p class="note">{{ starNote }}</p>
+        <p class="note">{{ $t('Seen from the middle of the hex, at eye height above its ground; the planet curves away below the level.') }}</p>
         <p class="note">{{ $t('Drag to look round, scroll to zoom. Sizes and brightness are true to scale.') }}</p>
       </template>
       <p v-else class="note">{{ $t('Working out the sky…') }}</p>
@@ -86,6 +98,9 @@ const props = defineProps({
   frequency: { type: Number, required: true },
   // The planet's worked-out climate (planetClimate.js), for its clouds.
   climate: { type: Object, default: null },
+  // The hex's ground: { height (m above sea level), color, name }; null
+  // until the map's layers are read (sea level meanwhile).
+  ground: { type: Object, default: null },
 })
 defineEmits(['close'])
 
@@ -105,6 +120,38 @@ const drag = ref(null)
 const catalogue = shallowRef(null)
 
 const hoursPerDay = computed(() => cal.hours_per_day || 24)
+// The eye: a person standing on the hex's ground (on the sea, its surface).
+const EYE_M = 1.7
+const eyeKm = computed(() => (Math.max(0, props.ground?.height ?? 0) + EYE_M) / 1000)
+
+// The human eye's view: about as wide as both eyes see at once.
+const HUMAN_FOV = 120
+const HUMAN_KEY = 'polaris-sky-human'
+function readHuman() {
+  try {
+    return localStorage.getItem(HUMAN_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+const human = ref(readHuman())
+const aspect = ref(16 / 10)
+// The vertical field of view (the camera's) for a horizontal one.
+const verticalFor = (across) => (2 * Math.atan(Math.tan((across * DEG) / 2) / aspect.value)) / DEG
+function setHuman(on) {
+  human.value = on
+  try {
+    localStorage.setItem(HUMAN_KEY, on ? '1' : '0')
+  } catch {
+    // Not remembered in a private window.
+  }
+  if (on) fov.value = Math.min(140, verticalFor(HUMAN_FOV))
+  update()
+}
+const fovText = computed(() => {
+  const across = (2 * Math.atan(Math.tan((fov.value * DEG) / 2) * aspect.value)) / DEG
+  return `${Math.round(across)}° × ${Math.round(fov.value)}°${human.value ? ' · ' + t('human eye') : ''}`
+})
 const grid = new PlanetGrid(props.frequency)
 const [lat, lon] = latLon(grid.center(props.cell))
 const lonText = (l) => {
@@ -151,12 +198,16 @@ const sunText = computed(() => {
   const s = sky.value?.sun
   if (!s) return ''
   if (!s.shines) return t('Hidden in its sphere')
-  return s.alt > 0 ? t('{alt} up, {dir}', { alt: deg(s.alt), dir: compass(s.az) }) : t('{alt} below the horizon', { alt: deg(-s.alt) })
+  return s.alt > -dip.value ? whereText(s) : t('{alt} below the horizon', { alt: deg(-s.alt - dip.value) })
 })
 const moons = computed(() => (sky.value?.bodies ?? []).filter((b) => b.body.kind === 'moon'))
 const planets = computed(() => (sky.value?.bodies ?? []).filter((b) => b.body.kind !== 'moon'))
+// Up from the level, or just over the curved horizon below it.
+function whereText(b) {
+  return b.alt >= 0 ? t('{alt} up, {dir}', { alt: deg(b.alt), dir: compass(b.az) }) : t('just over the horizon, {dir}', { dir: compass(b.az) })
+}
 function moonText(m) {
-  const where = m.alt > 0 ? t('{alt} up, {dir}', { alt: deg(m.alt), dir: compass(m.az) }) : t('below the horizon')
+  const where = m.alt > -dip.value ? whereText(m) : t('below the horizon')
   const size = deg(m.angularRadius * 2, 2)
   const light =
     m.eclipsed > 0.5 && m.direct < 0.5 && !m.body.glows
@@ -169,13 +220,25 @@ function moonText(m) {
   return `${where} · ${size} · ${light}`
 }
 function planetText(p) {
-  const where = p.alt > 0 ? t('{alt} up, {dir}', { alt: deg(p.alt), dir: compass(p.az) }) : t('below the horizon')
+  const where = p.alt > -dip.value ? whereText(p) : t('below the horizon')
   return Number.isFinite(p.mag) ? `${where} · ${t('magnitude {m}', { m: p.mag.toFixed(1) })}` : where
 }
 const cloudCover = computed(() => {
   if (!props.climate) return null
   const step = stepOfMonth(date.value.month - 1, cal)
   return props.climate.clouds(step)[props.cell]
+})
+const dip = computed(() => sky.value?.observer.dip ?? 0)
+const groundText = computed(() => {
+  const g = props.ground
+  const m = t('{n} m', { n: Math.round(Math.max(0, g?.height ?? 0)).toLocaleString() })
+  return g?.name ? `${m} · ${g.name}` : m
+})
+const horizonText = computed(() => {
+  const o = sky.value?.observer
+  if (!o) return ''
+  const km = o.horizonKm < 10 ? o.horizonKm.toFixed(1) : Math.round(o.horizonKm).toLocaleString()
+  return t('{km} km away, {deg} below the level', { km, deg: deg(o.dip, o.dip < 1 * DEG ? 2 : 1) })
 })
 const cloudText = computed(() => (cloudCover.value == null ? t('Working out…') : `${Math.round(cloudCover.value * 100)}%`))
 const starNote = computed(() =>
@@ -254,7 +317,7 @@ function setup() {
 function update() {
   if (!solar.value || !renderer) return
   const p = worldMap.planet
-  const s = skyAt(solar.value.bodies, lat, lon, days.value, { tilt: p.tilt, dayHours: hoursPerDay.value, enclosure: enclosureFor(solar.value) })
+  const s = skyAt(solar.value.bodies, lat, lon, days.value, { tilt: p.tilt, dayHours: hoursPerDay.value, enclosure: enclosureFor(solar.value), heightKm: eyeKm.value })
   if (!s) {
     error.value = t('The sky needs a main planet going round a star (Solar system tab).')
     return
@@ -263,10 +326,14 @@ function update() {
   sky.value = s
   const fromPicture = pictureToThree(s.stars)
   const toPicture = fromPicture.clone().transpose()
+  // The real horizon, below the level by the planet's curve.
+  const dipNow = s.observer.dip
+  const sinDip = Math.sin(dipNow)
+  for (const m of [dome, stars, clouds, ground]) if (m) m.material.uniforms.uDip.value = sinDip
 
   // How light the air is: the star's height, or the shell's day.
   const sunDir = toThree(s.sun.local)
-  const sunUp = s.sun.shines ? Math.max(0, Math.min(1, (s.sun.alt / DEG + 18) / 22)) ** 1.6 : 0
+  const sunUp = s.sun.shines ? Math.max(0, Math.min(1, ((s.sun.alt + dipNow) / DEG + 18) / 22)) ** 1.6 : 0
   const day = s.shell ? Math.max(sunUp, 0) : sunUp
   const shellGlow = s.shell ? s.shell.glow : 0
   if (dome) {
@@ -281,7 +348,7 @@ function update() {
   const darkness = (1 - day) * (1 - shellGlow)
   // The faintest star seen: about magnitude 6 on a dark night, more
   // through a narrow view (a telescope's), fewer as the sky brightens.
-  const brightest = Math.max(0, ...s.bodies.filter((b) => b.alt > 0 && b.body.kind === 'moon').map((b) => Math.max(0, -b.mag - 4) / 9))
+  const brightest = Math.max(0, ...s.bodies.filter((b) => b.alt > -dipNow && b.body.kind === 'moon').map((b) => Math.max(0, -b.mag - 4) / 9))
   const limit = 6.2 + 2.5 * Math.log10(70 / fov.value) - 9 * (1 - darkness) - 1.2 * brightest
   for (const pts of [stars, planetPoints]) {
     if (!pts) continue
@@ -328,6 +395,7 @@ function update() {
   }
   planetPoints = createPoints(new Float32Array(pdirs), new Float32Array(pmags), new Uint8Array(pcolors))
   planetPoints.material.uniforms.uLimit.value = limit
+  planetPoints.material.uniforms.uDip.value = sinDip
   planetPoints.material.uniforms.uPx.value = renderer.getPixelRatio()
   planetPoints.renderOrder = -1
   scene.add(planetPoints)
@@ -348,7 +416,7 @@ function update() {
 
   // Clouds of that month at this hex, and the ground.
   const cover = show.clouds && cloudCover.value != null ? cloudCover.value : 0
-  const moonLight = Math.max(0, ...s.bodies.filter((b) => b.alt > 0 && b.body.kind === 'moon').map((b) => Math.min(1, (b.direct * b.lit + b.even) * (b.angularRadius / (0.26 * DEG)) ** 2)))
+  const moonLight = Math.max(0, ...s.bodies.filter((b) => b.alt > -dipNow && b.body.kind === 'moon').map((b) => Math.min(1, (b.direct * b.lit + b.even) * (b.angularRadius / (0.26 * DEG)) ** 2)))
   for (const m of [clouds, stars, planetPoints]) {
     if (!m) continue
     m.material.uniforms.uCover.value = cover
@@ -358,6 +426,8 @@ function update() {
   clouds.material.uniforms.uDay.value = Math.max(day, shellGlow)
   clouds.material.uniforms.uMoon.value = moonLight
   ground.material.uniforms.uDay.value = Math.max(day, shellGlow)
+  // The ground is what covers the hex, in its own colour.
+  ground.material.uniforms.uGround.value.set(props.ground?.color || '#7d8a5a').multiplyScalar(0.5)
   gridLines.visible = show.grid
   requestRender()
 }
@@ -389,16 +459,16 @@ function placeLabels() {
   const points = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
   points.forEach((name, i) => {
     const az = i * 45 * DEG
-    put(new THREE.Vector3(Math.sin(az), 0.02, -Math.cos(az)).multiplyScalar(100), name, 'compass', 'c' + name)
+    put(new THREE.Vector3(Math.sin(az), 0.02 - Math.sin(dip.value), -Math.cos(az)).multiplyScalar(100), name, 'compass', 'c' + name)
   })
   if (show.labels && sky.value) {
     for (const b of sky.value.bodies) {
-      if (b.alt < 0) continue
+      if (b.alt < -dip.value) continue
       const v = toThree(b.local).multiplyScalar(100)
       v.y += (BODY_DISTANCE * Math.tan(b.angularRadius) + 2.5 * (100 / ((renderer.domElement.clientHeight / 2) / Math.tan((fov.value * DEG) / 2)))) * 1.6
       put(v, b.body.name, 'body', 'b' + b.body.id)
     }
-    if (sky.value.sun.shines && sky.value.sun.alt > 0) put(toThree(sky.value.sun.local).multiplyScalar(100), sunName.value, 'body', 'sun')
+    if (sky.value.sun.shines && sky.value.sun.alt > -dip.value) put(toThree(sky.value.sun.local).multiplyScalar(100), sunName.value, 'body', 'sun')
   }
   labels.value = out
 }
@@ -408,6 +478,8 @@ function resize() {
   if (!el || !renderer) return
   renderer.setSize(el.clientWidth, el.clientHeight, false)
   camera.aspect = el.clientWidth / Math.max(1, el.clientHeight)
+  aspect.value = camera.aspect
+  if (human.value) fov.value = Math.min(140, verticalFor(HUMAN_FOV))
   camera.updateProjectionMatrix()
   update()
 }
@@ -430,9 +502,12 @@ function onUp(e) {
   if (wrapEl.value?.hasPointerCapture?.(e.pointerId)) wrapEl.value.releasePointerCapture(e.pointerId)
 }
 function onWheel(e) {
+  if (human.value) setHuman(false)
   fov.value = Math.max(0.5, Math.min(120, fov.value * Math.exp(e.deltaY * 0.0012)))
   update()
 }
+
+watch(() => props.ground, update)
 
 // ---- Life ---------------------------------------------------------------------------------------
 let resizeObserver = null
@@ -449,12 +524,13 @@ onMounted(async () => {
   // For the screenshot scripts (tests/visual), on the dev server only.
   if (import.meta.env.DEV) {
     window.__skyView = {
-      set: ({ date, hour, az, alt, fov: f }) => {
+      set: ({ date, hour, az, alt, fov: f, human: h }) => {
         if (date) dateText.value = date
         if (hour != null) localHour.value = hour
         if (az != null) view.az = az * DEG
         if (alt != null) view.alt = alt * DEG
         if (f) fov.value = f
+        if (h != null) setHuman(h)
         update()
       },
       ready: () => !!(sky.value && dome && catalogue.value),
