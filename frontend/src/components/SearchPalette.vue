@@ -16,9 +16,9 @@
       <p v-if="loadError" class="error-banner">{{ loadError }}</p>
 
       <ul v-if="results.length" ref="listEl" class="results">
+        <template v-for="(r, i) in results" :key="r.key">
+        <li v-if="r.group && r.group !== results[i - 1]?.group" class="group-head" aria-hidden="true">{{ $t(r.group) }}</li>
         <li
-          v-for="(r, i) in results"
-          :key="r.key"
           class="result"
           :class="{ 'is-active': i === cursor }"
           @mousemove="cursor = i"
@@ -26,6 +26,7 @@
         >
           <span class="result-icon">
             <IconImage v-if="r.kind === 'item'" :src="r.picture" :name="r.name" />
+            <span v-else-if="r.kind === 'action'" class="page-mark">+</span>
             <span v-else class="page-mark">↦</span>
           </span>
           <span class="result-text">
@@ -42,6 +43,7 @@
             {{ $t('Wiki') }}
           </button>
         </li>
+        </template>
       </ul>
       <p v-else-if="query.trim() && items" class="nothing">{{ $t('Nothing matches.') }}</p>
 
@@ -58,6 +60,8 @@ import { useRouter } from 'vue-router'
 import { t, tr } from '../i18n'
 import { wikiApi, wikiPath, TYPE_LABELS } from '../wiki'
 import { chapterIndex, chapterLabel, loadChapters } from '../chapters'
+import { recentPath, recentKey } from '../recent'
+import { recentItems } from '../recentTracker'
 import IconImage from './IconImage.vue'
 
 const emit = defineEmits(['close'])
@@ -72,13 +76,25 @@ const PAGES = [
   { name: tr('Character Assets'), path: '/assets' },
   { name: tr('Timeline'), path: '/timeline' },
   { name: tr('Calendar'), path: '/calendar' },
+  { name: tr('Bestiary'), path: '/bestiary' },
   { name: tr('Map'), path: '/map' },
+  { name: tr('Solar system'), path: '/solar-system' },
   { name: tr('Events'), path: '/events' },
-  { name: tr('New event'), path: '/events/new' },
   { name: tr('Wiki'), path: '/wiki' },
   { name: tr('Graph'), path: '/wiki/graph' },
   { name: tr('Settings'), path: '/settings' },
   { name: tr('Switch story'), path: '/stories' },
+]
+
+// Things to start. The list pages open their own add form when reached with
+// ?new=1 (see quickAdd.js).
+const ACTIONS = [
+  { name: tr('New character'), path: '/characters?new=1' },
+  { name: tr('New event'), path: '/events/new' },
+  { name: tr('New chapter'), path: '/chapters?new=1' },
+  { name: tr('New article'), path: '/wiki?new=1' },
+  { name: tr('New faction'), path: '/factions?new=1' },
+  { name: tr('New creature'), path: '/bestiary?new=1' },
 ]
 
 const inputEl = ref(null)
@@ -101,6 +117,7 @@ function primaryPath(type, id) {
 
 const entries = computed(() => {
   const pages = PAGES.map((p) => ({ key: `page:${p.path}`, kind: 'page', name: t(p.name), label: t('Page'), path: p.path }))
+  const actions = ACTIONS.map((a) => ({ key: `action:${a.path}`, kind: 'action', name: t(a.name), label: t('Action'), path: a.path }))
   const things = (items.value || []).map((it) => ({
     key: `${it.type}:${it.id}`,
     kind: 'item',
@@ -120,14 +137,43 @@ const entries = computed(() => {
     picture: '',
     path: `/chapters/${c.id}`,
   }))
-  return [...things, ...chapters, ...pages].map((e) => ({ ...e, folded: fold([e.name, ...(e.aliases || [])].join(' ')) }))
+  return [...things, ...chapters, ...actions, ...pages].map((e) => ({ ...e, folded: fold([e.name, ...(e.aliases || [])].join(' ')) }))
 })
 
 // Best first: the name starts with the query, then a word in it does, then
 // it merely contains it. Every word typed has to appear somewhere.
+// The items opened last, as entries. Once the story's index is here, ones that
+// were deleted are left out and the pictures and current names are used.
+const recent = computed(() => {
+  const byKey = new Map(entries.value.filter((e) => e.kind === 'item').map((e) => [e.key, e]))
+  const out = []
+  for (const r of recentItems.value) {
+    const key = recentKey(r)
+    const found = byKey.get(key)
+    if (items.value && !found) continue
+    out.push({
+      key: `recent:${key}`,
+      kind: 'item',
+      name: found?.name || r.name,
+      label: r.type === 'chapter' ? t('Chapter') : t(TYPE_LABELS[r.type] || r.type),
+      picture: found?.picture ?? '',
+      path: recentPath(r),
+      group: GROUP_RECENT,
+    })
+  }
+  return out
+})
+
+const GROUP_RECENT = tr('Recently opened')
+const GROUP_ACTIONS = tr('Actions')
+const GROUP_PAGES = tr('Pages')
+
 const results = computed(() => {
   const q = fold(query.value.trim())
-  if (!q) return entries.value.filter((e) => e.kind === 'page')
+  if (!q) {
+    const rest = entries.value.filter((e) => e.kind === 'action' || e.kind === 'page')
+    return [...recent.value, ...rest.map((e) => ({ ...e, group: e.kind === 'action' ? GROUP_ACTIONS : GROUP_PAGES }))]
+  }
   const words = q.split(/\s+/)
   const scored = []
   for (const e of entries.value) {
@@ -147,7 +193,7 @@ function move(by) {
   const n = results.value.length
   if (!n) return
   cursor.value = (cursor.value + by + n) % n
-  nextTick(() => listEl.value?.children[cursor.value]?.scrollIntoView({ block: 'nearest' }))
+  nextTick(() => listEl.value?.querySelectorAll('.result')[cursor.value]?.scrollIntoView({ block: 'nearest' }))
 }
 
 // Enter pressed before the index has loaded (a fast typist) is kept and
@@ -200,6 +246,18 @@ onMounted(async () => {
   padding: 0;
   max-height: 50vh;
   overflow-y: auto;
+}
+
+.group-head {
+  margin: 0.45rem 0.55rem 0.15rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.group-head:first-child {
+  margin-top: 0.1rem;
 }
 
 .result {

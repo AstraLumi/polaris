@@ -1,18 +1,26 @@
 <template>
   <div class="page is-narrow">
-    <BackLink :to="`/characters/${id}`" :label="$t('← Back to character')" />
+    <Breadcrumbs :missing="missing"
+      :crumbs="[{ label: $t('Characters'), to: '/characters' }, { label: characterName || (missing ? '' : '…'), to: `/characters/${id}` }, { label: $t('Versions') }]"
+    >
+      <ItemLinks v-if="characterName" type="character" :id="id" />
+    </Breadcrumbs>
 
-    <header class="page-header">
+    <NotFoundPanel v-if="missing" :message="$t('This character was deleted, or never existed.')">
+      <RouterLink to="/characters" class="btn btn-ghost">{{ $t('All characters') }}</RouterLink>
+    </NotFoundPanel>
+
+    <header v-else class="page-header">
       <div>
         <h1>{{ characterName || $t('Versions') }}</h1>
         <p class="page-sub">{{ $t('What belongs to the character comes first, shared by every version. Below, pick a version to edit, or start a new one from the current version.') }}</p>
       </div>
     </header>
 
-    <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+    <p v-if="loadError && !missing" class="error-banner">{{ loadError }}</p>
     <p v-else-if="loading" class="loading-hint">{{ $t('Loading…') }}</p>
 
-    <template v-else>
+    <template v-else-if="!missing">
       <section class="glass-panel shared-panel">
         <h2>{{ $t('The character') }}</h2>
         <p class="section-sub">{{ $t('These belong to the character, not to one version: changing them changes them in every version.') }}</p>
@@ -75,6 +83,7 @@
             </span>
           </RouterLink>
           <div class="version-actions">
+            <RouterLink :to="`/characters/${id}/versions/${v.id}/edit`" class="btn btn-ghost small">{{ $t('Edit') }}</RouterLink>
             <RouterLink
               v-if="!v.is_current && currentVersion"
               :to="{ path: `/characters/${id}/compare`, query: { a: v.id, b: currentVersion.id } }"
@@ -126,10 +135,12 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { t } from '../i18n'
 import {
-  fetchVersions, deleteVersion, setCurrentVersion, fetchCurrentVersion, fetchCharacters, fetchLocationOptions, updateSharedCharacter,
+  fetchVersions, deleteVersion, setCurrentVersion, fetchCurrentVersion, fetchCharacters, fetchLocationOptions, updateSharedCharacter, isMissing,
 } from '../api'
 import NewVersionModal from '../components/NewVersionModal.vue'
-import BackLink from '../components/BackLink.vue'
+import Breadcrumbs from '../components/Breadcrumbs.vue'
+import ItemLinks from '../components/ItemLinks.vue'
+import NotFoundPanel from '../components/NotFoundPanel.vue'
 import DateField from '../components/DateField.vue'
 import LocationSelect from '../components/LocationSelect.vue'
 import TagInput from '../components/TagInput.vue'
@@ -145,6 +156,7 @@ loadChapters()
 const versions = ref([])
 const loading = ref(true)
 const loadError = ref('')
+const missing = ref(false)
 const newOpen = ref(false)
 const confirmTarget = ref(null)
 const currentVersion = computed(() => versions.value.find((v) => v.is_current) || null)
@@ -192,6 +204,7 @@ async function load() {
     versions.value = list
     takeCharacter(current)
   } catch (err) {
+    missing.value = await isMissing(`/characters/${props.id}/current`)
     loadError.value = t("Couldn't load versions. Try refreshing.")
   } finally {
     loading.value = false

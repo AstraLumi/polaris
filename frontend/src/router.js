@@ -22,9 +22,10 @@ import Factions from './views/Factions.vue'
 import Bestiary from './views/Bestiary.vue'
 import Chapters from './views/Chapters.vue'
 import ChapterView from './views/ChapterView.vue'
+import NotFound from './views/NotFound.vue'
 import { activeStoryId, forgetStory, loadStories, stories } from './stories'
 import { tr } from './i18n'
-import { pageTitle } from './navigation'
+import { pageTitle, rememberVisit } from './navigation'
 
 const routes = [
   // The picker is the one page that isn't inside a story (no sidebar).
@@ -68,6 +69,8 @@ const routes = [
   { path: '/wiki', name: 'wiki', component: WikiHome, meta: { title: tr('Wiki') } },
   { path: '/wiki/graph', name: 'wiki-graph', component: GraphView, meta: { title: tr('Graph') } },
   { path: '/wiki/:type/:id', name: 'wiki-article', component: WikiArticle, meta: { title: tr('Wiki') }, props: true },
+  // Anything else: a mistyped address or an old link to something removed.
+  { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFound, meta: { title: tr('Not found') } },
 ]
 
 const router = createRouter({
@@ -101,6 +104,7 @@ router.beforeEach(async (to) => {
 // A detail page names what it shows once it has loaded it (see pageTitle).
 router.afterEach((to, from, failure) => {
   if (!failure) pageTitle.value = ''
+  if (!failure) rememberVisit(to)
 })
 
 export default router

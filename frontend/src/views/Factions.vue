@@ -54,6 +54,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { t } from '../i18n'
 import { factionsApi } from '../api'
+import { useQuickAdd } from '../quickAdd'
 import { wikiPath } from '../wiki'
 import IconImage from '../components/IconImage.vue'
 import FactionFormModal from '../components/FactionFormModal.vue'
@@ -113,6 +114,9 @@ function onChanged() {
 }
 
 onMounted(load)
+
+// /factions?new=1 (the search's "New faction") opens the form.
+useQuickAdd(() => openForm(null))
 </script>
 
 <style scoped>

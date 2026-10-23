@@ -1,7 +1,10 @@
 <template>
   <div class="card glass-panel" :class="{ 'is-selected': selected, 'is-dead': character.status === 'dead' }">
+    <!-- The whole card opens the sheet (or, while picking, ticks the box):
+         the link's or the box's area is stretched over the card, under its
+         buttons, so nothing is nested inside a link. -->
     <label v-if="selectMode" class="select-box">
-      <input type="checkbox" :checked="selected" @change="$emit('toggle-select')" />
+      <input type="checkbox" :checked="selected" :aria-label="character.name" @change="$emit('toggle-select')" />
     </label>
 
     <div class="card-row">
@@ -10,7 +13,10 @@
         <span v-else class="portrait-fallback">{{ initials }}</span>
       </div>
       <div class="identity">
-        <p class="name-line">{{ character.name }} <span class="level">{{ $t('Lv.') }} {{ paddedLevel }}</span></p>
+        <p class="name-line">
+          <RouterLink v-if="!selectMode" :to="`/characters/${character.id}`" class="card-link" :title="$t('Open the character sheet')">{{ character.name }}</RouterLink>
+          <template v-else>{{ character.name }}</template>{{ ' ' }}<span class="level">{{ $t('Lv.') }} {{ paddedLevel }}</span>
+        </p>
         <p v-if="character.status && character.status !== 'alive'" class="status-line">
           <span class="status-badge" :class="'is-' + character.status">{{ statusLabel(character.status) }}</span>
         </p>
@@ -24,9 +30,9 @@
       </div>
     </div>
 
-    <div class="card-actions">
-      <RouterLink :to="`/characters/${character.id}`" class="btn btn-ghost small" :title="$t('Open the character sheet')">{{ $t('View') }}</RouterLink>
-      <RouterLink :to="`/characters/${character.id}/versions`" class="btn btn-ghost small" :title="$t('Pick a version to edit')">{{ $t('Edit') }}</RouterLink>
+    <div v-if="!selectMode" class="card-actions">
+      <RouterLink :to="`/characters/${character.id}/versions/${character.version_id}/edit`" class="btn btn-ghost small" :title="$t('Edit the current version')">{{ $t('Edit') }}</RouterLink>
+      <RouterLink :to="`/characters/${character.id}/versions`" class="btn btn-ghost small" :title="$t('Every version of this character, and what they all share')">{{ $t('Versions') }}</RouterLink>
     </div>
   </div>
 </template>
@@ -89,10 +95,36 @@ const initials = computed(() =>
   border-color: var(--accent);
 }
 
+.card:hover,
+.card:has(.card-link:focus-visible) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--glass-border));
+}
+
+/* The link's (or the box's) area covers the whole card; the buttons sit
+   above it. */
+.card-link {
+  color: inherit;
+  text-decoration: none;
+  outline: none;
+}
+
+.card-link::after,
 .select-box {
+  content: '';
   position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
+  inset: 0;
+  z-index: 1;
+  cursor: pointer;
+}
+
+.select-box {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.75rem;
+}
+
+.select-box input {
+  height: fit-content;
 }
 
 .card-row {
@@ -159,6 +191,8 @@ const initials = computed(() =>
 }
 
 .card-actions {
+  position: relative;
+  z-index: 2;
   display: flex;
   gap: 0.6rem;
 }

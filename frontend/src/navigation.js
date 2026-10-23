@@ -54,3 +54,18 @@ export function viewPicture(src, alt = '') {
 export function viewGallery(list, index = 0) {
   if (list.length) viewedPicture.value = { ...list[index], list, index }
 }
+
+// The last address each page was seen at, query included (a list's filters
+// and sort), so a breadcrumb back to a list opens it as it was left even
+// after a few pages in between. router.js records every navigation.
+const lastSeenAt = new Map()
+export function rememberVisit(route) {
+  lastSeenAt.set(route.path, route.fullPath)
+}
+export const lastVisitOf = (path) => lastSeenAt.get(path) || path
+
+// Opens the Ctrl+K search. App.vue owns it and listens for the shortcut, so
+// this presses it.
+export function openSearch() {
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true }))
+}

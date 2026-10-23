@@ -1,8 +1,11 @@
 <template>
   <div class="page is-narrow chapter-page">
-    <BackLink to="/chapters" :label="$t('← Chapters')" />
+    <Breadcrumbs :missing="missing" :crumbs="[{ label: $t('Chapters'), to: '/chapters' }, { label: chapter?.volume_title }, { label: chapter?.title }]" />
 
-    <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+    <NotFoundPanel v-if="missing" :message="$t('This chapter was deleted, or never existed.')">
+      <RouterLink to="/chapters" class="btn btn-ghost">{{ $t('All chapters') }}</RouterLink>
+    </NotFoundPanel>
+    <p v-else-if="loadError" class="error-banner">{{ loadError }}</p>
     <p v-else-if="!chapter" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <template v-else>
@@ -81,11 +84,7 @@
         <p v-else class="empty">{{ $t('No character versions point to this chapter. Pick it on a version to list it here.') }}</p>
       </section>
 
-      <nav class="pager">
-        <RouterLink v-if="chapter.prev_id" :to="`/chapters/${chapter.prev_id}`" class="btn btn-ghost">{{ $t('← Previous chapter') }}</RouterLink>
-        <span class="spacer"></span>
-        <RouterLink v-if="chapter.next_id" :to="`/chapters/${chapter.next_id}`" class="btn btn-ghost">{{ $t('Next chapter →') }}</RouterLink>
-      </nav>
+      <Pager :prev="pagerLink(chapter.prev_id)" :next="pagerLink(chapter.next_id)" :prev-label="$t('← Previous chapter')" :next-label="$t('Next chapter →')" :label="$t('Chapters')" />
     </template>
 
     <ConfirmDialog
@@ -103,13 +102,15 @@
 import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { t } from '../i18n'
-import { chaptersApi } from '../api'
+import { chaptersApi, isMissing } from '../api'
 import { chapterIndex as idx, loadChapters } from '../chapters'
 import { fullDate } from '../calendar'
 import { renderMarkdown } from '../markdown'
 import { wikiApi, makeLinkResolver } from '../wiki'
 import { pageTitle, useUnsavedGuard, useSaveShortcut } from '../navigation'
-import BackLink from '../components/BackLink.vue'
+import Breadcrumbs from '../components/Breadcrumbs.vue'
+import NotFoundPanel from '../components/NotFoundPanel.vue'
+import Pager from '../components/Pager.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 
@@ -119,6 +120,7 @@ const router = useRouter()
 
 const chapter = ref(null)
 const loadError = ref('')
+const missing = ref(false)
 const editing = ref(false)
 const saving = ref(false)
 const saveError = ref('')
@@ -135,6 +137,13 @@ const kicker = computed(() => {
   const num = t('Chapter {n}', { n: c.number })
   return c.volume_title ? `${c.volume_title} · ${num}` : num
 })
+
+// The chapters before and after, by their titles in the chapter index.
+function pagerLink(id) {
+  if (!id) return null
+  const c = idx.value.chapters.find((x) => x.id === id)
+  return { to: `/chapters/${id}`, name: c ? `${t('Chapter {n}', { n: c.number })} · ${c.title}` : '' }
+}
 
 const draftState = () => JSON.stringify(draft)
 const dirty = () => editing.value && draftState() !== snapshot
@@ -195,6 +204,7 @@ async function remove() {
 
 async function load() {
   loadError.value = ''
+  missing.value = false
   editing.value = false
   chapter.value = null
   try {
@@ -207,6 +217,7 @@ async function load() {
       router.replace({ query: {} })
     }
   } catch (e) {
+    missing.value = await isMissing(`/chapters/${props.id}`)
     loadError.value = e.message
   }
 }
@@ -222,8 +233,12 @@ wikiApi.list().then((list) => (wikiItems.value = list)).catch(() => {})
   gap: 1rem;
 }
 
-.chapter-page .back-link {
+.chapter-page .page-trail {
   margin-bottom: 0;
+}
+
+.chapter-page .pager {
+  margin-top: 0;
 }
 
 .head {
@@ -252,12 +267,6 @@ wikiApi.list().then((list) => (wikiItems.value = list)).catch(() => {})
 }
 
 .edit-actions,
-.pager {
-  display: flex;
-  gap: 0.6rem;
-  align-items: center;
-}
-
 .spacer {
   flex: 1;
 }

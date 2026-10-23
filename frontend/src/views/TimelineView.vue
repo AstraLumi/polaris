@@ -461,6 +461,21 @@ function formatYears(y) {
   return tn('{n} year', '{n} years', r, { n: r.toLocaleString() })
 }
 
+// ?event=<id> (an event page's Timeline link) opens the timeline with that
+// event picked and in view.
+watch(
+  () => [data.value, queryText('event')],
+  async () => {
+    const id = Number(queryText('event'))
+    if (!data.value || !id) return
+    const n = nodes.value.find((x) => x.event_id === id || x.key === `event:${id}`)
+    if (!n) return
+    await nextTick()
+    select(n.key, true)
+  },
+  { flush: 'post' },
+)
+
 // ---- Selection ------------------------------------------------------------------
 
 function select(key, scroll = false) {

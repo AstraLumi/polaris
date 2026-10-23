@@ -1,8 +1,19 @@
 <template>
   <div class="page wiki-article">
-    <BackLink to="/wiki" :label="$t('← Back to the wiki')" />
+    <Breadcrumbs :missing="missing"
+      :crumbs="[
+        { label: $t('Wiki'), to: '/wiki' },
+        { label: TYPE_PLURALS[type] ? $t(TYPE_PLURALS[type]) : '', to: { path: '/wiki', query: { type } } },
+        { label: article?.name },
+      ]"
+    >
+      <ItemLinks v-if="article" :type="article.type" :id="article.id" here="wiki" :location-id="eventPlace?.id" :location-name="eventPlace?.name" />
+    </Breadcrumbs>
 
-    <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+    <NotFoundPanel v-if="missing" :message="$t('This article was deleted, or never existed.')">
+      <RouterLink to="/wiki" class="btn btn-ghost">{{ $t('Wiki') }}</RouterLink>
+    </NotFoundPanel>
+    <p v-else-if="loadError" class="error-banner">{{ loadError }}</p>
     <p v-else-if="!article" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <article v-else class="paper glass-panel">
@@ -13,13 +24,6 @@
         </div>
         <div class="actions">
           <template v-if="!editing">
-            <RouterLink
-              :to="{ path: '/wiki/graph', query: { focus: article.type + ':' + article.id } }"
-              class="btn btn-ghost small"
-              :title="$t('This article and everything it connects to, on the graph')"
-            >
-              {{ $t('Show in graph') }}
-            </RouterLink>
             <button class="btn btn-primary small" @click="startEdit()">{{ $t('Edit') }}</button>
           </template>
           <template v-else>
@@ -362,7 +366,9 @@
 import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import IconImage from '../components/IconImage.vue'
-import BackLink from '../components/BackLink.vue'
+import Breadcrumbs from '../components/Breadcrumbs.vue'
+import ItemLinks from '../components/ItemLinks.vue'
+import NotFoundPanel from '../components/NotFoundPanel.vue'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 import WikiLinkPanel from '../components/WikiLinkPanel.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
@@ -371,7 +377,7 @@ import WikiGallery from '../components/WikiGallery.vue'
 import HexTerritory from '../components/HexTerritory.vue'
 import PlanetTerritory from '../components/PlanetTerritory.vue'
 import { worldMap } from '../worldMap'
-import { creaturesApi, mapApi, planetApi } from '../api'
+import { creaturesApi, mapApi, planetApi, isMissing } from '../api'
 import { mapHexesOf, planetLandOf } from '../creatures'
 import { pageTitle, useUnsavedGuard, useSaveShortcut, viewPicture } from '../navigation'
 import { renderMarkdown } from '../markdown'
@@ -379,7 +385,7 @@ import { calendar, fullDate, dateParts } from '../calendar'
 import { chapterLabel, loadChapters } from '../chapters'
 import { t } from '../i18n'
 import {
-  TYPE_LABELS, FIELD_LABELS, FACT_LABELS, FACT_GROUPS, GROUP_LABELS, SHEET_LABELS,
+  TYPE_LABELS, TYPE_PLURALS, FIELD_LABELS, FACT_LABELS, FACT_GROUPS, GROUP_LABELS, SHEET_LABELS,
   wikiApi, wikiPath, sourcePath, sourceLabel, makeLinkResolver, factWords, biomeShares, terrainShares,
 } from '../wiki'
 
@@ -393,12 +399,15 @@ const route = useRoute()
 const article = ref(null)
 const items = ref([])
 const loadError = ref('')
+const missing = ref(false)
 const saveError = ref('')
 const editing = ref(false)
 const saving = ref(false)
 const tocOpen = ref(true)
 const draft = reactive({ name: '', summary: '', fields: {}, sections: [], infobox: [], climate: {} })
 const isLore = computed(() => article.value?.type === 'lore')
+// Where an event happened, for its map link.
+const eventPlace = computed(() => (article.value?.type === 'event' ? article.value.facts.find((f) => f.key === 'location')?.link : null) || null)
 
 // A character's facts change between versions: the infobox and the related
 // lists can show any of them (the written text is the same for all). Opens
@@ -688,6 +697,7 @@ async function loadTerritory() {
 
 async function load() {
   loadError.value = ''
+  missing.value = false
   saveError.value = ''
   article.value = null
   loadTerritory()
@@ -698,6 +708,7 @@ async function load() {
     items.value = list
     pageTitle.value = a.name
   } catch (e) {
+    missing.value = await isMissing(`/wiki/${props.type}/${props.id}`)
     loadError.value = e.message
     return
   }

@@ -102,6 +102,7 @@ import CharacterCard from '../components/CharacterCard.vue'
 import AddCharacterModal from '../components/AddCharacterModal.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import { fetchCharacters, deleteCharacters, factionsApi } from '../api'
+import { useQuickAdd } from '../quickAdd'
 
 const characters = ref([])
 const loading = ref(true)
@@ -224,6 +225,9 @@ async function handleDelete() {
 }
 
 onMounted(load)
+
+// /characters?new=1 (the search's "New character") opens the add form.
+useQuickAdd(() => (addOpen.value = true))
 </script>
 
 <style scoped>

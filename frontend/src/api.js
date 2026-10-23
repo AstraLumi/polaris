@@ -699,3 +699,15 @@ export const chaptersApi = {
   renameVolume: (id, title) => request(`/volumes/${id}`, jsonBody('PUT', { title }), 'failed to save the volume'),
   removeVolume: (id) => request(`/volumes/${id}`, { method: 'DELETE' }, 'failed to delete the volume'),
 }
+
+// Whether what a page shows is gone (a deleted item's old link, or an id
+// that never existed), told apart from any other failure to load it. Asked
+// only after a load failed, so the pages' fetchers stay as they are.
+export async function isMissing(path) {
+  try {
+    const res = await fetch(`${BASE}${path}`)
+    return res.status === 404 || res.status === 400
+  } catch (e) {
+    return false
+  }
+}

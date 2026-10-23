@@ -71,6 +71,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { t, tr } from '../i18n'
 import { creaturesApi } from '../api'
+import { useQuickAdd } from '../quickAdd'
 import { wikiPath } from '../wiki'
 import { CREATURE_KINDS, kindLabel, levelText } from '../creatures'
 import IconImage from '../components/IconImage.vue'
@@ -118,6 +119,9 @@ function onChanged() {
 }
 
 onMounted(load)
+
+// /bestiary?new=1 (the search's "New creature") opens the form.
+useQuickAdd(() => openForm(null))
 </script>
 
 <style scoped>

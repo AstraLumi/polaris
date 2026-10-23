@@ -1,8 +1,13 @@
 <template>
   <div class="page event-page">
-    <BackLink to="/events" :label="$t('← Back to events')" />
+    <Breadcrumbs :missing="missing" :crumbs="[{ label: $t('Events'), to: '/events' }, { label: event?.name }]">
+      <ItemLinks v-if="event" type="event" :id="event.id" here="sheet" :location-id="event.location_id" :location-name="event.location_name" />
+    </Breadcrumbs>
 
-    <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+    <NotFoundPanel v-if="missing" :message="$t('This event was deleted, or never existed.')">
+      <RouterLink to="/events" class="btn btn-ghost">{{ $t('All events') }}</RouterLink>
+    </NotFoundPanel>
+    <p v-else-if="loadError" class="error-banner">{{ loadError }}</p>
     <p v-else-if="!event" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <template v-else>
@@ -91,6 +96,8 @@
         {{ $t('Nothing else uses these tags yet.') }}
         <RouterLink :to="newWithTags">{{ $t('Create a related event →') }}</RouterLink>
       </p>
+
+      <Pager :prev="neighbours.prev" :next="neighbours.next" :prev-label="$t('← Previous event')" :next-label="$t('Next event →')" :label="$t('Events')" />
     </template>
 
     <Teleport to="body">
@@ -111,10 +118,13 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { eventsApi } from '../api'
+import { eventsApi, isMissing } from '../api'
 import { shortDate, fullDate, dateParts } from '../calendar'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
-import BackLink from '../components/BackLink.vue'
+import Breadcrumbs from '../components/Breadcrumbs.vue'
+import ItemLinks from '../components/ItemLinks.vue'
+import NotFoundPanel from '../components/NotFoundPanel.vue'
+import Pager from '../components/Pager.vue'
 import { chapterLabel, loadChapters } from '../chapters'
 import { pageTitle, viewPicture, mapPath } from '../navigation'
 import { t as tt } from '../i18n'
@@ -126,7 +136,22 @@ loadChapters()
 const event = ref(null)
 const related = ref([])
 const loadError = ref('')
+const missing = ref(false)
 const confirmOpen = ref(false)
+
+// Every event in date order, as the Events page lists them, for the
+// previous/next links at the foot of the page.
+const allEvents = ref([])
+const neighbours = computed(() => {
+  const i = allEvents.value.findIndex((e) => String(e.id) === String(props.id))
+  if (i < 0) return { prev: null, next: null }
+  const link = (e) => e && { to: `/events/${e.id}`, name: e.name }
+  return { prev: link(allEvents.value[i - 1]), next: link(allEvents.value[i + 1]) }
+})
+eventsApi
+  .list()
+  .then((list) => (allEvents.value = list))
+  .catch(() => {})
 
 const shown = computed(() => {
   const d = event.value?.event_date
@@ -151,12 +176,14 @@ function initials(name) {
 
 async function load() {
   loadError.value = ''
+  missing.value = false
   event.value = null
   related.value = []
   try {
     event.value = await eventsApi.get(props.id)
     pageTitle.value = event.value.name
   } catch (err) {
+    missing.value = await isMissing(`/events/${props.id}`)
     loadError.value = tt("Couldn't find that event.")
     return
   }
@@ -197,8 +224,12 @@ watch(() => props.id, load, { immediate: true })
   gap: 1rem;
 }
 
-.back-link {
+.page-trail {
   margin-bottom: 0;
+}
+
+.pager {
+  margin-top: 0;
 }
 
 .hero {

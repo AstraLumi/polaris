@@ -4,6 +4,7 @@ import router from './router'
 import './style.css'
 import { loadSavedTheme } from './theme'
 import { loadSavedLocale, i18nPlugin } from './i18n'
+import { trackRecent } from './recentTracker'
 
 loadSavedTheme()
 loadSavedLocale()
@@ -21,5 +22,8 @@ document.addEventListener(
   },
   true,
 )
+
+// Remember the items the writer opens (the search and the home page offer them).
+trackRecent(router)
 
 createApp(App).use(router).use(i18nPlugin).mount('#app')

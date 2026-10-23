@@ -80,6 +80,7 @@ import { ref, computed, h, onMounted, nextTick } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { t, tn } from '../i18n'
 import { chaptersApi } from '../api'
+import { useQuickAdd } from '../quickAdd'
 import { chapterIndex as idx, loadChapters } from '../chapters'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 
@@ -216,6 +217,9 @@ onMounted(async () => {
   await run(() => loadChapters(true))
   loading.value = false
 })
+
+// /chapters?new=1 (the search's "New chapter") adds one, as the button does.
+useQuickAdd(() => addChapter(null))
 </script>
 
 <style scoped>

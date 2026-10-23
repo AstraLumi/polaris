@@ -33,6 +33,7 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/skyFrames.test.mjs
     node frontend/tests/starCatalog.test.mjs
     node frontend/tests/bodyOutlines.test.mjs
+    node frontend/tests/recent.test.mjs
 
 Run all of these before committing.
 
@@ -183,6 +184,15 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   character (gender, age). The keys exist in both files: change both.
   Screenshots: `node frontend/tests/visual/heightShots.mjs [--ft]` (also
   the date picker's calendar).
+- **Item pages share their navigation:** a breadcrumb trail
+  (`components/Breadcrumbs.vue`; a list crumb reopens the list as it was
+  left, `lastVisitOf` in `navigation.js`), the same links bar
+  (`ItemLinks.vue`: Sheet · Wiki · Map · Timeline · Family tree · Graph,
+  only what applies), previous/next (`Pager.vue`) and one "not found"
+  panel (`NotFoundPanel.vue`, also the catch-all route). A new item page
+  uses all four. Recently opened items (`recent.js`, recorded from the
+  router by `recentTracker.js`) feed the search and Home; `?new=1` on a
+  list page opens its add form (`quickAdd.js`).
 - Birth date, blood type and Born in belong to the character (`characters`
   columns, schema 23), not to a version; the version form edits them for
   all versions.

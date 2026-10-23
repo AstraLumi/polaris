@@ -1,8 +1,16 @@
 <template>
   <div class="page is-wide family-page">
-    <BackLink :to="`/characters/${id}`" :label="$t('← Back to the character')" />
+    <Breadcrumbs :missing="missing"
+      :crumbs="[{ label: $t('Characters'), to: '/characters' }, { label: rootPerson?.name, to: `/characters/${id}` }, { label: $t('Family tree') }]"
+    >
+      <ItemLinks v-if="data" type="character" :id="id" here="family" />
+    </Breadcrumbs>
 
-    <header class="page-header">
+    <NotFoundPanel v-if="missing" :message="$t('This character was deleted, or never existed.')">
+      <RouterLink to="/characters" class="btn btn-ghost">{{ $t('All characters') }}</RouterLink>
+    </NotFoundPanel>
+
+    <header v-else class="page-header">
       <div>
         <h1>{{ rootPerson ? $t('Family of {name}', { name: rootPerson.name }) : $t('Family tree') }}</h1>
         <p class="page-sub">
@@ -10,20 +18,10 @@
           <template v-else>&nbsp;</template>
         </p>
       </div>
-      <div v-if="data" class="head-actions">
-        <RouterLink :to="`/characters/${id}`" class="btn btn-ghost">{{ $t('Character sheet') }}</RouterLink>
-        <RouterLink :to="wikiPath('character', id)" class="btn btn-ghost">{{ $t('Wiki article') }}</RouterLink>
-        <RouterLink
-          :to="{ path: '/wiki/graph', query: { focus: 'character:' + id, depth: 1, types: 'character' } }"
-          class="btn btn-ghost"
-          :title="$t('Everyone this character is connected to, on the graph')"
-        >
-          {{ $t('Relationship web') }}
-        </RouterLink>
-      </div>
     </header>
 
-    <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+    <template v-if="missing" />
+    <p v-else-if="loadError" class="error-banner">{{ loadError }}</p>
     <p v-else-if="!data" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <div v-else-if="data.people.length === 1" class="empty-state glass-panel">
@@ -102,9 +100,10 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import IconImage from '../components/IconImage.vue'
-import BackLink from '../components/BackLink.vue'
-import { fetchFamily } from '../api'
-import { wikiPath } from '../wiki'
+import Breadcrumbs from '../components/Breadcrumbs.vue'
+import ItemLinks from '../components/ItemLinks.vue'
+import NotFoundPanel from '../components/NotFoundPanel.vue'
+import { fetchFamily, isMissing } from '../api'
 import { dateParts } from '../calendar'
 import { statusLabel } from '../characterStatus'
 import { pageTitle } from '../navigation'
@@ -122,6 +121,7 @@ const router = useRouter()
 const PAD = 40
 const data = ref(null)
 const loadError = ref('')
+const missing = ref(false)
 const scroller = ref(null)
 const zoom = ref(1)
 
@@ -207,6 +207,7 @@ async function centreRoot() {
 async function load() {
   data.value = null
   loadError.value = ''
+  missing.value = false
   try {
     data.value = await fetchFamily(props.id)
     pageTitle.value = t('Family of {name}', { name: rootPerson.value?.name || '' })
@@ -216,6 +217,7 @@ async function load() {
     zoom.value = Math.min(1, Math.max(0.7, w / (tree.value.width + PAD * 2)))
     centreRoot()
   } catch (e) {
+    missing.value = await isMissing(`/characters/${props.id}/family`)
     loadError.value = e.message
   }
 }
@@ -224,12 +226,6 @@ watch(() => props.id, load, { immediate: true })
 </script>
 
 <style scoped>
-.head-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
 .legend {
   display: flex;
   flex-wrap: wrap;

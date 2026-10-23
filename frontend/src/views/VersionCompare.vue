@@ -1,15 +1,29 @@
 <template>
   <div class="page">
-    <BackLink :to="`/characters/${id}/versions`" :label="$t('← Back to versions')" />
+    <Breadcrumbs :missing="missing"
+      :crumbs="[
+        { label: $t('Characters'), to: '/characters' },
+        { label: characterName, to: `/characters/${id}` },
+        { label: $t('Versions'), to: `/characters/${id}/versions` },
+        { label: $t('Compare versions') },
+      ]"
+    >
+      <ItemLinks v-if="characterName" type="character" :id="id" />
+    </Breadcrumbs>
 
-    <header class="page-header">
+    <NotFoundPanel v-if="missing" :message="$t('This character was deleted, or never existed.')">
+      <RouterLink to="/characters" class="btn btn-ghost">{{ $t('All characters') }}</RouterLink>
+    </NotFoundPanel>
+
+    <header v-else class="page-header">
       <div>
         <h1>{{ $t('Compare versions') }}</h1>
         <p class="page-sub">{{ $t('What changed between two points in the story.') }}</p>
       </div>
     </header>
 
-    <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+    <template v-if="missing" />
+    <p v-else-if="loadError" class="error-banner">{{ loadError }}</p>
     <p v-else-if="!versions.length" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <template v-else>
@@ -69,10 +83,12 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { t } from '../i18n'
-import { fetchVersions, fetchVersion } from '../api'
+import { fetchVersions, fetchVersion, isMissing } from '../api'
 import { EQUIP_SLOTS } from '../gear'
 import { STAT_CATEGORIES, statSystem, statsIn, statName, statShort, isImprovement } from '../stats'
-import BackLink from '../components/BackLink.vue'
+import Breadcrumbs from '../components/Breadcrumbs.vue'
+import ItemLinks from '../components/ItemLinks.vue'
+import NotFoundPanel from '../components/NotFoundPanel.vue'
 import { statusLabel } from '../characterStatus'
 import { genderLabel } from '../gender'
 import { chapterLabel, loadChapters } from '../chapters'
@@ -85,7 +101,10 @@ const router = useRouter()
 
 const versions = ref([])
 const loadError = ref('')
+const missing = ref(false)
 const loading = ref(false)
+// The character's name is the current version's.
+const characterName = computed(() => (versions.value.find((v) => v.is_current) || versions.value[0])?.name || '')
 const a = ref(null)
 const b = ref(null)
 const onlyChanges = ref(true)
@@ -214,7 +233,13 @@ onMounted(async () => {
   try {
     versions.value = await fetchVersions(props.id)
   } catch (err) {
+    missing.value = await isMissing(`/characters/${props.id}/current`)
     loadError.value = t("Couldn't load versions. Try refreshing.")
+    return
+  }
+  // Every character has a version: none means there's no such character.
+  if (!versions.value.length) {
+    missing.value = true
     return
   }
   loadPair()

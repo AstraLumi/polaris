@@ -1,5 +1,5 @@
 <template>
-  <div class="page" :class="{ 'is-narrow': tab !== 'stats' }">
+  <div class="page">
     <header class="page-header">
       <div>
         <h1>{{ $t('Settings') }}</h1>
@@ -7,20 +7,27 @@
       </div>
     </header>
 
-    <div class="tab-bar">
-      <button class="tab-button" :class="{ 'is-active': tab === 'general' }" @click="tab = 'general'">
-        {{ $t('General') }}
-      </button>
-      <button class="tab-button" :class="{ 'is-active': tab === 'stats' }" :title="$t('Which stats characters have and how they are calculated')" @click="tab = 'stats'">
-        {{ $t('Stats') }}
-      </button>
-    </div>
+    <div class="settings-layout">
+    <nav class="settings-index" :aria-label="$t('Settings sections')">
+      <a
+        v-for="s in SECTIONS"
+        :key="s.id"
+        :href="`#${s.id}`"
+        class="index-link"
+        :class="{ 'is-active': active === s.id }"
+        :aria-current="active === s.id ? 'true' : undefined"
+        @click.prevent="openSection(s.id)"
+      >{{ $t(s.label) }}</a>
+    </nav>
 
+    <div class="settings-main" :class="{ 'is-stats': tab === 'stats' }">
     <!-- Both stay mounted, so unsaved stat edits survive a look at General. -->
-    <StatSystemEditor v-show="tab === 'stats'" />
+    <section id="stats" v-show="tab === 'stats'" class="stats-section" :class="{ 'is-flash': flash === 'stats' }">
+      <StatSystemEditor />
+    </section>
 
     <div v-show="tab === 'general'">
-    <section class="glass-panel card">
+    <section id="language" class="glass-panel card" :class="{ 'is-flash': flash === 'language' }">
       <h2>{{ $t('Language') }}</h2>
       <p class="lede">
         {{ $t('The language of the app\'s menus, buttons and messages. What you write in your story is never translated. Remembered on this device only.') }}
@@ -33,7 +40,7 @@
       </label>
     </section>
 
-    <section class="glass-panel card">
+    <section id="appearance" class="glass-panel card" :class="{ 'is-flash': flash === 'language' }">
       <h2>{{ $t('Appearance') }}</h2>
       <p class="lede">
         {{ $t('Pick a colour theme. It applies straight away and is remembered on this device only, so your phone and your desktop can look different.') }}
@@ -63,7 +70,7 @@
       </div>
     </section>
 
-    <section id="calendar" class="glass-panel card">
+    <section id="calendar" class="glass-panel card" :class="{ 'is-flash': flash === 'calendar' }">
       <h2>{{ $t('Calendar') }}</h2>
       <p class="lede">
         {{ $t('How your world counts time. Date inputs, the Q1–Q4 labels and the timeline all follow this, so set it before entering many dates.') }}
@@ -114,7 +121,7 @@
       </template>
     </section>
 
-    <section id="seasons" class="glass-panel card">
+    <section id="seasons" class="glass-panel card" :class="{ 'is-flash': flash === 'seasons' }">
       <h2>{{ $t('Seasons') }}</h2>
       <p class="lede">
         {{ $t('Name your world\'s seasons, put them in order and say how many months each lasts. They repeat from the day the first one starts, so a round of seasons can be longer than a year: a winter can last three years. The calendar shows them, and regions on the wiki can give temperatures for each.') }}
@@ -183,7 +190,7 @@
       </template>
     </section>
 
-    <section id="map" class="glass-panel card">
+    <section id="map" class="glass-panel card" :class="{ 'is-flash': flash === 'map' }">
       <h2>{{ $t('Map') }}</h2>
       <p class="lede">
         {{ $t('A flat hex map, or a whole planet of hexes you paint on a globe. On a planet, the flat maps are projections of it, and everything that depends on where things are (borders, latitudes, territories) is read from the planet. The 2D map is kept as it is, as a 2D-only version you can go back to or port onto the planet.') }}
@@ -207,7 +214,7 @@
           <span>{{ $t('Planet circumference (km)') }}</span>
           <input v-model.number="mapForm.planet_km" type="number" min="1" step="any" />
         </label>
-        <label class="field">
+        <label v-if="isPlanet" class="field">
           <span>{{ $t('Hex width (km)') }}</span>
           <input v-model.number="mapForm.hex_km" type="number" min="0.01" step="any" />
         </label>
@@ -215,14 +222,14 @@
           <span>{{ $t('Axial tilt (°)') }}</span>
           <input v-model.number="mapForm.tilt" type="number" min="0" max="90" step="any" />
         </label>
-        <label class="field">
+        <label v-if="isPlanet" class="field">
           <span>{{ $t('Bestiary territories drawn in') }}</span>
           <select v-model="mapForm.bestiary_projection">
             <option v-for="p in PROJECTIONS" :key="p.id" :value="p.id">{{ $t(p.label) }}</option>
           </select>
         </label>
       </div>
-      <p v-if="mapValid" class="note">
+      <p v-if="mapValid && isPlanet" class="note">
         {{ $t('The planet has {cells} hexes, each about {km} km across.', { cells: planetCells.toLocaleString(), km: planetHexKm }) }}
         <template v-if="planetFrequency !== savedFrequency && savedFrequency">
           {{ $t('Changing the hex size moves everything already painted on the planet onto the new hexes.') }}
@@ -239,34 +246,7 @@
         <button type="button" class="btn btn-ghost small restore-btn" :disabled="mapSaving" @click="restoring = 'map'">{{ $t('Restore default') }}</button>
       </div>
 
-      <div class="port">
-        <h3>{{ $t('Sky') }}</h3>
-        <p class="note">
-          {{ $t('The sky behind the planet in the 3D map, turning with it as you look around. Use your own picture of the sky over your world; the template is the default sky, so it shows the format.') }}
-        </p>
-        <div class="sky-row">
-          <img class="sky-preview" :src="currentSky" :alt="$t('The sky')" />
-          <div class="sky-actions">
-            <a class="btn btn-ghost small" :href="DEFAULT_SKY" download="polaris-sky-template.jpg">{{ $t('Download the template') }}</a>
-            <button type="button" class="btn btn-ghost small" :disabled="skyBusy" @click="skyInput.click()">
-              {{ skyBusy ? $t('Saving…') : $t('Upload your sky') }}
-            </button>
-            <button v-if="worldMap.sky_url" type="button" class="btn btn-ghost small" :disabled="skyBusy" @click="restoring = 'sky'">
-              {{ $t('Restore default') }}
-            </button>
-            <input ref="skyInput" type="file" accept="image/jpeg,image/png" hidden @change="uploadSky" />
-          </div>
-        </div>
-        <ul class="sky-format">
-          <li>{{ $t('A JPEG or PNG exactly twice as wide as it is tall, up to 8192 × 4096.') }}</li>
-          <li>{{ $t('The sky as seen from the ground, like a photo of it: the top edge is the sky straight above the north pole, the bottom edge above the south pole, the middle row the celestial equator.') }}</li>
-          <li>{{ $t('The middle column is above longitude 0; east is to the left. The left and right edges meet, so they must match.') }}</li>
-          <li>{{ $t('Near the top and bottom the picture is stretched sideways, as on a world map: draw round things there wider than they are tall.') }}</li>
-        </ul>
-        <p v-if="skyError" class="error-banner">{{ skyError }}</p>
-      </div>
-
-      <div class="port">
+      <div v-if="isPlanet" class="port">
         <h3>{{ $t('Port the 2D map onto the planet') }}</h3>
         <p class="note">
           {{ $t('Reads the 2D map as drawn in a projection, with its equator as the planet\'s and its hexes as wide as the 2D map\'s Equator panel says, and copies every painted hex, place and creature territory onto the planet. Whatever is on the planet now is replaced. The 2D map itself is not changed.') }}
@@ -285,9 +265,37 @@
         <p class="note">{{ $t(PROJECTIONS.find((p) => p.id === portProjection)?.blurb || '') }}</p>
         <p v-if="portDone" class="saved-hint">{{ portDone }}</p>
       </div>
+      <p v-else class="note">{{ $t('Choose 3D planet to port the 2D map onto the planet.') }}</p>
     </section>
 
-    <section id="blood-types" class="glass-panel card">
+    <section id="sky" class="glass-panel card" :class="{ 'is-flash': flash === 'sky' }">
+      <h2>{{ $t('Sky') }}</h2>
+      <p class="lede">
+        {{ $t('The sky behind the planet in the 3D map, turning with it as you look around. Use your own picture of the sky over your world; the template is the default sky, so it shows the format.') }}
+      </p>
+      <div class="sky-row">
+        <img class="sky-preview" :src="currentSky" :alt="$t('The sky')" />
+        <div class="sky-actions">
+          <a class="btn btn-ghost small" :href="DEFAULT_SKY" download="polaris-sky-template.jpg">{{ $t('Download the template') }}</a>
+          <button type="button" class="btn btn-ghost small" :disabled="skyBusy" @click="skyInput.click()">
+            {{ skyBusy ? $t('Saving…') : $t('Upload your sky') }}
+          </button>
+          <button v-if="worldMap.sky_url" type="button" class="btn btn-ghost small" :disabled="skyBusy" @click="restoring = 'sky'">
+            {{ $t('Restore default') }}
+          </button>
+          <input ref="skyInput" type="file" accept="image/jpeg,image/png" hidden @change="uploadSky" />
+        </div>
+      </div>
+      <ul class="sky-format">
+        <li>{{ $t('A JPEG or PNG exactly twice as wide as it is tall, up to 8192 × 4096.') }}</li>
+        <li>{{ $t('The sky as seen from the ground, like a photo of it: the top edge is the sky straight above the north pole, the bottom edge above the south pole, the middle row the celestial equator.') }}</li>
+        <li>{{ $t('The middle column is above longitude 0; east is to the left. The left and right edges meet, so they must match.') }}</li>
+        <li>{{ $t('Near the top and bottom the picture is stretched sideways, as on a world map: draw round things there wider than they are tall.') }}</li>
+      </ul>
+      <p v-if="skyError" class="error-banner">{{ skyError }}</p>
+    </section>
+
+    <section id="blood-types" class="glass-panel card" :class="{ 'is-flash': flash === 'blood-types' }">
       <h2>{{ $t('Blood types') }}</h2>
       <p class="lede">
         {{ $t('The blood types the character form offers, one button each. Add your world\'s own, or remove the ones it doesn\'t have. The note is shown when one is picked; leave it empty on a usual type to show what it is said to mean in Japan.') }}
@@ -339,7 +347,7 @@
       @confirm="portMap"
     />
 
-    <section class="glass-panel card about">
+    <section id="about" class="glass-panel card about" :class="{ 'is-flash': flash === 'about' }">
       <h2>{{ $t('About Polaris') }}</h2>
       <dl class="about-list">
         <dt>{{ $t('Version') }}</dt>
@@ -356,11 +364,13 @@
       </dl>
     </section>
     </div>
+    </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { fetchSettings, saveSettings, saveSeasons, saveBloodTypes, planetApi } from '../api'
 import RestoreDefaultDialog from '../components/RestoreDefaultDialog.vue'
 import { applyBloodTypes, bloodTypeNote, DEFAULT_BLOOD_TYPES } from '../bloodTypes'
@@ -368,7 +378,7 @@ import { loadCalendar, calendar } from '../calendar'
 import { THEMES, currentTheme, saveTheme } from '../theme'
 import { t, tn, tr, LOCALES, locale, saveLocale } from '../i18n'
 import pkg from '../../package.json'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import StatSystemEditor from '../components/StatSystemEditor.vue'
 import DateField from '../components/DateField.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
@@ -376,9 +386,65 @@ import { PROJECTIONS, applyMapSettings, worldMap, DEFAULT_SKY, skyUrl } from '..
 import { frequencyFor, hexKmOf } from '../planetGrid'
 import { newSeasonId } from '../seasons'
 
-// ?tab=stats opens the Stats tab (the Build tab links there).
+// The side index. Stats is a tab of its own (a big editor that stays mounted),
+// the rest are sections of the General page; `ids` are the cards a label covers.
+const SECTIONS = [
+  { id: 'language', label: tr('Language & look'), ids: ['language', 'appearance'] },
+  { id: 'calendar', label: tr('Calendar'), ids: ['calendar'] },
+  { id: 'seasons', label: tr('Seasons'), ids: ['seasons'] },
+  { id: 'map', label: tr('Map'), ids: ['map'] },
+  { id: 'sky', label: tr('Sky'), ids: ['sky'] },
+  { id: 'blood-types', label: tr('Blood types'), ids: ['blood-types'] },
+  { id: 'stats', label: tr('Stats'), ids: ['stats'] },
+  { id: 'about', label: tr('About Polaris'), ids: ['about'] },
+]
+const sectionOf = (id) => SECTIONS.find((s) => s.ids.includes(id))?.id
+
+// /settings#calendar scrolls to a section; ?tab=stats (older links) and
+// #stats open the Stats tab.
 const route = useRoute()
-const tab = ref(route.query.tab === 'stats' ? 'stats' : 'general')
+const router = useRouter()
+const tab = ref(route.query.tab === 'stats' || route.hash === '#stats' ? 'stats' : 'general')
+const active = ref(tab.value === 'stats' ? 'stats' : 'language')
+const flash = ref('')
+let flashTimer = 0
+let jumping = 0
+
+async function goTo(id) {
+  const key = sectionOf(id)
+  if (!key) return
+  tab.value = key === 'stats' ? 'stats' : 'general'
+  active.value = key
+  await nextTick()
+  clearTimeout(flashTimer)
+  flash.value = key
+  flashTimer = setTimeout(() => (flash.value = ''), 1400)
+  // The scroll spy stays quiet while the smooth scroll runs.
+  jumping = Date.now()
+  if (key === 'stats') window.scrollTo({ top: 0, behavior: 'smooth' })
+  else document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+}
+
+function openSection(id) {
+  if (route.hash === `#${id}`) goTo(id)
+  else router.replace({ path: route.path, hash: `#${id}` })
+}
+
+watch(() => route.hash, (h) => h && goTo(h.slice(1)))
+
+// Highlight the section being read: the last one whose top has passed the
+// top of the page.
+function spy() {
+  if (tab.value === 'stats' || Date.now() - jumping < 900) return
+  let found = SECTIONS[0].id
+  for (const s of SECTIONS) {
+    if (s.id === 'stats') continue
+    const el = document.getElementById(s.ids[0])
+    if (el && el.getBoundingClientRect().top <= 140) found = s.id
+  }
+  const bottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4
+  active.value = bottom ? 'about' : found
+}
 
 // The version comes from package.json at build time, so it is always the
 // one that was built.
@@ -535,6 +601,7 @@ function takeMap(m) {
   savedFrequency.value = m.planet.frequency
 }
 
+const isPlanet = computed(() => mapForm.value.mode === '3d')
 const mapValid = computed(() => {
   const f = mapForm.value
   return f.planet_km > 0 && f.hex_km > 0 && f.tilt >= 0 && f.tilt <= 90
@@ -727,16 +794,119 @@ onMounted(async () => {
   } catch (err) {
     loadError.value = "Couldn't load settings. Try refreshing."
   }
-  // The calendar page's Settings button links to #calendar.
-  const hash = route.hash.slice(1)
-  if (hash) {
+  window.addEventListener('scroll', spy, { passive: true })
+  if (route.hash && route.hash !== '#stats') {
     await nextTick()
-    document.getElementById(hash)?.scrollIntoView({ block: 'start' })
+    document.getElementById(route.hash.slice(1))?.scrollIntoView({ block: 'start' })
+    active.value = sectionOf(route.hash.slice(1)) || active.value
   }
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', spy)
+  clearTimeout(flashTimer)
 })
 </script>
 
 <style scoped>
+.settings-layout {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr);
+  gap: 1.75rem;
+  align-items: start;
+}
+
+.settings-main {
+  max-width: var(--page-narrow);
+}
+
+.settings-main.is-stats {
+  max-width: none;
+}
+
+.settings-index {
+  position: sticky;
+  top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding-left: 0.25rem;
+  border-left: 1px solid var(--glass-border);
+}
+
+.index-link {
+  margin-left: -1px;
+  padding: 0.4rem 0.75rem;
+  border-left: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.index-link:visited {
+  color: var(--text-muted);
+}
+
+.index-link:hover,
+.index-link.is-active:visited,
+.index-link:hover:visited {
+  color: var(--text-primary);
+}
+
+.index-link.is-active {
+  color: var(--text-primary);
+  border-left-color: var(--accent);
+}
+
+/* A section flashes briefly when the index or a link jumps to it. */
+.is-flash {
+  animation: section-flash 1.4s ease;
+}
+
+@keyframes section-flash {
+  0%, 60% { box-shadow: 0 0 0 3px var(--accent-soft); }
+  100% { box-shadow: 0 0 0 3px transparent; }
+}
+
+.settings-main section {
+  scroll-margin-top: 1rem;
+}
+
+@media (max-width: 720px) {
+  .settings-layout {
+    display: block;
+  }
+  /* A strip of chips that scrolls on its own, so the page never does. */
+  .settings-index {
+    position: sticky;
+    top: 3.9rem;
+    z-index: 5;
+    flex-direction: row;
+    gap: 0.4rem;
+    margin: 0 0 1rem;
+    padding: 0.5rem 0;
+    overflow-x: auto;
+    border-left: 0;
+    background: var(--bg);
+    scrollbar-width: none;
+  }
+  .index-link {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 0.4rem 0.8rem;
+    border: 1px solid var(--glass-border);
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .index-link.is-active {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .settings-main section {
+    scroll-margin-top: 7.5rem;
+  }
+}
+
 .about-list {
   display: grid;
   grid-template-columns: max-content 1fr;

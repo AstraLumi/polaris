@@ -1,6 +1,6 @@
 <template>
   <div class="page">
-    <BackLink to="/characters" :label="$t('← Characters')" />
+    <Breadcrumbs :crumbs="[{ label: $t('Characters'), to: '/characters' }, { label: $t('Height chart') }]" />
     <header class="page-header">
       <div>
         <h1>{{ $t('Height chart') }}</h1>
@@ -135,7 +135,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { t, tr } from '../i18n'
-import BackLink from '../components/BackLink.vue'
+import Breadcrumbs from '../components/Breadcrumbs.vue'
 import OutlineFigure from '../components/OutlineFigure.vue'
 import { fetchCharacterHeights } from '../api'
 import { figure, outlineFor, OUTLINE_SEXES, OUTLINE_AGES, OUTLINE_BUILDS } from '../bodyOutlines'

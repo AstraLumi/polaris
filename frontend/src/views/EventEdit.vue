@@ -1,8 +1,17 @@
 <template>
   <div class="page is-narrow">
-    <BackLink :to="id ? `/events/${id}` : '/events'" :label="id ? $t('← Back to event') : $t('← Back to events')" />
+    <Breadcrumbs :missing="missing"
+      :crumbs="
+        id
+          ? [{ label: $t('Events'), to: '/events' }, { label: loadedName, to: `/events/${id}` }, { label: $t('Edit') }]
+          : [{ label: $t('Events'), to: '/events' }, { label: $t('New event') }]
+      "
+    />
 
-    <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+    <NotFoundPanel v-if="missing" :message="$t('This event was deleted, or never existed.')">
+      <RouterLink to="/events" class="btn btn-ghost">{{ $t('All events') }}</RouterLink>
+    </NotFoundPanel>
+    <p v-else-if="loadError" class="error-banner">{{ loadError }}</p>
     <p v-else-if="loading" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <form v-else class="glass-panel form" @submit.prevent="save">
@@ -74,7 +83,7 @@
 <script setup>
 import { reactive, ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { eventsApi, buildEventFormData, fetchLocationOptions, fetchCharacterOptions } from '../api'
+import { eventsApi, buildEventFormData, fetchLocationOptions, fetchCharacterOptions, isMissing } from '../api'
 import { fullDate } from '../calendar'
 import { t } from '../i18n'
 import DateField from '../components/DateField.vue'
@@ -82,7 +91,8 @@ import LocationSelect from '../components/LocationSelect.vue'
 import TagInput from '../components/TagInput.vue'
 import PeoplePicker from '../components/PeoplePicker.vue'
 import ChapterSelect from '../components/ChapterSelect.vue'
-import BackLink from '../components/BackLink.vue'
+import Breadcrumbs from '../components/Breadcrumbs.vue'
+import NotFoundPanel from '../components/NotFoundPanel.vue'
 import { useUnsavedGuard, useSaveShortcut, mapPath } from '../navigation'
 
 // No id means "new event".
@@ -92,6 +102,8 @@ const router = useRouter()
 
 const loading = ref(true)
 const loadError = ref('')
+const missing = ref(false)
+const loadedName = ref('') // as saved, for the breadcrumbs
 const saving = ref(false)
 const saveError = ref('')
 const source = ref(null)
@@ -197,6 +209,7 @@ onMounted(async () => {
   }
   try {
     const e = await eventsApi.get(props.id)
+    loadedName.value = e.name
     form.name = e.name
     form.eventDate = e.event_date
     form.description = e.description
@@ -208,6 +221,7 @@ onMounted(async () => {
     source.value = e.source
     snapshot = formState()
   } catch (err) {
+    missing.value = await isMissing(`/events/${props.id}`)
     loadError.value = t("Couldn't find that event.")
   } finally {
     loading.value = false

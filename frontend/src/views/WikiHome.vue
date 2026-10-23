@@ -114,11 +114,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import IconImage from '../components/IconImage.vue'
 import { TYPE_ORDER, TYPE_PLURALS, TYPE_LABELS, wikiApi, wikiPath } from '../wiki'
 import { timeAgo } from '../timeAgo'
+import { useQuickAdd } from '../quickAdd'
 
 const router = useRouter()
 
@@ -126,7 +127,20 @@ const items = ref([])
 const loading = ref(true)
 const loadError = ref('')
 const search = ref('')
-const filter = ref('')
+// The type shown (the chips), in the address as ?type=, so a breadcrumb such
+// as "Wiki / Characters" opens the wiki on that type.
+const route = useRoute()
+const filter = ref(TYPE_ORDER.includes(route.query.type) ? route.query.type : '')
+watch(filter, (type) => {
+  const query = { ...route.query }
+  if (type) query.type = type
+  else delete query.type
+  router.replace({ query })
+})
+watch(
+  () => route.query.type,
+  (type) => (filter.value = TYPE_ORDER.includes(type) ? type : ''),
+)
 const writtenOnly = ref(false)
 
 // A new lore article: named here, then written on its own page.
@@ -190,6 +204,9 @@ const groups = computed(() => {
     }))
     .filter((g) => g.items.length)
 })
+
+// /wiki?new=1 (the search's "New article") opens the new article box.
+useQuickAdd(openNew)
 
 onMounted(async () => {
   try {

@@ -1,11 +1,30 @@
 <template>
   <div class="page">
-    <BackLink :to="`/characters/${id}/versions`" :label="$t('← Back to versions')" />
+    <Breadcrumbs :missing="missing"
+      :crumbs="[
+        { label: $t('Characters'), to: '/characters' },
+        { label: characterName, to: `/characters/${id}` },
+        { label: $t('Versions'), to: `/characters/${id}/versions` },
+        { label: $t('Edit') },
+      ]"
+    >
+      <ItemLinks v-if="characterName" type="character" :id="id" />
+    </Breadcrumbs>
 
-    <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+    <NotFoundPanel v-if="missing" :message="$t('This version was deleted, or never existed.')">
+      <RouterLink :to="`/characters/${id}/versions`" class="btn btn-ghost">{{ $t('Versions') }}</RouterLink>
+    </NotFoundPanel>
+    <p v-else-if="loadError" class="error-banner">{{ loadError }}</p>
     <p v-else-if="loading" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <template v-else>
+      <div v-if="versions.length > 1" class="version-picker">
+        <label for="version-pick">{{ $t('Version') }}</label>
+        <select id="version-pick" :value="versionId" @change="switchVersion($event.target)">
+          <option v-for="v in versions" :key="v.id" :value="String(v.id)">{{ versionLabel(v) }}</option>
+        </select>
+      </div>
+
       <header class="identity-form glass-panel">
         <div class="portrait-upload">
           <div class="portrait">
@@ -196,9 +215,12 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed, watch, onMounted } from 'vue'
+import { reactive, ref, computed, watch, onMounted, nextTick } from 'vue'
 import { t } from '../i18n'
-import { fetchVersion, updateVersion, buildVersionFormData, fetchCatalogs, fetchLocationOptions, fetchComputePreview } from '../api'
+import { useRouter } from 'vue-router'
+import {
+  fetchVersion, fetchVersions, updateVersion, buildVersionFormData, fetchCatalogs, fetchLocationOptions, fetchComputePreview, isMissing,
+} from '../api'
 import BuildStatsPanel from '../components/BuildStatsPanel.vue'
 import ComboBoxField from '../components/ComboBoxField.vue'
 import DateField from '../components/DateField.vue'
@@ -206,7 +228,10 @@ import GenderField from '../components/GenderField.vue'
 import LocationSelect from '../components/LocationSelect.vue'
 import GearTab from '../components/GearTab.vue'
 import SpellsTab from '../components/SpellsTab.vue'
-import BackLink from '../components/BackLink.vue'
+import Breadcrumbs from '../components/Breadcrumbs.vue'
+import ItemLinks from '../components/ItemLinks.vue'
+import NotFoundPanel from '../components/NotFoundPanel.vue'
+import { chapterLabel, loadChapters } from '../chapters'
 import ChapterSelect from '../components/ChapterSelect.vue'
 import { STATUSES } from '../characterStatus'
 import { pageTitle, useUnsavedGuard, useSaveShortcut } from '../navigation'
@@ -216,8 +241,12 @@ const props = defineProps({
   versionId: { type: String, required: true },
 })
 
+const router = useRouter()
+loadChapters()
+
 const loading = ref(true)
 const loadError = ref('')
+const missing = ref(false)
 const saving = ref(false)
 const saveError = ref('')
 const savedAt = ref(false)
@@ -332,15 +361,53 @@ function onFileChange(e) {
 let snapshot = ''
 const formState = () =>
   JSON.stringify([form, buildStats.value, specialBases.value, assignedSpells.value.map((s) => s.id), Object.entries(equippedGear.value).map(([slot, g]) => [slot, g?.id])])
-const dirty = () => !loading.value && !loadError.value && (formState() !== snapshot || !!pictureFile.value)
+const dirty = () => !loading.value && !loadError.value && !missing.value && (formState() !== snapshot || !!pictureFile.value)
 useUnsavedGuard(dirty)
-useSaveShortcut(() => !saving.value && !loading.value && !loadError.value && save())
+useSaveShortcut(() => !saving.value && !loading.value && !loadError.value && !missing.value && save())
+
+// Every version of the character, for the picker at the top; the
+// character's name is the current version's.
+const versions = ref([])
+const characterName = computed(() => (versions.value.find((v) => v.is_current) || versions.value[0])?.name || '')
+const versionLabel = (v) =>
+  [
+    v.is_current ? `★ ${v.name}` : v.name,
+    (v.chapter_id && chapterLabel(v.chapter_id, { short: true })) || '',
+    v.version_date,
+    v.version_reference,
+    t('Lv. {level}', { level: v.level }),
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+async function loadVersions() {
+  try {
+    versions.value = await fetchVersions(props.id)
+  } catch (err) {
+    versions.value = []
+  }
+}
+
+// Opens another version's form. The unsaved-changes guard may keep this
+// one, so the picker is set back to what is actually open.
+async function switchVersion(select) {
+  await router.push(`/characters/${props.id}/versions/${select.value}/edit`)
+  await nextTick()
+  select.value = props.versionId
+}
 
 async function load() {
   loading.value = true
   loadError.value = ''
+  missing.value = false
+  pictureFile.value = null
   try {
     const data = await fetchVersion(props.versionId)
+    // A version of someone else, under this character's address.
+    if (String(data.character_id) !== String(props.id)) {
+      missing.value = true
+      return
+    }
     Object.assign(form, {
       version_date: data.version_date,
       version_reference: data.version_reference,
@@ -375,6 +442,7 @@ async function load() {
     pageTitle.value = data.name
     snapshot = formState()
   } catch (err) {
+    missing.value = await isMissing(`/versions/${props.versionId}`)
     loadError.value = t("Couldn't load this version. Try refreshing.")
   } finally {
     loading.value = false
@@ -403,6 +471,7 @@ async function save() {
     pictureFile.value = null
     snapshot = formState()
     pageTitle.value = form.name
+    loadVersions()
     savedAt.value = true
     setTimeout(() => (savedAt.value = false), 2500)
   } catch (err) {
@@ -412,6 +481,11 @@ async function save() {
   }
 }
 
+// The picker reuses this page for another version (and Save may rename the
+// character), so the version is reloaded when the address changes.
+watch(() => props.versionId, load)
+watch(() => props.id, loadVersions, { immediate: true })
+
 onMounted(async () => {
   load()
   catalogs.value = await fetchCatalogs()
@@ -420,6 +494,20 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.version-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.version-picker select {
+  flex: 0 1 30rem;
+  min-width: 0;
+}
+
 .shared-note {
   margin: -0.25rem 0 1rem;
   font-size: 0.78rem;

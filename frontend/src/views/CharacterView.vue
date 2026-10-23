@@ -1,8 +1,13 @@
 <template>
   <div class="page">
-    <BackLink to="/characters" :label="$t('← Characters')" />
+    <Breadcrumbs :missing="missing" :crumbs="[{ label: $t('Characters'), to: '/characters' }, { label: data?.name }]">
+      <ItemLinks v-if="data" type="character" :id="data.character_id" here="sheet" />
+    </Breadcrumbs>
 
-    <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+    <NotFoundPanel v-if="missing" :message="$t('This character was deleted, or never existed.')">
+      <RouterLink to="/characters" class="btn btn-ghost">{{ $t('All characters') }}</RouterLink>
+    </NotFoundPanel>
+    <p v-else-if="loadError" class="error-banner">{{ loadError }}</p>
     <p v-else-if="loading" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <template v-else-if="data">
@@ -28,14 +33,11 @@
           </p>
         </div>
         <div class="identity-actions">
-          <RouterLink :to="{ path: '/timeline', query: { person: data.character_id, match: 'highlight' } }" class="btn btn-ghost">
-            {{ $t('Timeline') }}
-          </RouterLink>
-          <RouterLink :to="`/characters/${data.character_id}/family`" class="btn btn-ghost" :title="$t('Parents, children, siblings and partners, as a tree')">
-            {{ $t('Family tree') }}
-          </RouterLink>
-          <RouterLink :to="`/characters/${data.character_id}/versions`" class="btn btn-ghost">
+          <RouterLink :to="`/characters/${data.character_id}/versions/${data.id}/edit`" class="btn btn-ghost" :title="$t('Edit the current version')">
             {{ $t('Edit') }}
+          </RouterLink>
+          <RouterLink :to="`/characters/${data.character_id}/versions`" class="btn btn-ghost" :title="$t('Every version of this character, and what they all share')">
+            {{ $t('Versions') }}
           </RouterLink>
           <button type="button" class="btn btn-ghost" :title="$t('Print the whole sheet, or save it as a PDF')" @click="print">
             {{ $t('Print') }}
@@ -111,19 +113,24 @@
         <h2 class="print-only">{{ $t('Relations') }}</h2>
         <RelationsTab :character-id="data.character_id" :character-name="data.name" :point="{ chapterId: data.chapter_id, date: data.version_date }" />
       </section>
+
+      <Pager :prev="neighbours.prev" :next="neighbours.next" :prev-label="$t('← Previous character')" :next-label="$t('Next character →')" :label="$t('Characters')" />
     </template>
   </div>
 </template>
 
 <script setup>
 import IconImage from '../components/IconImage.vue'
-import BackLink from '../components/BackLink.vue'
+import Breadcrumbs from '../components/Breadcrumbs.vue'
+import ItemLinks from '../components/ItemLinks.vue'
+import NotFoundPanel from '../components/NotFoundPanel.vue'
+import Pager from '../components/Pager.vue'
 import { statusLabel } from '../characterStatus'
 import { genderLabel } from '../gender'
 import { pageTitle, viewPicture } from '../navigation'
 import { ref, computed, watch, h } from 'vue'
 import { t } from '../i18n'
-import { fetchCurrentVersion } from '../api'
+import { fetchCurrentVersion, fetchCharacterOptions, isMissing } from '../api'
 import BuildStatsPanel from '../components/BuildStatsPanel.vue'
 import GearTab from '../components/GearTab.vue'
 import SpellsTab from '../components/SpellsTab.vue'
@@ -134,7 +141,21 @@ const props = defineProps({ id: { type: String, required: true } })
 const data = ref(null)
 const loading = ref(true)
 const loadError = ref('')
+const missing = ref(false)
 const tab = ref('story')
+
+// Everyone, by name (as the Characters page lists them), for the
+// previous/next links at the foot of the sheet.
+const everyone = ref([])
+fetchCharacterOptions()
+  .then((list) => (everyone.value = list))
+  .catch(() => {})
+const neighbours = computed(() => {
+  const i = everyone.value.findIndex((c) => String(c.id) === String(props.id))
+  if (i < 0) return { prev: null, next: null }
+  const link = (c) => c && { to: `/characters/${c.id}`, name: c.name }
+  return { prev: link(everyone.value[i - 1]), next: link(everyone.value[i + 1]) }
+})
 
 // Tiny inline component for a label + read-only value pair, so the Story
 // tab's markup above stays readable instead of repeating this block 14 times.
@@ -173,10 +194,13 @@ const classLine = computed(() => {
 async function load() {
   loading.value = true
   loadError.value = ''
+  missing.value = false
+  data.value = null
   try {
     data.value = await fetchCurrentVersion(props.id)
     pageTitle.value = data.value.name
   } catch (err) {
+    missing.value = await isMissing(`/characters/${props.id}/current`)
     loadError.value = t("Couldn't load this character. Try refreshing.")
   } finally {
     loading.value = false

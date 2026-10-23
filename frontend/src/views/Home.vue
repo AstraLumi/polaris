@@ -25,6 +25,23 @@
         </RouterLink>
       </section>
 
+      <section v-if="resume.length" class="glass-panel block resume">
+        <div class="block-head">
+          <h2>{{ $t('Continue where you left off') }}</h2>
+        </div>
+        <ul class="resume-list">
+          <li v-for="r in resume" :key="r.key">
+            <RouterLink :to="r.path" class="resume-row">
+              <span class="resume-icon"><IconImage :src="r.picture" :name="r.name" /></span>
+              <span class="recent-text">
+                <strong>{{ r.name }}</strong>
+                <small>{{ r.label }}</small>
+              </span>
+            </RouterLink>
+          </li>
+        </ul>
+      </section>
+
       <div class="columns">
         <section class="glass-panel block">
           <div class="block-head">
@@ -94,6 +111,10 @@ import { fetchHome } from '../api'
 import { t, tn, tr } from '../i18n'
 import { fullDate } from '../calendar'
 import { timeAgo } from '../timeAgo'
+import { TYPE_LABELS } from '../wiki'
+import { recentPath, recentKey } from '../recent'
+import { recentItems, recentPictures, checkRecent } from '../recentTracker'
+import IconImage from '../components/IconImage.vue'
 
 // The "loose ends" labels come from the backend (home.go); listing them here
 // lets the language checker see them and keep every catalog complete.
@@ -125,7 +146,19 @@ function initials(name) {
 
 const ago = timeAgo
 
+// The items opened last (see recent.js), newest first.
+const resume = computed(() =>
+  recentItems.value.map((r) => ({
+    key: recentKey(r),
+    name: r.name,
+    label: r.type === 'chapter' ? t('Chapter') : t(TYPE_LABELS[r.type] || r.type),
+    picture: recentPictures.value[recentKey(r)] || '',
+    path: recentPath(r),
+  })),
+)
+
 onMounted(async () => {
+  checkRecent()
   try {
     data.value = await fetchHome()
   } catch (err) {
@@ -176,6 +209,46 @@ onMounted(async () => {
   font-size: 0.72rem;
   color: var(--text-faint);
   margin-top: 0.15rem;
+}
+
+.resume {
+  margin-bottom: 1rem;
+  padding-bottom: 0.9rem;
+}
+
+.resume-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr));
+  gap: 0.15rem 0.5rem;
+}
+
+.resume-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.4rem 0.4rem;
+  border-radius: 8px;
+  text-decoration: none;
+  min-width: 0;
+}
+
+.resume-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.resume-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  font-size: 0.8rem;
 }
 
 .columns {
@@ -301,8 +374,12 @@ onMounted(async () => {
   color: var(--text-faint);
 }
 
-/* Phones: two tiles per row. */
+/* Phones: two tiles per row, and only the last few items to resume. */
 @media (max-width: 720px) {
+  .resume-list li:nth-child(n + 5) {
+    display: none;
+  }
+
   .tiles {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
