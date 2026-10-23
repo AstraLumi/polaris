@@ -7,11 +7,12 @@
 <script setup>
 // The same links, in the same order, on every page about one item (the
 // character sheet, its family tree, an event, any wiki article): Sheet ·
-// Wiki · Map · Timeline · Family tree · Graph. Only those the item has, and
+// Wiki · Map · Timeline (· Calendar, for a dated event) · Family tree · Graph. Only those the item has, and
 // never the page you're on (`here`).
 import { computed } from 'vue'
 import { t } from '../i18n'
 import { mapPath } from '../navigation'
+import { parseStoryDate } from '../calendar'
 import { TYPE_ORDER, wikiPath } from '../wiki'
 
 const props = defineProps({
@@ -20,6 +21,7 @@ const props = defineProps({
   here: { type: String, default: '' }, // sheet, wiki, map, timeline, family or graph
   locationId: { type: Number, default: null }, // an event's place, for its map link
   locationName: { type: String, default: '' },
+  date: { type: String, default: '' }, // an event's date, for its calendar link
 })
 
 const links = computed(() => {
@@ -37,6 +39,8 @@ const links = computed(() => {
   if (type === 'character') add('timeline', t('Timeline'), { path: '/timeline', query: { person: id, match: 'highlight' } })
   if (type === 'location') add('timeline', t('Timeline'), { path: '/timeline', query: { place: id, match: 'highlight' } })
   if (type === 'event') add('timeline', t('Timeline'), { path: '/timeline', query: { event: id } })
+  const day = type === 'event' && /^\d{1,3}-\d{1,3}-/.test(props.date) ? parseStoryDate(props.date) : null
+  if (day) add('calendar', t('Calendar'), { path: '/calendar', query: { y: String(day.year), m: String(day.month) } })
   if (type === 'character') add('family', t('Family tree'), `/characters/${id}/family`, t('Parents, children, siblings and partners, as a tree'))
   if (TYPE_ORDER.includes(type)) {
     add('graph', t('Graph'), { path: '/wiki/graph', query: { focus: `${type}:${id}` } }, t('This article and everything it connects to, on the graph'))

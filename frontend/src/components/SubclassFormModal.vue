@@ -1,5 +1,5 @@
 <template>
-  <div class="overlay" @click.self="$emit('close')">
+  <div class="overlay" @click.self="requestClose" @pointerdown.capture="touched" @keydown.capture="touched" @input.capture="touched">
     <div class="modal glass-panel is-wide">
       <h2>{{ subclass ? $t('Edit subclass') : $t('Add a subclass') }}</h2>
       <form @submit.prevent="submit">
@@ -43,6 +43,7 @@
 
 <script setup>
 import { ref } from 'vue'
+import { useModalGuard } from '../navigation'
 import { t } from '../i18n'
 import { subclassesApi } from '../api'
 import ModifierForm from './ModifierForm.vue'
@@ -58,6 +59,8 @@ const classIds = ref([...(props.subclass?.class_ids ?? [])])
 const modifiers = ref({ ...(props.subclass?.modifiers ?? {}) })
 const submitting = ref(false)
 const error = ref('')
+// A stray click outside or Esc asks before dropping what was typed.
+const { requestClose, touched } = useModalGuard(() => [name.value, classIds.value, modifiers.value], () => emit('close'))
 
 async function submit() {
   if (!name.value.trim()) return

@@ -62,6 +62,9 @@ type factionOut struct {
 	MemberCount  int             `json:"member_count"`
 	KingdomID    *int64          `json:"kingdom_id"` // the kingdom it stands for (kingdoms.go)
 	Members      []factionMember `json:"members,omitempty"`
+	// A kingdom's faction: how many characters have that kingdom as their
+	// nation (their current version), members or not.
+	Nationals int `json:"nationals,omitempty"`
 }
 
 const factionSelect = `
@@ -164,6 +167,16 @@ func listFactionsHandler(db *sql.DB) http.HandlerFunc {
 				continue
 			}
 			out = append(out, f)
+		}
+		rows.Close()
+		// The members (for the list's faces) and a kingdom's people.
+		for i := range out {
+			out[i].Members = factionMembers(db, out[i].ID)
+			if k := out[i].KingdomID; k != nil {
+				db.QueryRow(`SELECT COUNT(*) FROM character_story st
+					JOIN character_versions v ON v.id = st.version_id AND v.is_current = 1
+					WHERE st.nation_location_id = ?`, *k).Scan(&out[i].Nationals)
+			}
 		}
 		writeJSON(w, out)
 	}

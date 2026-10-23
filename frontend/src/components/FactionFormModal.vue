@@ -1,5 +1,5 @@
 <template>
-  <div class="overlay" @click.self="$emit('close')">
+  <div class="overlay" @click.self="requestClose" @pointerdown.capture="touched" @keydown.capture="touched" @input.capture="touched">
     <div class="modal is-wide glass-panel panel-solid">
       <h2>{{ faction ? $t('Edit faction') : $t('New faction') }}</h2>
 
@@ -94,6 +94,7 @@
 <script setup>
 // Creates or edits a faction, members included, in one save.
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useModalGuard } from '../navigation'
 import { factionsApi, fetchCharacterOptions, fetchLocationOptions } from '../api'
 import ColorPicker from './ColorPicker.vue'
 import DateField from './DateField.vue'
@@ -120,6 +121,8 @@ const characters = ref([])
 const locationOptions = ref([])
 const saving = ref(false)
 const error = ref('')
+// A stray click outside or Esc asks before dropping what was typed.
+const { requestClose, touched } = useModalGuard(() => [name.value, description.value, color.value, parentId.value, hqId.value, foundingDate.value, members.value, pictureFile.value, removePicture.value], () => emit('close'))
 const confirmOpen = ref(false)
 
 const pictureFile = ref(null)

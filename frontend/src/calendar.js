@@ -36,6 +36,10 @@ export async function loadCalendar() {
   }
 }
 
+// How many days a row of a month shows. The story's months have no weeks:
+// rows of ten read well for 20, 30 or 40 days, otherwise rows of seven.
+export const dayColumns = (days) => (days % 10 === 0 && days >= 20 ? 10 : 7)
+
 // ---- Canonical story-date text (mirrors backend/dates.go) -------------------
 
 const DATE_RE = /^(?:(\d{1,3})-(\d{1,3})-)?(-?\d{1,9})$/

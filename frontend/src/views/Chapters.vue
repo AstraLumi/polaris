@@ -1,5 +1,5 @@
 <template>
-  <div class="page is-narrow">
+  <div class="page">
     <header class="page-header">
       <div>
         <h1>{{ $t('Chapters') }}</h1>
@@ -26,7 +26,7 @@
 
     <template v-else>
       <section v-if="loose.length" class="glass-panel block">
-        <ChapterRows :chapters="loose" @move="moveChapter" @delete="(c) => (confirmChapter = c)" />
+        <ChapterRows :chapters="loose" :volume-id="null" @move="moveChapter" @delete="(c) => (confirmChapter = c)" @drop-on="dropChapter" />
       </section>
 
       <section v-for="(v, vi) in idx.volumes" :key="v.id" class="glass-panel block">
@@ -43,13 +43,18 @@
           />
           <h2 v-else>{{ v.title }}</h2>
           <div class="volume-actions">
-            <button type="button" class="btn btn-ghost small" :disabled="vi === 0" :title="$t('Move up')" @click="moveVolume(vi, -1)">↑</button>
-            <button type="button" class="btn btn-ghost small" :disabled="vi === idx.volumes.length - 1" :title="$t('Move down')" @click="moveVolume(vi, 1)">↓</button>
             <button type="button" class="btn btn-ghost small" @click="startRename(v)">{{ $t('Rename') }}</button>
-            <button type="button" class="btn btn-ghost small" @click="confirmVolume = v">{{ $t('Delete') }}</button>
+            <RowMenu
+              :label="$t('Volume actions')"
+              :items="[
+                { label: $t('Move up'), disabled: vi === 0, action: () => moveVolume(vi, -1) },
+                { label: $t('Move down'), disabled: vi === idx.volumes.length - 1, action: () => moveVolume(vi, 1) },
+                { label: $t('Delete volume'), danger: true, action: () => (confirmVolume = v) },
+              ]"
+            />
           </div>
         </div>
-        <ChapterRows :chapters="chaptersOf(v.id)" @move="moveChapter" @delete="(c) => (confirmChapter = c)" />
+        <ChapterRows :chapters="chaptersOf(v.id)" :volume-id="v.id" @move="moveChapter" @delete="(c) => (confirmChapter = c)" @drop-on="dropChapter" />
         <button type="button" class="btn btn-ghost small add-here" @click="addChapter(v.id)">{{ $t('Add a chapter to {name}', { name: v.title }) }}</button>
       </section>
     </template>
@@ -83,6 +88,7 @@ import { chaptersApi } from '../api'
 import { useQuickAdd } from '../quickAdd'
 import { chapterIndex as idx, loadChapters } from '../chapters'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import RowMenu from '../components/RowMenu.vue'
 
 const router = useRouter()
 const loading = ref(true)
@@ -104,33 +110,105 @@ function removeChapter() {
 const loose = computed(() => idx.value.chapters.filter((c) => !c.volume_id))
 const chaptersOf = (volumeId) => idx.value.chapters.filter((c) => c.volume_id === volumeId)
 
-// One list of chapter rows with up/down arrows (within its group).
+// The chapter being dragged, shared by every list so one can go to another
+// volume.
+const dragged = ref(null)
+const dropTarget = ref(null) // the chapter id (or 'end:<volume>') under the pointer
+
+// One list of chapter rows. A row is dragged by its handle to a new place
+// (before the row it is dropped on, or to the end of a volume); its "…"
+// menu moves it up or down (the keyboard's way) or deletes it.
 const ChapterRows = {
-  props: { chapters: Array },
-  emits: ['move', 'delete'],
+  props: { chapters: Array, volumeId: { type: Number, default: null } },
+  emits: ['move', 'delete', 'drop-on'],
   setup(props, { emit }) {
-    return () =>
-      props.chapters.length
-        ? h(
-            'ol',
-            { class: 'chapter-list' },
-            props.chapters.map((c, i) =>
-              h('li', { class: 'chapter-row', key: c.id }, [
-                h('span', { class: 'num' }, String(c.number)),
-                h(RouterLink, { to: `/chapters/${c.id}`, class: 'chapter-title' }, () => c.title),
-                h('span', { class: 'counts' }, [
-                  c.event_count ? tn('{n} event', '{n} events', c.event_count) : '',
-                  c.event_count && c.version_count ? ' · ' : '',
-                  c.version_count ? tn('{n} character change', '{n} character changes', c.version_count) : '',
-                ].join('')),
-                h('button', { type: 'button', class: 'btn btn-ghost small', disabled: i === 0, title: t('Move up'), onClick: () => emit('move', c, -1) }, '↑'),
-                h('button', { type: 'button', class: 'btn btn-ghost small', disabled: i === props.chapters.length - 1, title: t('Move down'), onClick: () => emit('move', c, 1) }, '↓'),
-                h('button', { type: 'button', class: 'btn btn-ghost small row-delete', title: t('Delete chapter'), 'aria-label': t('Delete chapter'), onClick: () => emit('delete', c) }, '×'),
-              ]),
+    const over = (key) => (e) => {
+      if (!dragged.value) return
+      e.preventDefault()
+      dropTarget.value = key
+    }
+    const drop = (target) => (e) => {
+      e.preventDefault()
+      const c = dragged.value
+      dragged.value = null
+      dropTarget.value = null
+      if (c) emit('drop-on', c, target, props.volumeId)
+    }
+    const endKey = `end:${props.volumeId}`
+    return () => {
+      const rows = props.chapters.map((c, i) =>
+        h(
+          'li',
+          {
+            class: ['chapter-row', { 'is-dragging': dragged.value === c, 'is-drop-target': dropTarget.value === c.id && dragged.value !== c }],
+            key: c.id,
+            onDragover: over(c.id),
+            onDrop: drop(c),
+          },
+          [
+            h(
+              'span',
+              {
+                class: 'grip',
+                draggable: 'true',
+                title: t('Drag to move'),
+                'aria-hidden': 'true',
+                onDragstart: (e) => {
+                  dragged.value = c
+                  e.dataTransfer.effectAllowed = 'move'
+                  e.dataTransfer.setData('text/plain', String(c.id))
+                },
+                onDragend: () => {
+                  dragged.value = null
+                  dropTarget.value = null
+                },
+              },
+              '⠿',
             ),
-          )
-        : h('p', { class: 'empty' }, t('No chapters in this volume yet.'))
+            h('span', { class: 'num' }, String(c.number)),
+            h(RouterLink, { to: `/chapters/${c.id}`, class: 'chapter-title' }, () => c.title),
+            h('span', { class: 'counts' }, [
+              c.event_count ? tn('{n} event', '{n} events', c.event_count) : '',
+              c.event_count && c.version_count ? ' · ' : '',
+              c.version_count ? tn('{n} character change', '{n} character changes', c.version_count) : '',
+            ].join('')),
+            h(RowMenu, {
+              label: t('Chapter actions'),
+              items: [
+                { label: t('Move up'), disabled: i === 0, action: () => emit('move', c, -1) },
+                { label: t('Move down'), disabled: i === props.chapters.length - 1, action: () => emit('move', c, 1) },
+                { label: t('Delete chapter'), danger: true, action: () => emit('delete', c) },
+              ],
+            }),
+          ],
+        ),
+      )
+      // Dropping below the last row (or on an empty volume) puts it at the end.
+      const end = h('li', {
+        class: ['drop-end', { 'is-drop-target': dropTarget.value === endKey, 'is-active': !!dragged.value }],
+        key: 'end',
+        onDragover: over(endKey),
+        onDrop: drop(null),
+      }, props.chapters.length ? '' : t('No chapters in this volume yet.'))
+      return h('ol', { class: 'chapter-list' }, [...rows, end])
+    }
   },
+}
+
+// A dragged chapter dropped before `target` (null: the end of the volume),
+// moving into that volume.
+function dropChapter(c, target, volumeId) {
+  if (c === target) return
+  const list = idx.value.chapters.filter((x) => x !== c)
+  const moved = { ...c, volume_id: volumeId }
+  if (target) list.splice(list.indexOf(target), 0, moved)
+  else {
+    // After the volume's last chapter, or where the volume's chapters would start.
+    const inVolume = list.filter((x) => (x.volume_id ?? null) === (volumeId ?? null))
+    const last = inVolume[inVolume.length - 1]
+    list.splice(last ? list.indexOf(last) + 1 : list.length, 0, moved)
+  }
+  saveOrder(idx.value.volumes, list)
 }
 
 async function run(fn) {
@@ -279,6 +357,40 @@ useQuickAdd(() => addChapter(null))
 
 :deep(.chapter-row:first-child) {
   border-top: none;
+}
+
+:deep(.grip) {
+  cursor: grab;
+  padding: 0 0.15rem;
+  color: var(--text-faint);
+  user-select: none;
+}
+
+:deep(.grip:hover) {
+  color: var(--text-primary);
+}
+
+:deep(.chapter-row.is-dragging) {
+  opacity: 0.45;
+}
+
+/* Where a dragged chapter would land: a line above the row. */
+:deep(.chapter-row.is-drop-target) {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+:deep(.drop-end) {
+  min-height: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--text-faint);
+}
+
+:deep(.drop-end.is-active) {
+  min-height: 1.6rem;
+}
+
+:deep(.drop-end.is-drop-target) {
+  box-shadow: inset 0 2px 0 var(--accent);
 }
 
 :deep(.num) {

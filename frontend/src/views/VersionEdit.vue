@@ -33,7 +33,7 @@
           </div>
           <label class="picture-input">
             <span>{{ $t('Change picture') }}</span>
-            <input type="file" accept="image/*" @change="onFileChange" />
+            <FilePick accept="image/*" @change="onFileChange" />
           </label>
         </div>
 
@@ -204,11 +204,12 @@
 
       <p v-if="saveError" class="error-banner save-error">{{ saveError }}</p>
 
-      <div class="save-bar">
+      <div class="save-bar sticky-save">
         <button class="btn btn-primary" :disabled="saving" @click="save">
           {{ saving ? $t('Saving…') : $t('Save changes') }}
         </button>
         <span v-if="savedAt" class="saved-hint">{{ $t('Saved.') }}</span>
+        <span v-else-if="dirty()" class="unsaved-hint">{{ $t('Unsaved changes') }}</span>
       </div>
     </template>
   </div>
@@ -216,6 +217,7 @@
 
 <script setup>
 import { reactive, ref, computed, watch, onMounted, nextTick } from 'vue'
+import FilePick from '../components/FilePick.vue'
 import { t } from '../i18n'
 import { useRouter } from 'vue-router'
 import {

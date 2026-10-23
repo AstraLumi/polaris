@@ -116,6 +116,7 @@
             {{ saving ? $t('Saving…') : $t('Save calendar') }}
           </button>
           <span v-if="saved" class="saved-hint">{{ $t('Saved.') }}</span>
+          <span v-else-if="unsaved('calendar')" class="unsaved-hint">{{ $t('Unsaved changes') }}</span>
           <button type="button" class="btn btn-ghost small restore-btn" :disabled="saving" @click="restoring = 'calendar'">{{ $t('Restore default') }}</button>
         </div>
       </template>
@@ -185,6 +186,7 @@
             {{ seasonSaving ? $t('Saving…') : $t('Save seasons') }}
           </button>
           <span v-if="seasonSaved" class="saved-hint">{{ $t('Saved.') }}</span>
+          <span v-else-if="unsaved('seasons')" class="unsaved-hint">{{ $t('Unsaved changes') }}</span>
           <button type="button" class="btn btn-ghost small restore-btn" :disabled="seasonSaving" @click="restoring = 'seasons'">{{ $t('Restore default') }}</button>
         </div>
       </template>
@@ -243,6 +245,7 @@
           {{ mapSaving ? $t('Saving…') : $t('Save map settings') }}
         </button>
         <span v-if="mapSaved" class="saved-hint">{{ $t('Saved.') }}</span>
+          <span v-else-if="unsaved('map')" class="unsaved-hint">{{ $t('Unsaved changes') }}</span>
         <button type="button" class="btn btn-ghost small restore-btn" :disabled="mapSaving" @click="restoring = 'map'">{{ $t('Restore default') }}</button>
       </div>
 
@@ -326,6 +329,7 @@
           {{ bloodSaving ? $t('Saving…') : $t('Save blood types') }}
         </button>
         <span v-if="bloodSaved" class="saved-hint">{{ $t('Saved.') }}</span>
+          <span v-else-if="unsaved('blood')" class="unsaved-hint">{{ $t('Unsaved changes') }}</span>
         <button type="button" class="btn btn-ghost small restore-btn" :disabled="bloodSaving" @click="restoring = 'blood'">{{ $t('Restore default') }}</button>
       </div>
     </section>
@@ -371,6 +375,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { useUnsavedGuard, useSaveShortcut } from '../navigation'
 import { fetchSettings, saveSettings, saveSeasons, saveBloodTypes, planetApi } from '../api'
 import RestoreDefaultDialog from '../components/RestoreDefaultDialog.vue'
 import { applyBloodTypes, bloodTypeNote, DEFAULT_BLOOD_TYPES } from '../bloodTypes'
@@ -452,6 +457,30 @@ const appVersion = `v${pkg.version}`
 const REPO_URL = 'https://github.com/AstraLumi/polaris'
 const REPO_OWNER_URL = 'https://github.com/AstraLumi'
 
+// What each section held when last loaded or saved, so edits not yet
+// saved are noticed: a note beside its Save button, and a question before
+// leaving the page.
+const savedState = ref({})
+const sectionState = {
+  calendar: () => JSON.stringify([months.value, days.value, hours.value]),
+  seasons: () => JSON.stringify([seasonList.value, seasonStart.value, hemisphere.value, unit.value]),
+  map: () => JSON.stringify(mapForm.value),
+  blood: () => JSON.stringify(bloodList.value.map((b) => [b.name, b.note])),
+}
+function markSaved(key) {
+  savedState.value = { ...savedState.value, [key]: sectionState[key]() }
+}
+const unsaved = (key) => key in savedState.value && sectionState[key]() !== savedState.value[key]
+useUnsavedGuard(() => Object.keys(sectionState).some(unsaved))
+// Ctrl+S saves every section with unsaved changes (Stats has its own).
+useSaveShortcut(() => {
+  if (tab.value === 'stats') return
+  if (unsaved('calendar') && !saving.value) save()
+  if (unsaved('seasons') && seasonsValid.value && !seasonSaving.value) saveSeasonSettings()
+  if (unsaved('map') && mapValid.value && !mapSaving.value) saveMapSettings()
+  if (unsaved('blood') && bloodValid.value && !bloodSaving.value) saveBloodTypeList()
+})
+
 const months = ref(calendar.months_per_year)
 const days = ref(calendar.days_per_month)
 const hours = ref(calendar.hours_per_day)
@@ -511,6 +540,7 @@ function takeSeasons(s) {
   seasonStart.value = s.start || ''
   hemisphere.value = s.hemisphere || 'north'
   unit.value = s.unit || 'C'
+  markSaved('seasons')
 }
 
 const seasonsValid = computed(
@@ -599,6 +629,7 @@ function takeMap(m) {
     show_zones: m.planet.show_zones,
   }
   savedFrequency.value = m.planet.frequency
+  markSaved('map')
 }
 
 const isPlanet = computed(() => mapForm.value.mode === '3d')
@@ -684,6 +715,7 @@ let bloodUid = 0
 
 function takeBloodTypes(list) {
   bloodList.value = (list || []).map((b) => ({ uid: ++bloodUid, name: b.name, note: b.note || '' }))
+  markSaved('blood')
 }
 
 const bloodValid = computed(() => {
@@ -773,6 +805,7 @@ async function save() {
   try {
     await saveSettings({ months_per_year: months.value, days_per_month: days.value, hours_per_day: hours.value })
     await loadCalendar()
+    markSaved('calendar')
     saved.value = true
     setTimeout(() => (saved.value = false), 2500)
   } catch (err) {
@@ -788,6 +821,7 @@ onMounted(async () => {
     months.value = s.months_per_year
     days.value = s.days_per_month
     hours.value = s.hours_per_day || 24
+    markSaved('calendar')
     if (s.seasons) takeSeasons(s.seasons)
     takeMap(s.map)
     takeBloodTypes(s.blood_types)

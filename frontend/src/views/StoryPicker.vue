@@ -34,7 +34,7 @@
             <div class="card-actions">
               <button class="btn btn-ghost small" type="button" :title="$t('Rename it or change its icon')" @click="formStory = s">{{ $t('Edit') }}</button>
               <a class="btn btn-ghost small" :href="storyExportUrl(s.id)" download :title="$t('Download the whole story as a .zip, pictures included. Import it to restore.')">{{ $t('Export') }}</a>
-              <button class="btn btn-ghost small danger" type="button" @click="toDelete = s">{{ $t('Delete') }}</button>
+              <RowMenu :label="$t('More actions')" :items="[{ label: $t('Delete story'), danger: true, action: () => (toDelete = s) }]" />
             </div>
           </li>
 
@@ -73,6 +73,7 @@ import PolarisLogo from '../components/PolarisLogo.vue'
 import IconImage from '../components/IconImage.vue'
 import StoryFormModal from '../components/StoryFormModal.vue'
 import StoryDeleteModal from '../components/StoryDeleteModal.vue'
+import RowMenu from '../components/RowMenu.vue'
 import {
   stories, storiesLoaded, loadStories, activeStoryId, openStory, forgetStory,
   importStory, storyExportUrl,

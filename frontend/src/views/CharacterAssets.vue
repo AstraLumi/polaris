@@ -5,6 +5,15 @@
         <h1>{{ $t('Character Assets') }}</h1>
         <p class="page-sub">{{ $t('Classes, Subclasses, Specializations, Races, Body Types, Gear and Spells live here.') }}</p>
       </div>
+      <div class="bulk-bar">
+        <template v-if="selectMode">
+          <span class="bulk-count">{{ $tn('{n} selected', '{n} selected', selectedIds.size) }}</span>
+          <button class="btn btn-danger" :disabled="!selectedIds.size" @click="bulkConfirm = true">
+            {{ $t('Delete selected ({n})', { n: selectedIds.size }) }}
+          </button>
+        </template>
+        <button class="btn btn-ghost" :title="selectMode ? null : $t('Pick several to delete at once')" @click="toggleSelectMode">{{ selectMode ? $t('Cancel') : $t('Select several') }}</button>
+      </div>
     </header>
 
     <div class="tab-bar">
@@ -19,16 +28,6 @@
       </button>
     </div>
 
-    <div class="bulk-bar">
-      <template v-if="selectMode">
-        <span class="bulk-count">{{ $tn('{n} selected', '{n} selected', selectedIds.size) }}</span>
-        <button class="btn btn-danger small" :disabled="!selectedIds.size" @click="bulkConfirm = true">
-          {{ $t('Delete selected ({n})', { n: selectedIds.size }) }}
-        </button>
-      </template>
-      <button class="btn btn-ghost small" :title="selectMode ? null : $t('Pick several to delete at once')" @click="toggleSelectMode">{{ selectMode ? $t('Cancel') : $t('Select several') }}</button>
-    </div>
-
     <p v-if="loadError" class="error-banner">{{ loadError }}</p>
 
     <!-- Classes -->
@@ -39,12 +38,13 @@
       </div>
       <AssetEmptyState v-if="!loading && classes.length === 0" kind="classes" />
       <ul class="asset-list">
-        <li v-for="c in classes" :key="c.id" class="asset-row glass-panel">
+        <li v-for="c in classes" :key="c.id" class="asset-row glass-panel is-clickable" @click="rowClick('class', c, $event)">
           <div class="asset-name-group">
             <span class="asset-icon"><IconImage :src="c.icon_path" :name="c.name" /></span>
             <span class="asset-name">{{ c.name }}</span>
           </div>
           <div class="asset-actions">
+            <AssetFacts kind="class" :id="c.id" />
             <RowActions kind="class" :item="c" />
           </div>
         </li>
@@ -59,7 +59,7 @@
       </div>
       <AssetEmptyState v-if="!loading && subclasses.length === 0" kind="subclasses" />
       <ul class="asset-list">
-        <li v-for="s in subclasses" :key="s.id" class="asset-row glass-panel">
+        <li v-for="s in subclasses" :key="s.id" class="asset-row glass-panel is-clickable" @click="rowClick('subclass', s, $event)">
           <div class="asset-name-group">
             <span class="asset-name">{{ s.name }}</span>
             <span v-if="s.class_names.length" class="scope-badges">
@@ -68,6 +68,7 @@
             <span v-else class="scope-badge scope-badge-any">{{ $t('Any class') }}</span>
           </div>
           <div class="asset-actions">
+            <AssetFacts kind="subclass" :id="s.id" />
             <RowActions kind="subclass" :item="s" />
           </div>
         </li>
@@ -82,12 +83,13 @@
       </div>
       <AssetEmptyState v-if="!loading && specializations.length === 0" kind="specializations" />
       <ul class="asset-list">
-        <li v-for="s in specializations" :key="s.id" class="asset-row glass-panel">
+        <li v-for="s in specializations" :key="s.id" class="asset-row glass-panel is-clickable" @click="rowClick('specialization', s, $event)">
           <div class="asset-name-group">
             <span class="asset-name">{{ s.name }}</span>
             <span class="scope-badge">{{ s.class_name }}</span>
           </div>
           <div class="asset-actions">
+            <AssetFacts kind="specialization" :id="s.id" />
             <RowActions kind="specialization" :item="s" />
           </div>
         </li>
@@ -102,9 +104,12 @@
       </div>
       <AssetEmptyState v-if="!loading && races.length === 0" kind="races" />
       <ul class="asset-list">
-        <li v-for="r in races" :key="r.id" class="asset-row glass-panel">
-          <span class="asset-name">{{ r.name }}</span>
+        <li v-for="r in races" :key="r.id" class="asset-row glass-panel is-clickable" @click="rowClick('race', r, $event)">
+          <div class="asset-name-group">
+            <span class="asset-name">{{ r.name }}</span>
+          </div>
           <div class="asset-actions">
+            <AssetFacts kind="race" :id="r.id" />
             <RowActions kind="race" :item="r" />
           </div>
         </li>
@@ -119,7 +124,7 @@
       </div>
       <AssetEmptyState v-if="!loading && bodyTypes.length === 0" kind="bodyTypes" />
       <ul class="asset-list">
-        <li v-for="b in bodyTypes" :key="b.id" class="asset-row glass-panel">
+        <li v-for="b in bodyTypes" :key="b.id" class="asset-row glass-panel is-clickable" @click="rowClick('bodyType', b, $event)">
           <span class="asset-name-group">
             <svg class="body-outline" viewBox="-14 -1 28 42" aria-hidden="true">
               <OutlineFigure :outline="outlineFor(b.outline)" :ground="40" :height="40" :line="1" />
@@ -127,6 +132,7 @@
             <span class="asset-name">{{ b.name }}</span>
           </span>
           <div class="asset-actions">
+            <AssetFacts kind="bodyType" :id="b.id" />
             <RowActions kind="bodyType" :item="b" />
           </div>
         </li>
@@ -267,7 +273,7 @@
 import { ref, computed, watch, h, onMounted } from 'vue'
 import { t, tn, tr } from '../i18n'
 import {
-  fetchCatalogs, classesApi, racesApi, bodyTypesApi, specializationsApi, subclassesApi, spellsApi, gearApi,
+  fetchCatalogs, fetchAssetSummary, classesApi, racesApi, bodyTypesApi, specializationsApi, subclassesApi, spellsApi, gearApi,
 } from '../api'
 import SimpleAssetFormModal from '../components/SimpleAssetFormModal.vue'
 import OutlineFigure from '../components/OutlineFigure.vue'
@@ -281,6 +287,8 @@ import GearRow from '../components/GearRow.vue'
 import GearFormModal from '../components/GearFormModal.vue'
 import { GEAR_SLOT_TYPES } from '../gear'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import RowMenu from '../components/RowMenu.vue'
+import { statLabel, loadStatSystem } from '../stats'
 
 const tabs = [
   { key: 'classes', label: tr('Classes') },
@@ -366,6 +374,10 @@ async function load() {
   loadError.value = ''
   try {
     const [catalogs, spellList, gl] = await Promise.all([fetchCatalogs(), spellsApi.list(), gearApi.list()])
+    loadStatSystem()
+    fetchAssetSummary()
+      .then((sum) => (summary.value = sum))
+      .catch(() => {})
     classes.value = catalogs.classes
     subclasses.value = catalogs.subclasses
     specializations.value = catalogs.specializations
@@ -494,24 +506,56 @@ const editors = {
   gear: (g) => (gearEdit.value = g),
 }
 
-// A row's Edit and Delete buttons, or its checkbox while selecting.
+// What each asset gives and how many characters use it (fetchAssetSummary).
+const summary = ref({ uses: {}, modifiers: {} })
+const SUMMARY_KIND = { class: 'class', subclass: 'subclass', specialization: 'specialization', race: 'race', bodyType: 'body_type', spell: 'spell', gear: 'item' }
+const usesOf = (kind, id) => summary.value.uses?.[SUMMARY_KIND[kind]]?.[id] || 0
+
+// An asset's bonuses in short ("+3 STR · +10 HP"), at most four, then "…".
+const AssetFacts = {
+  props: { kind: String, id: Number },
+  setup(p) {
+    return () => {
+      const mods = Object.entries(summary.value.modifiers?.[SUMMARY_KIND[p.kind]]?.[p.id] || {})
+      if (!mods.length) return null
+      const fmt = ([key, v]) => `${v > 0 ? '+' : ''}${Math.round(v * 100) / 100} ${statLabel(key)}`
+      const text = mods.slice(0, 4).map(fmt).join(' · ') + (mods.length > 4 ? ' · …' : '')
+      return h('span', { class: 'asset-facts', title: mods.map(fmt).join(' · ') }, text)
+    }
+  },
+}
+
+// A plain row opens its editor (or, while selecting, ticks it); its own
+// buttons and links keep their job.
+function rowClick(kind, item, e) {
+  if (e.target.closest('button, a, input, label, .row-menu')) return
+  if (selectMode.value) toggleSelected(item.id)
+  else editors[kind](item)
+}
+
+// A row's use count, Edit and its "…" menu (Delete), or its checkbox while
+// selecting.
 const RowActions = {
   props: { kind: String, item: Object },
   setup(p) {
-    return () =>
-      selectMode.value
-        ? h('label', { class: 'row-pick', title: t('Select') }, [
-            h('input', {
-              type: 'checkbox',
-              checked: selectedIds.value.has(p.item.id),
-              'aria-label': p.item.name,
-              onChange: () => toggleSelected(p.item.id),
-            }),
-          ])
-        : [
-            h('button', { class: 'btn btn-ghost small', onClick: () => editors[p.kind](p.item) }, t('Edit')),
-            h('button', { class: 'btn btn-ghost small', onClick: () => confirmDelete(p.kind, p.item) }, t('Delete')),
-          ]
+    return () => {
+      if (selectMode.value) {
+        return h('label', { class: 'row-pick', title: t('Select') }, [
+          h('input', {
+            type: 'checkbox',
+            checked: selectedIds.value.has(p.item.id),
+            'aria-label': p.item.name,
+            onChange: () => toggleSelected(p.item.id),
+          }),
+        ])
+      }
+      const n = usesOf(p.kind, p.item.id)
+      return [
+        h('span', { class: ['asset-uses', { 'is-unused': !n }], title: t('Characters using it now (their current version)') }, n ? tn('{n} character', '{n} characters', n) : t('Unused')),
+        h('button', { class: 'btn btn-ghost small', onClick: () => editors[p.kind](p.item) }, t('Edit')),
+        h(RowMenu, { label: t('More actions'), items: [{ label: t('Delete'), danger: true, action: () => confirmDelete(p.kind, p.item) }] }),
+      ]
+    }
   },
 }
 
@@ -550,8 +594,8 @@ onMounted(load)
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.6rem;
-  margin: -0.5rem 0 1rem;
 }
 
 .bulk-count {
@@ -666,8 +710,44 @@ onMounted(load)
 
 .asset-actions {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
   flex-shrink: 0;
+}
+
+.asset-row.is-clickable {
+  cursor: pointer;
+}
+
+.asset-row.is-clickable:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--glass-border));
+}
+
+.asset-row :deep(.asset-facts) {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 22rem;
+}
+
+.asset-actions :deep(.asset-uses) {
+  margin-right: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.asset-actions :deep(.asset-uses.is-unused) {
+  font-style: italic;
+}
+
+@media (max-width: 720px) {
+  .asset-row :deep(.asset-facts),
+  .asset-actions :deep(.asset-uses) {
+    display: none;
+  }
 }
 
 .slot-filter {

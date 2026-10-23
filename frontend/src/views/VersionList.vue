@@ -1,5 +1,5 @@
 <template>
-  <div class="page is-narrow">
+  <div class="page">
     <Breadcrumbs :missing="missing"
       :crumbs="[{ label: $t('Characters'), to: '/characters' }, { label: characterName || (missing ? '' : '…'), to: `/characters/${id}` }, { label: $t('Versions') }]"
     >
@@ -95,14 +95,13 @@
             <button v-if="!v.is_current" class="btn btn-ghost small" :title="$t('Make this the version shown on the sheet, the wiki and the timeline')" @click="handleSetCurrent(v.id)">
               {{ $t('Set current') }}
             </button>
-            <button
-              class="btn btn-ghost small"
-              :disabled="versions.length <= 1"
-              :title="versions.length <= 1 ? $t('The only version — delete the character instead') : ''"
-              @click="confirmTarget = v"
-            >
-              {{ $t('Delete') }}
-            </button>
+            <!-- Deleting is kept apart from the everyday actions; the only
+                 version can't go (delete the character instead). -->
+            <RowMenu
+              v-if="versions.length > 1"
+              :label="$t('More actions')"
+              :items="[{ label: $t('Delete version'), danger: true, action: () => (confirmTarget = v) }]"
+            />
           </div>
         </li>
       </ul>
@@ -148,6 +147,7 @@ import BloodTypePicker from '../components/BloodTypePicker.vue'
 import RelationsTab from '../components/RelationsTab.vue'
 import { chapterLabel, loadChapters } from '../chapters'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import RowMenu from '../components/RowMenu.vue'
 import { pageTitle, useUnsavedGuard, useSaveShortcut } from '../navigation'
 
 const props = defineProps({ id: { type: String, required: true } })

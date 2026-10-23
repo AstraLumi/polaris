@@ -1,5 +1,5 @@
 <template>
-  <div class="overlay" @click.self="$emit('close')">
+  <div class="overlay" @click.self="requestClose" @pointerdown.capture="touched" @keydown.capture="touched" @input.capture="touched">
     <form class="modal is-small glass-panel panel-solid" @submit.prevent="save">
       <h2>{{ feature?.id ? $t('Edit {name}', { name: feature.name }) : $t('New {kind}', { kind: $t(layer.one).toLowerCase() }) }}</h2>
       <label class="field">
@@ -39,6 +39,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useModalGuard } from '../navigation'
 import { t } from '../i18n'
 import { layerOf } from '../planetLayers'
 import { wikiPath } from '../wiki'
@@ -64,6 +65,8 @@ const form = reactive({
 })
 const busy = ref(false)
 const error = ref('')
+// A stray click outside or Esc asks before dropping what was typed.
+const { requestClose, touched } = useModalGuard(() => [form], () => emit('close'))
 const confirming = ref(false)
 const nameEl = ref(null)
 onMounted(() => nameEl.value?.focus())

@@ -8,6 +8,15 @@
       <button class="btn btn-primary" @click="openForm(null)">{{ $t('New faction') }}</button>
     </header>
 
+    <input
+      v-if="factions.length > 5"
+      v-model="search"
+      type="text"
+      class="search"
+      :placeholder="$t('Search factions and their members…')"
+      :aria-label="$t('Search factions')"
+    />
+
     <p v-if="loadError" class="error-banner">{{ loadError }}</p>
     <p v-else-if="loading" class="loading-hint">{{ $t('Loading…') }}</p>
 
@@ -16,9 +25,11 @@
       <p class="empty-hint">{{ $t('Guilds, orders, churches, noble houses: anything your characters belong to.') }}</p>
     </div>
 
+    <p v-else-if="!shown.length" class="empty-hint">{{ $t('No factions match.') }}</p>
+
     <div v-else class="grid">
       <article
-        v-for="f in ordered"
+        v-for="f in shown"
         :key="f.id"
         class="card glass-panel"
         :style="{ '--depth': f.depth, ...(f.color ? { '--faction': f.color } : {}) }"
@@ -31,8 +42,17 @@
             <strong>{{ f.name }} <span v-if="f.kingdom_id" class="kingdom-badge" :title="$t('Tied to the kingdom of the same name on the map')">{{ $t('Kingdom') }}</span></strong>
             <small v-if="f.parent_name">{{ $t('Part of {name}', { name: f.parent_name }) }}</small>
             <small>
-              {{ $tn('{n} member', '{n} members', f.member_count) }}<template v-if="f.hq_name"> · {{ f.hq_name }}</template>
+              <template v-if="f.kingdom_id && !f.member_count">{{ $tn('{n} person of this nation', '{n} people of this nation', f.nationals || 0) }}</template>
+              <template v-else>{{ $tn('{n} member', '{n} members', f.member_count) }}</template>
+              <template v-if="f.hq_name"> · {{ f.hq_name }}</template>
             </small>
+          </span>
+          <span v-if="f.members?.length" class="faces" :title="f.members.map((m) => m.name).join(', ')">
+            <span v-for="m in f.members.slice(0, 5)" :key="m.id" class="face">
+              <img v-if="m.picture_path" :src="m.picture_path" :alt="m.name" />
+              <template v-else>{{ m.name.slice(0, 1) }}</template>
+            </span>
+            <span v-if="f.members.length > 5" class="face more">+{{ f.members.length - 5 }}</span>
           </span>
         </RouterLink>
         <button type="button" class="btn btn-ghost small" @click="openForm(f)">{{ $t('Edit') }}</button>
@@ -60,6 +80,13 @@ import IconImage from '../components/IconImage.vue'
 import FactionFormModal from '../components/FactionFormModal.vue'
 
 const factions = ref([])
+const search = ref('')
+// Matching factions, and their members' names, keeping the nesting.
+const shown = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return ordered.value
+  return ordered.value.filter((f) => f.name.toLowerCase().includes(q) || (f.members || []).some((m) => m.name.toLowerCase().includes(q)))
+})
 const loading = ref(true)
 const loadError = ref('')
 const formOpen = ref(false)
@@ -120,6 +147,51 @@ useQuickAdd(() => openForm(null))
 </script>
 
 <style scoped>
+.search {
+  max-width: 420px;
+  margin-bottom: 1rem;
+}
+
+/* Up to five members' faces, overlapping, at the card's end. */
+.faces {
+  display: flex;
+  margin-left: auto;
+  padding-left: 0.5rem;
+  flex-shrink: 0;
+}
+
+.face {
+  width: 26px;
+  height: 26px;
+  margin-left: -8px;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.face.more {
+  background: var(--glass);
+  color: var(--text-muted);
+}
+
+@media (max-width: 720px) {
+  .faces {
+    display: none;
+  }
+}
+
 .kingdom-badge {
   margin-left: 0.35rem;
   padding: 0.02rem 0.45rem;

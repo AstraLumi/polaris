@@ -1,5 +1,5 @@
 <template>
-  <div class="overlay" @click.self="$emit('close')">
+  <div class="overlay" @click.self="requestClose" @pointerdown.capture="touched" @keydown.capture="touched" @input.capture="touched">
     <div class="modal is-wide glass-panel panel-solid">
       <h2>{{ creature ? $t('Edit creature') : $t('New creature') }}</h2>
       <form @submit.prevent="submit">
@@ -120,6 +120,7 @@
 <script setup>
 // Creates or edits a creature of the bestiary, its relations included.
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useModalGuard } from '../navigation'
 import { creaturesApi, fetchLocationOptions, mapApi, planetApi } from '../api'
 import { CREATURE_KINDS, mapHexesOf, areaOf, planetLandOf, planetAreaOf } from '../creatures'
 import { worldMap } from '../worldMap'
@@ -177,6 +178,8 @@ watch(regionId, followRegion)
 const locationOptions = ref([])
 const saving = ref(false)
 const error = ref('')
+// A stray click outside or Esc asks before dropping what was typed.
+const { requestClose, touched } = useModalGuard(() => [name.value, kind.value, levelMin.value, levelMax.value, regionId.value, description.value, related.value, territory.value, customTerritory.value, cells.value, pictureFile.value, removePicture.value], () => emit('close'))
 const confirmOpen = ref(false)
 
 const pictureFile = ref(null)

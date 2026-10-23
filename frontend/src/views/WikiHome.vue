@@ -21,7 +21,7 @@
       </div>
     </header>
 
-    <div v-if="newOpen" class="overlay" @click.self="newOpen = false">
+    <div v-if="newOpen" class="overlay" @click.self="closeNew">
       <form class="modal is-small glass-panel panel-solid" @submit.prevent="createArticle">
         <h2>{{ $t('New article') }}</h2>
         <label class="field">
@@ -120,6 +120,7 @@ import IconImage from '../components/IconImage.vue'
 import { TYPE_ORDER, TYPE_PLURALS, TYPE_LABELS, wikiApi, wikiPath } from '../wiki'
 import { timeAgo } from '../timeAgo'
 import { useQuickAdd } from '../quickAdd'
+import { t } from '../i18n'
 
 const router = useRouter()
 
@@ -149,6 +150,12 @@ const newTitle = ref('')
 const newError = ref('')
 const creating = ref(false)
 const newTitleEl = ref(null)
+
+// A stray click outside (or Esc) asks before dropping a typed title.
+function closeNew() {
+  if (newTitle.value.trim() && !window.confirm(t('Discard your changes?'))) return
+  newOpen.value = false
+}
 
 async function openNew() {
   newTitle.value = ''

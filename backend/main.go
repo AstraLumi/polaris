@@ -86,6 +86,8 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	mux.HandleFunc("GET /api/specializations", listClassScopedLookupHandler(db, "specializations"))
 	mux.HandleFunc("GET /api/races", listSimpleLookupHandler(db, "races"))
 	mux.HandleFunc("GET /api/body-types", listBodyTypesHandler(db))
+	// What each asset gives and how many characters use it (assets.go).
+	mux.HandleFunc("GET /api/assets/summary", assetSummaryHandler(db))
 
 	// Character Assets: full CRUD + stat modifiers for every asset type
 	// except Spells.

@@ -18,7 +18,7 @@
         </div>
         <div class="identity-text">
           <h1>
-            {{ data.name }} <span class="level">{{ $t('Lv.') }} {{ String(data.level).padStart(2, '0') }}</span>
+            {{ data.name }} <span class="level">{{ $t('Lv.') }} {{ data.level }}</span>
             <span v-if="data.story.status && data.story.status !== 'alive'" class="status-badge" :class="'is-' + data.story.status">
               {{ statusLabel(data.story.status) }}
             </span>
@@ -65,27 +65,26 @@
 
       <section v-show="tab === 'story'" class="story-tab glass-panel sheet-part">
         <h2 class="print-only">{{ $t('Story') }}</h2>
-        <div class="field-grid">
-          <ReadField :label="$t('Gender')" :value="genderLabel(data.story.gender)" />
-          <ReadField :label="$t('Race')" :value="data.story.race_name" />
-          <ReadField :label="$t('Height (cm)')" :value="data.story.height" />
-          <ReadField :label="$t('Weight (kg)')" :value="data.story.weight" />
-          <ReadField :label="$t('Body type')" :value="data.story.body_type_name" />
-          <ReadField :label="$t('Age')" :value="data.story.age" />
-          <ReadField :label="$t('Blood type')" :value="data.story.blood_type" />
-          <ReadField :label="$t('Born in')" :value="data.story.born_in_name || data.story.born_in" />
-          <ReadField :label="$t('Nation')" :value="data.story.nation_name || data.story.nation" />
-          <ReadField :label="$t('Birth date (in-story)')" :value="data.story.birth_date" />
-          <ReadField :label="$t('Earth Name')" :value="data.story.earth_name" />
-          <ReadField :label="$t('Earth Birthdate')" :value="data.story.human_birth_date" />
-          <ReadField :label="$t('Status')" :value="statusLabel(data.story.status)" />
-          <ReadField :label="$t('Deaths')" :value="data.story.deaths" />
-        </div>
+        <!-- In groups, as on the wiki's infobox; fields with nothing in them
+             wait behind "Show empty fields". -->
+        <template v-for="g in storyGroups" :key="g.label">
+          <template v-if="g.fields.some(shows)">
+            <h3 class="group-title">{{ g.label }}</h3>
+            <div class="field-grid">
+              <ReadField v-for="f in g.fields.filter(shows)" :key="f.label" :label="f.label" :value="f.value" />
+            </div>
+          </template>
+        </template>
         <div class="long-fields">
-          <ReadField :label="$t('Description')" :value="data.story.description" long />
-          <ReadField :label="$t('Bio')" :value="data.story.bio" long />
-          <ReadField :label="$t('Speech mannerisms')" :value="data.story.speech_mannerisms" long />
+          <ReadField v-for="f in longFields.filter(shows)" :key="f.label" :label="f.label" :value="f.value" long />
         </div>
+        <p v-if="!storyGroups.some((g) => g.fields.some(shows)) && !longFields.some(shows)" class="nothing-yet">
+          {{ $t('Nothing written about them yet.') }}
+          <RouterLink :to="`/characters/${data.character_id}/versions/${data.id}/edit`">{{ $t('Edit the current version') }}</RouterLink>
+        </p>
+        <button v-if="emptyCount" type="button" class="btn btn-ghost small empty-toggle no-print" @click="showEmpty = !showEmpty">
+          {{ showEmpty ? $t('Hide empty fields') : $tn('Show {n} empty field', 'Show {n} empty fields', emptyCount) }}
+        </button>
       </section>
 
       <section v-show="tab === 'build'" class="build-tab glass-panel sheet-part">
@@ -159,6 +158,40 @@ const neighbours = computed(() => {
 
 // Tiny inline component for a label + read-only value pair, so the Story
 // tab's markup above stays readable instead of repeating this block 14 times.
+// The Story tab's fields, grouped. A value of null, '' (or no deaths) is
+// empty; empty fields show only when asked.
+const showEmpty = ref(false)
+const isEmpty = (v) => v === null || v === undefined || v === ''
+const shows = (f) => showEmpty.value || !isEmpty(f.value)
+const storyGroups = computed(() => {
+  const s = data.value.story
+  const f = (label, value) => ({ label, value })
+  return [
+    {
+      label: t('Personal'),
+      fields: [
+        f(t('Gender'), genderLabel(s.gender)), f(t('Race'), s.race_name), f(t('Age'), s.age), f(t('Body type'), s.body_type_name),
+        f(t('Height (cm)'), s.height), f(t('Weight (kg)'), s.weight), f(t('Blood type'), s.blood_type),
+        f(t('Status'), statusLabel(s.status)), f(t('Deaths'), s.deaths || null),
+      ],
+    },
+    {
+      label: t('Birth'),
+      fields: [f(t('Birth date (in-story)'), s.birth_date), f(t('Born in'), s.born_in_name || s.born_in), f(t('Nation'), s.nation_name || s.nation)],
+    },
+    { label: t('On Earth'), fields: [f(t('Earth Name'), s.earth_name), f(t('Earth Birthdate'), s.human_birth_date)] },
+  ]
+})
+const longFields = computed(() => {
+  const s = data.value.story
+  return [
+    { label: t('Description'), value: s.description },
+    { label: t('Bio'), value: s.bio },
+    { label: t('Speech mannerisms'), value: s.speech_mannerisms },
+  ]
+})
+const emptyCount = computed(() => [...storyGroups.value.flatMap((g) => g.fields), ...longFields.value].filter((x) => isEmpty(x.value)).length)
+
 const ReadField = {
   props: { label: String, value: [String, Number, null], long: Boolean },
   render() {
@@ -218,6 +251,29 @@ function print() {
 </script>
 
 <style scoped>
+.group-title {
+  margin: 1.1rem 0 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.group-title:first-of-type {
+  margin-top: 0;
+}
+
+.empty-toggle {
+  margin-top: 0.75rem;
+}
+
+.nothing-yet {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
 .tag-line {
   display: flex;
   flex-wrap: wrap;

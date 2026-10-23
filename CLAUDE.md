@@ -193,6 +193,13 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   uses all four. Recently opened items (`recent.js`, recorded from the
   router by `recentTracker.js`) feed the search and Home; `?new=1` on a
   list page opens its add form (`quickAdd.js`).
+- **Forms and actions share their pieces:** a pop-up form guards what was
+  typed against a stray click outside or Esc (`useModalGuard` in
+  `navigation.js`; a full page uses `useUnsavedGuard`); a long form keeps
+  its Save in reach (`.sticky-save`); picture inputs are `FilePick.vue`
+  (button, file name, drop zone) rather than a bare `<input type=file>`;
+  Delete and other rare actions go in a row's "…" menu (`RowMenu.vue`,
+  teleported so frosted panels can't cover it).
 - Birth date, blood type and Born in belong to the character (`characters`
   columns, schema 23), not to a version; the version form edits them for
   all versions.

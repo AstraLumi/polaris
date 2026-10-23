@@ -227,7 +227,9 @@ h3 {
 
 /* ---- 3. Page layout ----------------------------------------------------- */
 /* Every page's root is `.page`: left-aligned against the sidebar, with the
-   same padding and the same heading. `.is-narrow` is for forms. */
+   same padding, width and heading. `.is-narrow` is for forms, `.is-wide`
+   (below) for canvases that use the whole window (timeline, calendar,
+   family tree, graph). */
 
 .page {
   width: 100%;
@@ -273,6 +275,31 @@ h3 {
 }
 
 /* ---- 4. Buttons --------------------------------------------------------- */
+
+/* A long form's Save, kept in reach at the foot of the window while the
+   form scrolls. */
+.sticky-save {
+  position: sticky;
+  bottom: 0.75rem;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 1.25rem;
+  padding: 0.5rem 0.9rem 0.5rem 0.5rem;
+  border: 1px solid var(--glass-border);
+  border-radius: calc(var(--radius-control) + 0.5rem);
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.unsaved-hint {
+  font-size: 0.82rem;
+  color: var(--accent);
+}
 
 .btn {
   display: inline-flex;

@@ -61,7 +61,7 @@
         <div class="picture-row">
           <img v-if="previewUrl" :src="previewUrl" alt="" class="preview" />
           <div class="picture-controls">
-            <input type="file" accept="image/*" @change="onFileChange" />
+            <FilePick accept="image/*" @change="onFileChange" />
             <button v-if="previewUrl" type="button" class="btn btn-ghost small" @click="clearPicture">
               {{ $t('Remove picture') }}
             </button>
@@ -70,11 +70,12 @@
       </div>
 
       <p v-if="saveError" class="error-banner">{{ saveError }}</p>
-      <div class="actions">
+      <div class="actions sticky-save">
         <button class="btn btn-primary" type="submit" :disabled="saving">
           {{ saving ? $t('Saving…') : id ? $t('Save changes') : $t('Create event') }}
         </button>
         <button type="button" class="btn btn-ghost cancel" @click="cancel">{{ $t('Cancel') }}</button>
+        <span v-if="dirty()" class="unsaved-hint">{{ $t('Unsaved changes') }}</span>
       </div>
     </form>
   </div>
@@ -82,6 +83,7 @@
 
 <script setup>
 import { reactive, ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import FilePick from '../components/FilePick.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { eventsApi, buildEventFormData, fetchLocationOptions, fetchCharacterOptions, isMissing } from '../api'
 import { fullDate } from '../calendar'

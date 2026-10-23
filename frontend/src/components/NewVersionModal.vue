@@ -1,5 +1,5 @@
 <template>
-  <div class="overlay" @click.self="$emit('close')">
+  <div class="overlay" @click.self="requestClose" @pointerdown.capture="touched" @keydown.capture="touched" @input.capture="touched">
     <div class="modal glass-panel is-small">
       <h2>{{ $t('New version') }}</h2>
       <p class="hint">
@@ -28,6 +28,7 @@
 
 <script setup>
 import { ref } from 'vue'
+import { useModalGuard } from '../navigation'
 import { t } from '../i18n'
 import { createVersion } from '../api'
 import DateField from './DateField.vue'
@@ -43,6 +44,8 @@ const versionReference = ref('')
 const chapterId = ref(null)
 const submitting = ref(false)
 const error = ref('')
+// A stray click outside or Esc asks before dropping what was typed.
+const { requestClose, touched } = useModalGuard(() => [versionDate.value, versionReference.value, chapterId.value], () => emit('close'))
 
 async function submit() {
   submitting.value = true

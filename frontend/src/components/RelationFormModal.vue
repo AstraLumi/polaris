@@ -1,5 +1,5 @@
 <template>
-  <div class="overlay" @click.self="$emit('close')">
+  <div class="overlay" @click.self="requestClose" @pointerdown.capture="touched" @keydown.capture="touched" @input.capture="touched">
     <div class="modal glass-panel panel-solid">
       <h2>{{ relation ? $t('Edit relation') : $t('New relation') }}</h2>
 
@@ -82,6 +82,7 @@
 // Adds or edits a relation between the character whose sheet this is ("me")
 // and another. Stored once, read from both sides (see relations.js).
 import { ref, computed } from 'vue'
+import { useModalGuard } from '../navigation'
 import { t } from '../i18n'
 import { relationsApi } from '../api'
 import { RELATION_KINDS, relationKind } from '../relations'
@@ -109,6 +110,8 @@ const untilChapter = ref(r?.until_chapter_id ?? null)
 const notes = ref(r?.notes ?? '')
 const saving = ref(false)
 const error = ref('')
+// A stray click outside or Esc asks before dropping what was typed.
+const { requestClose, touched } = useModalGuard(() => [meIsFrom.value, otherId.value, kind.value, myWording.value, theirWording.value, since.value, until.value, sinceChapter.value, untilChapter.value, notes.value], () => emit('close'))
 
 const others = computed(() => props.characters.filter((c) => c.id !== props.me.id))
 const meName = computed(() => props.me.name)

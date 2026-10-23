@@ -24,13 +24,18 @@ type homeRecent struct {
 	UpdatedAt   string `json:"updated_at"`
 }
 
+// looseEach is how many loose ends of one kind Home lists.
+const looseEach = 3
+
 // homeLooseEnd is a gentle nudge about data that will matter once the
 // timeline exists: a thing that should have a date or a link and doesn't.
 type homeLooseEnd struct {
-	Kind  string `json:"kind"` // "character" | "location"
-	ID    int64  `json:"id"`   // character id, or location id
+	Kind  string `json:"kind"` // "character" | "location" | "event" | "chapter" | "lore"
+	ID    int64  `json:"id"`   // the character's, location's, event's, chapter's or article's id
 	Name  string `json:"name"`
 	Issue string `json:"issue"`
+	// For a character, the current version, when the fix is on its form.
+	VersionID int64 `json:"version_id,omitempty"`
 }
 
 type homeEvent struct {
@@ -45,7 +50,10 @@ type homePayload struct {
 	Calendar calendarSettings `json:"calendar"`
 	Recent   []homeRecent     `json:"recent"`
 	Loose    []homeLooseEnd   `json:"loose_ends"`
-	Events   []homeEvent      `json:"events"`
+	// How many more there are beyond the few of each kind listed (at most
+	// 20 counted per kind).
+	LooseMore int         `json:"loose_more"`
+	Events    []homeEvent `json:"events"`
 }
 
 func homeHandler(db *sql.DB) http.HandlerFunc {
@@ -97,31 +105,49 @@ func homeHandler(db *sql.DB) http.HandlerFunc {
 		rows.Close()
 
 		// Loose ends: kingdoms with no founding date, characters with no
-		// in-story birth date or an unmatched birthplace/nation.
+		// in-story birth date, an unmatched birthplace/nation or no height
+		// or body type, events with no date, chapters with nothing in them
+		// and lore pages never written. A few of each, so one kind can't
+		// crowd out the rest. A query with a third column gives the
+		// character's current version.
 		type spec struct {
 			kind, issue, q string
 		}
+		const currentChar = `FROM characters c JOIN character_versions v ON v.character_id = c.id AND v.is_current = 1`
 		for _, s := range []spec{
 			{"location", "No founding date", `SELECT id, name FROM locations WHERE kind = 'major' AND color IS NOT NULL AND realm = 'kingdom' AND (founding_date IS NULL OR founding_date = '') ORDER BY name COLLATE NOCASE LIMIT 20`},
 			{"character", "No in-story birth date", `SELECT c.id, v.name FROM characters c JOIN character_versions v ON v.character_id = c.id AND v.is_current = 1 WHERE c.birth_date IS NULL OR c.birth_date = '' ORDER BY v.name COLLATE NOCASE LIMIT 20`},
 			{"character", "Birthplace needs a map location", `SELECT c.id, v.name FROM characters c JOIN character_versions v ON v.character_id = c.id AND v.is_current = 1 WHERE c.born_in_location_id IS NULL AND c.born_in IS NOT NULL AND c.born_in != '' ORDER BY v.name COLLATE NOCASE LIMIT 20`},
 			{"character", "Nation needs a kingdom", `SELECT c.id, v.name FROM characters c JOIN character_versions v ON v.character_id = c.id AND v.is_current = 1 JOIN character_story st ON st.version_id = v.id WHERE st.nation_location_id IS NULL AND st.nation IS NOT NULL AND st.nation != '' ORDER BY v.name COLLATE NOCASE LIMIT 20`},
+			{"character", "No height or body type", `SELECT c.id, v.name, v.id ` + currentChar + ` LEFT JOIN character_story st ON st.version_id = v.id WHERE st.height IS NULL OR st.body_type_id IS NULL ORDER BY v.name COLLATE NOCASE LIMIT 20`},
+			{"event", "No date", `SELECT id, name FROM events WHERE event_date IS NULL OR event_date = '' ORDER BY name COLLATE NOCASE LIMIT 20`},
+			{"chapter", "No events, versions or notes", `SELECT ch.id, ch.title FROM chapters ch WHERE TRIM(ch.notes) = '' AND NOT EXISTS (SELECT 1 FROM events e WHERE e.chapter_id = ch.id) AND NOT EXISTS (SELECT 1 FROM character_versions cv WHERE cv.chapter_id = ch.id) ORDER BY ch.position, ch.id LIMIT 20`},
+			{"lore", "Not written yet", `SELECT l.id, l.name FROM lore_articles l WHERE NOT EXISTS (SELECT 1 FROM wiki_entries e WHERE e.entity_type = 'lore' AND e.entity_id = l.id AND (TRIM(COALESCE(e.summary, '')) != '' OR EXISTS (SELECT 1 FROM wiki_sections s WHERE s.entry_id = e.id AND TRIM(s.body) != ''))) ORDER BY l.name COLLATE NOCASE LIMIT 20`},
 		} {
 			lr, err := db.Query(s.q)
 			if err != nil {
 				log.Printf("home loose ends (%s): %v", s.issue, err)
 				continue
 			}
+			cols, _ := lr.Columns()
+			n := 0
 			for lr.Next() {
 				l := homeLooseEnd{Kind: s.kind, Issue: s.issue}
-				if lr.Scan(&l.ID, &l.Name) == nil {
-					p.Loose = append(p.Loose, l)
+				dest := []any{&l.ID, &l.Name}
+				if len(cols) > 2 {
+					dest = append(dest, &l.VersionID)
+				}
+				if lr.Scan(dest...) == nil {
+					if n < looseEach {
+						p.Loose = append(p.Loose, l)
+					}
+					n++
 				}
 			}
 			lr.Close()
-		}
-		if len(p.Loose) > 12 {
-			p.Loose = p.Loose[:12]
+			if n > looseEach {
+				p.LooseMore += n - looseEach
+			}
 		}
 
 		// The newest events, by when they were added (not their in-story date).

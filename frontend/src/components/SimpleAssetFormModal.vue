@@ -1,5 +1,5 @@
 <template>
-  <div class="overlay" @click.self="$emit('close')">
+  <div class="overlay" @click.self="requestClose" @pointerdown.capture="touched" @keydown.capture="touched" @input.capture="touched">
     <div class="modal glass-panel is-wide">
       <h2>{{ asset ? text.edit : text.add }}</h2>
       <form @submit.prevent="submit">
@@ -7,7 +7,7 @@
           <div class="icon-preview"><IconImage :src="previewSrc" :name="name" /></div>
           <label class="field icon-field">
             <span>{{ $t('Icon') }}</span>
-            <input ref="fileInput" type="file" accept="image/*" @change="onFileChange" />
+            <FilePick ref="fileInput" accept="image/*" @change="onFileChange" />
           </label>
           <button v-if="previewSrc" type="button" class="btn btn-ghost small" @click="removeIcon">
             {{ $t('Remove') }}
@@ -50,6 +50,8 @@
 
 <script setup>
 import { ref, computed, onBeforeUnmount } from 'vue'
+import FilePick from './FilePick.vue'
+import { useModalGuard } from '../navigation'
 import { t } from '../i18n'
 import ModifierForm from './ModifierForm.vue'
 import IconImage from './IconImage.vue'
@@ -104,6 +106,8 @@ const locationOptions = ref([])
 if (props.kind === 'race') fetchLocationOptions().then((o) => (locationOptions.value = o))
 const submitting = ref(false)
 const error = ref('')
+// A stray click outside or Esc asks before dropping what was typed.
+const { requestClose, touched } = useModalGuard(() => [name.value, modifiers.value, kingdomId.value, outline.value, iconFile.value, iconRemoved.value], () => emit('close'))
 
 // Icon (classes only): a newly chosen file, or a request to drop the old one.
 const fileInput = ref(null)

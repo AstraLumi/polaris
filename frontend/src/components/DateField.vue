@@ -103,7 +103,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch, nextTick, onBeforeUnmount } from 'vue'
-import { calendar, parseStoryDate, formatStoryDate } from '../calendar'
+import { calendar, parseStoryDate, formatStoryDate, dayColumns as columnsFor } from '../calendar'
 import { seasonCycle, monthSeasons } from '../seasons'
 import { digitsToParts, partsToDigits, displayDigits, parsePasted, MAX_DIGITS } from '../dateDigits'
 import { t, tr, locale } from '../i18n'
@@ -257,9 +257,7 @@ const EARTH_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 const dayCount = computed(() => (props.earth ? EARTH_DAYS[view.month - 1] : calendar.days_per_month))
 // Months in even rows of at most eight (12 in two rows of 6).
 const monthColumns = computed(() => Math.ceil(monthCount.value / Math.ceil(monthCount.value / 8)))
-// The story's months have no weeks: rows of ten read well for 20, 30 or 40
-// days, otherwise rows of seven.
-const dayColumns = computed(() => (dayCount.value % 10 === 0 && dayCount.value >= 20 ? 10 : 7))
+const dayColumns = computed(() => columnsFor(dayCount.value))
 
 function earthMonth(m, style) {
   return new Intl.DateTimeFormat(locale.value, { month: style, timeZone: 'UTC' }).format(new Date(Date.UTC(2000, m - 1, 1)))

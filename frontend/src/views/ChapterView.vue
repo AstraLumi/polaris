@@ -1,5 +1,5 @@
 <template>
-  <div class="page is-narrow chapter-page">
+  <div class="page chapter-page">
     <Breadcrumbs :missing="missing" :crumbs="[{ label: $t('Chapters'), to: '/chapters' }, { label: chapter?.volume_title }, { label: chapter?.title }]" />
 
     <NotFoundPanel v-if="missing" :message="$t('This chapter was deleted, or never existed.')">

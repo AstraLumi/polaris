@@ -72,14 +72,15 @@
           </div>
           <ul v-if="data.loose_ends.length" class="loose">
             <li v-for="(l, i) in data.loose_ends" :key="i">
-              <RouterLink :to="l.kind === 'character' ? `/characters/${l.id}` : { path: '/map', query: { edit: l.id } }" class="loose-row">
+              <RouterLink :to="looseLink(l)" class="loose-row">
                 <strong data-tip-overflow>{{ l.name }}</strong>
                 <span>{{ $t(l.issue) }}</span>
               </RouterLink>
             </li>
           </ul>
-          <p v-else class="empty">{{ $t('Nothing to tidy. Every kingdom and character has what the timeline needs.') }}</p>
-          <p class="foot">{{ $t('Dates and map links the timeline will use, still missing.') }}</p>
+          <p v-else class="empty">{{ $t('Nothing to tidy: every kingdom, character, event, chapter and lore page has what it needs.') }}</p>
+          <p v-if="data.loose_more" class="foot">{{ $tn('…and {n} more like these.', '…and {n} more like these.', data.loose_more) }}</p>
+          <p class="foot">{{ $t('Missing dates, map links and heights; empty chapters and lore pages.') }}</p>
         </section>
       </div>
 
@@ -118,7 +119,20 @@ import IconImage from '../components/IconImage.vue'
 
 // The "loose ends" labels come from the backend (home.go); listing them here
 // lets the language checker see them and keep every catalog complete.
-void [tr('No founding date'), tr('No in-story birth date'), tr('Birthplace needs a map location'), tr('Nation needs a kingdom')]
+void [
+  tr('No founding date'), tr('No in-story birth date'), tr('Birthplace needs a map location'), tr('Nation needs a kingdom'),
+  tr('No height or body type'), tr('No date'), tr('No events, versions or notes'), tr('Not written yet'),
+]
+
+// Where a loose end is fixed: the version's form for a height, the event's
+// form for a date, the page itself otherwise.
+function looseLink(l) {
+  if (l.kind === 'character') return l.version_id ? `/characters/${l.id}/versions/${l.version_id}/edit` : `/characters/${l.id}`
+  if (l.kind === 'event') return `/events/${l.id}/edit`
+  if (l.kind === 'chapter') return `/chapters/${l.id}`
+  if (l.kind === 'lore') return `/wiki/lore/${l.id}`
+  return { path: '/map', query: { edit: l.id } }
+}
 
 const data = ref(null)
 const error = ref('')

@@ -1,5 +1,5 @@
 <template>
-  <div class="overlay" @click.self="$emit('close')">
+  <div class="overlay" @click.self="requestClose" @pointerdown.capture="touched" @keydown.capture="touched" @input.capture="touched">
     <div class="modal glass-panel panel-solid">
       <h2>{{ location ? $t('Edit major location') : $t('New major location') }}</h2>
 
@@ -66,6 +66,7 @@
 
 <script setup>
 import { t } from '../i18n'
+import { useModalGuard } from '../navigation'
 import { ref, computed } from 'vue'
 import { mapApi } from '../api'
 import ColorPicker from './ColorPicker.vue'
@@ -93,6 +94,8 @@ function pickRealm(id) {
 }
 const saving = ref(false)
 const error = ref('')
+// A stray click outside or Esc asks before dropping what was typed.
+const { requestClose, touched } = useModalGuard(() => [name.value, foundingDate.value, description.value, color.value, realm.value], () => emit('close'))
 const confirmOpen = ref(false)
 
 // Your own current color stays pickable; everyone else's is taken.

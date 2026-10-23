@@ -15,7 +15,7 @@
       <div class="identity">
         <p class="name-line">
           <RouterLink v-if="!selectMode" :to="`/characters/${character.id}`" class="card-link" :title="$t('Open the character sheet')">{{ character.name }}</RouterLink>
-          <template v-else>{{ character.name }}</template>{{ ' ' }}<span class="level">{{ $t('Lv.') }} {{ paddedLevel }}</span>
+          <template v-else>{{ character.name }}</template>{{ ' ' }}<span class="level">{{ $t('Lv.') }} {{ character.level }}</span>
         </p>
         <p v-if="character.status && character.status !== 'alive'" class="status-line">
           <span class="status-badge" :class="'is-' + character.status">{{ statusLabel(character.status) }}</span>
@@ -50,7 +50,6 @@ const props = defineProps({
 })
 defineEmits(['toggle-select'])
 
-const paddedLevel = computed(() => String(props.character.level).padStart(2, '0'))
 
 // Class | Specialization; the subclass has a line of its own.
 const classLine = computed(() => {

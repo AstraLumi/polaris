@@ -1,5 +1,5 @@
 <template>
-  <div class="overlay" @click.self="$emit('close')">
+  <div class="overlay" @click.self="requestClose" @pointerdown.capture="touched" @keydown.capture="touched" @input.capture="touched">
     <div class="modal glass-panel">
       <h2>{{ $t('Add a character') }}</h2>
       <form @submit.prevent="submit">
@@ -49,7 +49,7 @@
         </div>
         <label class="field">
           <span>{{ $t('Picture') }}</span>
-          <input type="file" accept="image/*" @change="onFileChange" />
+          <FilePick accept="image/*" @change="onFileChange" />
         </label>
 
         <p v-if="error" class="error-banner">{{ error }}</p>
@@ -67,6 +67,8 @@
 
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue'
+import FilePick from './FilePick.vue'
+import { useModalGuard } from '../navigation'
 import { t } from '../i18n'
 import { createCharacter, fetchCatalogs } from '../api'
 import ComboBoxField from './ComboBoxField.vue'
@@ -87,6 +89,8 @@ const form = reactive({
 const picture = ref(null)
 const submitting = ref(false)
 const error = ref('')
+// A stray click outside or Esc asks before dropping what was typed.
+const { requestClose, touched } = useModalGuard(() => [form, picture.value], () => emit('close'))
 const catalogs = ref({ classes: [], subclasses: [], specializations: [], races: [], bodyTypes: [] })
 
 const availableSubclasses = computed(() => {

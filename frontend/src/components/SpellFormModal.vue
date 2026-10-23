@@ -1,5 +1,5 @@
 <template>
-  <div class="overlay" @click.self="$emit('close')">
+  <div class="overlay" @click.self="requestClose" @pointerdown.capture="touched" @keydown.capture="touched" @input.capture="touched">
     <div class="modal glass-panel">
       <h2>{{ spell ? $t('Edit spell') : $t('Add a spell') }}</h2>
       <form @submit.prevent="submit">
@@ -9,7 +9,7 @@
           </div>
           <label class="field icon-field">
             <span>{{ $t('Icon') }}</span>
-            <input ref="fileInput" type="file" accept="image/*" @change="onFileChange" />
+            <FilePick ref="fileInput" accept="image/*" @change="onFileChange" />
           </label>
           <button v-if="previewSrc" type="button" class="btn btn-ghost small" @click="clearIcon">
             {{ $t('Remove') }}
@@ -114,6 +114,8 @@
 
 <script setup>
 import { ref, computed, onBeforeUnmount } from 'vue'
+import FilePick from './FilePick.vue'
+import { useModalGuard } from '../navigation'
 import { t } from '../i18n'
 import { spellsApi, buildSpellFormData } from '../api'
 import { BUILTIN_ICONS, BUILTIN_PREFIX } from '../builtinIcons'
@@ -140,6 +142,8 @@ const description = ref(props.spell?.description ?? '')
 const iconFile = ref(null)
 const submitting = ref(false)
 const error = ref('')
+// A stray click outside or Esc asks before dropping what was typed.
+const { requestClose, touched } = useModalGuard(() => [name.value, level.value, source.value, mpCost.value, hpCost.value, origin.value, description.value, iconFile.value, iconChoice.value], () => emit('close'))
 
 // What the form says about the icon, apart from an uploaded file:
 // '' = leave as is, 'none' = remove, 'builtin:<id>' = use a built-in one.

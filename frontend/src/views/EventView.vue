@@ -1,7 +1,7 @@
 <template>
   <div class="page event-page">
     <Breadcrumbs :missing="missing" :crumbs="[{ label: $t('Events'), to: '/events' }, { label: event?.name }]">
-      <ItemLinks v-if="event" type="event" :id="event.id" here="sheet" :location-id="event.location_id" :location-name="event.location_name" />
+      <ItemLinks v-if="event" type="event" :id="event.id" here="sheet" :location-id="event.location_id" :location-name="event.location_name" :date="event.event_date" />
     </Breadcrumbs>
 
     <NotFoundPanel v-if="missing" :message="$t('This event was deleted, or never existed.')">
@@ -33,9 +33,10 @@
           </p>
           <div class="actions">
             <RouterLink :to="`/events/${event.id}/edit`" class="btn btn-primary">{{ $t('Edit') }}</RouterLink>
-            <button class="btn btn-danger" @click="confirmOpen = true">
-              {{ event.source ? $t('Clear details') : $t('Delete') }}
-            </button>
+            <RowMenu
+              :label="$t('More actions')"
+              :items="[{ label: event.source ? $t('Clear details') : $t('Delete event'), danger: true, action: () => (confirmOpen = true) }]"
+            />
           </div>
         </div>
       </article>
@@ -61,7 +62,7 @@
         <section class="glass-panel block">
           <h2>{{ $t('Involved people') }}</h2>
           <ul v-if="event.people.length" class="people">
-            <li v-for="p in event.people" :key="p.id">
+            <li v-for="p in event.people" :key="p.id" class="person-item">
               <RouterLink :to="`/characters/${p.id}`" class="person">
                 <span class="avatar">
                   <img v-if="p.picture_path" :src="p.picture_path" :alt="p.name" />
@@ -69,9 +70,16 @@
                 </span>
                 {{ p.name }}
               </RouterLink>
+              <button type="button" class="person-x" :disabled="peopleSaving" :aria-label="$t('Remove {name}', { name: p.name })" :title="$t('Remove {name}', { name: p.name })" @click="savePeople(event.people.filter((x) => x.id !== p.id).map((x) => x.id))">×</button>
             </li>
           </ul>
           <p v-else class="empty">{{ $t('Nobody listed.') }}</p>
+          <!-- Added straight away, without opening the edit form. -->
+          <select v-if="addable.length" class="add-person" :value="''" :disabled="peopleSaving" :aria-label="$t('Add a character…')" @change="savePeople([...event.people.map((x) => x.id), Number($event.target.value)])">
+            <option value="">{{ $t('Add a character…') }}</option>
+            <option v-for="o in addable" :key="o.id" :value="o.id">{{ o.name }}</option>
+          </select>
+          <p v-if="peopleError" class="error-banner">{{ peopleError }}</p>
         </section>
       </div>
 
@@ -118,7 +126,8 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { eventsApi, isMissing } from '../api'
+import { eventsApi, isMissing, buildEventFormData, fetchCharacterOptions } from '../api'
+import RowMenu from '../components/RowMenu.vue'
 import { shortDate, fullDate, dateParts } from '../calendar'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
@@ -172,6 +181,40 @@ function relatedDate(r) {
 
 function initials(name) {
   return (name || '').split(' ').filter(Boolean).map((p) => p[0]).join('').slice(0, 2).toUpperCase()
+}
+
+// People added or removed right here are saved at once, with everything
+// else about the event as it is.
+const characterOptions = ref([])
+fetchCharacterOptions()
+  .then((list) => (characterOptions.value = list))
+  .catch(() => {})
+const addable = computed(() => characterOptions.value.filter((o) => !event.value?.people.some((p) => p.id === o.id)))
+const peopleSaving = ref(false)
+const peopleError = ref('')
+async function savePeople(ids) {
+  const e = event.value
+  if (!e) return
+  peopleSaving.value = true
+  peopleError.value = ''
+  try {
+    const body = buildEventFormData({
+      name: e.name,
+      description: e.description,
+      eventDate: e.event_date,
+      locationId: e.location_id,
+      chapterId: e.chapter_id ?? null,
+      tags: e.tags,
+      characterIds: ids,
+    })
+    await eventsApi.update(e.id, body)
+    const fresh = await eventsApi.get(props.id)
+    event.value = { ...event.value, people: fresh.people }
+  } catch (err) {
+    peopleError.value = err.message || tt("Couldn't save.")
+  } finally {
+    peopleSaving.value = false
+  }
 }
 
 async function load() {
@@ -410,6 +453,48 @@ watch(() => props.id, load, { immediate: true })
 
 .person:hover {
   background: rgba(255, 255, 255, 0.08);
+}
+
+.person-item {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Remove, shown beside a person on hover (always on touch screens). */
+.person-x {
+  margin-left: -0.6rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-faint);
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.person-item:hover .person-x,
+.person-x:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .person-x {
+    opacity: 1;
+  }
+}
+
+.person-x:hover {
+  color: var(--danger-text);
+}
+
+.add-person {
+  width: auto;
+  max-width: 100%;
+  margin-top: 0.75rem;
 }
 
 .avatar {

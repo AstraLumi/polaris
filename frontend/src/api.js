@@ -341,6 +341,14 @@ export async function fetchHome() {
   return res.json()
 }
 
+// For every asset, how many characters use it (current versions) and its
+// stat bonuses: { uses: { kind: { id: n } }, modifiers: { kind: { id: { stat: value } } } }.
+export async function fetchAssetSummary() {
+  const res = await fetch(`${BASE}/assets/summary`)
+  if (!res.ok) throw apiError('failed to load the assets')
+  return res.json()
+}
+
 export async function fetchCatalogs() {
   const [classes, subclasses, specializations, races, bodyTypes, locations] = await Promise.all([
     fetch(`${BASE}/classes`).then((r) => (r.ok ? r.json() : [])),

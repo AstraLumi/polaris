@@ -23,13 +23,13 @@
       <section class="nav-bar glass-panel panel-solid">
         <div class="nav-group">
           <button type="button" class="btn btn-ghost small" :disabled="!prevPoint" :title="$t('The closest earlier month with something in it')" @click="goPoint(prevPoint)">
-            ⇤ {{ $t('Previous') }}
+            ⇤ {{ $t('Earlier events') }}
           </button>
           <button type="button" class="btn btn-ghost small" :aria-label="$t('Previous month')" :title="$t('Previous month')" @click="shift(-1)">‹</button>
           <h2 class="month-title">{{ $t('Month {n}', { n: month }) }}, {{ yearLabel }}</h2>
           <button type="button" class="btn btn-ghost small" :aria-label="$t('Next month')" :title="$t('Next month')" @click="shift(1)">›</button>
           <button type="button" class="btn btn-ghost small" :disabled="!nextPoint" :title="$t('The closest later month with something in it')" @click="goPoint(nextPoint)">
-            {{ $t('Next') }} ⇥
+            {{ $t('Later events') }} ⇥
           </button>
         </div>
         <label class="year-jump">
@@ -65,7 +65,7 @@
         </button>
       </div>
 
-      <div class="grid" :style="{ '--cols': COLS }">
+      <div class="grid" :class="{ 'is-tens': COLS === 10 }" :style="{ '--cols': COLS }">
         <div
           v-for="d in calendar.days_per_month"
           :key="d"
@@ -118,7 +118,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { timelineApi } from '../api'
-import { calendar, parseStoryDate, formatStoryDate, fullDate } from '../calendar'
+import { calendar, parseStoryDate, formatStoryDate, fullDate, dayColumns } from '../calendar'
 import { seasonCycle, seasonOn, monthSeasons, dayIndex } from '../seasons'
 import { mapPath } from '../navigation'
 import { wikiPath } from '../wiki'
@@ -130,7 +130,8 @@ import { t } from '../i18n'
 // calendar has no weeks, so the days simply run in rows. The month in view is
 // in the URL (?y=&m=), so going back returns to it.
 
-const COLS = 7
+// Rows of ten for 20-, 30- or 40-day months (they have no weeks), else seven.
+const COLS = computed(() => dayColumns(calendar.days_per_month))
 const MAX_CHIPS = 3
 const KINDS = ['event', 'birth', 'birthday', 'founding', 'lore']
 
@@ -599,6 +600,9 @@ timelineApi
 @media (max-width: 720px) {
   .grid {
     --cols: 4 !important;
+  }
+  .grid.is-tens {
+    --cols: 5 !important;
   }
   .day {
     min-height: 4.5rem;

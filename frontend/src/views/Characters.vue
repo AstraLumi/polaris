@@ -5,6 +5,15 @@
         <h1>{{ $t('Characters') }}</h1>
         <p class="page-sub">
           {{ filtering ? $t('{shown} of {total}', { shown: shown.length, total: characters.length }) : $tn('{n} saved', '{n} saved', characters.length) }}
+          <template v-if="characters.length">
+            ·
+            <label class="sort-inline">
+              {{ $t('Sort by') }}
+              <select :value="sort" @change="setQuery('sort', $event.target.value === 'name' ? '' : $event.target.value)">
+                <option v-for="o in SORTS" :key="o.key" :value="o.key">{{ $t(o.label) }}</option>
+              </select>
+            </label>
+          </template>
         </p>
       </div>
       <div class="actions">
@@ -17,8 +26,8 @@
           {{ $t('Delete selected ({n})', { n: selectedIds.size }) }}
         </button>
         <router-link v-if="!selectMode && characters.length" to="/characters/heights" class="btn btn-ghost">{{ $t('Height chart') }}</router-link>
-        <button class="btn btn-ghost" @click="toggleSelectMode">
-          {{ selectMode ? $t('Cancel') : $t('Delete characters') }}
+        <button v-if="characters.length || selectMode" class="btn btn-ghost" :title="selectMode ? null : $t('Pick several to delete at once')" @click="toggleSelectMode">
+          {{ selectMode ? $t('Cancel') : $t('Select several') }}
         </button>
         <button class="btn btn-primary" @click="addOpen = true">{{ $t('Add character') }}</button>
       </div>
@@ -51,9 +60,6 @@
       <select :value="statusFilter" :aria-label="$t('Status')" @change="setQuery('status', $event.target.value)">
         <option value="">{{ $t('Any status') }}</option>
         <option v-for="s in STATUSES" :key="s.key" :value="s.key">{{ $t(s.label) }}</option>
-      </select>
-      <select :value="sort" :aria-label="$t('Sort by')" @change="setQuery('sort', $event.target.value === 'name' ? '' : $event.target.value)">
-        <option v-for="o in SORTS" :key="o.key" :value="o.key">{{ $t(o.label) }}</option>
       </select>
       <button v-if="filtering" type="button" class="btn btn-ghost small" @click="clearFilters">{{ $t('Clear filter') }}</button>
     </div>
@@ -246,6 +252,22 @@ useQuickAdd(() => (addOpen.value = true))
 
 .controls select {
   width: auto;
+}
+
+.sort-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* A quiet select inside the line of text, not a full-size box. */
+.sort-inline select {
+  width: auto;
+  min-height: 0;
+  padding: 0.1rem 1.6rem 0.1rem 0.45rem;
+  font-size: inherit;
+  color: var(--text-primary);
+  background-color: transparent;
 }
 
 .actions {

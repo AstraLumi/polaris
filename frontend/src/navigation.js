@@ -32,6 +32,25 @@ export function useUnsavedGuard(isDirty) {
   onBeforeUnmount(() => window.removeEventListener('beforeunload', warnUnload))
 }
 
+// A pop-up form asks before a click outside it or Esc (App.vue clicks the
+// backdrop for Esc) throws away what was typed. state() gathers the form's
+// values (a picked file counts by its name). They are noted at the first
+// touch inside the form (`touched`, on its pointerdown, keydown and input,
+// caught before the field changes), so values that load after the form
+// opens count as unchanged. requestClose is the backdrop's click handler.
+export function useModalGuard(state, close) {
+  const snapshot = () => JSON.stringify(state(), (k, v) => (typeof File !== 'undefined' && v instanceof File ? `file:${v.name}` : v))
+  let start = null
+  const touched = () => {
+    if (start === null) start = snapshot()
+  }
+  const requestClose = () => {
+    if (start !== null && snapshot() !== start && !window.confirm(t('Discard your changes?'))) return
+    close()
+  }
+  return { requestClose, touched }
+}
+
 // Ctrl+S (Cmd+S on a Mac) calls save instead of the browser's "save page".
 export function useSaveShortcut(save) {
   const onKey = (e) => {

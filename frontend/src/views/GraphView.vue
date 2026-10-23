@@ -385,7 +385,8 @@ function draw() {
 
   // Names: all of them once zoomed in, otherwise the focus and its
   // neighbours and the best-connected articles. Most important first, and a
-  // name that would overlap one already drawn is left out.
+  // name that would overlap one already drawn, or another article's dot, is
+  // left out.
   ctx.font = `600 ${12 / view.k}px Manrope, sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
@@ -401,8 +402,15 @@ function draw() {
     const n = nodes[i]
     const y = n.y + nodeRadius(degree[i]) + 3 / view.k
     const w = ctx.measureText(n.name).width + 6 / view.k
-    const box = { x0: n.x - w / 2, x1: n.x + w / 2, y0: y, y1: y + lineH }
-    if (i !== fi && taken.some((b) => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0)) continue
+    const pad = 2 / view.k
+    const box = { x0: n.x - w / 2 - pad, x1: n.x + w / 2 + pad, y0: y - pad, y1: y + lineH + pad }
+    const hits = (b) => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0
+    const onDot = nodes.some((m, j) => {
+      if (j === i || (fi >= 0 && !lit(j))) return false // faded dots don't count
+      const r = nodeRadius(degree[j])
+      return hits({ x0: m.x - r, x1: m.x + r, y0: m.y - r, y1: m.y + r })
+    })
+    if (i !== fi && (onDot || taken.some(hits))) continue
     taken.push(box)
     ctx.globalAlpha = 1
     ctx.lineWidth = 3 / view.k

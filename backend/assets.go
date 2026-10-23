@@ -649,3 +649,72 @@ func deleteSubclassHandler(db *sql.DB) http.HandlerFunc {
 		writeJSON(w, map[string]any{"deleted": id})
 	}
 }
+
+// assetSummaryHandler gives the Character Assets page, for every asset, how
+// many characters use it (their current versions) and its stat bonuses:
+// { "uses": { kind: { id: n } }, "modifiers": { kind: { id: { stat: value } } } }.
+// Kinds are the stat_modifiers source types plus "spell"; "item" is gear.
+func assetSummaryHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		uses := map[string]map[int64]int{}
+		count := func(kind, q string) error {
+			rows, err := db.Query(q)
+			if err != nil {
+				return err
+			}
+			defer rows.Close()
+			m := map[int64]int{}
+			for rows.Next() {
+				var id int64
+				var n int
+				if err := rows.Scan(&id, &n); err != nil {
+					return err
+				}
+				m[id] = n
+			}
+			uses[kind] = m
+			return rows.Err()
+		}
+		const current = `JOIN character_versions v ON v.id = x.version_id AND v.is_current = 1`
+		for _, c := range []struct{ kind, q string }{
+			{"class", `SELECT class_id, COUNT(*) FROM character_versions WHERE is_current = 1 AND class_id IS NOT NULL GROUP BY class_id`},
+			{"subclass", `SELECT subclass_id, COUNT(*) FROM character_versions WHERE is_current = 1 AND subclass_id IS NOT NULL GROUP BY subclass_id`},
+			{"specialization", `SELECT specialization_id, COUNT(*) FROM character_versions WHERE is_current = 1 AND specialization_id IS NOT NULL GROUP BY specialization_id`},
+			{"race", `SELECT x.race_id, COUNT(*) FROM character_story x ` + current + ` WHERE x.race_id IS NOT NULL GROUP BY x.race_id`},
+			{"body_type", `SELECT x.body_type_id, COUNT(*) FROM character_story x ` + current + ` WHERE x.body_type_id IS NOT NULL GROUP BY x.body_type_id`},
+			{"spell", `SELECT x.spell_id, COUNT(DISTINCT v.character_id) FROM character_spells x ` + current + ` GROUP BY x.spell_id`},
+			{"item", `SELECT x.gear_id, COUNT(DISTINCT v.character_id) FROM character_gear x ` + current + ` GROUP BY x.gear_id`},
+		} {
+			if err := count(c.kind, c.q); err != nil {
+				http.Error(w, "failed to load the assets", http.StatusInternalServerError)
+				log.Printf("asset uses %s: %v", c.kind, err)
+				return
+			}
+		}
+		modifiers := map[string]map[int64]map[string]float64{}
+		rows, err := db.Query(`SELECT source_type, source_id, target_stat, value FROM stat_modifiers WHERE value != 0 ORDER BY id`)
+		if err != nil {
+			http.Error(w, "failed to load the assets", http.StatusInternalServerError)
+			log.Printf("asset modifiers: %v", err)
+			return
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var kind, stat string
+			var id int64
+			var value float64
+			if err := rows.Scan(&kind, &id, &stat, &value); err != nil {
+				http.Error(w, "failed to read the assets", http.StatusInternalServerError)
+				return
+			}
+			if modifiers[kind] == nil {
+				modifiers[kind] = map[int64]map[string]float64{}
+			}
+			if modifiers[kind][id] == nil {
+				modifiers[kind][id] = map[string]float64{}
+			}
+			modifiers[kind][id][stat] = value
+		}
+		writeJSON(w, map[string]any{"uses": uses, "modifiers": modifiers})
+	}
+}
