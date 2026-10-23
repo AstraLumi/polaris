@@ -161,13 +161,22 @@ export function mainLighting(solar, options) {
 //   even     light from all round: the whole disc evenly, no phases (the
 //            shell by day, its painted starlight by night)
 //   phases   whether it shows phases at all
-//   source   'star', 'shell' (day), 'starlight' (the shell's night) or
-//            'none'
+//   own      the light of a moon that shines on its own (`glows`), counted
+//            in `even` too
+//   source   'star', 'own' (it glows, with no star lighting it), 'shell'
+//            (day), 'starlight' (the shell's night) or 'none'
 export function moonlightOf(bodies, moon, { enclosure = null, hours = 0 } = {}) {
   const lit = lightingOf(bodies, moon, { enclosure, hours })
   const shell = enclosureOf(enclosure)
+  const own = moon?.glows ? MOON_GLOW : 0
   let source = 'none'
   if (lit.light.star > 0) source = 'star'
+  else if (own > 0) source = 'own'
   else if (shell.kind === 'shell') source = shellGlow(shell, hours) > 0.5 ? 'shell' : 'starlight'
-  return { star: lit.light.star, even: lit.light.even, phases: lit.light.star > 0, source }
+  return { star: lit.light.star, even: lit.light.even + own, own, phases: lit.light.star > 0, source }
 }
+
+// How bright a moon that shines on its own is, as if lit all over by most
+// of Earth's sunlight: a full moon's brightness, whatever lights it. A star
+// still lighting one side shows its phase on top.
+export const MOON_GLOW = 0.7

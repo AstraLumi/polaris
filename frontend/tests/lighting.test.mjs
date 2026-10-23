@@ -108,6 +108,20 @@ const far = { id: 4, kind: 'planet', parent_id: 1, orbit_km: 2 * AU_KM }
   const both = moonlightOf([sun, earth, moon], moon, { enclosure: shell, hours: 0 })
   assert.equal(both.source, 'star')
   assert.ok(both.phases && both.even > 0)
+
+  // A moon that shines on its own is bright with no light to reflect: by
+  // the shell's night, and next to a Dyson sphere with no shell at all.
+  const lamp = { ...moon, glows: true }
+  const glowNight = moonlightOf([dyson, earth, lamp], lamp, { enclosure: shell, hours: 0 })
+  assert.equal(glowNight.source, 'own')
+  assert.ok(!glowNight.phases && glowNight.own > 0.5 && glowNight.even > night.even + 0.5)
+  const dark = moonlightOf([dyson, earth, lamp], lamp)
+  assert.equal(dark.source, 'own')
+  close(dark.even, dark.own, 1e-12, 'only its own light')
+  // Under the star it keeps its phases, the dark side glowing.
+  const sunny = moonlightOf([sun, earth, lamp], lamp)
+  assert.ok(sunny.source === 'star' && sunny.phases && sunny.even === sunny.own)
+  assert.equal(moonlightOf([sun, earth, moon], moon).own, 0)
 }
 
 // Bad values are kept in range; anything but a shell is no enclosure.

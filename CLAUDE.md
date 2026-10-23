@@ -95,7 +95,8 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
 - Dates are `DD-MM-YYYY`, there is no year 0. They are typed in one box
   (`components/DateField.vue`): digits are typed and shown left to right
   but read from the right, the last four being the year (`dateDigits.js`);
-  a year alone is emitted as just the year.
+  a year alone is emitted as just the year. Its calendar button opens a
+  month of the story's calendar with the seasons tinted in their colours.
 - **The map is 2D only or a planet** (`map_mode`, `backend/planetmap.go`).
   The 2D tables (`location_hexes`, `locations.q/r`, `creature_hexes`) and
   the planet's (`planet_cells`, `locations.cell`, `creature_cells`) are kept
@@ -136,7 +137,8 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   `enclosed` from `GET /api/solar`, made into an enclosure by
   `enclosureFor`): even light on the main planet's day and night, only
   the painted stars' light at night; moons then have no phases
-  (`moonlightOf`).
+  (`moonlightOf`). A moon can shine on its own (`glows`, schema 41):
+  bright as a full moon whatever lights it (`MOON_GLOW`).
 - **The sky view** (`SkyView.vue`, "Sky from this hex" on the planet map):
   time and frames in `skyFrames.js` (day 0 = 01-01-0001, axis from the
   solstice rule shared with the climate, sidereal spin, the sky picture
@@ -176,7 +178,8 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   type stores its outline (`outline_sex/age/build` on `body_types`,
   schema 40, `backend/bodyoutlines.go`); an empty part comes from the
   character (gender, age). The keys exist in both files: change both.
-  Screenshots: `node frontend/tests/visual/heightShots.mjs [--ft]`.
+  Screenshots: `node frontend/tests/visual/heightShots.mjs [--ft]` (also
+  the date picker's calendar).
 - Birth date, blood type and Born in belong to the character (`characters`
   columns, schema 23), not to a version; the version form edits them for
   all versions.

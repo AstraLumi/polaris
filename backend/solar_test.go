@@ -261,3 +261,36 @@ func TestMainPlanetYear(t *testing.T) {
 		t.Errorf("hours kept: %v", s.Main.DayHours)
 	}
 }
+
+// Only a moon can shine on its own, and it keeps that when saved; an older
+// story's moons don't.
+func TestGlowingMoons(t *testing.T) {
+	mgr, h := newTestServer(t)
+	st := createStory(t, h, map[string]string{"name": "Glow"})
+	base := "/api/s/" + st.ID + "/solar"
+	_, s := solarSave(t, h, "POST", base+"/bodies", `{"kind":"star","name":"Sol","body_type":"star","radius_km":696000,"temperature_k":5772,"mass_kg":1.989e30,"glows":true}`)
+	star := idStr(s.Bodies[0].ID)
+	_, s = solarSave(t, h, "POST", base+"/bodies", `{"kind":"planet","name":"Terra","body_type":"rocky","radius_km":6371,"orbit_km":1.5e8,"glows":true,"parent_id":`+star+`}`)
+	planet := idStr(s.Bodies[1].ID)
+	_, s = solarSave(t, h, "POST", base+"/bodies", `{"kind":"moon","name":"Lamp","body_type":"rocky","radius_km":1737,"orbit_km":384400,"glows":true,"parent_id":`+planet+`}`)
+	if s.Bodies[0].Glows || s.Bodies[1].Glows || !s.Bodies[2].Glows {
+		t.Fatalf("glows: %v %v %v", s.Bodies[0].Glows, s.Bodies[1].Glows, s.Bodies[2].Glows)
+	}
+	moon := idStr(s.Bodies[2].ID)
+	_, s = solarSave(t, h, "PUT", base+"/bodies/"+moon, `{"kind":"moon","name":"Lamp","body_type":"rocky","radius_km":1737,"orbit_km":384400,"glows":false}`)
+	if s.Bodies[2].Glows {
+		t.Errorf("turned off: %+v", s.Bodies[2])
+	}
+
+	app, _ := mgr.open(createStoryDirect(t, mgr, "Old"))
+	rollBackSchema41(t, app.db)
+	if _, err := app.db.Exec(`INSERT INTO celestial_bodies (kind, name, body_type, radius_km) VALUES ('star', 'Sol', 'star', 696000)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureSchema(app.db); err != nil {
+		t.Fatal(err)
+	}
+	if old, err := loadSolarSystem(app.db); err != nil || old.Bodies[0].Glows {
+		t.Errorf("%v, %+v", err, old)
+	}
+}

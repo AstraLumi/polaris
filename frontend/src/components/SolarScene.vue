@@ -28,7 +28,7 @@ import { cloudCoverage, genericCloudCover, mainPlanetCloudCover } from '../clima
 import { loadSkyDome, disposeSkyDome, setSkyGlow } from '../three/skyDome'
 import { createLensPass, HOLE_LAYER } from '../three/lensPass'
 import { setOccluders, setRingShadow, setFill } from '../three/shadows'
-import { enclosureOf, shellGlow, shellLight } from '../lighting'
+import { enclosureOf, shellGlow, shellLight, MOON_GLOW } from '../lighting'
 import { shadowCasters } from '../eclipses'
 
 // The solar system in 3D: the star at the centre, each body on its orbit at
@@ -102,6 +102,7 @@ const meshes = new Map() // body id -> { body, mesh, spin, orbit (trail, round i
 let follow = null // { id, last: Vector3 }
 let stars = [] // three/bodyShaders.js stars, their coronas facing the camera
 let sunLit = [] // materials told where the star is each frame (planets, air, clouds, rings)
+let glowing = new Set() // the materials of moons that shine on their own
 // What falls in other bodies' shadows: per body, the materials it is drawn
 // with ({ id, radius, reach, materials, rings }: its rings also catch its
 // own shadow).
@@ -161,6 +162,7 @@ function buildBodies() {
   meshes.clear()
   stars = []
   sunLit = []
+  glowing = new Set()
   shadowed = []
   cloudMaterials = []
   mainClouds = null
@@ -182,10 +184,12 @@ function buildBodies() {
       globe.mesh.scale.setScalar(r)
       mesh = globe.mesh
       receives.materials.push(globe.material)
+      if (b.kind === 'moon' && b.glows) glowing.add(globe.material)
     } else {
       const material = createPlanetMaterial(colorOf(b), { bands: b.body_type === 'gas' })
       sunLit.push(material)
       receives.materials.push(material)
+      if (b.kind === 'moon' && b.glows) glowing.add(material)
       mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 32, 16), material)
     }
     // holder (where it is) > tilt (its axis) > spin (its day) > the body.
@@ -454,6 +458,7 @@ function buildGlobes() {
 // change, and the arrays each frame writes into.
 let system = null
 const fillColor = new THREE.Color(1, 1, 1)
+const glowColor = new THREE.Color(1, 1, 1) // a glowing moon's own light
 let relKm = null // each body from its parent, km
 let drawn = null // each body in the scene
 const positions = new Map() // body id -> where it is drawn (the same vector every frame)
@@ -556,15 +561,19 @@ function render() {
   const fill = shell.kind === 'shell' ? Math.min(1.5, shellLight(shell, hours) / 0.6) : 0
   if (shell.kind === 'shell') fillColor.set(shell.color)
   if (skyMesh) setSkyGlow(skyMesh, shell.kind === 'shell' ? shellGlow(shell, hours) : 0, fillColor)
+  // A moon that shines on its own glows all over, as brightly as a full
+  // moon, whatever lights it (lighting.js, MOON_GLOW).
+  const glow = MOON_GLOW / 0.6
+  const lightAll = (u, m) => (glowing.has(m) && glow > fill ? setFill(u, glow, glowColor) : setFill(u, fill, fillColor))
   for (const m of sunLit) {
     m.uniforms.uSun.value.copy(sun)
     m.uniforms.uPower.value = power
-    setFill(m.uniforms, fill, fillColor)
+    lightAll(m.uniforms, m)
   }
   for (const g of globeViews.values()) {
     g.material.uniforms.uPower.value = power
     g.material.uniforms.uSun.value.copy(sun)
-    setFill(g.material.uniforms, fill, fillColor)
+    lightAll(g.material.uniforms, g.material)
   }
   castShadows(star, sun)
   // Clouds drift with the clock (slowly: a turn of the pattern is years).

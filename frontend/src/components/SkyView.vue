@@ -158,7 +158,14 @@ const planets = computed(() => (sky.value?.bodies ?? []).filter((b) => b.body.ki
 function moonText(m) {
   const where = m.alt > 0 ? t('{alt} up, {dir}', { alt: deg(m.alt), dir: compass(m.az) }) : t('below the horizon')
   const size = deg(m.angularRadius * 2, 2)
-  const light = m.eclipsed > 0.5 && m.direct < 0.5 ? t('eclipsed') : m.direct > 0 ? t('{n}% lit', { n: Math.round(m.lit * 100) }) : t('lit from all round')
+  const light =
+    m.eclipsed > 0.5 && m.direct < 0.5 && !m.body.glows
+      ? t('eclipsed')
+      : m.direct > 0
+        ? t('{n}% lit', { n: Math.round(m.lit * 100) })
+        : m.body.glows
+          ? t('shines on its own')
+          : t('lit from all round')
   return `${where} · ${size} · ${light}`
 }
 function planetText(p) {

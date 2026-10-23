@@ -266,6 +266,10 @@
               <input v-model="draft.dyson" type="checkbox" />
               <span>{{ $t('Inside a Dyson sphere') }}</span>
             </label>
+            <label v-if="draft.kind === 'moon'" class="check-field" :title="$t('Bright even with no light to reflect: at night inside the shell, or round a hidden star. A star lighting it still shows its phase.')">
+              <input v-model="draft.glows" type="checkbox" />
+              <span>{{ $t('Shines on its own') }}</span>
+            </label>
             <template v-if="draft.kind === 'planet'">
               <label class="check-field">
                 <input :checked="draft.ring_outer > 0" type="checkbox" @change="toggleRings($event.target.checked)" />

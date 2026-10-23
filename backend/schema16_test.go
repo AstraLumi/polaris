@@ -5,10 +5,25 @@ import (
 	"testing"
 )
 
+// rollBackSchema41 turns a fresh database back into schema 40: no glowing
+// moons.
+func rollBackSchema41(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, q := range []string{
+		`ALTER TABLE celestial_bodies DROP COLUMN glows`,
+		`UPDATE schema_meta SET value = '40' WHERE key = 'schema_version'`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+}
+
 // rollBackSchema40 turns a fresh database back into schema 39: body types
 // without outlines.
 func rollBackSchema40(t *testing.T, db *sql.DB) {
 	t.Helper()
+	rollBackSchema41(t, db)
 	for _, q := range []string{
 		`ALTER TABLE body_types DROP COLUMN outline_sex`,
 		`ALTER TABLE body_types DROP COLUMN outline_age`,

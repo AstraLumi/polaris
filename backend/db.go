@@ -15,7 +15,7 @@ import (
 // oldest migration (or a brand new one) gets wiped and recreated from
 // freshSchema — so every schema change from here on should ship with a
 // migration instead of relying on that reset.
-const currentSchemaVersion = "40"
+const currentSchemaVersion = "41"
 
 const freshSchema = `
 CREATE TABLE classes (
@@ -546,6 +546,11 @@ var migrations = map[string]migration{
 		// (bodyoutlines.go).
 		statements: schema40Statements,
 	},
+	"40": {
+		to: "41",
+		// Moons that shine on their own (solar.go).
+		statements: schema41Statements,
+	},
 }
 
 // schema20Statements create what schema 20 added. The fresh schema runs them
@@ -786,7 +791,7 @@ func ensureSchema(db *sql.DB) error {
 			return fmt.Errorf("create schema: %w", err)
 		}
 	}
-	later := [][]string{wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements, schema24Statements, {gearDescriptionSQL}, schema26Statements, schema27Statements, schema28Statements, schema29Statements, schema30Statements, schema31Statements, schema32Statements, schema33Statements, schema34Statements, schema35Statements, schema36Statements, schema37Statements, schema38Statements, schema39Statements, schema40Statements}
+	later := [][]string{wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements, schema24Statements, {gearDescriptionSQL}, schema26Statements, schema27Statements, schema28Statements, schema29Statements, schema30Statements, schema31Statements, schema32Statements, schema33Statements, schema34Statements, schema35Statements, schema36Statements, schema37Statements, schema38Statements, schema39Statements, schema40Statements, schema41Statements}
 	for _, stmt := range slices.Concat(later...) {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("create wiki schema: %w", err)

@@ -18,7 +18,9 @@
 //                      01-01-0001,0
 //     --look <az,alt,fov>  where it looks, default 180,30,90
 //     --dyson, --shell the Sun in a Dyson sphere; the system in its shell
+//     --glow           the Moon shines on its own
 //     --solar          then the planet in the Solar system's 3D view
+//     --view <name>    the body it looks at there (default Terra)
 //     --size <WxH>     the window, default 1400x900
 //     --out <dir>      where the pictures go (default tests/visual/out)
 //
@@ -157,7 +159,7 @@ async function makeStory() {
     const sunId = sun.bodies.find((b) => b.name === 'Sun').id
     const home = await send('POST', '/solar/bodies', { kind: 'planet', parent_id: sunId, name: 'Terra', body_type: 'rocky', radius_km: 6371, orbit_km: 1.496e8, phase: 0, is_main: true })
     const homeId = home.bodies.find((b) => b.name === 'Terra').id
-    await send('POST', '/solar/bodies', { kind: 'moon', parent_id: homeId, name: 'Luna', body_type: 'rocky', radius_km: 1737, orbit_km: 384400, phase: Number(option('moon', '0')), inclination: 5.14, ascending_node: 90 })
+    await send('POST', '/solar/bodies', { kind: 'moon', parent_id: homeId, name: 'Luna', body_type: 'rocky', radius_km: 1737, orbit_km: 384400, phase: Number(option('moon', '0')), inclination: 5.14, ascending_node: 90, glows: flag('glow') })
     await send('POST', '/solar/bodies', { kind: 'planet', parent_id: sunId, name: 'Rubra', body_type: 'rocky', radius_km: 3390, orbit_km: 2.28e8, phase: 200 })
     await send('POST', '/solar/bodies', { kind: 'planet', parent_id: sunId, name: 'Vesper', body_type: 'rocky', radius_km: 6052, orbit_km: 1.08e8, phase: 330 })
     if (flag('shell')) await send('PUT', '/solar/enclosure', { enclosed: true })
@@ -235,7 +237,7 @@ async function shoot(storyId) {
     await page.getByRole('button', { name: 'Run', exact: true }).click()
     await page.waitForFunction(() => window.__solarScene?.skyLoaded() && window.__solarPage)
     await page.waitForTimeout(6000)
-    await page.evaluate(() => window.__solarScene.view('Terra', { zoom: 1 }))
+    await page.evaluate((who) => window.__solarScene.view(who, { zoom: 1 }), option('view', 'Terra'))
     await page.waitForTimeout(1500)
     const file = join(out, 'solar_terra.png')
     await page.screenshot({ path: file })

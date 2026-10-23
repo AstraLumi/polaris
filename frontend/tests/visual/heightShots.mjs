@@ -1,4 +1,5 @@
-// Screenshots of the height chart and the body type form, to see them
+// Screenshots of the height chart, the body type form and the date
+// picker's calendar (with the story's seasons), to see them
 // without a screen. Like climateShots.mjs: it builds the backend and runs it
 // on a throwaway data folder (never a real story), starts the Vite dev
 // server, makes a test story with body types and a small cast of different
@@ -114,8 +115,20 @@ async function makeStory() {
     if (!res.ok) throw new Error(`${path}: ${await res.text()}`)
     return res.json()
   }
+  await send('PUT', '/settings/seasons', {
+    seasons: [
+      { id: 'winter', name: 'Winter', months: 3, color: '#7fb2e5' },
+      { id: 'spring', name: 'Spring', months: 3, color: '#86cf7f' },
+      { id: 'summer', name: 'Summer', months: 3, color: '#f2c14e' },
+      { id: 'fall', name: 'Fall', months: 3, color: '#e0864a' },
+    ],
+    start: '15-12-0001',
+    hemisphere: 'north',
+    unit: 'C',
+  })
   for (const [name, outline] of BODY_TYPES) await send('POST', '/body-types', { name, modifiers: {}, outline })
   const ids = []
+  const versions = []
   for (const [name, cm, gender, age, bodyType] of CAST) {
     const f = new FormData()
     f.set('name', name)
@@ -124,11 +137,12 @@ async function makeStory() {
     for (const [k, val] of Object.entries({ name, level: '1', gender, age: String(age), height: String(cm), weight: '', body_type: bodyType, status: 'alive' })) v.set(k, val)
     await send('PUT', `/versions/${made.version_id}`, v)
     ids.push(made.id)
+    versions.push(made.version_id)
   }
-  return { id: story.id, ids }
+  return { id: story.id, ids, versions }
 }
 
-async function shoot({ id, ids }) {
+async function shoot({ id, ids, versions }) {
   const browser = await chromium.launch({ channel: option('channel', 'msedge'), headless: true })
   cleanups.push(() => browser.close())
   const context = await browser.newContext({ viewport: { width, height }, locale: 'en-US' })
@@ -164,6 +178,15 @@ async function shoot({ id, ids }) {
   const file = join(out, 'body_type_form.png')
   await page.locator('.modal').screenshot({ path: file })
   saved.push(file)
+  // The date picker, on a version's date, in a month where a season starts.
+  await page.goto(`http://127.0.0.1:${WEB_PORT}/characters/${ids[0]}/versions/${versions[0]}/edit`)
+  const box = page.locator('.date-field-wrap').first()
+  await box.locator('input').fill('')
+  await box.locator('input').pressSequentially('20031456')
+  await box.locator('.date-pick').click()
+  await page.waitForSelector('.date-pop')
+  await page.waitForTimeout(300)
+  await snap('date_picker.png')
   return { saved, errors }
 }
 

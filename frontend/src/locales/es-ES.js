@@ -1831,4 +1831,11 @@ export default {
   "cm": "cm",
   "ft / in": "pies / pulg",
   "In between": "Intermedio",
+  "Bright even with no light to reflect: at night inside the shell, or round a hidden star. A star lighting it still shows its phase.": "Brilla aunque no haya luz que reflejar: de noche dentro de la cáscara, o alrededor de una estrella oculta. Si una estrella la ilumina, aún se ve su fase.",
+  "Just the year": "Solo el año",
+  "Month": "Mes",
+  "Pick a date": "Elegir una fecha",
+  "Pick on the calendar": "Elegir en el calendario",
+  "Shines on its own": "Brilla con luz propia",
+  "shines on its own": "brilla con luz propia",
 }
