@@ -25,6 +25,7 @@
       </div>
     </header>
 
+    <FoldOnPhone :label="$t('Filters')" :active="hiddenTypes.size + (depth ? 1 : 0) + (showStory ? 0 : 1) + (showLinks ? 0 : 1) + (hideLonely ? 1 : 0)">
     <section class="controls glass-panel panel-solid">
       <div class="types" role="group" :aria-label="$t('Kinds of article')">
         <button
@@ -61,6 +62,7 @@
         </label>
       </div>
     </section>
+    </FoldOnPhone>
 
     <p v-if="loadError" class="error-banner">{{ loadError }}</p>
 
@@ -99,6 +101,7 @@ import { ref, shallowRef, computed, watch, nextTick, onMounted, onBeforeUnmount 
 import { useRoute, useRouter } from 'vue-router'
 import ArticleCard from '../components/ArticleCard.vue'
 import { TYPE_ORDER, TYPE_PLURALS, wikiApi, wikiPath } from '../wiki'
+import FoldOnPhone from '../components/FoldOnPhone.vue'
 import { loadArticle } from '../articlePreview'
 import { createSimulation, bounds, nodeRadius } from '../graphLayout'
 import { pageTitle } from '../navigation'
@@ -450,8 +453,40 @@ function nodeAt(p) {
 
 let drag = null // { node?, sx, sy, vx, vy, moved }
 
+// ---- Touch: two fingers pinch to zoom and drag to move ----------------------
+const touches = new Map() // pointerId -> { sx, sy }
+let pinch = null // { dist, mx, my } while two fingers are down
+let pinched = false // a pinch happened: the fingers left don't click
+
+function pinchState() {
+  const [a, b] = [...touches.values()]
+  return { dist: Math.max(1, Math.hypot(a.sx - b.sx, a.sy - b.sy)), mx: (a.sx + b.sx) / 2, my: (a.sy + b.sy) / 2 }
+}
+
+// Whatever one finger had started (a pan, a dragged dot) gives way.
+function startPinch() {
+  if (drag?.node && drag.moved) {
+    drag.node.fx = null
+    drag.node.fy = null
+    sim.alphaTarget = 0
+    run()
+  }
+  drag = null
+  dragging.value = false
+  pinch = pinchState()
+  pinched = true
+  hideCard()
+}
+
 function onDown(e) {
   if (e.button !== 0 && e.pointerType === 'mouse') return
+  if (e.pointerType === 'touch') {
+    const p = worldAt(e)
+    touches.set(e.pointerId, { sx: p.sx, sy: p.sy })
+    canvasEl.value.setPointerCapture(e.pointerId)
+    if (touches.size === 2) return startPinch()
+    if (touches.size > 2 || pinched) return
+  }
   const p = worldAt(e)
   const n = nodeAt(p)
   canvasEl.value.setPointerCapture(e.pointerId)
@@ -462,6 +497,20 @@ function onDown(e) {
 
 function onMove(e) {
   const p = worldAt(e)
+  if (e.pointerType === 'touch' && touches.has(e.pointerId)) {
+    touches.set(e.pointerId, { sx: p.sx, sy: p.sy })
+    if (pinch && touches.size >= 2) {
+      const now = pinchState()
+      // Zoom round the point between the fingers, and follow it as they move.
+      zoomAt(now.mx, now.my, now.dist / pinch.dist)
+      view.x += now.mx - pinch.mx
+      view.y += now.my - pinch.my
+      draw()
+      pinch = now
+      return
+    }
+    if (pinched) return
+  }
   if (drag) {
     if (Math.hypot(p.sx - drag.sx, p.sy - drag.sy) > 3) drag.moved = true
     if (!drag.moved) return
@@ -484,6 +533,16 @@ function onMove(e) {
 }
 
 function onUp(e) {
+  if (e.pointerType === 'touch') {
+    touches.delete(e.pointerId)
+    if (canvasEl.value?.hasPointerCapture(e.pointerId)) canvasEl.value.releasePointerCapture(e.pointerId)
+    if (touches.size < 2) pinch = null
+    if (pinched) {
+      // Lifting the fingers after a pinch opens nothing.
+      if (!touches.size) pinched = false
+      return
+    }
+  }
   const d = drag
   drag = null
   dragging.value = false
