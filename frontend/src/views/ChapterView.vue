@@ -14,7 +14,10 @@
           <p class="kicker">{{ kicker }}</p>
           <div class="title-row">
             <h1>{{ chapter.title }}</h1>
-            <button type="button" class="btn btn-ghost small" @click="startEdit">{{ $t('Edit') }}</button>
+            <span class="title-actions">
+              <RouterLink :to="{ path: `/write/${chapter.volume_id || 0}`, query: { chapter: chapter.id } }" class="btn btn-primary small">{{ $t('Write') }}</RouterLink>
+              <button type="button" class="btn btn-ghost small" @click="startEdit">{{ $t('Edit') }}</button>
+            </span>
           </div>
         </template>
         <form v-else class="edit" @submit.prevent="save">
@@ -106,7 +109,7 @@ import { chaptersApi, isMissing } from '../api'
 import { chapterIndex as idx, loadChapters } from '../chapters'
 import { fullDate } from '../calendar'
 import { renderMarkdown } from '../markdown'
-import { wikiApi, makeLinkResolver } from '../wiki'
+import { wikiApi, makeLinkResolver, linksForEditing } from '../wiki'
 import { pageTitle, useUnsavedGuard, useSaveShortcut } from '../navigation'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import NotFoundPanel from '../components/NotFoundPanel.vue'
@@ -131,6 +134,10 @@ const wikiItems = ref([])
 let snapshot = ''
 
 const resolver = computed(() => makeLinkResolver(wikiItems.value))
+const itemsLoaded = wikiApi
+  .list()
+  .then((list) => (wikiItems.value = list))
+  .catch(() => {})
 
 const kicker = computed(() => {
   const c = chapter.value
@@ -158,9 +165,13 @@ function onContentClick(e) {
   router.push(a.getAttribute('href'))
 }
 
-function startEdit() {
+async function startEdit() {
+  // The notes' links show by name in the editor, so the article list must
+  // be there first (wikiLinks.js); the server stores them by id again.
+  await itemsLoaded
   const c = chapter.value
-  Object.assign(draft, { title: c.title, volumeId: c.volume_id ?? null, notes: c.notes })
+  if (!c) return
+  Object.assign(draft, { title: c.title, volumeId: c.volume_id ?? null, notes: linksForEditing(c.notes, resolver.value) })
   snapshot = draftState()
   saveError.value = ''
   editing.value = true
@@ -223,10 +234,15 @@ async function load() {
 }
 
 watch(() => props.id, load, { immediate: true })
-wikiApi.list().then((list) => (wikiItems.value = list)).catch(() => {})
 </script>
 
 <style scoped>
+.title-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
 .chapter-page {
   display: flex;
   flex-direction: column;

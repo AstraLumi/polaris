@@ -318,13 +318,26 @@ func listEventsHandler(db *sql.DB) http.HandlerFunc {
 
 		needle := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
 		var kept []eventRow
+		var links *wikiLinkIndex // read once a description with links needs it
+		shownText := func(s string) string {
+			if !strings.Contains(s, "[[") {
+				return s
+			}
+			if links == nil {
+				if links, err = loadWikiLinkIndex(db); err != nil {
+					links = newWikiLinkIndex(nil)
+				}
+			}
+			// Links by id are searched by the names they show.
+			return wikiLinksAsText(s, links, "")
+		}
 		for _, er := range all {
 			if !er.applySource(db) {
 				continue
 			}
 			if needle != "" &&
 				!strings.Contains(strings.ToLower(er.d.Name), needle) &&
-				!strings.Contains(strings.ToLower(er.d.Description), needle) {
+				!strings.Contains(strings.ToLower(shownText(er.d.Description)), needle) {
 				continue
 			}
 			kept = append(kept, er)
@@ -531,6 +544,9 @@ func createEventHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			http.Error(w, msg, http.StatusBadRequest)
 			return
 		}
+		if !storeLinksOrFail(w, db, &f.Description) {
+			return
+		}
 		if f.Name == "" {
 			http.Error(w, "name is required", http.StatusBadRequest)
 			return
@@ -606,6 +622,9 @@ func updateEventHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 		f, msg := parseEventForm(db, r)
 		if msg != "" {
 			http.Error(w, msg, http.StatusBadRequest)
+			return
+		}
+		if !storeLinksOrFail(w, db, &f.Description) {
 			return
 		}
 

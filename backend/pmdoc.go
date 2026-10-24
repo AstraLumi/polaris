@@ -1,0 +1,691 @@
+package main
+
+// ProseMirror documents: each chapter's text in the writing editor. The
+// contract (node and mark types, attrs, units) is docs/EDITOR.md, "The
+// document"; the schema itself is frontend/src/editor/schema.js.
+//
+// API:
+//
+//	parsePMDoc(data []byte) (*pmNode, error)
+//	    Decode a document sent by the client or read from the database and
+//	    validate it: size limit (maxPMDocBytes), nesting limit, a "doc"
+//	    root, known node and mark types, content rules, safe links and
+//	    picture paths. Errors are meant for a 400 answer.
+//	validatePMDoc(doc *pmNode) error
+//	    The same checks on a document built in Go (the .docx import).
+//	json.Marshal(doc) / json.Unmarshal(data, &node)
+//	    Round trip: attrs (and any keys the Go side doesn't know, on nodes
+//	    and marks) are kept as they came; numbers keep their exact text.
+//	docWords(doc) int          EDITOR.md's word rule (the server's count).
+//	docText(doc) string        Plain text: one line per block, hard breaks
+//	                           as new lines, tabs as tabs, scene breaks as
+//	                           their glyph.
+//	docStoryLinks(doc) []pmStoryLink
+//	    Every story_link mark's (type, id), in reading order, without
+//	    repeats: what a chapter links to, for "appears in" lists.
+//	emptyPMDoc() *pmNode       A doc holding one empty paragraph.
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"math"
+	"regexp"
+	"strconv"
+	"strings"
+	"unicode"
+	"unicode/utf8"
+)
+
+const (
+	maxPMDocBytes = 5 << 20 // a chapter's JSON
+	maxPMDepth    = 32      // nesting of JSON values in a doc
+	maxPMNodes    = 500000
+)
+
+// pmNode is one ProseMirror node. Attrs holds every attribute as decoded
+// (json.Number for numbers read from JSON); Extra any other key.
+type pmNode struct {
+	Type    string
+	Attrs   map[string]any
+	Content []*pmNode
+	Marks   []pmMark
+	Text    string
+	Extra   map[string]json.RawMessage
+}
+
+type pmMark struct {
+	Type  string
+	Attrs map[string]any
+	Extra map[string]json.RawMessage
+}
+
+// pmStoryLink is a story_link mark's target (the wiki's type keys and ids).
+type pmStoryLink struct {
+	Type string `json:"type"`
+	ID   int64  `json:"id"`
+}
+
+func emptyPMDoc() *pmNode {
+	return &pmNode{Type: "doc", Content: []*pmNode{{Type: "paragraph"}}}
+}
+
+// --- JSON ---
+
+func decodeAttrs(raw json.RawMessage) (map[string]any, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var m map[string]any
+	if err := dec.Decode(&m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (n *pmNode) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*n = pmNode{}
+	for k, v := range raw {
+		var err error
+		switch k {
+		case "type":
+			err = json.Unmarshal(v, &n.Type)
+		case "attrs":
+			n.Attrs, err = decodeAttrs(v)
+		case "content":
+			err = json.Unmarshal(v, &n.Content)
+		case "marks":
+			err = json.Unmarshal(v, &n.Marks)
+		case "text":
+			err = json.Unmarshal(v, &n.Text)
+		default:
+			if n.Extra == nil {
+				n.Extra = map[string]json.RawMessage{}
+			}
+			n.Extra[k] = v
+		}
+		if err != nil {
+			return fmt.Errorf("%s: %w", k, err)
+		}
+	}
+	return nil
+}
+
+func (n *pmNode) MarshalJSON() ([]byte, error) {
+	out := struct {
+		Type    string         `json:"type"`
+		Attrs   map[string]any `json:"attrs,omitempty"`
+		Content []*pmNode      `json:"content,omitempty"`
+		Marks   []pmMark       `json:"marks,omitempty"`
+		Text    *string        `json:"text,omitempty"`
+	}{Type: n.Type, Attrs: n.Attrs, Content: n.Content, Marks: n.Marks}
+	if n.Type == "text" {
+		out.Text = &n.Text
+	}
+	b, err := json.Marshal(out)
+	if err != nil || len(n.Extra) == 0 {
+		return b, err
+	}
+	return mergeExtra(b, n.Extra)
+}
+
+func (m *pmMark) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*m = pmMark{}
+	for k, v := range raw {
+		var err error
+		switch k {
+		case "type":
+			err = json.Unmarshal(v, &m.Type)
+		case "attrs":
+			m.Attrs, err = decodeAttrs(v)
+		default:
+			if m.Extra == nil {
+				m.Extra = map[string]json.RawMessage{}
+			}
+			m.Extra[k] = v
+		}
+		if err != nil {
+			return fmt.Errorf("mark %s: %w", k, err)
+		}
+	}
+	return nil
+}
+
+func (m pmMark) MarshalJSON() ([]byte, error) {
+	out := struct {
+		Type  string         `json:"type"`
+		Attrs map[string]any `json:"attrs,omitempty"`
+	}{m.Type, m.Attrs}
+	b, err := json.Marshal(out)
+	if err != nil || len(m.Extra) == 0 {
+		return b, err
+	}
+	return mergeExtra(b, m.Extra)
+}
+
+// mergeExtra adds keys the Go side doesn't know back to an encoded object.
+func mergeExtra(obj []byte, extra map[string]json.RawMessage) ([]byte, error) {
+	var all map[string]json.RawMessage
+	if err := json.Unmarshal(obj, &all); err != nil {
+		return nil, err
+	}
+	for k, v := range extra {
+		if _, known := all[k]; !known {
+			all[k] = v
+		}
+	}
+	return json.Marshal(all)
+}
+
+// --- parsing and validation ---
+
+// checkJSONDepth rejects deeply nested JSON before it is decoded.
+func checkJSONDepth(data []byte, max int) error {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	depth := 0
+	for {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if d, ok := tok.(json.Delim); ok {
+			switch d {
+			case '{', '[':
+				depth++
+				if depth > max {
+					return errors.New("the document is nested too deeply")
+				}
+			default:
+				depth--
+			}
+		}
+	}
+}
+
+func parsePMDoc(data []byte) (*pmNode, error) {
+	if len(data) > maxPMDocBytes {
+		return nil, fmt.Errorf("the document is too large (over %d MB)", maxPMDocBytes>>20)
+	}
+	if err := checkJSONDepth(data, maxPMDepth); err != nil {
+		return nil, fmt.Errorf("invalid document: %w", err)
+	}
+	var doc pmNode
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("invalid document: %w", err)
+	}
+	if err := validatePMDoc(&doc); err != nil {
+		return nil, err
+	}
+	return &doc, nil
+}
+
+var (
+	pmBlockTypes  = map[string]bool{"paragraph": true, "heading": true, "scene_break": true, "page_break": true, "image": true, "bullet_list": true, "ordered_list": true}
+	pmInlineTypes = map[string]bool{"text": true, "hard_break": true, "tab": true}
+	pmAtomTypes   = map[string]bool{"scene_break": true, "page_break": true, "image": true, "hard_break": true, "tab": true}
+	pmMarkTypes   = map[string]bool{"bold": true, "italic": true, "underline": true, "strike": true, "superscript": true, "subscript": true, "smallcaps": true, "font": true, "size": true, "color": true, "highlight": true, "link": true, "story_link": true}
+	pmAligns      = map[string]bool{"left": true, "center": true, "right": true, "justify": true}
+	pmColorRe     = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+	pmStoryTypeRe = regexp.MustCompile(`^[a-z_]{1,40}$`)
+	pmSchemeRe    = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9+.-]*):`)
+)
+
+// pmNum reads a number attr however it was made (decoded or built in Go).
+func pmNum(v any) (float64, bool) {
+	switch x := v.(type) {
+	case json.Number:
+		f, err := x.Float64()
+		return f, err == nil && !math.IsInf(f, 0) && !math.IsNaN(f)
+	case float64:
+		return x, !math.IsInf(x, 0) && !math.IsNaN(x)
+	case float32:
+		return float64(x), true
+	case int:
+		return float64(x), true
+	case int64:
+		return float64(x), true
+	case int32:
+		return float64(x), true
+	}
+	return 0, false
+}
+
+func pmInt(v any) (int64, bool) {
+	switch x := v.(type) {
+	case json.Number:
+		i, err := strconv.ParseInt(x.String(), 10, 64)
+		return i, err == nil
+	case string:
+		i, err := strconv.ParseInt(x, 10, 64)
+		return i, err == nil
+	}
+	f, ok := pmNum(v)
+	if !ok || f != math.Trunc(f) || math.Abs(f) > 1<<53 {
+		return 0, false
+	}
+	return int64(f), true
+}
+
+// safeLinkHref allows web, mail and phone links, in-book anchors and
+// relative paths; never script or data URLs.
+func safeLinkHref(href string) bool {
+	if href == "" || len(href) > 2048 || strings.ContainsAny(href, "\x00\r\n") {
+		return false
+	}
+	m := pmSchemeRe.FindStringSubmatch(strings.TrimSpace(href))
+	if m == nil {
+		return true
+	}
+	switch strings.ToLower(m[1]) {
+	case "http", "https", "mailto", "tel":
+		return true
+	}
+	return false
+}
+
+// safeUploadSrc: a picture is always one of the story's uploads.
+func safeUploadSrc(src string) bool {
+	return strings.HasPrefix(src, "/uploads/") && !strings.Contains(src, "..") &&
+		!strings.ContainsAny(src, "\\\"'<>\x00\r\n") && len(src) <= 512
+}
+
+type pmValidator struct {
+	nodes int
+}
+
+func validatePMDoc(doc *pmNode) error {
+	if doc == nil || doc.Type != "doc" {
+		return errors.New("the document must have a doc root")
+	}
+	v := &pmValidator{}
+	if len(doc.Content) == 0 {
+		return errors.New("doc: needs at least one block")
+	}
+	for _, c := range doc.Content {
+		if err := v.block(c, "doc", 1); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v *pmValidator) count() error {
+	v.nodes++
+	if v.nodes > maxPMNodes {
+		return errors.New("the document has too many nodes")
+	}
+	return nil
+}
+
+func (v *pmValidator) block(n *pmNode, parent string, depth int) error {
+	if n == nil {
+		return fmt.Errorf("%s: empty node", parent)
+	}
+	if err := v.count(); err != nil {
+		return err
+	}
+	if depth > maxPMDepth {
+		return errors.New("the document is nested too deeply")
+	}
+	if !pmBlockTypes[n.Type] {
+		return fmt.Errorf("%s: unknown or misplaced node %q", parent, n.Type)
+	}
+	if len(n.Marks) > 0 {
+		return fmt.Errorf("%s: block nodes have no marks", n.Type)
+	}
+	if n.Text != "" {
+		return fmt.Errorf("%s: only text nodes have text", n.Type)
+	}
+	if err := checkBlockAttrs(n); err != nil {
+		return err
+	}
+	switch n.Type {
+	case "paragraph", "heading":
+		for _, c := range n.Content {
+			if err := v.inline(c, n.Type); err != nil {
+				return err
+			}
+		}
+	case "bullet_list", "ordered_list":
+		if len(n.Content) == 0 {
+			return fmt.Errorf("%s: needs at least one list_item", n.Type)
+		}
+		for _, item := range n.Content {
+			if item == nil || item.Type != "list_item" {
+				return fmt.Errorf("%s: may only hold list_item", n.Type)
+			}
+			if err := v.count(); err != nil {
+				return err
+			}
+			if len(item.Content) == 0 {
+				return errors.New("list_item: needs at least one paragraph")
+			}
+			for _, p := range item.Content {
+				if p == nil || p.Type != "paragraph" {
+					return errors.New("list_item: may only hold paragraphs")
+				}
+				if err := v.block(p, "list_item", depth+2); err != nil {
+					return err
+				}
+			}
+		}
+	default: // atoms
+		if len(n.Content) > 0 {
+			return fmt.Errorf("%s: has no content", n.Type)
+		}
+	}
+	return nil
+}
+
+func (v *pmValidator) inline(n *pmNode, parent string) error {
+	if n == nil {
+		return fmt.Errorf("%s: empty node", parent)
+	}
+	if err := v.count(); err != nil {
+		return err
+	}
+	if !pmInlineTypes[n.Type] {
+		return fmt.Errorf("%s: unknown or misplaced node %q", parent, n.Type)
+	}
+	if len(n.Content) > 0 {
+		return fmt.Errorf("%s: has no content", n.Type)
+	}
+	if n.Type == "text" {
+		if n.Text == "" {
+			return errors.New("text: may not be empty")
+		}
+		if !utf8.ValidString(n.Text) {
+			return errors.New("text: not valid UTF-8")
+		}
+	} else if n.Text != "" {
+		return fmt.Errorf("%s: only text nodes have text", n.Type)
+	}
+	if len(n.Marks) > 0 && n.Type != "text" {
+		return fmt.Errorf("%s: only text has marks", n.Type)
+	}
+	seen := map[string]bool{}
+	for _, m := range n.Marks {
+		if !pmMarkTypes[m.Type] {
+			return fmt.Errorf("unknown mark %q", m.Type)
+		}
+		if seen[m.Type] {
+			return fmt.Errorf("mark %q twice on one text", m.Type)
+		}
+		seen[m.Type] = true
+		if err := checkMarkAttrs(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func optNum(attrs map[string]any, key string, lo, hi float64) error {
+	v, ok := attrs[key]
+	if !ok || v == nil {
+		return nil
+	}
+	f, ok := pmNum(v)
+	if !ok || f < lo || f > hi {
+		return fmt.Errorf("attr %s: expected a number from %g to %g", key, lo, hi)
+	}
+	return nil
+}
+
+func optString(attrs map[string]any, key string, max int) (string, error) {
+	v, ok := attrs[key]
+	if !ok || v == nil {
+		return "", nil
+	}
+	s, ok := v.(string)
+	if !ok || utf8.RuneCountInString(s) > max {
+		return "", fmt.Errorf("attr %s: expected text up to %d characters", key, max)
+	}
+	return s, nil
+}
+
+func checkBlockAttrs(n *pmNode) error {
+	a := n.Attrs
+	if a == nil {
+		a = map[string]any{}
+	}
+	wrap := func(err error) error {
+		if err != nil {
+			return fmt.Errorf("%s: %w", n.Type, err)
+		}
+		return nil
+	}
+	switch n.Type {
+	case "paragraph", "heading":
+		if n.Type == "heading" {
+			lvl, ok := pmInt(a["level"])
+			if !ok || lvl < 1 || lvl > 6 {
+				return errors.New("heading: level must be 1 to 6")
+			}
+		}
+		if _, err := optString(a, "style", 120); err != nil {
+			return wrap(err)
+		}
+		if al, err := optString(a, "align", 10); err != nil || (al != "" && !pmAligns[al]) {
+			return wrap(fmt.Errorf("attr align: unknown value"))
+		}
+		for _, k := range []string{"indentFirst", "indentLeft", "indentRight"} {
+			if err := optNum(a, k, -2000, 2000); err != nil {
+				return wrap(err)
+			}
+		}
+		for _, k := range []string{"spaceBefore", "spaceAfter", "lineExact"} {
+			if err := optNum(a, k, 0, 2000); err != nil {
+				return wrap(err)
+			}
+		}
+		if err := optNum(a, "lineHeight", 0.1, 20); err != nil {
+			return wrap(err)
+		}
+		if kn, ok := a["keepNext"]; ok && kn != nil {
+			if _, isBool := kn.(bool); !isBool {
+				return wrap(errors.New("attr keepNext: expected true or false"))
+			}
+		}
+		if _, err := optString(a, "bookmark", 200); err != nil {
+			return wrap(err)
+		}
+	case "scene_break":
+		if _, err := optString(a, "glyph", 60); err != nil {
+			return wrap(err)
+		}
+		if img, err := optString(a, "image", 512); err != nil || (img != "" && !safeUploadSrc(img)) {
+			return wrap(errors.New("attr image: must be an /uploads/ path"))
+		}
+	case "image":
+		src, err := optString(a, "src", 512)
+		if err != nil || !safeUploadSrc(src) {
+			return wrap(errors.New("attr src: must be an /uploads/ path"))
+		}
+		if _, err := optString(a, "alt", 2000); err != nil {
+			return wrap(err)
+		}
+		if err := optNum(a, "width", 0, 5000); err != nil {
+			return wrap(err)
+		}
+		if al, err := optString(a, "align", 10); err != nil || (al != "" && al != "left" && al != "center" && al != "right") {
+			return wrap(errors.New("attr align: unknown value"))
+		}
+	case "ordered_list":
+		if err := optNum(a, "start", 0, 1e9); err != nil {
+			return wrap(err)
+		}
+	}
+	return nil
+}
+
+func checkMarkAttrs(m pmMark) error {
+	a := m.Attrs
+	if a == nil {
+		a = map[string]any{}
+	}
+	wrap := func(err error) error {
+		if err != nil {
+			return fmt.Errorf("mark %s: %w", m.Type, err)
+		}
+		return nil
+	}
+	switch m.Type {
+	case "font":
+		f, err := optString(a, "family", 100)
+		if err != nil || strings.TrimSpace(f) == "" {
+			return wrap(errors.New("attr family: expected a font name"))
+		}
+	case "size":
+		if v, ok := pmNum(a["pt"]); !ok || v < 1 || v > 1000 {
+			return wrap(errors.New("attr pt: expected a size from 1 to 1000"))
+		}
+	case "color", "highlight":
+		if c, ok := a["color"]; ok && c != nil {
+			s, isStr := c.(string)
+			if !isStr || !pmColorRe.MatchString(s) {
+				return wrap(errors.New("attr color: expected #rrggbb"))
+			}
+		}
+	case "link":
+		h, ok := a["href"].(string)
+		if !ok || !safeLinkHref(h) {
+			return wrap(errors.New("attr href: not an allowed link"))
+		}
+	case "story_link":
+		t, ok := a["type"].(string)
+		if !ok || !pmStoryTypeRe.MatchString(t) {
+			return wrap(errors.New("attr type: expected a story item type"))
+		}
+		if id, ok := pmInt(a["id"]); !ok || id < 1 {
+			return wrap(errors.New("attr id: expected a positive id"))
+		}
+	}
+	return nil
+}
+
+// --- reading ---
+
+// pmWalk calls fn for n and every node below it, depth first.
+func pmWalk(n *pmNode, fn func(*pmNode)) {
+	if n == nil {
+		return
+	}
+	fn(n)
+	for _, c := range n.Content {
+		pmWalk(c, fn)
+	}
+}
+
+// pmTextblockText is a paragraph's or heading's text, with hard breaks
+// and tabs as given.
+func pmTextblockText(n *pmNode, hardBreak, tab string) string {
+	var b strings.Builder
+	for _, c := range n.Content {
+		switch c.Type {
+		case "text":
+			b.WriteString(c.Text)
+		case "hard_break":
+			b.WriteString(hardBreak)
+		case "tab":
+			b.WriteString(tab)
+		}
+	}
+	return b.String()
+}
+
+// countWords: split on whitespace, count the pieces that hold a letter or
+// digit.
+func countWords(s string) int {
+	n := 0
+	inWord, hasAlnum := false, false
+	for _, r := range s {
+		if unicode.IsSpace(r) {
+			if inWord && hasAlnum {
+				n++
+			}
+			inWord, hasAlnum = false, false
+			continue
+		}
+		inWord = true
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			hasAlnum = true
+		}
+	}
+	if inWord && hasAlnum {
+		n++
+	}
+	return n
+}
+
+func docWords(doc *pmNode) int {
+	n := 0
+	pmWalk(doc, func(x *pmNode) {
+		if x.Type == "paragraph" || x.Type == "heading" {
+			n += countWords(pmTextblockText(x, " ", " "))
+		}
+	})
+	return n
+}
+
+func docText(doc *pmNode) string {
+	var lines []string
+	var walk func(n *pmNode)
+	walk = func(n *pmNode) {
+		switch n.Type {
+		case "paragraph", "heading":
+			lines = append(lines, pmTextblockText(n, "\n", "\t"))
+		case "scene_break":
+			g, _ := n.Attrs["glyph"].(string)
+			if g == "" {
+				g = "* * *"
+			}
+			lines = append(lines, g)
+		default:
+			for _, c := range n.Content {
+				walk(c)
+			}
+		}
+	}
+	if doc != nil {
+		walk(doc)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func docStoryLinks(doc *pmNode) []pmStoryLink {
+	var out []pmStoryLink
+	seen := map[pmStoryLink]bool{}
+	pmWalk(doc, func(n *pmNode) {
+		for _, m := range n.Marks {
+			if m.Type != "story_link" {
+				continue
+			}
+			t, _ := m.Attrs["type"].(string)
+			id, ok := pmInt(m.Attrs["id"])
+			if t == "" || !ok || id < 1 {
+				continue
+			}
+			l := pmStoryLink{Type: t, ID: id}
+			if !seen[l] {
+				seen[l] = true
+				out = append(out, l)
+			}
+		}
+	})
+	return out
+}

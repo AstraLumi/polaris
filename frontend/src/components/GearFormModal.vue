@@ -82,6 +82,7 @@
 import { ref, computed, onBeforeUnmount } from 'vue'
 import FilePick from './FilePick.vue'
 import { useModalGuard } from '../navigation'
+import { linkField } from '../linkNames'
 import { t } from '../i18n'
 import IconImage from './IconImage.vue'
 import ModifierForm from './ModifierForm.vue'
@@ -98,7 +99,7 @@ const emit = defineEmits(['close', 'saved'])
 const name = ref(props.gear?.name ?? '')
 const slot = ref(props.gear?.slot ?? props.defaultSlot ?? '')
 const weight = ref(props.gear?.weight ?? '')
-const description = ref(props.gear?.description ?? '')
+const description = linkField(props.gear?.description)
 const modifiers = ref({ ...(props.gear?.modifiers ?? {}) })
 const iconFile = ref(null)
 const fileUrl = ref('')

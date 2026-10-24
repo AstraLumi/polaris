@@ -121,6 +121,7 @@
 // Creates or edits a creature of the bestiary, its relations included.
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useModalGuard } from '../navigation'
+import { linkField } from '../linkNames'
 import { creaturesApi, fetchLocationOptions, mapApi, planetApi } from '../api'
 import { CREATURE_KINDS, mapHexesOf, areaOf, planetLandOf, planetAreaOf } from '../creatures'
 import { worldMap } from '../worldMap'
@@ -141,7 +142,7 @@ const kind = ref(c?.kind ?? 'monster')
 const levelMin = ref(c?.level_min ?? '')
 const levelMax = ref(c?.level_max ?? '')
 const regionId = ref(c?.region_id ?? null)
-const description = ref(c?.description ?? '')
+const description = linkField(c?.description)
 const related = ref((c?.related ?? []).map((r) => r.id))
 
 // The territory follows the place it's native to until a hex is painted;

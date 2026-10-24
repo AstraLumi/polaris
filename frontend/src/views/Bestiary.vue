@@ -47,7 +47,7 @@
                 <template v-if="levelText(c)"> · {{ $t('Lv. {range}', { range: levelText(c) }) }}</template>
                 <template v-if="c.region_name"> · {{ c.region_name }}</template>
               </small>
-              <small v-if="c.description" class="desc">{{ c.description }}</small>
+              <small v-if="c.description" class="desc">{{ linkText(c.description) }}</small>
               <small v-if="c.related.length" class="related">{{ $t('Related: {list}', { list: c.related.map((r) => r.name).join(', ') }) }}</small>
             </span>
           </RouterLink>
@@ -73,6 +73,7 @@ import { t, tr } from '../i18n'
 import { creaturesApi } from '../api'
 import { useQuickAdd } from '../quickAdd'
 import { wikiPath } from '../wiki'
+import { useLinkNames, linkText } from '../linkNames'
 import { CREATURE_KINDS, kindLabel, levelText } from '../creatures'
 import IconImage from '../components/IconImage.vue'
 import CreatureFormModal from '../components/CreatureFormModal.vue'
@@ -122,6 +123,7 @@ onMounted(load)
 
 // /bestiary?new=1 (the search's "New creature") opens the form.
 useQuickAdd(() => openForm(null))
+useLinkNames()
 </script>
 
 <style scoped>

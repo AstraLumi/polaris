@@ -172,7 +172,7 @@ func TestWikiRejectsBadInput(t *testing.T) {
 }
 
 func TestWikiLinkResolution(t *testing.T) {
-	idx := wikiNameIndex([]wikiListItem{
+	idx := newWikiLinkIndex([]wikiListItem{
 		{Type: "class", ID: 1, Name: "Dragon"},
 		{Type: "race", ID: 2, Name: "Dragon"},
 		{Type: "gear", ID: 3, Name: "Iron  Helm"},
@@ -183,7 +183,7 @@ func TestWikiLinkResolution(t *testing.T) {
 	}
 	for in, want := range cases {
 		got := ""
-		if r := resolveWikiLink(in, idx); r != nil {
+		if r := idx.resolve(in); r != nil {
 			got = r.Type + ":" + strconv.FormatInt(r.ID, 10)
 		}
 		if got != want {

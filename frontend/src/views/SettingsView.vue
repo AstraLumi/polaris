@@ -401,6 +401,9 @@
 
     <section id="about" class="glass-panel card about" :class="{ 'is-flash': flash === 'about' }">
       <h2>{{ $t('About Polaris') }}</h2>
+      <!-- The Appropriate Legal Notices (AGPL-3.0 and NOTICE.md): a changed
+           version keeps "Based on Polaris by AstraLumi" with its link here,
+           and points Source code at its own source. -->
       <dl class="about-list">
         <dt>{{ $t('Version') }}</dt>
         <dd>{{ appVersion }}</dd>
@@ -408,8 +411,10 @@
         <dd><a :href="REPO_OWNER_URL" target="_blank" rel="noopener noreferrer">AstraLumi</a></dd>
         <dt>{{ $t('License') }}</dt>
         <dd>
-          <a :href="`${REPO_URL}/blob/main/LICENSE`" target="_blank" rel="noopener noreferrer">MIT</a>
-          · {{ $t('free to use, change and share; provided as is, without warranty') }}
+          <a :href="`${REPO_URL}/blob/main/LICENSE`" target="_blank" rel="noopener noreferrer">AGPL-3.0</a>
+          {{ $t('with') }}
+          <a :href="`${REPO_URL}/blob/main/NOTICE.md`" target="_blank" rel="noopener noreferrer">{{ $t('additional terms') }}</a>
+          · {{ $t('free to use, change and share; a changed version that is shared or hosted for others shares its source too; provided as is, without warranty') }}
         </dd>
         <dt>{{ $t('Source code') }}</dt>
         <dd><a :href="REPO_URL" target="_blank" rel="noopener noreferrer">github.com/AstraLumi/polaris</a></dd>

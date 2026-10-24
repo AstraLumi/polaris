@@ -268,6 +268,9 @@ func createSpellHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if !storeLinksOrFail(w, db, &in.description.String) {
+			return
+		}
 
 		res, err := db.Exec(
 			`INSERT INTO spells
@@ -311,6 +314,9 @@ func updateSpellHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 		in, err := parseSpellForm(db, r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if !storeLinksOrFail(w, db, &in.description.String) {
 			return
 		}
 

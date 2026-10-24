@@ -54,6 +54,7 @@ type chapterSummary struct {
 	Number       int    `json:"number"` // 1-based, within its volume (or among those without one)
 	EventCount   int    `json:"event_count"`
 	VersionCount int    `json:"version_count"`
+	Words        int    `json:"words"` // in its text (chaptertext.go)
 }
 
 type chapterIndex struct {
@@ -85,7 +86,8 @@ func loadChapterIndex(db *sql.DB) (chapterIndex, error) {
 	rows, err = db.Query(`
 		SELECT c.id, c.volume_id, c.title, c.position,
 		       (SELECT COUNT(*) FROM events e WHERE e.chapter_id = c.id),
-		       (SELECT COUNT(*) FROM character_versions v WHERE v.chapter_id = c.id)
+		       (SELECT COUNT(*) FROM character_versions v WHERE v.chapter_id = c.id),
+		       COALESCE((SELECT t.words FROM chapter_texts t WHERE t.chapter_id = c.id), 0)
 		FROM chapters c`)
 	if err != nil {
 		return idx, err
@@ -94,7 +96,7 @@ func loadChapterIndex(db *sql.DB) (chapterIndex, error) {
 	for rows.Next() {
 		var c chapterSummary
 		var vol sql.NullInt64
-		if err := rows.Scan(&c.ID, &vol, &c.Title, &c.Position, &c.EventCount, &c.VersionCount); err != nil {
+		if err := rows.Scan(&c.ID, &vol, &c.Title, &c.Position, &c.EventCount, &c.VersionCount, &c.Words); err != nil {
 			return idx, err
 		}
 		if vol.Valid {
@@ -360,8 +362,19 @@ func updateChapterHandler(db *sql.DB) http.HandlerFunc {
 		q := `UPDATE chapters SET title = ?, volume_id = ?, updated_at = datetime('now')`
 		args := []any{title, vol}
 		if in.Notes != nil {
+			// Links are stored by id (wikilinks.go).
+			notes := *in.Notes
+			if strings.Contains(notes, "[[") {
+				x, err := loadWikiLinkIndex(db)
+				if err != nil {
+					log.Printf("index the wiki: %v", err)
+					http.Error(w, "failed to save the chapter", http.StatusInternalServerError)
+					return
+				}
+				notes = normalizeWikiLinks(notes, x)
+			}
 			q += `, notes = ?`
-			args = append(args, *in.Notes)
+			args = append(args, notes)
 		}
 		if vol != oldVol {
 			// Moved to another volume: it goes at the end there.

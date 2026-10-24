@@ -342,7 +342,7 @@ func (m *storyManager) create(name string, up *iconUpload, choice, copyFrom stri
 		return fail(err)
 	}
 	if src != nil {
-		if err := copyAssets(app.db, src.dbPath, src.uploadsDir, app.uploadsDir); err != nil {
+		if err := copyAssets(app.db, src.db, src.dbPath, src.uploadsDir, app.uploadsDir); err != nil {
 			log.Printf("copy assets %s -> %s: %v", src.id, id, err)
 			return fail(errors.New("couldn't copy the Character Assets"))
 		}

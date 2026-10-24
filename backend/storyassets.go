@@ -29,6 +29,10 @@ type assetTable struct {
 	// Columns holding an uploaded file's path inside the uploads folder; the
 	// files are copied along with the rows.
 	fileCols []string
+	// Columns whose text can hold links by id (wikiLinkColumns). Ids are
+	// kept, so links to copied rows still hold; links to anything else are
+	// turned back into names (linksForCopy).
+	linkCols []string
 	// replace: a new story already has rows here (its default stat system);
 	// they are dropped so the copy takes their place.
 	replace bool
@@ -50,8 +54,22 @@ var assetTables = []assetTable{
 	// and, once they exist, items — all point at asset tables, so they travel
 	// with them.
 	{name: "stat_modifiers"},
-	{name: "spells", nullCols: []string{"origin_location_id"}, fileCols: []string{"icon_path"}},
-	{name: "gear", fileCols: []string{"icon_path"}},
+	{name: "spells", nullCols: []string{"origin_location_id"}, fileCols: []string{"icon_path"}, linkCols: []string{"description"}},
+	{name: "gear", fileCols: []string{"icon_path"}, linkCols: []string{"description"}},
+}
+
+// copiedKinds are the kinds of wiki article whose rows copyAssets copies,
+// ids and all.
+func copiedKinds() map[string]bool {
+	out := map[string]bool{}
+	for _, wt := range wikiTypes {
+		for _, a := range assetTables {
+			if a.name == wt.Table {
+				out[wt.Key] = true
+			}
+		}
+	}
+	return out
 }
 
 // Belong to one story's own world; never copied.
@@ -77,6 +95,9 @@ var storyOnlyTables = []string{
 	"celestial_bodies", "body_cells", "solar_systems",
 	// The planet's layers.
 	"map_features", "feature_cells", "cell_biomes", "cell_relief",
+	// The book itself: each book's settings, each chapter's text and its
+	// saved versions (editor.go).
+	"book_settings", "chapter_texts", "chapter_text_versions",
 }
 
 func isNullCol(t assetTable, col string) bool {
@@ -93,9 +114,16 @@ func quoteIdent(s string) string { return `"` + strings.ReplaceAll(s, `"`, `""`)
 // copyAssets fills the (new, empty) database dst with the asset library found
 // in the story database at srcDBPath, then copies the uploaded files those rows
 // refer to from srcUploads to dstUploads. Row ids are preserved, so every
-// link between assets (subclass → class, spell source, modifiers) stays valid.
-func copyAssets(dst *sql.DB, srcDBPath, srcUploads, dstUploads string) error {
+// link between assets (subclass → class, spell source, modifiers, a [[link]]
+// by id in a description) stays valid. src is the source story's open
+// database, for the names of what the copied texts link to.
+func copyAssets(dst *sql.DB, src wikiQuerier, srcDBPath, srcUploads, dstUploads string) error {
 	ctx := context.Background()
+	links, err := loadWikiLinkIndex(src)
+	if err != nil {
+		return fmt.Errorf("index the source's wiki: %w", err)
+	}
+	copied := copiedKinds()
 	conn, err := dst.Conn(ctx)
 	if err != nil {
 		return err
@@ -156,6 +184,11 @@ func copyAssets(dst *sql.DB, srcDBPath, srcUploads, dstUploads string) error {
 		if _, err := conn.ExecContext(ctx, q); err != nil {
 			return rollback(fmt.Errorf("copy %s: %w", t.name, err))
 		}
+		for _, lc := range t.linkCols {
+			if err := relinkCopied(ctx, conn, t.name, lc, links, copied); err != nil {
+				return rollback(fmt.Errorf("copy %s.%s: %w", t.name, lc, err))
+			}
+		}
 		for _, fc := range t.fileCols {
 			fr, err := conn.QueryContext(ctx, fmt.Sprintf(
 				`SELECT %s FROM main.%s WHERE %s IS NOT NULL AND %s != ''`,
@@ -182,6 +215,37 @@ func copyAssets(dst *sql.DB, srcDBPath, srcUploads, dstUploads string) error {
 			continue
 		}
 		if err := copyFile(filepath.Join(srcUploads, filepath.FromSlash(clean)), filepath.Join(dstUploads, filepath.FromSlash(clean))); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+// relinkCopied runs linksForCopy over a copied text column.
+func relinkCopied(ctx context.Context, conn *sql.Conn, table, col string, x *wikiLinkIndex, copied map[string]bool) error {
+	rows, err := conn.QueryContext(ctx, fmt.Sprintf(`SELECT id, %s FROM main.%s WHERE %s LIKE '%%[[%%'`,
+		quoteIdent(col), quoteIdent(table), quoteIdent(col)))
+	if err != nil {
+		return err
+	}
+	changed := map[int64]string{}
+	for rows.Next() {
+		var id int64
+		var s string
+		if err := rows.Scan(&id, &s); err != nil {
+			rows.Close()
+			return err
+		}
+		if out := linksForCopy(s, x, copied); out != s {
+			changed[id] = out
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for id, s := range changed {
+		if _, err := conn.ExecContext(ctx, fmt.Sprintf(`UPDATE main.%s SET %s = ? WHERE id = ?`, quoteIdent(table), quoteIdent(col)), s, id); err != nil {
 			return err
 		}
 	}

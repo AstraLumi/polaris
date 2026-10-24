@@ -190,7 +190,7 @@
 
         <img v-if="selected.picture_path" :src="selected.picture_path" :alt="selected.name" class="pic zoomable" @click="viewPicture(selected.picture_path, selected.name)" />
 
-        <p v-if="selected.description" class="desc">{{ selected.description }}</p>
+        <p v-if="selected.description" class="desc">{{ linkText(selected.description) }}</p>
         <p v-else class="desc is-empty">{{ $t('No description yet.') }}</p>
 
         <div v-if="selected.tags.length" class="block">
@@ -275,9 +275,11 @@ import { layoutTimeline, autoPxPerYear, minimumWidth, DEFAULTS } from '../timeli
 import { timelineRows } from '../timelinePrefs'
 import { viewPicture, mapPath } from '../navigation'
 import { wikiPath } from '../wiki'
+import { useLinkNames, linkText } from '../linkNames'
 
 const router = useRouter()
 const route = useRoute()
+useLinkNames()
 
 const data = ref(null)
 const loadError = ref('')

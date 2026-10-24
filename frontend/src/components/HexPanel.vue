@@ -115,6 +115,7 @@ import { t } from '../i18n'
 import { ref, watch } from 'vue'
 import ConfirmDialog from './ConfirmDialog.vue'
 import { realmLabel } from '../worldMap'
+import { linksByName, loadLinksByName } from '../linkNames'
 import DateField from './DateField.vue'
 
 const props = defineProps({
@@ -157,7 +158,12 @@ function openEdit(m) {
   editingId.value = m.id
   name.value = m.name
   founding.value = m.founding_date
-  desc.value = m.description
+  // Its [[links]] by name, with fresh names once they are in (linkNames.js).
+  const shown = linksByName(m.description)
+  desc.value = shown
+  loadLinksByName(m.description).then((v) => {
+    if (editingId.value === m.id && desc.value === shown) desc.value = v
+  })
   belongs.value = m.belongs_to_id ?? ''
   isCity.value = !!m.is_city
   isCapital.value = !!m.is_capital

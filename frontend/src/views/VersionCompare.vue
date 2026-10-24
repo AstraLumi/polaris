@@ -94,6 +94,7 @@ import { statusLabel } from '../characterStatus'
 import { genderLabel } from '../gender'
 import { chapterLabel, loadChapters } from '../chapters'
 import { pageTitle } from '../navigation'
+import { useLinkNames, linkText } from '../linkNames'
 
 const props = defineProps({ id: { type: String, required: true } })
 loadChapters()
@@ -155,6 +156,10 @@ function statGroups(x, y) {
   }))
 }
 
+// Texts that can hold [[links]] compare as they read (linkNames.js).
+useLinkNames()
+const plain = (v) => (typeof v === 'string' ? linkText(v) : v)
+
 const groups = computed(() => {
   const x = a.value
   const y = b.value
@@ -190,9 +195,9 @@ const groups = computed(() => {
         row(t('Nation'), s(x).nation_name || s(x).nation, s(y).nation_name || s(y).nation),
         row(t('Status'), statusLabel(s(x).status), statusLabel(s(y).status)),
         row(t('Deaths'), s(x).deaths, s(y).deaths),
-        row(t('Description'), s(x).description, s(y).description, { long: true }),
-        row(t('Bio'), s(x).bio, s(y).bio, { long: true }),
-        row(t('Speech mannerisms'), s(x).speech_mannerisms, s(y).speech_mannerisms, { long: true }),
+        row(t('Description'), plain(s(x).description), plain(s(y).description), { long: true }),
+        row(t('Bio'), plain(s(x).bio), plain(s(y).bio), { long: true }),
+        row(t('Speech mannerisms'), plain(s(x).speech_mannerisms), plain(s(y).speech_mannerisms), { long: true }),
       ],
     },
     ...statGroups(x, y),

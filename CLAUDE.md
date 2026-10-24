@@ -35,6 +35,10 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/bodyOutlines.test.mjs
     node frontend/tests/recent.test.mjs
     node frontend/tests/storyDates.test.mjs
+    node frontend/tests/editorSchema.test.mjs
+    node frontend/tests/editorStyles.test.mjs
+    node frontend/tests/editorText.test.mjs
+    node frontend/tests/autosave.test.mjs
 
 Run all of these before committing.
 
@@ -79,6 +83,30 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   `es-ES.js`; `es-419.js` inherits `es-ES.js` and only overrides words that
   differ). Placeholders such as `{name}` must match. `i18n.check.mjs` fails on
   gaps. Only the interface is translated, never user content.
+- **Wiki links are stored by id:** `[[type#id]]` (shows the current name)
+  or `[[type#id|text]]` (schema 42). The typed `[[Name]]`, `[[Name|text]]`,
+  `[[type:Name]]` stay valid input: every handler that saves Markdown text
+  turns them into ids with `normalizeWikiLinks` (`backend/wikilinks.go`;
+  the columns are `wikiLinkColumns`), and a text editor shows them by name
+  again with `linksForEditing` (`frontend/src/wikiLinks.js`), so an
+  unchanged save gives back the same bytes. The columns: the wiki's own
+  text and chapter notes, and (schema 43, `itemLinkColumns`) the items'
+  own texts the wiki shows from their pages: a version's description, bio
+  and speech mannerisms, and the description of a location, faction,
+  event, spell, gear and creature. Their handlers call `storeLinksByID`;
+  their forms fill the field through `linkField` / `loadLinksByName`
+  (`frontend/src/linkNames.js`, which loads the article list's names).
+  **Never print a text that can hold links raw:** outside the wiki's
+  Markdown it goes through `linkText` (`linksAsText`: a link's text, else
+  the current name), in every row, card, hover and tooltip. New text that
+  holds links (the coming chapter text) goes in `wikiLinkColumns` with a
+  migration, is normalised on save and shown by name in its editor.
+  Parsing, resolving, plain text and code-skipping exist in Go and JS:
+  change both, and keep `frontend/tests/wikiLinks.fixtures.json` (read by
+  `wikilinks_test.go` and `markdown.test.mjs`) passing. "Copy Character
+  Assets" keeps ids, so a copied table's link columns are in its
+  `linkCols`, and `linksForCopy` turns links to anything not copied back
+  into `[[type:Name]]` (`TestCopiedLinkColumnsAreRelinked`).
 - **Built-in icons live in two places that must match:**
   `frontend/src/builtinIcons.js` and the allowlists in `backend/icons.go`.
 - **Stats:** each story defines its own stats and formulas (`stat_defs`,
@@ -209,6 +237,24 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   (button, file name, drop zone) rather than a bare `<input type=file>`;
   Delete and other rare actions go in a row's "…" menu (`RowMenu.vue`,
   teleported so frosted panels can't cover it).
+- **The writing editor** follows `docs/EDITOR.md` (the contract for the
+  routes, book settings, page types, styles and the document JSON; change
+  it with the code). Storage (schema 44, `backend/editor.go`,
+  `chaptertext.go`, `editorimport.go`): `book_settings` (one row per volume,
+  0 = chapters without one), `chapter_texts` (the doc, a version that a
+  stale save gets `409` for, words) and `chapter_text_versions` (labelled,
+  or automatic every 30 minutes of writing, last 20 kept; the clock is
+  `editorNow`). The doc JSON schema lives twice,
+  `frontend/src/editor/schema.js` and `backend/pmdoc.go`: change both.
+  Docs store pictures as `/uploads/…`, never `/uploads/s/<story>/…`.
+  The client (`/write/:volume`, `views/WritePage.vue`, `components/write/`)
+  keeps its logic in plain modules under `frontend/src/editor/` (commands,
+  keymap, styles, page types, find, word count, autosave) with node tests;
+  ProseMirror is imported only there and by the lazily loaded page, never
+  by the main bundle. The built-in styles and page defaults exist twice,
+  `styles.js`/`pageTypes.js` and `backend/editor.go` (the server's win when
+  it sends them): change both. Screenshots without a server:
+  `node frontend/tests/visual/writeShots.mjs` (fakes the API in memory).
 - Birth date, blood type and Born in belong to the character (`characters`
   columns, schema 23), not to a version; the version form edits them for
   all versions.

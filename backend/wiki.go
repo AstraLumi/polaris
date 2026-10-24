@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,8 +22,9 @@ import (
 // foreign key to it, because the entry points at one of ten tables).
 //
 // Adding a new kind of article: add a wikiTypeDef below, its facts in
-// buildWikiArticle, its labels in frontend/src/wiki.js, and a migration that
-// creates its delete trigger.
+// buildWikiArticle, its labels in frontend/src/wiki.js, its key in TYPE_ORDER
+// (frontend/src/wikiLinks.js) and in the link fixtures' types, and a
+// migration that creates its delete trigger.
 
 const (
 	maxWikiText     = 60000
@@ -269,6 +269,9 @@ type wikiArticle struct {
 	Sections  []wikiSection     `json:"sections"`
 	Infobox   []wikiInfoRow     `json:"infobox"`
 	Backlinks []wikiRef         `json:"backlinks"`
+	// LinkNames is the current name of each article a stored link in the
+	// text points at ("character#12" -> "Aria"), for previews.
+	LinkNames map[string]string `json:"link_names"`
 	Gallery   []galleryItem     `json:"gallery"`
 	UpdatedAt string            `json:"updated_at"`
 	// Versions is a character's facts as they stand in each of its versions
@@ -320,7 +323,7 @@ func pictureURL(stored string) string {
 
 // ---- Reading -----------------------------------------------------------------
 
-func listWikiItems(db *sql.DB) ([]wikiListItem, error) {
+func listWikiItems(db wikiQuerier) ([]wikiListItem, error) {
 	written := map[string]string{} // "type:id" -> edited at
 	rows, err := db.Query(`SELECT entity_type, entity_id, updated_at FROM wiki_entries`)
 	if err != nil {
@@ -366,7 +369,7 @@ func listWikiItems(db *sql.DB) ([]wikiListItem, error) {
 
 // characterAliases is every character's names from versions other than the
 // current one (once each, leaving out the current name).
-func characterAliases(db *sql.DB) map[int64][]string {
+func characterAliases(db wikiQuerier) map[int64][]string {
 	out := map[int64][]string{}
 	rows, err := db.Query(`SELECT v.character_id, v.name FROM character_versions v
 		JOIN character_versions c ON c.character_id = v.character_id AND c.is_current = 1
@@ -859,12 +862,21 @@ func loadWikiArticle(db *sql.DB, t wikiTypeDef, id int64) (*wikiArticle, error) 
 		return nil, err
 	}
 
+	x, err := loadWikiLinkIndex(db)
+	if err != nil {
+		return nil, err
+	}
 	// A lore page has nothing in the story behind it, so its related list is
 	// what it links to.
 	if t.Key == "lore" {
-		a.addGroup("links_to", wikiOutlinks(db, a))
+		a.addGroup("links_to", wikiOutlinks(x, a))
 	}
-	a.Backlinks = wikiBacklinks(db, t.Key, id)
+	a.Backlinks = wikiBacklinks(db, x, t.Key, id)
+	texts := a.ownTexts()
+	for _, s := range a.Sheet {
+		texts = append(texts, s.Body)
+	}
+	a.LinkNames = wikiLinkNames(x, texts...)
 	return a, nil
 }
 
@@ -891,56 +903,7 @@ func getWikiHandler(db *sql.DB) http.HandlerFunc {
 }
 
 // ---- Links -------------------------------------------------------------------
-
-// [[Name]], [[Name|shown text]] and [[type:Name]] (to pick between a class and
-// a race that share a name). The frontend resolves them with the same rules.
-var wikiLinkRe = regexp.MustCompile(`\[\[([^\[\]|\n]+?)(?:\|[^\[\]\n]*)?\]\]`)
-
-func normalizeWikiKey(s string) string {
-	return strings.Join(strings.Fields(strings.ToLower(strings.ReplaceAll(s, "_", " "))), " ")
-}
-
-// resolveWikiLink finds the article a [[...]] points at, or nil.
-func resolveWikiLink(inner string, index map[string][]wikiRef) *wikiRef {
-	inner = strings.TrimSpace(inner)
-	if i := strings.Index(inner, ":"); i > 0 {
-		prefix := normalizeWikiKey(inner[:i])
-		for _, t := range wikiTypes {
-			if normalizeWikiKey(t.Key) == prefix {
-				name := normalizeWikiKey(inner[i+1:])
-				for _, ref := range index[name] {
-					if ref.Type == t.Key {
-						r := ref
-						return &r
-					}
-				}
-				return nil
-			}
-		}
-	}
-	if refs := index[normalizeWikiKey(inner)]; len(refs) > 0 {
-		r := refs[0] // index is built in wikiTypes order
-		return &r
-	}
-	return nil
-}
-
-func wikiNameIndex(items []wikiListItem) map[string][]wikiRef {
-	idx := map[string][]wikiRef{}
-	for _, it := range items {
-		k := normalizeWikiKey(it.Name)
-		idx[k] = append(idx[k], wikiRef{Type: it.Type, ID: it.ID, Name: it.Name})
-	}
-	// Former names come after every real name, so they never take a link
-	// that already points at something else.
-	for _, it := range items {
-		for _, a := range it.Aliases {
-			k := normalizeWikiKey(a)
-			idx[k] = append(idx[k], wikiRef{Type: it.Type, ID: it.ID, Name: it.Name})
-		}
-	}
-	return idx
-}
+// (wikilinks.go reads and rewrites them)
 
 func currentName(db *sql.DB, characterID int64) string {
 	var n string
@@ -1011,34 +974,17 @@ func characterWikiVersions(db *sql.DB, id int64) []wikiVersion {
 	return sorted
 }
 
-// wikiOutlinks lists the articles an article's own text links to, once each,
-// by name.
-func wikiOutlinks(db *sql.DB, a *wikiArticle) []wikiRef {
+// wikiOutlinks lists the articles an article's own text links to, once each.
+func wikiOutlinks(x *wikiLinkIndex, a *wikiArticle) []wikiRef {
 	out := []wikiRef{}
-	items, err := listWikiItems(db)
-	if err != nil {
-		return out
-	}
-	index := wikiNameIndex(items)
-	texts := []string{a.Summary}
-	for _, v := range a.Fields {
-		texts = append(texts, v)
-	}
-	for _, s := range a.Sections {
-		texts = append(texts, s.Title, s.Body)
-	}
-	for _, r := range a.Infobox {
-		texts = append(texts, r.Value)
-	}
-	seen := map[string]bool{a.Type + ":" + strconv.FormatInt(a.ID, 10): true}
-	for _, p := range texts {
-		for _, m := range wikiLinkRe.FindAllStringSubmatch(p, -1) {
-			ref := resolveWikiLink(m[1], index)
+	seen := map[string]bool{refKey(a.Type, a.ID): true}
+	for _, p := range a.ownTexts() {
+		for _, m := range findWikiLinks(p) {
+			ref := x.resolve(m.Target)
 			if ref == nil {
 				continue
 			}
-			k := ref.Type + ":" + strconv.FormatInt(ref.ID, 10)
-			if !seen[k] {
+			if k := refKey(ref.Type, ref.ID); !seen[k] {
 				seen[k] = true
 				out = append(out, *ref)
 			}
@@ -1050,22 +996,27 @@ func wikiOutlinks(db *sql.DB, a *wikiArticle) []wikiRef {
 	return out
 }
 
-// wikiBacklinks lists the articles whose wiki text links to the given one.
-func wikiBacklinks(db *sql.DB, typ string, id int64) []wikiRef {
-	out := []wikiRef{}
-	items, err := listWikiItems(db)
-	if err != nil {
-		return out
+// ownTexts is everything written in the wiki for an article.
+func (a *wikiArticle) ownTexts() []string {
+	texts := []string{a.Summary}
+	for _, v := range a.Fields {
+		texts = append(texts, v)
 	}
-	index := wikiNameIndex(items)
-	names := map[string]wikiRef{}
-	for _, it := range items {
-		names[it.Type+":"+strconv.FormatInt(it.ID, 10)] = wikiRef{Type: it.Type, ID: it.ID, Name: it.Name}
+	for _, s := range a.Sections {
+		texts = append(texts, s.Title, s.Body)
 	}
+	for _, r := range a.Infobox {
+		texts = append(texts, r.Value)
+	}
+	return texts
+}
 
+// wikiBacklinks lists the articles whose wiki text links to the given one.
+func wikiBacklinks(db *sql.DB, x *wikiLinkIndex, typ string, id int64) []wikiRef {
+	out := []wikiRef{}
 	texts, owner := wikiTexts(db)
 
-	self := typ + ":" + strconv.FormatInt(id, 10)
+	self := refKey(typ, id)
 	seen := map[string]bool{}
 	for eid, parts := range texts {
 		from := owner[eid]
@@ -1074,10 +1025,10 @@ func wikiBacklinks(db *sql.DB, typ string, id int64) []wikiRef {
 		}
 	scan:
 		for _, p := range parts {
-			for _, m := range wikiLinkRe.FindAllStringSubmatch(p, -1) {
-				if ref := resolveWikiLink(m[1], index); ref != nil && ref.Type == typ && ref.ID == id {
+			for _, m := range findWikiLinks(p) {
+				if ref := x.resolve(m.Target); ref != nil && ref.Type == typ && ref.ID == id {
 					seen[from] = true
-					if src, ok := names[from]; ok {
+					if src, ok := x.byID[from]; ok {
 						out = append(out, src)
 					}
 					break scan
@@ -1176,6 +1127,23 @@ func (p *wikiSavePayload) clean(t wikiTypeDef) string {
 	return ""
 }
 
+// normalizeLinks stores every link in the text by id (wikilinks.go).
+// Section titles are plain text and keep what was typed.
+func (p *wikiSavePayload) normalizeLinks(x *wikiLinkIndex) {
+	p.Summary = normalizeWikiLinks(p.Summary, x)
+	for k, v := range p.Fields {
+		p.Fields[k] = normalizeWikiLinks(v, x)
+	}
+	for i := range p.Sections {
+		p.Sections[i].Body = normalizeWikiLinks(p.Sections[i].Body, x)
+	}
+	for i := range p.Infobox {
+		if p.Infobox[i].Kind == "" {
+			p.Infobox[i].Value = normalizeWikiLinks(p.Infobox[i].Value, x)
+		}
+	}
+}
+
 func (p *wikiSavePayload) isEmpty() bool {
 	return strings.TrimSpace(p.Summary) == "" && len(p.Fields) == 0 && len(p.Sections) == 0 && len(p.Infobox) == 0
 }
@@ -1201,6 +1169,13 @@ func saveWikiHandler(db *sql.DB) http.HandlerFunc {
 			http.Error(w, msg, http.StatusBadRequest)
 			return
 		}
+		x, err := loadWikiLinkIndex(db)
+		if err != nil {
+			http.Error(w, "failed to save the article", http.StatusInternalServerError)
+			log.Printf("index the wiki: %v", err)
+			return
+		}
+		p.normalizeLinks(x)
 		var climate []climateRow
 		if p.Climate != nil {
 			var kind string

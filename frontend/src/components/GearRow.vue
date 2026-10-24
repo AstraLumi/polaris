@@ -14,7 +14,7 @@
         <span v-for="b in bonuses" :key="b.key" class="bonus" :class="{ 'is-negative': !b.good }">{{ b.text }}</span>
         <span v-if="!bonuses.length" class="no-bonus">{{ $t('No stat bonuses') }}</span>
       </div>
-      <p v-if="gear.description" class="gear-desc" :title="gear.description">{{ gear.description }}</p>
+      <p v-if="gear.description" class="gear-desc" :title="linkText(gear.description)">{{ linkText(gear.description) }}</p>
     </div>
 
     <div v-if="$slots.actions" class="gear-actions">
@@ -27,12 +27,14 @@
 import { computed } from 'vue'
 import IconImage from './IconImage.vue'
 import { gearIconSrc, slotTypeLabel, formatBonuses, formatKg } from '../gear'
+import { useLinkNames, linkText } from '../linkNames'
 
 const props = defineProps({
   gear: { type: Object, required: true },
 })
 
 const bonuses = computed(() => formatBonuses(props.gear.modifiers))
+useLinkNames()
 </script>
 
 <style scoped>

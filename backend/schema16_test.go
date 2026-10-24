@@ -5,10 +5,49 @@ import (
 	"testing"
 )
 
+// rollBackSchema44 turns a fresh database back into schema 43: no writing
+// editor (book settings, chapter texts and their versions).
+func rollBackSchema44(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, q := range []string{
+		`DROP TRIGGER book_settings_volume_delete`,
+		`DROP TABLE chapter_text_versions`,
+		`DROP TABLE chapter_texts`,
+		`DROP TABLE book_settings`,
+		`UPDATE schema_meta SET value = '43' WHERE key = 'schema_version'`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+}
+
+// rollBackSchema43 turns a fresh database back into schema 42. Schema 43
+// only rewrote links in the items' texts, so the version is all there is to
+// undo.
+func rollBackSchema43(t *testing.T, db *sql.DB) {
+	t.Helper()
+	rollBackSchema44(t, db)
+	if _, err := db.Exec(`UPDATE schema_meta SET value = '42' WHERE key = 'schema_version'`); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// rollBackSchema42 turns a fresh database back into schema 41. Schema 42
+// only rewrote links in stored text, so the version is all there is to undo.
+func rollBackSchema42(t *testing.T, db *sql.DB) {
+	t.Helper()
+	rollBackSchema43(t, db)
+	if _, err := db.Exec(`UPDATE schema_meta SET value = '41' WHERE key = 'schema_version'`); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // rollBackSchema41 turns a fresh database back into schema 40: no glowing
 // moons.
 func rollBackSchema41(t *testing.T, db *sql.DB) {
 	t.Helper()
+	rollBackSchema42(t, db)
 	for _, q := range []string{
 		`ALTER TABLE celestial_bodies DROP COLUMN glows`,
 		`UPDATE schema_meta SET value = '40' WHERE key = 'schema_version'`,

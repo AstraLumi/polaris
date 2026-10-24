@@ -164,13 +164,13 @@ func buildWikiGraph(db *sql.DB) (*graphPayload, error) {
 	}
 
 	// What the wiki text links.
-	index := wikiNameIndex(items)
+	index := newWikiLinkIndex(items)
 	texts, owner := wikiTexts(db)
 	for eid, parts := range texts {
 		from := owner[eid]
 		for _, p := range parts {
-			for _, m := range wikiLinkRe.FindAllStringSubmatch(p, -1) {
-				if ref := resolveWikiLink(m[1], index); ref != nil {
+			for _, m := range findWikiLinks(p) {
+				if ref := index.resolve(m.Target); ref != nil {
 					add(from, refKey(ref.Type, ref.ID), false)
 				}
 			}

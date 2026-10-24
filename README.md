@@ -11,7 +11,8 @@ has its own SQLite database, so it runs comfortably on a small home server.
 
 > **Provided as is.** Polaris was built for personal use and is shared in case
 > it is useful to others. There is no support and no commitment to future
-> updates. See [LICENSE](LICENSE) (MIT).
+> updates. It is licensed under the AGPL-3.0 with a few additional terms; see
+> [License](#license).
 
 ## Features
 
@@ -224,3 +225,21 @@ Google to fetch them. Polaris makes no other external requests.
 
 Architecture notes and contribution guidelines are in
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+
+## License
+
+Polaris is free software under the [GNU Affero General Public License,
+version 3](LICENSE) (AGPL-3.0-only), with the additional terms in
+[NOTICE.md](NOTICE.md). In plain words:
+
+- You can use it, change it and share it, for free, for any purpose.
+- If you share a changed version, or run one that other people use over the
+  network (a hosted service, say), you must offer them its full source code
+  under the same license. Whatever you add goes back to everyone.
+- Keep the credit: "Based on Polaris by AstraLumi", linking to this
+  repository, in your README and in the app's About page.
+- A changed version goes under its own name and logo, and says that it is
+  changed. It may say it is based on Polaris.
+- It comes without any warranty.
+
+The license text decides; this summary doesn't replace it.

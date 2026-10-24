@@ -88,6 +88,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { eventsApi, buildEventFormData, fetchLocationOptions, fetchCharacterOptions, isMissing } from '../api'
 import { fullDate } from '../calendar'
 import { t } from '../i18n'
+import { loadLinksByName } from '../linkNames'
 import DateField from '../components/DateField.vue'
 import LocationSelect from '../components/LocationSelect.vue'
 import TagInput from '../components/TagInput.vue'
@@ -214,7 +215,7 @@ onMounted(async () => {
     loadedName.value = e.name
     form.name = e.name
     form.eventDate = e.event_date
-    form.description = e.description
+    form.description = await loadLinksByName(e.description)
     form.locationId = e.location_id
     form.chapterId = e.chapter_id ?? null
     form.tags = [...e.tags]

@@ -430,6 +430,9 @@ func saveCreatureHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			http.Error(w, msg, http.StatusBadRequest)
 			return
 		}
+		if !storeLinksOrFail(w, db, &f.Description) {
+			return
+		}
 		tx, err := db.Begin()
 		if err != nil {
 			http.Error(w, "failed to save the creature", http.StatusInternalServerError)

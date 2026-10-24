@@ -387,7 +387,7 @@ import { t } from '../i18n'
 import { timeAgo, exactTime } from '../timeAgo'
 import {
   TYPE_LABELS, TYPE_PLURALS, FIELD_LABELS, FACT_LABELS, FACT_GROUPS, GROUP_LABELS, SHEET_LABELS,
-  wikiApi, wikiPath, sourcePath, sourceLabel, makeLinkResolver, factWords, biomeShares, terrainShares,
+  wikiApi, wikiPath, sourcePath, sourceLabel, makeLinkResolver, linksForEditing, factWords, biomeShares, terrainShares,
 } from '../wiki'
 
 const props = defineProps({
@@ -610,10 +610,13 @@ function fillDraft() {
   clearPreview()
   pictureFile.value = null
   pictureRemoved.value = false
-  draft.summary = a.summary
-  draft.fields = Object.fromEntries(a.field_keys.map((k) => [k, a.fields[k] || '']))
-  draft.sections = a.sections.map((s) => ({ key: ++keySeq, title: s.title, body: s.body }))
-  draft.infobox = a.infobox.map((r) => ({ key: ++keySeq, label: r.label, value: r.value, kind: r.kind || '' }))
+  // Links are stored by id; the editors show them by name, and the server
+  // stores them by id again on save (wikiLinks.js).
+  const named = (text) => linksForEditing(text, resolver.value)
+  draft.summary = named(a.summary)
+  draft.fields = Object.fromEntries(a.field_keys.map((k) => [k, named(a.fields[k] || '')]))
+  draft.sections = a.sections.map((s) => ({ key: ++keySeq, title: s.title, body: named(s.body) }))
+  draft.infobox = a.infobox.map((r) => ({ key: ++keySeq, label: r.label, value: r.kind ? r.value : named(r.value), kind: r.kind || '' }))
   draft.climate = {}
   for (const c of a.climate || []) draft.climate[c.season_id] = { low: c.low ?? '', high: c.high ?? '' }
   for (const s of climateSeasons.value) draft.climate[s.id] ||= { low: '', high: '' }

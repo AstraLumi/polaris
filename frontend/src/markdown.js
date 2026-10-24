@@ -5,9 +5,14 @@
 // Supported: # headings (shown as h3-h6, the article's own sections are h2),
 // paragraphs (a single line break stays a line break), **bold**, *italic*,
 // ~~strike~~, `code`, fenced code, > quotes, - / 1. lists (nested by two
-// spaces), --- rules, pipe tables and [text](url) links. [[Article]],
-// [[Article|text]] and [[type:Article]] link to other wiki articles; the
-// `resolve` callback turns the text inside into { type, id, name } or null.
+// spaces), --- rules, pipe tables and [text](url) links. [[type#id]],
+// [[type#id|text]], and the typed [[Article]], [[Article|text]] and
+// [[type:Article]] link to other wiki articles (wikiLinks.js); the `resolve`
+// callback (makeLinkResolver) turns the text inside into { type, id, name }
+// or null. A link by id to an article that is gone shows its text, or
+// resolve.deletedLabel.
+
+import { parseIdLink } from './wikiLinks.js'
 
 const escapeHtml = (s) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -33,15 +38,19 @@ function inline(raw, resolve) {
   s = s.replace(/\[\[([^\[\]|\n]+?)(?:\|([^\[\]\n]*))?\]\]/g, (m, target, text) => {
     const inner = unescapeHtml(target)
     const hit = resolve ? resolve(inner) : null
+    const byId = parseIdLink(inner)
+    const deleted = (resolve && resolve.deletedLabel) || 'deleted article'
     const norm = (v) => v.toLowerCase().replace(/\s+/g, ' ').trim()
     const shown =
       text !== undefined && text.trim() !== ''
         ? text
-        : hit && inner.includes(':') && norm(inner) !== norm(hit.name)
-          ? escapeHtml(hit.name)
-          : target
+        : byId
+          ? escapeHtml(hit ? hit.name : deleted)
+          : hit && inner.includes(':') && norm(inner) !== norm(hit.name)
+            ? escapeHtml(hit.name)
+            : target
     if (hit) return keep(`<a class="wikilink" href="/wiki/${hit.type}/${hit.id}" data-wiki="${hit.type}/${hit.id}">${shown}</a>`)
-    return keep(`<span class="wikilink is-missing" title="${attr(inner)}">${shown}</span>`)
+    return keep(`<span class="wikilink is-missing" title="${attr(byId ? deleted : inner)}">${shown}</span>`)
   })
 
   s = s.replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, (m, text, url) => {

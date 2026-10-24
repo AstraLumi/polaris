@@ -130,6 +130,7 @@ import { genderLabel } from '../gender'
 import { pageTitle, viewPicture } from '../navigation'
 import { ref, computed, watch, h } from 'vue'
 import { t } from '../i18n'
+import { useLinkNames, linkText } from '../linkNames'
 import { fetchCurrentVersion, fetchCharacterOptions, isMissing } from '../api'
 import BuildStatsPanel from '../components/BuildStatsPanel.vue'
 import GearTab from '../components/GearTab.vue'
@@ -183,12 +184,14 @@ const storyGroups = computed(() => {
     { label: t('On Earth'), fields: [f(t('Earth Name'), s.earth_name), f(t('Earth Birthdate'), s.human_birth_date)] },
   ]
 })
+// Their [[links]] read as names (linkNames.js).
+useLinkNames()
 const longFields = computed(() => {
   const s = data.value.story
   return [
-    { label: t('Description'), value: s.description },
-    { label: t('Bio'), value: s.bio },
-    { label: t('Speech mannerisms'), value: s.speech_mannerisms },
+    { label: t('Description'), value: linkText(s.description) },
+    { label: t('Bio'), value: linkText(s.bio) },
+    { label: t('Speech mannerisms'), value: linkText(s.speech_mannerisms) },
   ]
 })
 const emptyCount = computed(() => [...storyGroups.value.flatMap((g) => g.fields), ...longFields.value].filter((x) => isEmpty(x.value)).length)

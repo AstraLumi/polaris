@@ -356,6 +356,9 @@ func saveFactionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			http.Error(w, msg, http.StatusBadRequest)
 			return
 		}
+		if !storeLinksOrFail(w, db, &f.Description) {
+			return
+		}
 
 		// A kingdom's faction takes its name and colour from the map.
 		if k := kingdomOfFaction(db, id); id != 0 && k != nil {

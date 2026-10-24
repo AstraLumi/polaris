@@ -607,6 +607,10 @@ func updateVersionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			http.Error(w, "failed to save body type", http.StatusInternalServerError)
 			return
 		}
+		desc, bio, speech := r.FormValue("description"), r.FormValue("bio"), r.FormValue("speech_mannerisms")
+		if !storeLinksOrFail(w, db, &desc, &bio, &speech) {
+			return
+		}
 
 		tx, err := db.Begin()
 		if err != nil {
@@ -646,9 +650,9 @@ func updateVersionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			// Typed text only survives while nothing is linked.
 			nullableString(unlinkedText(r.FormValue("nation"), nationLoc)), nationLoc,
 			parseIntDefault(r.FormValue("deaths"), 0),
-			nullableString(r.FormValue("description")),
-			nullableString(r.FormValue("bio")),
-			nullableString(r.FormValue("speech_mannerisms")),
+			nullableString(desc),
+			nullableString(bio),
+			nullableString(speech),
 			normalizeStatus(r.FormValue("status")),
 			versionID,
 		)

@@ -23,6 +23,7 @@
 import { computed } from 'vue'
 import { BUILTIN_PREFIX } from '../builtinIcons'
 import { gearIconSrc, slotTypeDef, formatBonuses, formatKg } from '../gear'
+import { useLinkNames, linkText } from '../linkNames'
 import IconImage from './IconImage.vue'
 
 const props = defineProps({
@@ -32,6 +33,7 @@ const props = defineProps({
 })
 defineEmits(['open'])
 
+useLinkNames()
 const typeIcon = computed(() => slotTypeDef(props.slotDef.type)?.icon || '')
 const bonuses = computed(() => (props.gear ? formatBonuses(props.gear.modifiers) : []))
 const summary = computed(() => {
@@ -40,7 +42,7 @@ const summary = computed(() => {
   return b.length > 2 ? `${b[0].text}, ${b[1].text} +${b.length - 2}` : b.map((x) => x.text).join(', ')
 })
 const tip = computed(() =>
-  props.gear ? [props.gear.name, ...bonuses.value.map((b) => b.text), props.gear.description].filter(Boolean).join('\n') : '',
+  props.gear ? [props.gear.name, ...bonuses.value.map((b) => b.text), linkText(props.gear.description)].filter(Boolean).join('\n') : '',
 )
 </script>
 

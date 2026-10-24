@@ -130,11 +130,17 @@ export function searchArticles(items, query, limit = 8) {
 }
 
 // The [[…]] text that leads to `item`: [[Name]] when that name alone finds
-// it, [[type:Name]] when another kind of article has the same name.
-// `resolve` is makeLinkResolver() from wiki.js.
+// it, [[type:Name]] when another kind of article has the same name, and
+// [[type#id]] when no name can (another of its kind has it too). The server
+// stores them all by id (wikiLinks.js). `resolve` is makeLinkResolver().
 export function wikiLinkMarkup(item, text, resolve) {
-  const hit = resolve ? resolve(item.name) : null
-  const target = hit && hit.type === item.type && hit.id === item.id ? item.name : `${item.type}:${item.name}`
+  let target
+  if (resolve && resolve.nameTarget) {
+    target = resolve.nameTarget(item) || `${item.type}#${item.id}`
+  } else {
+    const hit = resolve ? resolve(item.name) : null
+    target = hit && hit.type === item.type && hit.id === item.id ? item.name : `${item.type}:${item.name}`
+  }
   const shown = String(text || '').replace(/[[\]]/g, ' ').replace(/\s+/g, ' ').trim()
   return shown && fold(shown) !== fold(item.name) ? `[[${target}|${shown}]]` : `[[${target}]]`
 }

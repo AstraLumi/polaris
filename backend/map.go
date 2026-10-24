@@ -207,6 +207,9 @@ func createMapLocationHandler(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
+		if !storeLinksOrFail(w, db, &in.Description) {
+			return
+		}
 		if in.Kind == "major" {
 			applyUnknownLand(db, &in, 0)
 		}
@@ -296,6 +299,9 @@ func updateMapLocationHandler(db *sql.DB) http.HandlerFunc {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
 		if err != nil || json.Unmarshal(body, &raw) != nil || json.Unmarshal(body, &in) != nil {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		if !storeLinksOrFail(w, db, &in.Description) {
 			return
 		}
 		// A field left out keeps its value: the 2D map doesn't send the

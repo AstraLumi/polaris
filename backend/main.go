@@ -263,6 +263,18 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	mux.HandleFunc("PUT /api/volumes/{id}", updateVolumeHandler(db))
 	mux.HandleFunc("DELETE /api/volumes/{id}", deleteVolumeHandler(db))
 
+	// The writing editor (docs/EDITOR.md): each book's settings, each
+	// chapter's text and its versions, and .docx upload.
+	mux.HandleFunc("GET /api/books/{volume}", getBookHandler(db))
+	mux.HandleFunc("PUT /api/books/{volume}", saveBookHandler(db))
+	mux.HandleFunc("POST /api/books/{volume}/import-docx", importDocxHandler(db, uploadsDir))
+	mux.HandleFunc("GET /api/chapters/{id}/text", getChapterTextHandler(db))
+	mux.HandleFunc("PUT /api/chapters/{id}/text", putChapterTextHandler(db))
+	mux.HandleFunc("GET /api/chapters/{id}/text/versions", listTextVersionsHandler(db))
+	mux.HandleFunc("POST /api/chapters/{id}/text/versions", createTextVersionHandler(db))
+	mux.HandleFunc("GET /api/chapters/{id}/text/versions/{vid}", getTextVersionHandler(db))
+	mux.HandleFunc("POST /api/chapters/{id}/text/versions/{vid}/restore", restoreTextVersionHandler(db))
+
 	return mux
 }
 

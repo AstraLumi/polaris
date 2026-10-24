@@ -2,16 +2,14 @@ import { tr, t } from './i18n'
 import { STORY_API } from './stories'
 import { mapPath } from './navigation'
 import { biomeOf, landformOf } from './biomes'
+import { makeLinkResolver as makeResolver } from './wikiLinks.js'
+
+export { TYPE_ORDER, linksForEditing } from './wikiLinks.js'
 
 // The wiki has no pages of its own: the server builds an article for every
 // character, location, event and asset (see backend/wiki.go) and stores only
 // the extra text added here. The labels below are the English text the server
 // refers to by key; tr() marks them for translation.
-
-export const TYPE_ORDER = [
-  'character', 'location', 'faction', 'event', 'class', 'subclass', 'specialization', 'race', 'body_type', 'spell', 'gear', 'creature',
-  'map_feature', 'solar_system', 'celestial_body', 'lore',
-]
 
 export const TYPE_LABELS = {
   character: tr('Character'),
@@ -313,28 +311,10 @@ export const wikiApi = {
   galleryRemove: (gid) => request(`/wiki-gallery/${gid}`, { method: 'DELETE' }, tr('failed to delete the picture')),
 }
 
-// Same rules as resolveWikiLink in backend/wiki.go: [[Name]], or
-// [[type:Name]] when two kinds of article share a name.
-const norm = (s) => s.replace(/_/g, ' ').toLowerCase().split(/\s+/).filter(Boolean).join(' ')
-
+// Resolves [[links]] over the wiki's article list (wikiLinks.js); a link to
+// a deleted article shows the label below.
 export function makeLinkResolver(items) {
-  const index = new Map()
-  const add = (name, it) => {
-    const k = norm(name)
-    if (!index.has(k)) index.set(k, [])
-    index.get(k).push(it)
-  }
-  for (const it of items) add(it.name, it)
-  // A character's former names, after every real name (as on the server).
-  for (const it of items) for (const a of it.aliases || []) add(a, it)
-  return (inner) => {
-    inner = inner.trim()
-    const colon = inner.indexOf(':')
-    if (colon > 0) {
-      const prefix = norm(inner.slice(0, colon))
-      const type = TYPE_ORDER.find((k) => norm(k) === prefix)
-      if (type) return (index.get(norm(inner.slice(colon + 1))) || []).find((x) => x.type === type) || null
-    }
-    return (index.get(norm(inner)) || [])[0] || null
-  }
+  const resolve = makeResolver(items)
+  resolve.deletedLabel = t('deleted article')
+  return resolve
 }

@@ -297,6 +297,9 @@ func createGearHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if !storeLinksOrFail(w, db, &in.description) {
+			return
+		}
 		tx, err := db.Begin()
 		if err != nil {
 			http.Error(w, "failed to start transaction", http.StatusInternalServerError)
@@ -345,6 +348,9 @@ func updateGearHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 		in, err := parseGearForm(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if !storeLinksOrFail(w, db, &in.description) {
 			return
 		}
 		tx, err := db.Begin()

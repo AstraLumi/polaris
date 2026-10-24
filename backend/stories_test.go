@@ -373,6 +373,11 @@ func TestExportImportRoundTrip(t *testing.T) {
 	app.db.Exec(`INSERT INTO characters DEFAULT VALUES`)
 	body, ct := form(t, nil, "icon", "story.png", []byte("STORYICON"))
 	do(t, h, "PUT", "/api/stories/"+a.ID, body, ct)
+	// A chapter's text and a saved version of it (chaptertext.go).
+	ch := addChapter(t, h, "/api/s/"+a.ID, "Prologue", 0)
+	putText(t, h, "/api/s/"+a.ID, ch, docOf("It began in the rain"), 0)
+	do(t, h, "POST", "/api/s/"+a.ID+"/chapters/"+idStr(ch)+"/text/versions", strings.NewReader(`{"label":"First"}`), "application/json")
+	putText(t, h, "/api/s/"+a.ID, ch, docOf("It began in the snow, again"), 1)
 
 	data := exportZip(t, h, a.ID)
 	rec := importZipBytes(t, h, data)
@@ -400,6 +405,12 @@ func TestExportImportRoundTrip(t *testing.T) {
 	}
 	if !strings.Contains(rows[0].IconPath, si.ID) {
 		t.Fatal("imported story's files must live under its own id")
+	}
+	if text := getText(t, h, "/api/s/"+si.ID, ch); text.Version != 2 || text.Words != 6 || !strings.Contains(string(text.Doc), "snow") {
+		t.Fatalf("imported chapter text: %+v", text)
+	}
+	if vs := listTextVersions(t, h, "/api/s/"+si.ID, ch); len(vs) != 1 || vs[0].Label != "First" || vs[0].Words != 5 {
+		t.Fatalf("imported versions: %+v", vs)
 	}
 }
 

@@ -116,6 +116,7 @@
 import { ref, computed, onBeforeUnmount } from 'vue'
 import FilePick from './FilePick.vue'
 import { useModalGuard } from '../navigation'
+import { linkField } from '../linkNames'
 import { t } from '../i18n'
 import { spellsApi, buildSpellFormData } from '../api'
 import { BUILTIN_ICONS, BUILTIN_PREFIX } from '../builtinIcons'
@@ -138,7 +139,7 @@ const source = ref(
 const mpCost = ref(props.spell?.mp_cost ?? '')
 const hpCost = ref(props.spell?.hp_cost ?? '')
 const origin = ref(props.spell?.origin ?? '')
-const description = ref(props.spell?.description ?? '')
+const description = linkField(props.spell?.description)
 const iconFile = ref(null)
 const submitting = ref(false)
 const error = ref('')

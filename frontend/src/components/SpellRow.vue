@@ -14,7 +14,7 @@
         <span v-if="source" class="spell-meta-item">{{ source }}</span>
         <span v-if="spell.origin" class="spell-meta-item">{{ spell.origin }}</span>
       </div>
-      <p v-if="spell.description" class="spell-description">{{ spell.description }}</p>
+      <p v-if="spell.description" class="spell-description">{{ linkText(spell.description) }}</p>
     </div>
 
     <div v-if="$slots.actions" class="spell-actions">
@@ -27,6 +27,7 @@
 import { computed } from 'vue'
 import IconImage from './IconImage.vue'
 import { formatSpellCost, formatSpellLevel, formatSpellSource } from '../spellUtils'
+import { useLinkNames, linkText } from '../linkNames'
 
 const props = defineProps({
   spell: { type: Object, required: true },
@@ -35,6 +36,7 @@ const props = defineProps({
 const cost = computed(() => formatSpellCost(props.spell))
 const isFree = computed(() => !props.spell.mp_cost && !props.spell.hp_cost)
 const source = computed(() => formatSpellSource(props.spell))
+useLinkNames()
 </script>
 
 <style scoped>

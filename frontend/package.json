@@ -2,6 +2,7 @@
   "name": "polaris-frontend",
   "private": true,
   "version": "2.1.0",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,6 +10,17 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "prosemirror-commands": "1.7.2",
+    "prosemirror-dropcursor": "1.8.4",
+    "prosemirror-gapcursor": "1.4.1",
+    "prosemirror-history": "1.5.1",
+    "prosemirror-inputrules": "1.5.1",
+    "prosemirror-keymap": "1.2.3",
+    "prosemirror-model": "1.25.12",
+    "prosemirror-schema-list": "1.5.1",
+    "prosemirror-state": "1.4.4",
+    "prosemirror-transform": "1.12.4",
+    "prosemirror-view": "1.42.8",
     "three": "^0.170.0",
     "vue": "^3.4.21",
     "vue-router": "^4.3.0"

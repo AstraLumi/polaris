@@ -20,7 +20,7 @@
           <strong>{{ e.founding_date ? fullDate(e.founding_date) : $t('Unknown') }}</strong>
         </p>
         <p class="desc" :class="{ empty: !e.description }">
-          {{ e.description || $t('No description.') }}
+          {{ linkText(e.description) || $t('No description.') }}
         </p>
       </template>
     </div>
@@ -30,6 +30,7 @@
 <script setup>
 import { tr } from '../i18n'
 import { fullDate } from '../calendar'
+import { useLinkNames, linkText } from '../linkNames'
 
 defineProps({
   // [{ type: 'Kingdom' | 'Region' | 'Ocean' | 'Major location' | 'Location' | 'City' | 'Capital', name, color,
@@ -60,6 +61,7 @@ tr('Cloud cover')
 tr('Wind from')
 tr('Wind')
 tr('Current towards')
+useLinkNames()
 </script>
 
 <style scoped>

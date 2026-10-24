@@ -26,6 +26,13 @@
 
     <template v-else>
       <section v-if="loose.length" class="glass-panel block">
+        <div v-if="idx.volumes.length" class="volume-head">
+          <h2 class="loose-title">{{ $t('Chapters without a volume') }}</h2>
+          <RouterLink to="/write/0" class="btn btn-ghost small">{{ $t('Write') }}</RouterLink>
+        </div>
+        <div v-else class="write-row">
+          <RouterLink to="/write/0" class="btn btn-ghost small">{{ $t('Write') }}</RouterLink>
+        </div>
         <ChapterRows :chapters="loose" :volume-id="null" @move="moveChapter" @delete="(c) => (confirmChapter = c)" @drop-on="dropChapter" />
       </section>
 
@@ -43,6 +50,7 @@
           />
           <h2 v-else>{{ v.title }}</h2>
           <div class="volume-actions">
+            <RouterLink :to="`/write/${v.id}`" class="btn btn-ghost small" :title="$t('Write this volume\'s text')">{{ $t('Write') }}</RouterLink>
             <button type="button" class="btn btn-ghost small" @click="startRename(v)">{{ $t('Rename') }}</button>
             <RowMenu
               :label="$t('Volume actions')"
@@ -330,6 +338,16 @@ useQuickAdd(() => addChapter(null))
 
 .rename {
   max-width: 22rem;
+}
+
+.loose-title {
+  color: var(--text-muted);
+}
+
+.write-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.3rem;
 }
 
 .volume-actions {

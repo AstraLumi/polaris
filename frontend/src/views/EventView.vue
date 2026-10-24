@@ -43,7 +43,7 @@
 
       <section class="glass-panel block">
         <h2>{{ $t('Description') }}</h2>
-        <p v-if="event.description" class="description">{{ event.description }}</p>
+        <p v-if="event.description" class="description">{{ linkText(event.description) }}</p>
         <p v-else class="empty">{{ $t('No description yet.') }}</p>
       </section>
 
@@ -137,9 +137,11 @@ import Pager from '../components/Pager.vue'
 import { chapterLabel, loadChapters } from '../chapters'
 import { pageTitle, viewPicture, mapPath } from '../navigation'
 import { t as tt } from '../i18n'
+import { useLinkNames, linkText } from '../linkNames'
 
 const props = defineProps({ id: { type: String, required: true } })
 const router = useRouter()
+useLinkNames()
 loadChapters()
 
 const event = ref(null)

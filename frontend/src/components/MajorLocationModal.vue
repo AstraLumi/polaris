@@ -67,6 +67,7 @@
 <script setup>
 import { t } from '../i18n'
 import { useModalGuard } from '../navigation'
+import { linkField } from '../linkNames'
 import { ref, computed } from 'vue'
 import { mapApi } from '../api'
 import ColorPicker from './ColorPicker.vue'
@@ -82,7 +83,7 @@ const emit = defineEmits(['close', 'saved', 'deleted'])
 
 const name = ref(props.location?.name ?? '')
 const foundingDate = ref(props.location?.founding_date ?? '')
-const description = ref(props.location?.description ?? '')
+const description = linkField(props.location?.description)
 const color = ref(props.location?.color ?? '')
 const realm = ref(props.location?.color ? props.location.realm || 'kingdom' : 'kingdom')
 

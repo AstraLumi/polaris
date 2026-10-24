@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { wrapInline, toggleLines, codeBlock, table, rule, webLink, searchArticles, wikiLinkMarkup } from '../src/markdownEdit.js'
 import { renderMarkdown } from '../src/markdown.js'
+import { makeLinkResolver } from '../src/wikiLinks.js'
 
 // Apply an edit the way the editor does; returns [text, selected text].
 function run(text, from, to, fn, ...args) {
@@ -69,5 +70,15 @@ assert.equal(wikiLinkMarkup(items[5], '', resolve), '[[Dragon]]')
 assert.equal(wikiLinkMarkup(items[6], '', resolve), '[[race:Dragon]]')
 assert.ok(renderMarkdown(wikiLinkMarkup(items[6], 'wyrms', resolve), resolve).includes('href="/wiki/race/6"'))
 assert.ok(renderMarkdown(wikiLinkMarkup(items[6], 'wyrms', resolve), resolve).includes('>wyrms</a>'))
+
+// With the wiki's own resolver: readable links, and the id when two of a
+// kind share the name (a name would lead to the first of them).
+const twins = [...items, { type: 'character', id: 8, name: 'Dragon' }]
+const real = makeLinkResolver(twins)
+assert.equal(wikiLinkMarkup(twins[1], '', real), '[[Aldoria]]')
+assert.equal(wikiLinkMarkup(twins[6], 'wyrms', real), '[[race:Dragon|wyrms]]')
+assert.equal(wikiLinkMarkup(twins[5], '', real), '[[character#5]]')
+assert.equal(wikiLinkMarkup(twins[7], 'the other', real), '[[character#8|the other]]')
+assert.ok(renderMarkdown(wikiLinkMarkup(twins[7], '', real), real).includes('href="/wiki/character/8"'))
 
 console.log('markdownEdit: ok')

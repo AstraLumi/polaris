@@ -220,6 +220,7 @@ import { reactive, ref, computed, watch, onMounted, nextTick } from 'vue'
 import { fullDate } from '../calendar'
 import FilePick from '../components/FilePick.vue'
 import { t } from '../i18n'
+import { loadLinksByName } from '../linkNames'
 import { useRouter } from 'vue-router'
 import {
   fetchVersion, fetchVersions, updateVersion, buildVersionFormData, fetchCatalogs, fetchLocationOptions, fetchComputePreview, isMissing,
@@ -411,6 +412,10 @@ async function load() {
       missing.value = true
       return
     }
+    // The texts' [[links]] by name (linkNames.js); stored by id on save.
+    const [description, bio, speech] = await Promise.all(
+      [data.story.description, data.story.bio, data.story.speech_mannerisms].map((s) => loadLinksByName(s)),
+    )
     Object.assign(form, {
       version_date: data.version_date,
       version_reference: data.version_reference,
@@ -431,9 +436,9 @@ async function load() {
       nation_location_id: data.story.nation_location_id,
       deaths: data.story.deaths,
       status: data.story.status || 'alive',
-      description: data.story.description,
-      bio: data.story.bio,
-      speech_mannerisms: data.story.speech_mannerisms,
+      description,
+      bio,
+      speech_mannerisms: speech,
     })
     buildStats.value = { ...(data.build || {}) }
     specialBases.value = { ...(data.special_bases || {}) }

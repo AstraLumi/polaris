@@ -1,4 +1,5 @@
 import { wikiApi } from './wiki'
+import { parseIdLink } from './wikiLinks.js'
 
 // Hover previews of wiki articles (components/LinkPreviewLayer.vue): which
 // links get one, and a short summary of the article they point at.
@@ -14,11 +15,17 @@ export function articleOfLink(el) {
   return m ? { el: a, type: m[1], id: m[2] } : null
 }
 
-// Markdown down to plain text, for an excerpt.
-export function plainText(md) {
+// Markdown down to plain text, for an excerpt. `names` maps a stored link's
+// target ("character#12") to the article's name (the article's link_names).
+export function plainText(md, names = {}) {
   return String(md || '')
     .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/\[\[([^\]|]+)\|\s*\]\]/g, '[[$1]]')
     .replace(/\[\[([^\]|]+)\|([^\]]*)\]\]/g, '$2')
+    .replace(/\[\[([^\]|]+)\]\]/g, (m, target) => {
+      const id = parseIdLink(target)
+      return id ? names[`${id.type}#${id.id}`] || '' : m
+    })
     .replace(/\[\[(?:[a-z_ ]+:)?([^\]]+)\]\]/gi, '$1')
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
     .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+[.)])\s+/gm, '')
@@ -48,7 +55,7 @@ export function articleText(a) {
     ...(a.sections || []).map((s) => s.body),
   ]
   for (const c of candidates) {
-    const t = plainText(c)
+    const t = plainText(c, a.link_names || {})
     if (t) return excerpt(t)
   }
   return ''

@@ -100,11 +100,26 @@ types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard
   foreign key; instead `wikiSchemaStatements` creates an `AFTER DELETE` trigger
   on each source table that removes its entry, so deleting a source from any
   path deletes its wiki text. Events that only carry a birth or founding are
-  not articles. `[[Name]]`, `[[Name|text]]` and `[[type:Name]]` link articles;
-  the Go (`resolveWikiLink`) and JS (`makeLinkResolver`) resolvers must agree.
+  not articles. Links are stored by id, `[[type#id]]` or `[[type#id|text]]`
+  (schema 42); the typed `[[Name]]`, `[[Name|text]]` and `[[type:Name]]` are
+  turned into that form on save (`normalizeWikiLinks`, `backend/wikilinks.go`)
+  and shown by name again in the editors (`linksForEditing`,
+  `frontend/src/wikiLinks.js`). Go and JS must agree; both test suites read
+  `frontend/tests/wikiLinks.fixtures.json`. The items' own texts that the
+  wiki shows from their pages (a version's description, bio and speech
+  mannerisms; a location's, faction's, event's, spell's, gear's and
+  creature's description) store links the same way since schema 43
+  (`itemLinkColumns`). Their forms show the links by name and every other
+  place shows them as plain text through `linkText` (`linkNames.js`, which
+  loads the wiki's article list for the names; `linksAsText` in
+  `wikiLinks.js`), never raw. "Copy Character Assets" keeps the ids of the
+  rows it copies, so a copied spell's or gear's description keeps its links
+  to copied assets and turns the rest back into `[[type:Name]]`
+  (`linksForCopy`).
   Markdown is rendered by our own small escaping renderer (no dependency, no raw
   HTML); `node frontend/tests/markdown.test.mjs` covers it. Adding an article
-  kind: a `wikiTypeDef`, its facts in `loadSourceFacts`, its labels in
+  kind: a `wikiTypeDef`, its facts in `loadSourceFacts`, its key in
+  `TYPE_ORDER` (`wikiLinks.js`) and the fixtures' `types`, its labels in
   `wiki.js`, and a migration creating its trigger.
   Lore articles (`backend/lore.go`, schema 17) are the one kind with no
   source: `lore_articles` holds only a name and picture, created from the

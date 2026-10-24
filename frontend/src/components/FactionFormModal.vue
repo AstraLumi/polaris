@@ -95,6 +95,7 @@
 // Creates or edits a faction, members included, in one save.
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useModalGuard } from '../navigation'
+import { linkField } from '../linkNames'
 import { factionsApi, fetchCharacterOptions, fetchLocationOptions } from '../api'
 import ColorPicker from './ColorPicker.vue'
 import DateField from './DateField.vue'
@@ -109,7 +110,7 @@ const emit = defineEmits(['close', 'saved', 'deleted'])
 
 const f = props.faction
 const name = ref(f?.name ?? '')
-const description = ref(f?.description ?? '')
+const description = linkField(f?.description)
 const color = ref(f?.color ?? '')
 const tiedToKingdom = !!f?.kingdom_id
 const parentId = ref(f?.parent_id ?? null)
