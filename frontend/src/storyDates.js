@@ -2,7 +2,8 @@
 // is DD-MM-YYYY, see dateDigits.js). One shape everywhere: "15/03/1054",
 // a year alone as just the year, and no zeros in front of a year. A year
 // before 1 gets a real minus sign ("−54"), or the story's era names when
-// it has them ("54 BC", "1054 AD"). No imports, so node can test it:
+// it has them ("54 BC", "1054 AD"). A month with a name reads as words:
+// "15 Frostfall 1054". No imports, so node can test it:
 // node frontend/tests/storyDates.test.mjs
 
 export const MINUS = '−'
@@ -15,9 +16,12 @@ export function yearText(year, { before = '', after = '' } = {}) {
   return after ? `${year} ${after}` : String(year)
 }
 
-// A date's text ("15/03/1054"), or just the year when only a year was
-// given (`yearOnly`).
-export function dayText({ day, month, year }, yearOnly = false, eras = {}) {
+// A date's text ("15/03/1054", or "15 Frostfall 1054" when `monthNames`
+// names its month), or just the year when only a year was given
+// (`yearOnly`).
+export function dayText({ day, month, year }, yearOnly = false, eras = {}, monthNames = []) {
   const y = yearText(year, eras)
-  return yearOnly ? y : `${two(day)}/${two(month)}/${y}`
+  if (yearOnly) return y
+  const name = monthNames[month - 1]
+  return name ? `${day} ${name} ${y}` : `${two(day)}/${two(month)}/${y}`
 }

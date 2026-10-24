@@ -137,7 +137,6 @@
 }
 
 :root {
-  --page-max: 1080px;
   --page-narrow: 760px;
   --control-h: 2.5rem; /* every input, select and button */
   --radius-control: 10px;
@@ -227,13 +226,11 @@ h3 {
 
 /* ---- 3. Page layout ----------------------------------------------------- */
 /* Every page's root is `.page`: left-aligned against the sidebar, with the
-   same padding, width and heading. `.is-narrow` is for forms, `.is-wide`
-   (below) for canvases that use the whole window (timeline, calendar,
-   family tree, graph). */
+   same padding and heading, and as wide as the window lets it be; lists
+   and cards fill it with more columns. `.is-narrow` is for single forms. */
 
 .page {
   width: 100%;
-  max-width: var(--page-max);
   padding: 1rem 1rem 3rem;
 }
 
@@ -685,10 +682,6 @@ input[type='radio'] {
     animation-duration: 0.001ms !important;
     transition-duration: 0.001ms !important;
   }
-}
-
-.page.is-wide {
-  max-width: none;
 }
 
 /* A class's icon, small, beside its name (character card and sheet). */

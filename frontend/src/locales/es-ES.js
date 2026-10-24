@@ -1941,4 +1941,8 @@ export default {
   "with a date, it lands on the timeline and the calendar": "con una fecha, aparece en la línea temporal y en el calendario",
   "Start a chapter": "Empieza un capítulo",
   "notes per chapter, and what happens in each": "notas por capítulo, y lo que pasa en cada uno",
+  "Month names": "Nombres de los meses",
+  "Optional. A named month reads as words in dates; one left empty keeps its number.": "Opcional. Un mes con nombre se lee con su nombre en las fechas; uno vacío conserva su número.",
+  "The calendar goes back to 12 months of 30 days of 24 hours, with no month or era names, and is saved. Dates already saved are not rewritten.": "El calendario vuelve a 12 meses de 30 días de 24 horas, sin nombres de meses ni de era, y se guarda. Las fechas ya guardadas no se reescriben.",
+  "a month name is at most 24 characters, on one line": "un nombre de mes tiene como máximo 24 caracteres, en una línea",
 }

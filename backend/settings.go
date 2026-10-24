@@ -27,6 +27,10 @@ const (
 	settingYearBefore = "calendar_year_before"
 	settingYearAfter  = "calendar_year_after"
 	maxEraRunes       = 24
+	// The months' names, a JSON list in order; "" leaves a month to its
+	// number. Names past the year's last month are kept, so a year made
+	// shorter and then longer again gets its names back.
+	settingMonthNames = "calendar_month_names"
 
 	defaultMonthsPerYear = 12
 	defaultDaysPerMonth  = 30
@@ -50,6 +54,22 @@ type calendarSettings struct {
 	// How years are written (frontend/src/calendar.js, yearLabel).
 	YearBefore string `json:"year_before"`
 	YearAfter  string `json:"year_after"`
+	// Month names in order (calendar.js, monthName); may be shorter or
+	// longer than the year.
+	MonthNames []string `json:"month_names"`
+}
+
+// readMonthNames reads the months' names, an empty list when unset.
+func readMonthNames(db *sql.DB) []string {
+	var raw string
+	names := []string{}
+	if db.QueryRow(`SELECT value FROM app_settings WHERE key = ?`, settingMonthNames).Scan(&raw) == nil {
+		json.Unmarshal([]byte(raw), &names)
+	}
+	if names == nil {
+		names = []string{}
+	}
+	return names
 }
 
 // readEra reads an era name, "" when unset.
@@ -125,6 +145,7 @@ func loadCalendar(db *sql.DB) calendarSettings {
 		HoursPerDay:   readHoursPerDay(db),
 		YearBefore:    readEra(db, settingYearBefore),
 		YearAfter:     readEra(db, settingYearAfter),
+		MonthNames:    readMonthNames(db),
 	}
 }
 
@@ -141,6 +162,8 @@ func updateSettingsHandler(db *sql.DB) http.HandlerFunc {
 			calendarSettings
 			YearBefore *string `json:"year_before"`
 			YearAfter  *string `json:"year_after"`
+			// Left out, the names stay.
+			MonthNames *[]string `json:"month_names"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -157,6 +180,28 @@ func updateSettingsHandler(db *sql.DB) http.HandlerFunc {
 				return
 			}
 			eras[key] = clean
+		}
+		var monthNames []byte
+		if in.MonthNames != nil {
+			names := *in.MonthNames
+			if len(names) > maxMonthsPerYear {
+				http.Error(w, "a month name is at most 24 characters, on one line", http.StatusBadRequest)
+				return
+			}
+			clean := make([]string, len(names))
+			for i, n := range names {
+				c, ok := cleanEra(n)
+				if !ok {
+					http.Error(w, "a month name is at most 24 characters, on one line", http.StatusBadRequest)
+					return
+				}
+				clean[i] = c
+			}
+			// Empty names at the end say nothing.
+			for len(clean) > 0 && clean[len(clean)-1] == "" {
+				clean = clean[:len(clean)-1]
+			}
+			monthNames, _ = json.Marshal(clean)
 		}
 		if in.MonthsPerYear < 1 || in.MonthsPerYear > maxMonthsPerYear {
 			http.Error(w, "months per year must be between 1 and "+strconv.Itoa(maxMonthsPerYear), http.StatusBadRequest)
@@ -187,6 +232,9 @@ func updateSettingsHandler(db *sql.DB) http.HandlerFunc {
 		}
 		for key, v := range eras {
 			values[key] = v
+		}
+		if monthNames != nil {
+			values[settingMonthNames] = string(monthNames)
 		}
 		for key, val := range values {
 			if _, err := tx.Exec(

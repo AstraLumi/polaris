@@ -57,7 +57,7 @@
           </div>
           <button type="button" class="pop-step" :aria-label="$t('Next month')" @click="stepMonth(1)">›</button>
         </div>
-        <div class="pop-months" role="radiogroup" :aria-label="$t('Month')" :style="{ gridTemplateColumns: `repeat(${monthColumns}, 1fr)` }">
+        <div class="pop-months" :class="{ 'is-named': named }" role="radiogroup" :aria-label="$t('Month')" :style="{ gridTemplateColumns: `repeat(${monthColumns}, minmax(0, 1fr))` }">
           <button
             v-for="m in monthCount"
             :key="m"
@@ -69,10 +69,10 @@
             :title="monthLabel(m)"
             @click="view.month = m"
           >
-            {{ earth ? monthShort(m) : m }}
+            {{ earth ? monthShort(m) : monthNameOf(m) || m }}
           </button>
         </div>
-        <div class="pop-days" :style="{ gridTemplateColumns: `repeat(${dayColumns}, 1fr)` }">
+        <div class="pop-days" :style="{ gridTemplateColumns: `repeat(${dayColumns}, minmax(0, 1fr))` }">
           <button
             v-for="d in dayCount"
             :key="d"
@@ -103,7 +103,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch, nextTick, onBeforeUnmount } from 'vue'
-import { calendar, parseStoryDate, formatStoryDate, dayColumns as columnsFor } from '../calendar'
+import { calendar, parseStoryDate, formatStoryDate, dayColumns as columnsFor, monthLabel as storyMonth, monthNameOf } from '../calendar'
 import { seasonCycle, monthSeasons } from '../seasons'
 import { digitsToParts, partsToDigits, displayDigits, parsePasted, MAX_DIGITS } from '../dateDigits'
 import { t, tr, locale } from '../i18n'
@@ -255,8 +255,13 @@ const monthCount = computed(() => (props.earth ? 12 : calendar.months_per_year))
 // Earth's months have their own lengths (February given its 29th).
 const EARTH_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 const dayCount = computed(() => (props.earth ? EARTH_DAYS[view.month - 1] : calendar.days_per_month))
-// Months in even rows of at most eight (12 in two rows of 6).
-const monthColumns = computed(() => Math.ceil(monthCount.value / Math.ceil(monthCount.value / 8)))
+// Named months (Settings → Calendar) show their names, in rows of at
+// most four; numbers fit eight to a row. Even rows: 12 in two rows of 6.
+const named = computed(() => !props.earth && calendar.month_names.some((n, i) => n && i < calendar.months_per_year))
+const monthColumns = computed(() => {
+  const most = named.value ? 4 : 8
+  return Math.ceil(monthCount.value / Math.ceil(monthCount.value / most))
+})
 const dayColumns = computed(() => columnsFor(dayCount.value))
 
 function earthMonth(m, style) {
@@ -266,7 +271,7 @@ function monthShort(m) {
   return earthMonth(m, 'short')
 }
 function monthLabel(m) {
-  return props.earth ? earthMonth(m, 'long') : t('Month {n}', { n: m })
+  return props.earth ? earthMonth(m, 'long') : storyMonth(m)
 }
 
 const picked = computed(() => digitsToParts(digits.value, negative.value))
@@ -520,6 +525,12 @@ onBeforeUnmount(() => listen(false))
   cursor: pointer;
 }
 
+.date-pop .pop-months.is-named .pop-month-pick {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .date-pop .pop-month-pick:hover {
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.05);
@@ -539,6 +550,7 @@ onBeforeUnmount(() => listen(false))
 .date-pop .pop-day {
   aspect-ratio: 1;
   min-height: 1.6rem;
+  padding: 0;
   border-radius: 6px;
   border: 1px solid transparent;
   background: var(--season, rgba(255, 255, 255, 0.025));

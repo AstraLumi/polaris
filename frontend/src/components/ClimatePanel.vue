@@ -6,7 +6,7 @@
       <span>{{ $t('When') }}</span>
       <select :value="month ?? ''" @change="$emit('update:month', $event.target.value === '' ? null : Number($event.target.value))">
         <option value="">{{ $t('The whole year') }}</option>
-        <option v-for="m in months" :key="m" :value="m - 1">{{ $t('Month {n}', { n: m }) }}</option>
+        <option v-for="m in months" :key="m" :value="m - 1">{{ monthLabel(m) }}</option>
       </select>
     </label>
 
@@ -70,6 +70,7 @@
 <script setup>
 import { computed } from 'vue'
 import { layerOf } from '../planetLayers'
+import { monthLabel } from '../calendar'
 import { TEMPERATURE_STOPS, RAIN_STOPS, KOPPEN_LEGEND, formatTemperature, formatRain } from '../climateColors'
 
 // What a climate layer of the planet map shows (planetClimate.js): the

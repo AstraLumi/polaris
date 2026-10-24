@@ -16,6 +16,9 @@ export const calendar = reactive({
   // Era names after a year (before year 1, from year 1 on); '' for none.
   year_before: '',
   year_after: '',
+  // The months' names in order; '' (or past the list) leaves a month to
+  // its number. The list can be longer than the year (settings.go).
+  month_names: [],
   // The story's seasons (seasons.js): { seasons, start, hemisphere, unit }.
   seasons: { seasons: [], start: '', hemisphere: 'north', unit: 'C' },
   loaded: false,
@@ -31,6 +34,7 @@ export async function loadCalendar() {
       calendar.hours_per_day = data.hours_per_day || 24
       calendar.year_before = data.year_before || ''
       calendar.year_after = data.year_after || ''
+      calendar.month_names = data.month_names || []
       if (data.seasons) calendar.seasons = data.seasons
       applyMapSettings(data.map)
       applyBloodTypes(data.blood_types)
@@ -86,6 +90,12 @@ export function quarterOf(month) {
 // ("54 BC") from Settings → Calendar (storyDates.js).
 export const yearLabel = (year) => yearText(year, { before: calendar.year_before, after: calendar.year_after })
 
+// A month's name from Settings → Calendar, or '' when it has none.
+export const monthNameOf = (month) => (month <= calendar.months_per_year && calendar.month_names[month - 1]) || ''
+
+// A month as a title: its name, or "Month 3".
+export const monthLabel = (month) => monthNameOf(month) || t('Month {n}', { n: month })
+
 // "1033 Q2" — what the timeline shows instead of the full date.
 export function shortDate(text) {
   const d = parseStoryDate(text)
@@ -93,14 +103,16 @@ export function shortDate(text) {
   return `${yearLabel(d.year)} ${t('Q{n}', { n: quarterOf(d.month) })}`
 }
 
-// "15/03/1054" for anything readable ("1054" for a year alone, "−54" or
-// "54 BC" before year 1), the raw text otherwise. For display only; stored
+// "15/03/1054" for anything readable ("15 Frostfall 1054" when the month
+// has a name, "1054" for a year alone, "−54" or "54 BC" before year 1),
+// the raw text otherwise. For display only; stored
 // dates keep the DD-MM-YYYY form.
 export function fullDate(text) {
   const d = parseStoryDate(text)
   if (!d) return text || ''
   const yearOnly = !/^\s*\d{1,3}-\d{1,3}-/.test(text)
-  return dayText(d, yearOnly, { before: calendar.year_before, after: calendar.year_after })
+  const names = calendar.month_names.slice(0, calendar.months_per_year)
+  return dayText(d, yearOnly, { before: calendar.year_before, after: calendar.year_after }, names)
 }
 
 // { year, yearText, quarter } for the big year / small "Q2" blocks, or null
@@ -128,4 +140,5 @@ export const SEASON_MESSAGES = [
   tr("the hex size and the planet's size must be more than 0"),
   tr('the axial tilt is between 0 and 90 degrees'),
   tr('an era name is at most 24 characters, on one line'),
+  tr('a month name is at most 24 characters, on one line'),
 ]

@@ -16,5 +16,11 @@ assert.equal(dayText({ day: 15, month: 3, year: -2000 }), `15/03/${MINUS}2000`)
 assert.equal(dayText({ day: 15, month: 3, year: -2000 }, false, { before: 'before the Crown' }), '15/03/2000 before the Crown')
 assert.equal(dayText({ day: 1, month: 1, year: 1054 }, true), '1054', 'a year alone stays a year')
 assert.equal(dayText({ day: 1, month: 1, year: -5 }, true, { before: 'BC' }), '5 BC')
+const names = ['Frostfall', '', 'Thaw']
+assert.equal(dayText({ day: 5, month: 1, year: 1054 }, false, {}, names), '5 Frostfall 1054', 'a named month reads as words')
+assert.equal(dayText({ day: 5, month: 2, year: 1054 }, false, {}, names), '05/02/1054', 'an unnamed month keeps its number')
+assert.equal(dayText({ day: 5, month: 7, year: 1054 }, false, {}, names), '05/07/1054', 'past the names, numbers')
+assert.equal(dayText({ day: 15, month: 3, year: -54 }, false, { before: 'BC' }, names), '15 Thaw 54 BC')
+assert.equal(dayText({ day: 1, month: 1, year: 1054 }, true, {}, names), '1054', 'a year alone stays a year')
 
 console.log('storyDates: ok')

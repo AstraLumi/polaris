@@ -26,7 +26,7 @@
             ⇤ {{ $t('Earlier events') }}
           </button>
           <button type="button" class="btn btn-ghost small step-prev" :aria-label="$t('Previous month')" :title="$t('Previous month')" @click="shift(-1)">‹</button>
-          <h2 class="month-title">{{ $t('Month {n}', { n: month }) }}, {{ yearText }}</h2>
+          <h2 class="month-title">{{ monthLabel(month) }}, {{ yearText }}</h2>
           <button type="button" class="btn btn-ghost small step-next" :aria-label="$t('Next month')" :title="$t('Next month')" @click="shift(1)">›</button>
           <button type="button" class="btn btn-ghost small jump-next" :disabled="!nextPoint" :title="$t('The closest later month with something in it')" @click="goPoint(nextPoint)">
             {{ $t('Later events') }} ⇥
@@ -58,10 +58,10 @@
           :class="{ 'is-on': m === month, 'has-points': monthCounts[m], 'has-season': monthSeason[m] }"
           :style="monthSeason[m] ? { '--season': monthSeason[m].color } : null"
           :aria-selected="m === month"
-          :title="[monthSeason[m]?.name, $tn('{n} point', '{n} points', monthCounts[m] || 0)].filter(Boolean).join(' · ')"
+          :title="[monthLabel(m), monthSeason[m]?.name, $tn('{n} point', '{n} points', monthCounts[m] || 0)].filter(Boolean).join(' · ')"
           @click="go(year, m)"
         >
-          {{ m }}<span v-if="monthCounts[m]" class="dot-count">{{ monthCounts[m] }}</span>
+          {{ monthNameOf(m) || m }}<span v-if="monthCounts[m]" class="dot-count">{{ monthCounts[m] }}</span>
         </button>
       </div>
 
@@ -118,7 +118,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { timelineApi } from '../api'
-import { calendar, parseStoryDate, formatStoryDate, fullDate, dayColumns, yearLabel } from '../calendar'
+import { calendar, parseStoryDate, formatStoryDate, fullDate, dayColumns, yearLabel, monthLabel, monthNameOf } from '../calendar'
 import { seasonCycle, seasonOn, monthSeasons, dayIndex } from '../seasons'
 import { mapPath } from '../navigation'
 import { wikiPath } from '../wiki'

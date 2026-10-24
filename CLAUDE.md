@@ -103,7 +103,10 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   year alone as the year, no leading zeros) and `shortDate` ("1054 Q2")
   in `calendar.js`, built on `storyDates.js`; a year before 1 gets a real
   minus or the story's era names (Settings → Calendar, `year_before` /
-  `year_after`). Never print a stored date raw.
+  `year_after`). A month can have a name (`month_names`, a list that may
+  run past the year so names survive a shorter year): its dates read
+  "15 Frostfall 1054", and pickers and titles use `monthLabel`. Never
+  print a stored date raw.
 - **The map is 2D only or a planet** (`map_mode`, `backend/planetmap.go`).
   The 2D tables (`location_hexes`, `locations.q/r`, `creature_hexes`) and
   the planet's (`planet_cells`, `locations.cell`, `creature_cells`) are kept

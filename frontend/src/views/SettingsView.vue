@@ -118,6 +118,17 @@
           </label>
         </div>
 
+        <div class="month-names">
+          <span class="quarters-title">{{ $t('Month names') }}</span>
+          <p class="note">{{ $t('Optional. A named month reads as words in dates; one left empty keeps its number.') }}</p>
+          <div class="month-name-grid">
+            <label v-for="m in nameSlots" :key="m" class="month-name">
+              <span>{{ m }}</span>
+              <input v-model="monthNames[m - 1]" type="text" maxlength="24" :placeholder="$t('Month {n}', { n: m })" />
+            </label>
+          </div>
+        </div>
+
         <div class="field-row narrow eras">
           <label class="field" :title="$t('Written after a year before 1. Left empty, those years show with a minus sign.')">
             <span>{{ $t('Era before year 1') }}</span>
@@ -507,7 +518,7 @@ const TIMELINE_ROWS = [
 // leaving the page.
 const savedState = ref({})
 const sectionState = {
-  calendar: () => JSON.stringify([months.value, days.value, hours.value, yearBefore.value.trim(), yearAfter.value.trim()]),
+  calendar: () => JSON.stringify([months.value, days.value, hours.value, yearBefore.value.trim(), yearAfter.value.trim(), namesToSave()]),
   seasons: () => JSON.stringify([seasonList.value, seasonStart.value, hemisphere.value, unit.value]),
   map: () => JSON.stringify(mapForm.value),
   blood: () => JSON.stringify(bloodList.value.map((b) => [b.name, b.note])),
@@ -527,12 +538,26 @@ useSaveShortcut(() => {
 })
 
 const months = ref(calendar.months_per_year)
+// One box per month, following Months per year. Names typed for months
+// past the last are kept (here and on the server) in case the year grows
+// again.
+const monthNames = ref(takeNames(calendar.month_names))
+const nameSlots = computed(() => Math.min(100, Math.max(1, Number.isInteger(months.value) ? months.value : 1)))
+function takeNames(list) {
+  return Array.from({ length: 100 }, (_, i) => (list || [])[i] || '')
+}
+function namesToSave() {
+  const names = monthNames.value.map((n) => (n || '').trim())
+  while (names.length && !names[names.length - 1]) names.pop()
+  return names
+}
 const yearBefore = ref(calendar.year_before)
 const yearAfter = ref(calendar.year_after)
 // How dates will read with the era names typed (storyDates.js).
 const eraExample = computed(() => {
   const eras = { before: yearBefore.value.trim(), after: yearAfter.value.trim() }
-  return [dayText({ day: 15, month: 3, year: 1054 }, false, eras), dayText({ day: 1, month: 1, year: -54 }, false, eras), `${yearText(1054, eras)} ${t('Q{n}', { n: 2 })}`].join(' · ')
+  const names = namesToSave().slice(0, nameSlots.value)
+  return [dayText({ day: 15, month: 3, year: 1054 }, false, eras, names), dayText({ day: 1, month: 1, year: -54 }, false, eras, names), `${yearText(1054, eras)} ${t('Q{n}', { n: 2 })}`].join(' · ')
 })
 const days = ref(calendar.days_per_month)
 const hours = ref(calendar.hours_per_day)
@@ -548,6 +573,8 @@ const valid = computed(
     hours.value > 0 && hours.value <= 100000,
 )
 const uneven = computed(() => valid.value && months.value % 4 !== 0)
+
+const named = (m) => (monthNames.value[m - 1] || '').trim()
 
 // Which months fall in each quarter, using the same rule as quarterOf().
 const quarterRows = computed(() => {
@@ -568,9 +595,11 @@ const quarterRows = computed(() => {
       range:
         lo === null
           ? t('(no months)')
-          : lo === hi
-            ? t('month {n}', { n: lo })
-            : t('months {from}–{to}', { from: lo, to: hi }),
+          : named(lo) && named(hi)
+            ? lo === hi ? named(lo) : `${named(lo)} – ${named(hi)}`
+            : lo === hi
+              ? t('month {n}', { n: lo })
+              : t('months {from}–{to}', { from: lo, to: hi }),
     })
   }
   return rows
@@ -803,13 +832,14 @@ const restoring = ref('')
 const RESTORES = {
   calendar: {
     title: tr('Restore the default calendar?'),
-    message: tr('The calendar goes back to 12 months of 30 days of 24 hours, with no era names, and is saved. Dates already saved are not rewritten.'),
+    message: tr('The calendar goes back to 12 months of 30 days of 24 hours, with no month or era names, and is saved. Dates already saved are not rewritten.'),
     run: () => {
       months.value = 12
       days.value = 30
       hours.value = 24
       yearBefore.value = ''
       yearAfter.value = ''
+      monthNames.value = takeNames([])
       return save()
     },
   },
@@ -863,6 +893,7 @@ async function save() {
       hours_per_day: hours.value,
       year_before: yearBefore.value.trim(),
       year_after: yearAfter.value.trim(),
+      month_names: namesToSave(),
     })
     await loadCalendar()
     markSaved('calendar')
@@ -883,6 +914,7 @@ onMounted(async () => {
     hours.value = s.hours_per_day || 24
     yearBefore.value = s.year_before || ''
     yearAfter.value = s.year_after || ''
+    monthNames.value = takeNames(s.month_names)
     markSaved('calendar')
     if (s.seasons) takeSeasons(s.seasons)
     takeMap(s.map)
@@ -909,14 +941,6 @@ onBeforeUnmount(() => {
   grid-template-columns: 11rem minmax(0, 1fr);
   gap: 1.75rem;
   align-items: start;
-}
-
-.settings-main {
-  max-width: var(--page-narrow);
-}
-
-.settings-main.is-stats {
-  max-width: none;
 }
 
 .settings-index {
@@ -1155,6 +1179,39 @@ onBeforeUnmount(() => {
 
 .quarters {
   margin: 0.5rem 0 1.25rem;
+}
+
+.month-names {
+  margin: 0.75rem 0 1rem;
+}
+
+.month-names .note {
+  margin: 0.2rem 0 0.5rem;
+}
+
+.month-name-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.4rem 0.6rem;
+}
+
+.month-name {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.month-name span {
+  min-width: 1.6rem;
+  text-align: right;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.month-name input {
+  flex: 1;
+  min-width: 0;
 }
 
 .quarters-title {
