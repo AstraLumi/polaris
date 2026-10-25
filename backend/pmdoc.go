@@ -23,6 +23,7 @@ package main
 //	docStoryLinks(doc) []pmStoryLink
 //	    Every story_link mark's (type, id), in reading order, without
 //	    repeats: what a chapter links to, for "appears in" lists.
+//	    (chapterindex.go counts them, and the dialogues, per chapter.)
 //	emptyPMDoc() *pmNode       A doc holding one empty paragraph.
 
 import (
@@ -41,7 +42,7 @@ import (
 
 const (
 	maxPMDocBytes = 5 << 20 // a chapter's JSON
-	maxPMDepth    = 32      // nesting of JSON values in a doc
+	maxPMDepth    = 64      // nesting of JSON values in a doc (a list level costs four: Word's nine levels fit)
 	maxPMNodes    = 500000
 )
 
@@ -235,10 +236,10 @@ func parsePMDoc(data []byte) (*pmNode, error) {
 }
 
 var (
-	pmBlockTypes  = map[string]bool{"paragraph": true, "heading": true, "scene_break": true, "page_break": true, "image": true, "bullet_list": true, "ordered_list": true}
+	pmBlockTypes  = map[string]bool{"paragraph": true, "heading": true, "scene_break": true, "page_break": true, "image": true, "bullet_list": true, "ordered_list": true, "toc": true, "dialogue": true}
 	pmInlineTypes = map[string]bool{"text": true, "hard_break": true, "tab": true}
-	pmAtomTypes   = map[string]bool{"scene_break": true, "page_break": true, "image": true, "hard_break": true, "tab": true}
-	pmMarkTypes   = map[string]bool{"bold": true, "italic": true, "underline": true, "strike": true, "superscript": true, "subscript": true, "smallcaps": true, "font": true, "size": true, "color": true, "highlight": true, "link": true, "story_link": true}
+	pmAtomTypes   = map[string]bool{"scene_break": true, "page_break": true, "image": true, "toc": true, "hard_break": true, "tab": true}
+	pmMarkTypes   = map[string]bool{"bold": true, "italic": true, "underline": true, "strike": true, "superscript": true, "subscript": true, "smallcaps": true, "font": true, "size": true, "color": true, "highlight": true, "link": true, "story_link": true, "char_style": true}
 	pmAligns      = map[string]bool{"left": true, "center": true, "right": true, "justify": true}
 	pmColorRe     = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 	pmStoryTypeRe = regexp.MustCompile(`^[a-z_]{1,40}$`)
@@ -312,6 +313,10 @@ func validatePMDoc(doc *pmNode) error {
 	if doc == nil || doc.Type != "doc" {
 		return errors.New("the document must have a doc root")
 	}
+	// The root's mode (stage 4): prose (the default) or script.
+	if m, ok := doc.Attrs["mode"]; ok && m != nil && m != "prose" && m != "script" {
+		return errors.New("doc: attr mode must be prose or script")
+	}
 	v := &pmValidator{}
 	if len(doc.Content) == 0 {
 		return errors.New("doc: needs at least one block")
@@ -355,7 +360,7 @@ func (v *pmValidator) block(n *pmNode, parent string, depth int) error {
 		return err
 	}
 	switch n.Type {
-	case "paragraph", "heading":
+	case "paragraph", "heading", "dialogue":
 		for _, c := range n.Content {
 			if err := v.inline(c, n.Type); err != nil {
 				return err
@@ -372,14 +377,12 @@ func (v *pmValidator) block(n *pmNode, parent string, depth int) error {
 			if err := v.count(); err != nil {
 				return err
 			}
-			if len(item.Content) == 0 {
-				return errors.New("list_item: needs at least one paragraph")
+			// A paragraph, then any blocks: more paragraphs, nested lists.
+			if len(item.Content) == 0 || item.Content[0] == nil || item.Content[0].Type != "paragraph" {
+				return errors.New("list_item: must start with a paragraph")
 			}
-			for _, p := range item.Content {
-				if p == nil || p.Type != "paragraph" {
-					return errors.New("list_item: may only hold paragraphs")
-				}
-				if err := v.block(p, "list_item", depth+2); err != nil {
+			for _, c := range item.Content {
+				if err := v.block(c, "list_item", depth+2); err != nil {
 					return err
 				}
 			}
@@ -529,6 +532,26 @@ func checkBlockAttrs(n *pmNode) error {
 		if err := optNum(a, "start", 0, 1e9); err != nil {
 			return wrap(err)
 		}
+	case "dialogue": // a line of Script Mode (stage 4)
+		if c, ok := a["character"]; ok && c != nil {
+			if id, ok := pmInt(c); !ok || id < 1 {
+				return wrap(errors.New("attr character: expected a character id or null"))
+			}
+		}
+		for _, k := range []string{"speaker", "manner"} {
+			if _, err := optString(a, k, 200); err != nil {
+				return wrap(err)
+			}
+		}
+	case "toc": // a generated table of contents (stage 3)
+		if lv, ok := a["levels"]; ok && lv != nil {
+			if n, ok := pmInt(lv); !ok || n < 1 || n > 3 {
+				return wrap(errors.New("attr levels: expected 1 to 3"))
+			}
+		}
+		if _, err := optString(a, "title", 200); err != nil {
+			return wrap(err)
+		}
 	}
 	return nil
 }
@@ -565,6 +588,11 @@ func checkMarkAttrs(m pmMark) error {
 		h, ok := a["href"].(string)
 		if !ok || !safeLinkHref(h) {
 			return wrap(errors.New("attr href: not an allowed link"))
+		}
+	case "char_style":
+		id, ok := a["id"].(string)
+		if !ok || id == "" || utf8.RuneCountInString(id) > 120 || strings.ContainsAny(id, "\x00\r\n") {
+			return wrap(errors.New("attr id: expected a style id"))
 		}
 	case "story_link":
 		t, ok := a["type"].(string)
@@ -635,7 +663,8 @@ func countWords(s string) int {
 func docWords(doc *pmNode) int {
 	n := 0
 	pmWalk(doc, func(x *pmNode) {
-		if x.Type == "paragraph" || x.Type == "heading" {
+		// A dialogue's words are its spoken line, not the speaker or manner.
+		if x.Type == "paragraph" || x.Type == "heading" || x.Type == "dialogue" {
 			n += countWords(pmTextblockText(x, " ", " "))
 		}
 	})
@@ -649,6 +678,8 @@ func docText(doc *pmNode) string {
 		switch n.Type {
 		case "paragraph", "heading":
 			lines = append(lines, pmTextblockText(n, "\n", "\t"))
+		case "dialogue":
+			lines = append(lines, dialogueLead(n)+pmTextblockText(n, "\n", "\t"))
 		case "scene_break":
 			g, _ := n.Attrs["glyph"].(string)
 			if g == "" {

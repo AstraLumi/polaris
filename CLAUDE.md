@@ -38,7 +38,16 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/editorSchema.test.mjs
     node frontend/tests/editorStyles.test.mjs
     node frontend/tests/editorText.test.mjs
+    node frontend/tests/editorCharStyles.test.mjs
+    node frontend/tests/editorLists.test.mjs
     node frontend/tests/autosave.test.mjs
+    node frontend/tests/editorSchema.test.mjs
+    node frontend/tests/editorStyles.test.mjs
+    node frontend/tests/editorText.test.mjs
+    node frontend/tests/autosave.test.mjs
+    node frontend/tests/bookLayout.test.mjs
+    node frontend/tests/nameMatch.test.mjs
+    node frontend/tests/editorScript.test.mjs
 
 Run all of these before committing.
 
@@ -255,11 +264,18 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   `styles.js`/`pageTypes.js` and `backend/editor.go` (the server's win when
   it sends them): change both. Screenshots without a server:
   `node frontend/tests/visual/writeShots.mjs` (fakes the API in memory).
+  Exports (.docx, EPUB, HTML/Markdown/text) are `backend/export*.go`; the
+  .docx export mirrors the import (`docx*.go`): change both, and keep
+  `TestExportDocxRoundTrip` passing (a real file:
+  `POLARIS_DOCX_SMOKE=… POLARIS_EXPORT_OUT=… go test -run TestExportSmoke`).
 - Birth date, blood type and Born in belong to the character (`characters`
   columns, schema 23), not to a version; the version form edits them for
   all versions.
 - Any file input must read `e.target.files[0]` *before* clearing the input
   (see `dropFile(keepInput)`), or the picker shows "No file chosen".
+- **Anything that writes `chapter_texts`** must call `indexChapterText`
+  in the same transaction (`backend/chapterindex.go`): "Appears in",
+  a character's Lines and "Who speaks" read that index, not the docs.
 
 ## Deployment
 

@@ -2,7 +2,7 @@
 // paragraph's formatting is worked out (its own attrs and marks, then its
 // style, then what that is based on, ending at Normal), and the stylesheet
 // that draws them. Pure: no DOM, no Vue.
-import { paraDeclarations, textDeclarations } from './css.js'
+import { paraDeclarations, textDeclarations, charDeclarations } from './css.js'
 
 export const BUILTIN_IDS = ['normal', 'heading1', 'heading2', 'heading3', 'title', 'subtitle', 'quote']
 export const BUILTIN_NAMES = {
@@ -17,6 +17,8 @@ export const BUILTIN_NAMES = {
 
 export const PARA_KEYS = ['align', 'indentFirst', 'indentLeft', 'indentRight', 'spaceBefore', 'spaceAfter', 'lineHeight', 'keepNext']
 export const TEXT_KEYS = ['font', 'size', 'color', 'bold', 'italic']
+// What a character style can set (docs/EDITOR.md, `char_style`): text formatting only.
+export const CHAR_KEYS = [...TEXT_KEYS, 'underline', 'strike', 'smallcaps', 'superscript', 'subscript', 'highlight']
 
 // The built-ins below mirror the server's defaults (defaultStyles in
 // backend/editor.go), which win when it sends them (GET /api/books' defaults).
@@ -76,6 +78,21 @@ export function resolveStyle(styles, id) {
   return { para, text }
 }
 
+// A character style's look: what it sets, over what the character styles it
+// is based on set (an unknown id, or a paragraph style's, gives nothing).
+// Only the keys some style in the chain sets come back.
+export function resolveCharStyle(styles, id) {
+  const chain = []
+  const seen = new Set()
+  for (let s = styleById(styles, id); s && s.kind === 'character' && !seen.has(s.id); s = s.based_on ? styleById(styles, s.based_on) : null) {
+    seen.add(s.id)
+    chain.unshift(s)
+  }
+  const out = {}
+  for (const st of chain) for (const k of CHAR_KEYS) if (st.text?.[k] != null) out[k] = st.text[k]
+  return out
+}
+
 // The style a block uses: its own, or for a heading without one the
 // built-in heading of its level (Normal past Heading 3).
 export function blockStyleId(typeName, attrs, styles) {
@@ -88,10 +105,16 @@ export function blockStyleId(typeName, attrs, styles) {
 }
 
 // What a paragraph or heading looks like: its own attrs over its style.
-// marks: the marks at a point in it (text formatting over the style's).
+// marks: the marks at a point in it: the text's own over its character style
+// over the paragraph's style.
 export function resolveBlock(styles, typeName, attrs, marks = []) {
   const { para, text } = resolveStyle(styles, blockStyleId(typeName, attrs, styles))
   for (const k of PARA_KEYS) if (attrs?.[k] != null && !(k === 'keepNext' && attrs[k] === false)) para[k] = attrs[k]
+  const cs = marks.find((m) => (m.type?.name ?? m.type) === 'char_style')
+  if (cs) {
+    const own = resolveCharStyle(styles, cs.attrs.id)
+    for (const k of TEXT_KEYS) if (k in own) text[k] = own[k]
+  }
   for (const m of marks) {
     const name = m.type?.name ?? m.type
     if (name === 'font') text.font = m.attrs.family
@@ -103,7 +126,9 @@ export function resolveBlock(styles, typeName, attrs, marks = []) {
   return { para, text }
 }
 
-const sel = (id) => `[data-style="${String(id).replace(/["\\]/g, '\\$&')}"]`
+const esc = (id) => String(id).replace(/["\\]/g, '\\$&')
+const sel = (id) => `[data-style="${esc(id)}"]`
+const csel = (id) => `[data-cstyle="${esc(id)}"]`
 
 // The stylesheet for a book's styles, under `scope` (the page's element).
 // Each rule carries the style's whole resolved formatting, so a paragraph's
@@ -121,6 +146,12 @@ export function styleSheet(styles, scope = '.write-doc') {
     `${scope} :where(li) > p:not([data-style]) { text-indent: 0 }`,
   ]
   for (const s of styles || []) {
+    if (s.kind === 'character') {
+      // A run of text in the style (a mark's class); the text's own marks are inside it.
+      const d = charDeclarations(resolveCharStyle(styles, s.id)).join('; ')
+      if (d) rules.push(`${scope} ${csel(s.id)} { ${d} }`)
+      continue
+    }
     if (s.kind && s.kind !== 'paragraph') continue
     const selectors = [`${scope} ${sel(s.id)}`]
     const m = /^heading([1-6])$/.exec(s.id)
@@ -141,9 +172,10 @@ export function newStyleId(styles, name) {
   return id
 }
 
-// Styles that may be picked as "based on" for a style: not itself nor any
-// style based on it (no loops).
+// Styles that may be picked as "based on" for a style: of its kind, not
+// itself nor any style based on it (no loops).
 export function basedOnChoices(styles, id) {
+  const kind = styleById(styles, id)?.kind || 'paragraph'
   const dependsOn = (s, target, seen = new Set()) => {
     for (let cur = s; cur && !seen.has(cur.id); cur = styleById(styles, cur.based_on)) {
       if (cur.id === target) return true
@@ -151,5 +183,5 @@ export function basedOnChoices(styles, id) {
     }
     return false
   }
-  return (styles || []).filter((s) => s.id !== id && (s.kind || 'paragraph') === 'paragraph' && !dependsOn(s, id))
+  return (styles || []).filter((s) => s.id !== id && (s.kind || 'paragraph') === kind && !dependsOn(s, id))
 }

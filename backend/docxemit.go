@@ -24,9 +24,13 @@ package main
 // carry only what differs from their style, so the book's styles do the
 // work. List items and scene breaks don't count.
 //
-// Character styles are listed (for the book's style list) but text
-// carries their formatting as plain marks: EDITOR.md has no mark naming a
-// character style.
+// Character styles are listed (for the book's style list) with the settings
+// they have, and text in one carries a `char_style` mark naming it (id
+// "word-<styleId>"). A run then carries as marks only what it has beyond
+// its paragraph style and its character style (and the styles that one is
+// based on): direct formatting. A character style Word sets bold, italic or
+// the like on can't be turned off by a run in the editor, so a run that
+// switches off what its style turns on keeps the style's look.
 //
 // Paragraph attrs: align, indentFirst (hanging = negative), indentLeft,
 // indentRight, spaceBefore, spaceAfter in pt; lineHeight a multiple of
@@ -541,32 +545,93 @@ func (set *styleSet) export() []bookStyle {
 
 // --- nodes ---
 
-func marksFor(in irInline, s *outStyle) []pmMark {
+// charRun is a character style's settings with those of the character
+// styles it is based on under them (the settings charStyleJSON lists).
+func (set *styleSet) charRun(o *outStyle) wRun {
+	var chain []*outStyle
+	seen := map[string]bool{}
+	for cur := o; cur != nil && !seen[cur.id]; {
+		seen[cur.id] = true
+		chain = append([]*outStyle{cur}, chain...)
+		var next *outStyle
+		for _, c := range set.order {
+			if c.kind == "character" && c.id == cur.base && cur.base != "" {
+				next = c
+			}
+		}
+		cur = next
+	}
+	var r wRun
+	for _, c := range chain {
+		r.over(c.charRun)
+	}
+	return r
+}
+
+// marksFor gives a run's marks: its link, its character style, then
+// whatever its formatting has beyond what its paragraph style and character
+// style already give (direct formatting). A run in a character style looks
+// like paragraph style + character style, as the editor draws it.
+func marksFor(in irInline, s *outStyle, set *styleSet) []pmMark {
 	var ms []pmMark
 	if in.link != "" {
 		ms = append(ms, pmMark{Type: "link", Attrs: map[string]any{"href": in.link}})
 	}
 	r, t := in.r, s.text
+	var cr wRun
+	if cs := set.charWid[in.cstyle]; cs != nil && in.cstyle != "" {
+		ms = append(ms, pmMark{Type: "char_style", Attrs: map[string]any{"id": cs.id}})
+		cr = set.charRun(cs)
+	}
+	by := func(own *bool, base bool) bool {
+		if own != nil {
+			return *own
+		}
+		return base
+	}
+	vertBy := func(want string) bool {
+		if cr.vert != nil {
+			return *cr.vert == want
+		}
+		return t.vert == want
+	}
 	for _, x := range []struct {
 		name   string
 		on, by bool
-	}{{"bold", r.bold, t.bold}, {"italic", r.italic, t.italic}, {"underline", r.underline, t.underline},
-		{"strike", r.strike, t.strike}, {"superscript", r.vert == "superscript", t.vert == "superscript"},
-		{"subscript", r.vert == "subscript", t.vert == "subscript"}, {"smallcaps", r.smallCaps, t.smallCaps}} {
+	}{{"bold", r.bold, by(cr.bold, t.bold)}, {"italic", r.italic, by(cr.italic, t.italic)}, {"underline", r.underline, by(cr.underline, t.underline)},
+		{"strike", r.strike, by(cr.strike, t.strike)}, {"superscript", r.vert == "superscript", vertBy("superscript")},
+		{"subscript", r.vert == "subscript", vertBy("subscript")}, {"smallcaps", r.smallCaps, by(cr.smallCaps, t.smallCaps)}} {
 		if x.on && !x.by {
 			ms = append(ms, pmMark{Type: x.name})
 		}
 	}
-	if r.font != t.font && r.font != "" {
+	font, size, color, highlight := t.font, t.size, t.color, t.highlight
+	if cr.asciiFont != nil {
+		font = *cr.asciiFont
+	} else if cr.hAnsiFont != nil {
+		font = *cr.hAnsiFont
+	}
+	if cr.size != nil {
+		size = *cr.size
+	}
+	if cr.color != nil {
+		color = *cr.color
+	}
+	if cr.highlight != nil {
+		highlight = *cr.highlight
+	} else if cr.shade != nil {
+		highlight = *cr.shade
+	}
+	if r.font != font && r.font != "" {
 		ms = append(ms, pmMark{Type: "font", Attrs: map[string]any{"family": r.font}})
 	}
-	if r.size != t.size && r.size > 0 {
+	if r.size != size && r.size > 0 {
 		ms = append(ms, pmMark{Type: "size", Attrs: map[string]any{"pt": r2(r.size)}})
 	}
-	if r.color != t.color && r.color != "" {
+	if r.color != color && r.color != "" {
 		ms = append(ms, pmMark{Type: "color", Attrs: map[string]any{"color": r.color}})
 	}
-	if r.highlight != "" && r.highlight != t.highlight {
+	if r.highlight != "" && r.highlight != highlight {
 		ms = append(ms, pmMark{Type: "highlight", Attrs: map[string]any{"color": r.highlight}})
 	}
 	return ms
@@ -576,7 +641,7 @@ func marksKey(ms []pmMark) string {
 	var b strings.Builder
 	for _, m := range ms {
 		b.WriteString(m.Type)
-		for _, k := range []string{"href", "family", "pt", "color"} {
+		for _, k := range []string{"href", "family", "pt", "color", "id"} {
 			if v, ok := m.Attrs[k]; ok {
 				fmt.Fprintf(&b, ":%v", v)
 			}
@@ -586,7 +651,7 @@ func marksKey(ms []pmMark) string {
 	return b.String()
 }
 
-func inlineNodes(b *irBlock, s *outStyle) []*pmNode {
+func inlineNodes(b *irBlock, s *outStyle, set *styleSet) []*pmNode {
 	var out []*pmNode
 	lastKey := ""
 	for _, in := range b.inl {
@@ -601,7 +666,7 @@ func inlineNodes(b *irBlock, s *outStyle) []*pmNode {
 			if in.text == "" {
 				continue
 			}
-			ms := marksFor(in, s)
+			ms := marksFor(in, s, set)
 			k := marksKey(ms)
 			if n := len(out); n > 0 && out[n-1].Type == "text" && k == lastKey {
 				out[n-1].Text += in.text
@@ -670,32 +735,83 @@ func (p *docxParser) paraNode(b *irBlock, set *styleSet, keep map[string]bool) *
 			break
 		}
 	}
-	n.Content = inlineNodes(b, s)
+	n.Content = inlineNodes(b, s, set)
 	if len(attrs) == 0 {
 		n.Attrs = nil
 	}
 	return n
 }
 
+// listLevel is a list being filled: the one an item goes in, at Word's
+// level ilvl, of Word's list numID.
+type listLevel struct {
+	node        *pmNode
+	ilvl, numID int
+	ordered     bool
+}
+
+const maxListLevels = 9 // Word's, and what the editor lets a writer nest
+
+func newListNode(ref *irListRef) *pmNode {
+	l := &pmNode{Type: "bullet_list"}
+	if ref.ordered {
+		l.Type = "ordered_list"
+		l.Attrs = map[string]any{"start": ref.value}
+	}
+	return l
+}
+
+// addListItem puts an item in the lists open so far (stack, outermost
+// first) and returns the stack to continue with. A deeper level nests a
+// list in the item before it; a shallower one closes the deeper lists; a
+// different list or kind of list at the top starts a new one.
+func addListItem(out *[]*pmNode, stack []listLevel, ref *irListRef, item *pmNode) []listLevel {
+	for len(stack) > 1 && stack[len(stack)-1].ilvl > ref.ilvl {
+		stack = stack[:len(stack)-1]
+	}
+	level := listLevel{ilvl: ref.ilvl, numID: ref.numID, ordered: ref.ordered}
+	// nest opens a list inside the last item of the list below it.
+	nest := func(below []listLevel) []listLevel {
+		level.node = newListNode(ref)
+		parent := below[len(below)-1].node
+		last := parent.Content[len(parent.Content)-1]
+		last.Content = append(last.Content, level.node)
+		return append(below, level)
+	}
+	top := len(stack) - 1
+	switch {
+	case top < 0:
+		level.node = newListNode(ref)
+		*out = append(*out, level.node)
+		stack = []listLevel{level}
+	case stack[top].ilvl < ref.ilvl && len(stack) < maxListLevels:
+		stack = nest(stack)
+	case top == 0 && (stack[0].numID != ref.numID || stack[0].ordered != ref.ordered):
+		level.node = newListNode(ref)
+		*out = append(*out, level.node)
+		stack = []listLevel{level}
+	case top > 0 && stack[top].ordered != ref.ordered && stack[top].ilvl == ref.ilvl:
+		stack = nest(stack[:top])
+	default:
+		if top == 0 && ref.ilvl < stack[0].ilvl {
+			stack[0].ilvl = ref.ilvl
+		}
+	}
+	list := stack[len(stack)-1].node
+	list.Content = append(list.Content, item)
+	return stack
+}
+
 func (p *docxParser) blockNodes(blocks []*irBlock, set *styleSet, keep map[string]bool) []*pmNode {
 	var out []*pmNode
-	var list *pmNode
-	var listRef *irListRef
+	var stack []listLevel
 	for _, b := range blocks {
 		if b.kind == 'p' && b.list != nil && b.scene == "" {
-			if list == nil || listRef.numID != b.list.numID || listRef.ordered != b.list.ordered {
-				list = &pmNode{Type: "bullet_list"}
-				if b.list.ordered {
-					list.Type = "ordered_list"
-					list.Attrs = map[string]any{"start": b.list.value}
-				}
-				listRef = b.list
-				out = append(out, list)
-			}
-			list.Content = append(list.Content, &pmNode{Type: "list_item", Content: []*pmNode{p.paraNode(b, set, keep)}})
+			item := &pmNode{Type: "list_item", Content: []*pmNode{p.paraNode(b, set, keep)}}
+			stack = addListItem(&out, stack, b.list, item)
 			continue
 		}
-		list = nil
+		stack = nil
 		switch {
 		case b.kind == 'b':
 			out = append(out, &pmNode{Type: "page_break"})

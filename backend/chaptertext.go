@@ -283,6 +283,10 @@ func saveChapterText(w http.ResponseWriter, db *sql.DB, id, base int64, doc stri
 		conflict()
 		return
 	}
+	if err := indexChapterText(tx, id, doc); err != nil {
+		fail(err)
+		return
+	}
 	if err := tx.Commit(); err != nil {
 		fail(err)
 		return
@@ -463,6 +467,9 @@ func restoreTextVersionHandler(db *sql.DB) http.HandlerFunc {
 		} else {
 			_, err = tx.Exec(`INSERT INTO chapter_texts (chapter_id, doc, version, words, updated_at, auto_since)
 				VALUES (?, ?, 1, ?, ?, ?)`, id, string(v.Doc), v.Words, sqlTime(now), sqlTime(now))
+		}
+		if err == nil {
+			err = indexChapterText(tx, id, string(v.Doc))
 		}
 		if err != nil {
 			fail(err)

@@ -20,12 +20,31 @@
         </button>
       </li>
     </ul>
-    <p v-if="otherStyles.length" class="hint">{{ $tn('{n} character style from Word is kept but not used yet.', '{n} character styles from Word are kept but not used yet.', otherStyles.length) }}</p>
+    <template v-if="characterStyles.length">
+      <h3 class="list-head">{{ $t('Character styles') }}</h3>
+      <ul class="style-list">
+        <li v-for="s in characterStyles" :key="s.id">
+          <button
+            type="button"
+            class="style-row"
+            :class="{ 'is-picked': s.id === pickedId, 'is-here': s.id === currentCharId }"
+            :title="s.id === currentCharId ? $t('The style where the cursor is') : ''"
+            @click="pickedId = s.id"
+            @dblclick="$emit('apply', s.id)"
+          >
+            <span class="style-name" :style="previewChar(s.id)">{{ nameOf(s) }}</span>
+            <span v-if="s.id === currentCharId" class="here-dot" aria-hidden="true">●</span>
+          </button>
+        </li>
+      </ul>
+    </template>
 
     <div class="row-actions">
-      <button type="button" class="btn btn-ghost small" @click="addStyle">{{ $t('New style') }}</button>
+      <button type="button" class="btn btn-ghost small" @click="addStyle('paragraph')">{{ $t('New style') }}</button>
+      <button type="button" class="btn btn-ghost small" @click="addStyle('character')">{{ $t('New character style') }}</button>
       <button type="button" class="btn btn-primary small" :disabled="!picked" @click="$emit('apply', pickedId)">{{ $t('Apply to the selection') }}</button>
     </div>
+    <p v-if="isChar" class="hint">{{ $t('A character style is for words inside a paragraph. Pick "No character style" in the toolbar to take it off.') }}</p>
 
     <form v-if="picked" class="style-form" @submit.prevent>
       <label class="field">
@@ -34,7 +53,8 @@
       </label>
       <label v-if="picked.id !== 'normal'" class="field">
         <span>{{ $t('Based on') }}</span>
-        <select :value="picked.based_on || 'normal'" @change="set('based_on', $event.target.value)">
+        <select :value="picked.based_on || (isChar ? '' : 'normal')" @change="set('based_on', $event.target.value || (isChar ? null : 'normal'))">
+          <option v-if="isChar" value="">{{ $t('None') }}</option>
           <option v-for="b in basedOn" :key="b.id" :value="b.id">{{ nameOf(b) }}</option>
         </select>
       </label>
@@ -49,24 +69,24 @@
           <span>{{ $t('Size (pt)') }}</span>
           <input :value="picked.text?.size ?? ''" :placeholder="fmt(inherited.text.size)" type="number" min="1" max="400" step="0.5" @change="setText('size', numOrNull($event.target.value))" />
         </label>
-        <label class="field">
-          <span>{{ $t('Bold') }}</span>
-          <select :value="tri(picked.text?.bold)" @change="setText('bold', untri($event.target.value))">
-            <option value="">{{ inheritLabel(inherited.text.bold ? $t('Yes') : $t('No')) }}</option>
+        <label v-for="f in toggles" :key="f.key" class="field">
+          <span>{{ f.label }}</span>
+          <select :value="tri(picked.text?.[f.key])" @change="setText(f.key, untri($event.target.value))">
+            <option value="">{{ inheritLabel(inherited.text[f.key] == null ? '' : inherited.text[f.key] ? $t('Yes') : $t('No')) }}</option>
             <option value="yes">{{ $t('Yes') }}</option>
             <option value="no">{{ $t('No') }}</option>
           </select>
         </label>
-        <label class="field">
-          <span>{{ $t('Italic') }}</span>
-          <select :value="tri(picked.text?.italic)" @change="setText('italic', untri($event.target.value))">
-            <option value="">{{ inheritLabel(inherited.text.italic ? $t('Yes') : $t('No')) }}</option>
-            <option value="yes">{{ $t('Yes') }}</option>
-            <option value="no">{{ $t('No') }}</option>
-          </select>
-        </label>
+        <div class="field span-2">
+          <span>{{ $t('Text colour') }}</span>
+          <div class="color-row">
+            <input type="color" :value="picked.text?.color || inherited.text.color || '#000000'" :aria-label="$t('Text colour')" @change="setText('color', $event.target.value)" />
+            <button type="button" class="btn btn-ghost small" :disabled="!picked.text?.color" @click="setText('color', null)">{{ $t('Automatic') }}</button>
+          </div>
+        </div>
       </div>
 
+      <template v-if="!isChar">
       <h3>{{ $t('Paragraph') }}</h3>
       <div class="grid">
         <label class="field span-2">
@@ -102,6 +122,8 @@
         </label>
       </div>
       <p class="hint">{{ $t('An empty box takes the value of the style it is based on (shown faintly).') }}</p>
+      </template>
+      <p v-else class="hint">{{ $t('An empty box takes the look of the text around it, or of the style this one is based on.') }}</p>
 
       <div class="row-actions">
         <button v-if="!picked.builtin" type="button" class="btn btn-danger small" @click="removeStyle">{{ $t('Delete style') }}</button>
@@ -115,14 +137,15 @@
 // is based on), make new ones, apply one to the selected paragraphs.
 import { ref, computed, watch } from 'vue'
 import { t, tr } from '../../i18n'
-import { BUILTIN_NAMES, resolveStyle, newStyleId, basedOnChoices, styleById } from '../../editor/styles.js'
-import { mmToPt, ptToMm, num, textDeclarations } from '../../editor/css.js'
+import { BUILTIN_NAMES, resolveStyle, resolveCharStyle, newStyleId, basedOnChoices, styleById } from '../../editor/styles.js'
+import { mmToPt, ptToMm, num, textDeclarations, charDeclarations } from '../../editor/css.js'
 
 void [tr('Normal'), tr('Heading 1'), tr('Heading 2'), tr('Heading 3'), tr('Title'), tr('Subtitle'), tr('Quote')]
 
 const props = defineProps({
   styles: { type: Array, required: true },
   currentId: { type: String, default: null },
+  currentCharId: { type: String, default: null },
 })
 const emit = defineEmits(['update', 'apply', 'close'])
 
@@ -137,16 +160,26 @@ watch(
 )
 
 const paragraphStyles = computed(() => props.styles.filter((s) => (s.kind || 'paragraph') === 'paragraph'))
-const otherStyles = computed(() => props.styles.filter((s) => s.kind && s.kind !== 'paragraph'))
+const characterStyles = computed(() => props.styles.filter((s) => s.kind === 'character'))
 const picked = computed(() => styleById(props.styles, pickedId.value))
+const isChar = computed(() => picked.value?.kind === 'character')
 const basedOn = computed(() => basedOnChoices(props.styles, pickedId.value))
-// What an empty box falls back to: the style this one is based on.
-const inherited = computed(() => resolveStyle(props.styles, picked.value?.id === 'normal' ? '__none__' : picked.value?.based_on || 'normal'))
+// What an empty box falls back to: the style this one is based on (a
+// character style's: only what its base sets, else the text around it).
+const inherited = computed(() => {
+  if (isChar.value) return { text: resolveCharStyle(props.styles, picked.value.based_on), para: {} }
+  return resolveStyle(props.styles, picked.value?.id === 'normal' ? '__none__' : picked.value?.based_on || 'normal')
+})
+const toggles = computed(() => [
+  { key: 'bold', label: t('Bold') },
+  { key: 'italic', label: t('Italic') },
+  ...(isChar.value ? [{ key: 'underline', label: t('Underline') }, { key: 'strike', label: t('Strikethrough') }, { key: 'smallcaps', label: t('Small caps') }] : []),
+])
 
 // Built-in names are shown translated until the writer renames them.
 const nameOf = (s) => (s.builtin && s.name === BUILTIN_NAMES[s.id] ? t(s.name) : s.name)
 const alignName = (a) => ({ left: t('Left'), center: t('Centre'), right: t('Right'), justify: t('Justified') })[a] || ''
-const inheritLabel = (v) => (v ? t('As based on ({value})', { value: v }) : t('As based on'))
+const inheritLabel = (v) => (v ? t('As based on ({value})', { value: v }) : isChar.value ? t('As the text around it') : t('As based on'))
 const fmt = (n) => (n == null ? '' : num(n))
 const mm = (pt) => (pt == null ? '' : String(ptToMm(pt)))
 const numOrNull = (v) => (v === '' || !Number.isFinite(+v) ? null : +v)
@@ -157,6 +190,9 @@ const untri = (v) => (v === '' ? null : v === 'yes')
 function previewStyle(id) {
   const { text } = resolveStyle(props.styles, id)
   return textDeclarations({ ...text, size: null, color: null }).join('; ')
+}
+function previewChar(id) {
+  return charDeclarations({ ...resolveCharStyle(props.styles, id), size: null, superscript: null, subscript: null }).join('; ')
 }
 
 function replace(next) {
@@ -172,20 +208,27 @@ function setPara(key, value) {
   replace({ ...picked.value, para: { ...(picked.value.para || {}), [key]: value } })
 }
 
-function addStyle() {
-  const name = t('New style')
+function addStyle(kind) {
+  const name = kind === 'character' ? t('New character style') : t('New style')
   const id = newStyleId(props.styles, name)
-  const based = picked.value && (picked.value.kind || 'paragraph') === 'paragraph' ? picked.value.id : 'normal'
-  emit('update', [...props.styles, { id, name, kind: 'paragraph', based_on: based, builtin: false, para: {}, text: {} }])
+  if (kind === 'character') {
+    emit('update', [...props.styles, { id, name, kind, based_on: null, builtin: false, text: {} }])
+  } else {
+    const based = picked.value && (picked.value.kind || 'paragraph') === 'paragraph' ? picked.value.id : 'normal'
+    emit('update', [...props.styles, { id, name, kind, based_on: based, builtin: false, para: {}, text: {} }])
+  }
   pickedId.value = id
 }
 
 function removeStyle() {
   const gone = picked.value
   if (!gone || gone.builtin) return
-  if (!window.confirm(t('Delete the style "{name}"? Paragraphs that use it look like Normal.', { name: gone.name }))) return
+  const sure = gone.kind === 'character'
+    ? t('Delete the character style "{name}"? Text that uses it loses its look.', { name: gone.name })
+    : t('Delete the style "{name}"? Paragraphs that use it look like Normal.', { name: gone.name })
+  if (!window.confirm(sure)) return
   // Styles based on it are based on what it was based on.
-  const next = props.styles.filter((s) => s.id !== gone.id).map((s) => (s.based_on === gone.id ? { ...s, based_on: gone.based_on || 'normal' } : s))
+  const next = props.styles.filter((s) => s.id !== gone.id).map((s) => (s.based_on === gone.id ? { ...s, based_on: gone.based_on || (gone.kind === 'character' ? null : 'normal') } : s))
   pickedId.value = 'normal'
   emit('update', next)
 }
@@ -228,6 +271,26 @@ function removeStyle() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.list-head {
+  margin: 0.6rem 0 0.3rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.color-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.color-row input[type='color'] {
+  width: 2.4rem;
+  height: 1.8rem;
+  min-height: 0;
+  padding: 0;
 }
 
 .here-dot {

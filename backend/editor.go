@@ -196,9 +196,12 @@ func defaultStyles(pageType string) []bookStyle {
 // defaultBookSettings is a page type's settings, as JSON.
 func defaultBookSettings(pageType string) json.RawMessage {
 	raw, _ := json.Marshal(map[string]any{
-		"page_type": pageType,
-		"page":      defaultPage(pageType),
-		"styles":    defaultStyles(pageType),
+		"page_type":       pageType,
+		"page":            defaultPage(pageType),
+		"styles":          defaultStyles(pageType),
+		"meta":            defaultBookMeta(),
+		"layout":          defaultBookLayout(),
+		"chapter_options": map[string]any{},
 	})
 	return raw
 }
@@ -245,6 +248,9 @@ func cleanBookSettings(raw json.RawMessage) (json.RawMessage, string) {
 		return nil, msg
 	}
 	m["styles"] = styles
+	if msg := cleanBookExtras(m); msg != "" { // meta, layout, chapter_options (booklayout.go)
+		return nil, msg
+	}
 	out, err := json.Marshal(m)
 	if err != nil {
 		return nil, "the book's settings are not valid"

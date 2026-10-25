@@ -34,6 +34,37 @@ export const typingRules = [
   new InputRule(/'$/, '’'),
 ]
 
+// Word's nine list levels are as deep as a list goes here too (a deeper
+// one would not fit the server's limit on nesting).
+export const MAX_LIST_LEVELS = 9
+
+export function listLevels($pos) {
+  let n = 0
+  for (let d = $pos.depth; d > 0; d--) if ($pos.node(d).type === schema.nodes.bullet_list || $pos.node(d).type === schema.nodes.ordered_list) n++
+  return n
+}
+
+// Tab in a list item: one level deeper (under the item before it). Past the
+// last level, or at the start of the list's first item, it does nothing
+// rather than type a tab into the item.
+export const indentListItem = (li) => (state, dispatch) => {
+  const { $from, empty } = state.selection
+  const levels = listLevels($from)
+  if (!levels) return false
+  if (levels >= MAX_LIST_LEVELS) return true
+  if (sinkListItem(li)(state, dispatch)) return true
+  return empty && $from.parentOffset === 0
+}
+
+// Enter in an empty item that has nothing under it: out one level (to the
+// text after the list from the first level), as Word does.
+export const outdentEmptyListItem = (li) => (state, dispatch) => {
+  const { $from, empty } = state.selection
+  if (!empty || $from.parent.type !== schema.nodes.paragraph || $from.parent.content.size) return false
+  if ($from.depth < 2 || $from.node(-1).type !== li || $from.node(-1).childCount !== 1) return false
+  return liftListItem(li)(state, dispatch)
+}
+
 // getStyles: the book's styles now (for the size steps).
 export function wordKeymap(getStyles) {
   const li = schema.nodes.list_item
@@ -71,8 +102,8 @@ export function wordKeymap(getStyles) {
     'Mod-Space': clearMarks,
     'Shift-F3': changeCase,
     'Shift-Enter': insertHardBreak,
-    Enter: chainCommands(splitListItem(li), createParagraphNear, liftEmptyBlock, splitParagraph),
-    Tab: chainCommands(sinkListItem(li), insertTab),
+    Enter: chainCommands(outdentEmptyListItem(li), splitListItem(li), createParagraphNear, liftEmptyBlock, splitParagraph),
+    Tab: chainCommands(indentListItem(li), insertTab),
     'Shift-Tab': liftListItem(li),
     'Mod-a': selectAll,
   }

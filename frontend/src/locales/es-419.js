@@ -160,4 +160,8 @@ export default {
   "{n} chapters were added at the end of the book:": "Se agregaron {n} capítulos al final del libro:",
   "{n} character style from Word is kept but not used yet.": "Se conserva {n} estilo de carácter de Word, pero todavía no se usa.",
   "{n} character styles from Word are kept but not used yet.": "Se conservan {n} estilos de carácter de Word, pero todavía no se usan.",
+  "Chapter layout": "Diagramación del capítulo",
+  "the book's layout is not valid": "la diagramación del libro no es válida",
+  "Page numbers and layout…": "Números de página y diagramación…",
+  "Click a page to write there.": "Haz clic en una página para escribir ahí.",
 }

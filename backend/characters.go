@@ -276,12 +276,24 @@ func saveUpload(uploadsDir, subdir, stem, originalName string, src io.Reader) (s
 	if err := os.MkdirAll(filepath.Join(uploadsDir, subdir), 0o755); err != nil {
 		return "", err
 	}
-	relPath := filepath.Join(subdir, stem+ext)
-	fullPath := filepath.Join(uploadsDir, relPath)
-
-	dst, err := os.Create(fullPath)
-	if err != nil {
-		return "", err
+	// Stems come from the clock, which two quick uploads can share: never
+	// overwrite a file, take the next free name instead.
+	var relPath string
+	var dst *os.File
+	for n := 0; ; n++ {
+		name := stem + ext
+		if n > 0 {
+			name = fmt.Sprintf("%s-%d%s", stem, n, ext)
+		}
+		relPath = filepath.Join(subdir, name)
+		f, err := os.OpenFile(filepath.Join(uploadsDir, relPath), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if err == nil {
+			dst = f
+			break
+		}
+		if !os.IsExist(err) || n >= 1000 {
+			return "", err
+		}
 	}
 	defer dst.Close()
 

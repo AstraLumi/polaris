@@ -1,0 +1,184 @@
+// The page view's book (docs/EDITOR.md, "Client"): every chapter drawn the
+// way the editor draws it (the schema's toDOM, the styles' stylesheet),
+// marked so a click finds its chapter and block, then laid out in pages by
+// paged.js, which is loaded only here. The layout's rules come from
+// bookLayout.js (pagedCSS).
+import { DOMSerializer } from 'prosemirror-model'
+import { schema, docFromJSON } from './schema.js'
+import { bookPlan, pageName, tocEntries, normaliseLayout } from './bookLayout.js'
+
+const textOf = (n) => (n.type === 'text' ? n.text || '' : n.type === 'hard_break' || n.type === 'tab' ? ' ' : (n.content || []).map(textOf).join(''))
+
+// The book as HTML: { fragment, plan, blocks (how many top-level blocks,
+// for the progress) }. chapters: [{ id, title, doc (JSON) }]. Each
+// top-level block carries data-ch (its chapter), data-blk (its index in
+// the chapter's doc) and data-gi (its index in the book). With paged
+// false (an online post) nothing is laid out in pages.
+export function buildBook(chapters, settings, { paged = true, doc = document } = {}) {
+  const serializer = DOMSerializer.fromSchema(schema)
+  const layout = normaliseLayout(settings?.layout)
+  const plan = bookPlan(settings, chapters)
+  const fragment = doc.createDocumentFragment()
+  let gi = 0
+  chapters.forEach((ch, ci) => {
+    const pl = plan[ci]
+    const node = docFromJSON(ch.doc)
+    const h1 = (ch.doc?.content || []).find((n) => n?.type === 'heading' && (+n.attrs?.level || 1) === 1)
+    const section = doc.createElement('section')
+    section.className = `pv-chapter pv-doc write-doc${paged ? ` pv-${pageName(pl)}` : ''}`
+    section.id = `pv-ch-${ch.id}`
+    section.dataset.title = (h1 ? textOf(h1).replace(/\s+/g, ' ').trim() : '') || ch.title || ''
+    section.dataset.number = pl.number
+    section.dataset.ch = String(ch.id)
+    let leading = paged // full-page pictures at a chapter's start go before it
+    let hoisted = false
+    node.forEach((block, _off, bi) => {
+      let el
+      if (block.type.name === 'toc') el = tocElement(block, chapters, plan, layout, doc)
+      else el = serializer.serializeNode(block, { document: doc })
+      if (el.nodeType !== 1) {
+        const wrap = doc.createElement('div')
+        wrap.appendChild(el)
+        el = wrap
+      }
+      el.dataset.ch = String(ch.id)
+      el.dataset.blk = String(bi)
+      el.dataset.gi = String(gi++)
+      if (block.type.name === 'heading') el.id = `pv-h-${ch.id}-${bi}`
+      if (block.type.name === 'page_break') {
+        el.className = paged ? 'pv-page-break' : 'page-break'
+      }
+      const full = paged && block.type.name === 'image' && block.attrs.fullPage
+      if (full) el.classList.add('pv-full')
+      if (full && leading) {
+        // Before the chapter, in a wrapper drawn like the chapter's text.
+        const wrap = doc.createElement('div')
+        wrap.className = 'pv-full pv-doc write-doc'
+        el.classList.remove('pv-full')
+        wrap.appendChild(el)
+        wrap.dataset.ch = String(ch.id)
+        wrap.dataset.blk = String(bi)
+        if (fragment.childNodes.length) wrap.classList.add('pv-later')
+        fragment.appendChild(wrap)
+        hoisted = true
+        return
+      }
+      leading = false
+      section.appendChild(el)
+    })
+    if (fragment.childNodes.length && !hoisted) {
+      section.classList.add('pv-later')
+    }
+    if (!section.childNodes.length) {
+      const p = doc.createElement('p')
+      p.dataset.ch = String(ch.id)
+      p.dataset.blk = '0'
+      section.appendChild(p)
+    }
+    fragment.appendChild(section)
+  })
+  return { fragment, plan, blocks: gi }
+}
+
+// A table of contents with its entries; the page numbers come from
+// pagedCSS's target-counter rules.
+function tocElement(node, chapters, plan, layout, doc) {
+  const nav = doc.createElement('nav')
+  nav.className = `pv-toc${layout.toc_dots ? ' has-dots' : ''}`
+  const title = doc.createElement('p')
+  title.className = 'pv-toc-title'
+  title.textContent = node.attrs.title ?? ''
+  nav.appendChild(title)
+  const list = doc.createElement('ol')
+  for (const e of tocEntries(chapters, plan, Math.min(3, Math.max(1, node.attrs.levels || 1)))) {
+    const li = doc.createElement('li')
+    li.className = `pv-toc-l${e.level}`
+    const a = doc.createElement('a')
+    a.href = e.block == null ? `#pv-ch-${e.chapter}` : `#pv-h-${e.chapter}-${e.block}`
+    a.className = e.front ? 'pv-n-front' : 'pv-n-main'
+    const text = doc.createElement('span')
+    text.className = 'pv-toc-text'
+    text.textContent = e.text
+    const dots = doc.createElement('span')
+    dots.className = 'pv-toc-dots'
+    a.append(text, dots)
+    li.appendChild(a)
+    list.appendChild(li)
+  }
+  nav.appendChild(list)
+  return nav
+}
+
+// Lays the book out in pages inside renderTo. onPage(n, lastGi) after each
+// page. Gives { pages, cancel(), destroy() }: cancel stops a layout under
+// way, destroy also takes paged.js's styles out of the document.
+export async function layOutBook(fragment, css, renderTo, { onPage } = {}) {
+  const { Previewer } = await import('pagedjs')
+  // Pictures loaded (and decoded) before the layout measures them; a
+  // picture first seen in the hidden pages would otherwise be left out of
+  // the print until it had been on screen.
+  const srcs = [...new Set([...fragment.querySelectorAll('img[src]')].map((i) => i.getAttribute('src')))]
+  await Promise.all(
+    srcs.map((src) => {
+      const img = new Image()
+      img.src = src
+      return img.decode().catch(() => {})
+    }),
+  )
+  for (const img of fragment.querySelectorAll('img')) {
+    img.loading = 'eager'
+    img.decoding = 'sync'
+  }
+  const previewer = new Previewer()
+  let n = 0
+  let stopped = false
+  // After each page is laid out (its text is in it by then).
+  previewer.chunker.on('renderedPage', (page) => {
+    n++
+    const marks = page.element?.querySelectorAll?.('[data-gi]')
+    const last = marks && marks.length ? +marks[marks.length - 1].dataset.gi : -1
+    onPage?.(n, last)
+  })
+  const handle = {
+    pages: 0,
+    // paged.js starts a stopped layout again; this makes the next round end.
+    cancel() {
+      stopped = true
+      previewer.chunker.render = async () => ({ done: true })
+      previewer.chunker.stop()
+    },
+    destroy() {
+      handle.cancel()
+      try {
+        previewer.polisher.destroy()
+      } catch (e) {
+        /* nothing was inserted yet */
+      }
+    },
+    previewer,
+    // paged.js restarts the page counter with counter-reset on the page,
+    // which current browsers keep to that page (the next one counts on from
+    // the old number). Once laid out, the same restarts as counter-set on the
+    // counter all pages share. (Not during the layout: paged.js reads the
+    // pages' counter-reset to number the table of contents.)
+    restartsCSS() {
+      const out = []
+      let rules = []
+      try {
+        rules = [...(previewer.polisher.styleSheet?.cssRules || [])]
+      } catch (e) {
+        /* no rules */
+      }
+      for (const r of rules) {
+        const m = /\[data-page-number="(\d+)"\]\s*\{\s*counter-increment:\s*none;\s*counter-reset:\s*page (-?\d+)/.exec(r.cssText)
+        if (m) out.push(`.pv-pages .pagedjs_page[data-page-number="${m[1]}"] { counter-reset: none; counter-set: page ${m[2]}; counter-increment: none; }`)
+      }
+      return out.join('\n')
+    },
+  }
+  const done = previewer.preview(fragment, [{ [`${location.origin}/polaris-book.css`]: css }], renderTo).then((flow) => {
+    handle.pages = flow?.total ?? n
+    return !stopped
+  })
+  return { handle, done }
+}

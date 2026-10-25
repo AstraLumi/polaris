@@ -185,3 +185,145 @@
     border-radius: 16px 16px 0 0;
   }
 }
+
+/* A table of contents (stage 3): the editor lists the chapters; the page
+   view adds the page numbers. */
+.write-doc .pm-toc {
+  margin: 1em 0;
+  padding: 0.7em 1em;
+  border: 1px dashed var(--ink-faint);
+  border-radius: 4px;
+  text-indent: 0;
+  white-space: normal;
+  user-select: none;
+}
+
+.write-doc .pm-toc-title {
+  margin: 0 0 0.5em;
+  text-align: center;
+  font-weight: 700;
+}
+
+.write-doc .pm-toc ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.write-doc .pm-toc li {
+  padding: 0.1em 0;
+}
+
+.write-doc .pm-toc-hint {
+  margin: 0.6em 0 0;
+  color: var(--ink-faint);
+  font: 600 0.62rem 'Manrope', sans-serif;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+/* Dialogue (stage 4, Script Mode): the speaker in small caps with the
+   manner in italics after a comma, the line indented below. Drawn the same
+   in both modes and in the page view. */
+.pm-dialogue {
+  margin: 0.55em 0 0.2em;
+}
+
+.pm-dialogue .pm-who {
+  font-variant: small-caps;
+  letter-spacing: 0.04em;
+  text-indent: 0;
+  user-select: none;
+}
+
+.pm-dialogue .pm-speaker {
+  font-weight: 600;
+}
+
+.pm-dialogue .pm-manner {
+  font-style: italic;
+  font-variant: normal;
+  letter-spacing: 0;
+}
+
+.pm-dialogue .pm-line {
+  margin-left: 1.6em;
+  text-indent: 0;
+}
+
+/* The speaker in the accent, darkened enough to read on the paper. */
+.write-doc .pm-dialogue .pm-who {
+  cursor: pointer;
+  color: color-mix(in srgb, var(--accent, #b5862b) 70%, var(--ink));
+}
+
+.write-doc .pm-dialogue .pm-who:hover .pm-speaker {
+  text-decoration: underline dotted;
+}
+
+.write-doc .pm-dialogue .pm-manner {
+  color: color-mix(in srgb, var(--ink) 65%, transparent);
+}
+
+/* Tab-to-link: the rest of a name in faint text after the caret, and the
+   list of names when several match. */
+.write-doc .pm-suggest {
+  position: relative;
+}
+
+.write-doc .pm-ghost {
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+
+.write-doc .pm-ghost.is-hint {
+  margin-left: 0.15em;
+  font: 600 0.7em 'Manrope', sans-serif;
+  vertical-align: 0.1em;
+}
+
+.write-doc .pm-suggest-list {
+  position: absolute;
+  left: 0;
+  top: 1.35em;
+  z-index: 15;
+  display: grid;
+  min-width: 13rem;
+  max-width: 20rem;
+  padding: 0.25rem;
+  border: 1px solid var(--glass-border, rgba(0, 0, 0, 0.15));
+  border-radius: 9px;
+  background: var(--surface, #fff);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  color: var(--text-primary, #222);
+  font: 400 13px/1.3 'Manrope', sans-serif;
+  font-variant: normal;
+  text-indent: 0;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.write-doc .pm-suggest-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.write-doc .pm-suggest-item.is-picked,
+.write-doc .pm-suggest-item:hover {
+  background: var(--accent-soft, rgba(200, 150, 50, 0.18));
+}
+
+.write-doc .pm-suggest-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.write-doc .pm-suggest-type {
+  color: var(--text-faint, #888);
+  font-size: 11px;
+}

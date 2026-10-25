@@ -3,6 +3,7 @@
     <div v-if="!focusMode" class="write-head">
       <Breadcrumbs :crumbs="crumbs">
         <RouterLink v-if="chapterId" :to="`/chapters/${chapterId}`" class="notes-link">{{ $t('Chapter notes') }}</RouterLink>
+        <RouterLink v-if="book && chapters.length" :to="`/write/${volumeKey}/pages`" class="notes-link pages-link">{{ online ? $t('Reading view') : $t('Page view') }}</RouterLink>
       </Breadcrumbs>
     </div>
 
@@ -20,6 +21,8 @@
       :online="online"
       :focus-mode="focusMode"
       :panel="panel"
+      :uploading="uploading"
+      @picture="pickPicture"
       @find="openFind(false)"
       @panel="togglePanel"
       @focus="focusMode = !focusMode"
@@ -32,12 +35,13 @@
       <nav v-if="!focusMode" class="chapter-nav glass-panel" :aria-label="$t('Chapters of this book')">
         <p class="book-title">{{ bookTitle }}</p>
         <ol class="chapter-list">
-          <li v-for="(c, i) in chapters" :key="c.id">
+          <li v-for="(c, i) in chapters" :key="c.id" class="chapter-row">
             <button type="button" class="chapter-item" :class="{ 'is-here': c.id === chapterId }" :aria-current="c.id === chapterId ? 'true' : undefined" @click="goChapter(c.id)">
-              <span class="ch-num">{{ i + 1 }}</span>
+              <span class="ch-num" :title="isFrontMatter(c.id) ? $t('Front matter') : undefined">{{ isFrontMatter(c.id) ? '·' : i + 1 }}</span>
               <span class="ch-title">{{ c.title }}</span>
               <span class="ch-words">{{ formatNum(c.id === chapterId ? words : c.words || 0) }}</span>
             </button>
+            <RowMenu v-if="!online" class="ch-menu" :label="$t('Chapter layout')" :items="chapterMenu(c)" />
           </li>
         </ol>
         <button type="button" class="btn btn-ghost small add-chapter" :disabled="adding" @click="addChapter">{{ $t('Add a chapter') }}</button>
@@ -50,7 +54,7 @@
         <option v-for="(c, i) in chapters" :key="c.id" :value="c.id">{{ i + 1 }}. {{ c.title }}</option>
       </select>
 
-      <div ref="paperArea" class="paper-area">
+      <div ref="paperArea" class="paper-area" @scroll.passive="placePictureOptions(); placeSpeaker()">
         <FindPanel v-if="find.open && view && editorState" ref="findPanel" :view="view" :state="editorState" :replace="find.replace" :initial="find.initial" @close="closeFind" />
 
         <div v-if="offer" class="offer glass-panel panel-solid" role="alert">
@@ -74,17 +78,48 @@
         <div v-show="book && chapters.length" class="sheet" :class="{ 'is-online': online, 'is-compact': compact }" :style="sheetStyle">
           <div ref="editorEl" class="write-host"></div>
         </div>
+        <PictureOptions
+          v-if="pictureNode && !focusMode && !readOnly"
+          ref="pictureBox"
+          :attrs="pictureNode.attrs"
+          :top="picturePlace.top"
+          :left="picturePlace.left"
+          @change="(patch) => exec(setImageAttrs(patch))"
+          @remove="exec(removeImage)"
+        />
+        <SpeakerOptions
+          v-if="speaker && speakerNode && !focusMode && !readOnly"
+          ref="speakerBox"
+          :attrs="speakerNode.attrs"
+          :characters="names.characters.value"
+          :resolve="names.resolve"
+          :top="speaker.top"
+          :left="speaker.left"
+          @change="(patch) => exec(setDialogueAttrs(speaker.pos, patch))"
+          @unwrap="unwrapSpeaker"
+          @close="closeSpeaker"
+        />
       </div>
 
-      <StylesPanel v-if="panel === 'styles' && !focusMode && settings" :styles="styles" :current-id="format?.styleId || null" @update="setStyles" @apply="applyStyle" @close="panel = ''" />
+      <StylesPanel v-if="panel === 'styles' && !focusMode && settings" :styles="styles" :current-id="format?.styleId || null" :current-char-id="format?.charStyleId || null" @update="setStyles" @apply="applyStyle" @close="panel = ''" />
       <VersionsPanel v-if="panel === 'versions' && !focusMode && chapterId" :chapter-id="chapterId" :online="online" :flush="flushText" @restored="onRestored" @close="panel = ''" />
-      <BookPanel v-if="panel === 'book' && !focusMode && settings" :settings="settings" @update="updateSettings" @change-type="typeDialog = 'switch'" @close="panel = ''" />
+      <BookPanel
+        v-if="panel === 'book' && !focusMode && settings"
+        :settings="settings"
+        :chapters="chapters"
+        :book-title="bookTitle"
+        :focus-chapter="panelChapter"
+        @update="updateSettings"
+        @change-type="typeDialog = 'switch'"
+        @close="panel = ''"
+      />
     </div>
 
     <footer class="write-status" :class="{ 'is-quiet': focusMode }">
       <span class="stat"><strong>{{ formatNum(words) }}</strong> {{ $tn('word in this chapter', 'words in this chapter', words) }}</span>
       <span v-if="!focusMode" class="stat">{{ $tn('{n} word in the book', '{n} words in the book', bookWords, { n: formatNum(bookWords) }) }}</span>
       <span v-if="selWords" class="stat">{{ $tn('{n} selected', '{n} selected', selWords, { n: formatNum(selWords) }) }}</span>
+      <span v-if="uploading" class="stat">{{ $t('Uploading the picture…') }}</span>
       <span class="save-state" :class="`is-${saveState}`" aria-live="polite">{{ saveLabel }}</span>
       <span class="spacer"></span>
       <label v-if="!focusMode" class="zoom">
@@ -97,6 +132,7 @@
       <button type="button" class="btn btn-ghost small" :aria-pressed="darkPaper" @click="darkPaper = !darkPaper">{{ darkPaper ? $t('Light paper') : $t('Dark paper') }}</button>
     </footer>
 
+    <input ref="pictureInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden @change="onPicture" />
     <input ref="docxInput" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden @change="onDocx" />
     <ImportReport v-if="importReport && settings" :report="importReport" :settings="settings" :set-up="book?.is_set_up !== false" :busy="busy" @apply="applyImport" @close="importReport = null" />
     <datalist id="write-fonts"><option v-for="f in fontList" :key="f" :value="f"></option></datalist>
@@ -134,7 +170,7 @@ import 'prosemirror-gapcursor/style/gapcursor.css'
 import '../editor/editor.css'
 import { ref, shallowRef, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
-import { EditorState } from 'prosemirror-state'
+import { EditorState, NodeSelection, TextSelection } from 'prosemirror-state'
 import { EditorView } from 'prosemirror-view'
 import { t, tr, locale } from '../i18n'
 import { chaptersApi } from '../api'
@@ -144,8 +180,8 @@ import { pageTitle } from '../navigation'
 import { schema, docFromJSON, docToJSON, emptyDocJSON } from '../editor/schema.js'
 import { editorPlugins } from '../editor/keymap.js'
 import { findPlugin } from '../editor/findPlugin.js'
-import { selectionFormat, setStyle, pasteIntoEmpty } from '../editor/commands.js'
-import { styleSheet, styleFonts, resolveStyle } from '../editor/styles.js'
+import { selectionFormat, setStyle, setCharStyle, pasteIntoEmpty, insertBlock, setImageAttrs, removeImage } from '../editor/commands.js'
+import { styleSheet, styleFonts, resolveStyle, styleById } from '../editor/styles.js'
 import { normaliseSettings, defaultSettings, switchPageType, textBlockMm, pageTypeName } from '../editor/pageTypes.js'
 import { countNode } from '../editor/wordCount.js'
 import { loadFonts, docFonts, fontChoices } from '../editor/fonts.js'
@@ -157,13 +193,23 @@ import Breadcrumbs from '../components/Breadcrumbs.vue'
 import WriteToolbar from '../components/write/WriteToolbar.vue'
 import FindPanel from '../components/write/FindPanel.vue'
 import StylesPanel from '../components/write/StylesPanel.vue'
+import PictureOptions from '../components/write/PictureOptions.vue'
 import VersionsPanel from '../components/write/VersionsPanel.vue'
 import BookPanel from '../components/write/BookPanel.vue'
 import PageTypeDialog from '../components/write/PageTypeDialog.vue'
 import ConflictView from '../components/write/ConflictView.vue'
 import ImportReport from '../components/write/ImportReport.vue'
+import RowMenu from '../components/RowMenu.vue'
+import { tocNodeView } from '../editor/tocView.js'
+import { chapterOption, setChapterOption, normaliseLayout } from '../editor/bookLayout.js'
+import SpeakerOptions from '../components/write/SpeakerOptions.vue'
+import { nameSuggest } from '../editor/nameSuggest.js'
+import { scriptPlugins, setDialogueAttrs, dialogueToParagraph } from '../editor/script.js'
+import { useStoryNames } from '../editor/useStoryNames.js'
 
 void [tr('Custom size'), tr('Online Post'), tr('Not kept after a conflict'), tr('Before using the copy kept in this browser')]
+const PICTURE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
+const MAX_PICTURE = 32 << 20
 
 const props = defineProps({ volume: { type: String, required: true } })
 const route = useRoute()
@@ -314,7 +360,15 @@ function refreshDocFonts() {
 }
 
 // ---- The editor ----------------------------------------------------------------------------
-const plugins = [...editorPlugins({ getStyles: () => styles.value }), findPlugin()]
+// Tab-to-link and Script Mode (stage 4) go first: their Tab, Enter and
+// Backspace come before the usual ones.
+const names = useStoryNames()
+const plugins = [
+  nameSuggest({ getIndex: () => names.index.value, typeLabel: names.typeLabel, hint: t('Tab: link this name') }),
+  ...scriptPlugins({ getIndex: () => names.index.value, onSpeaker: openSpeaker }),
+  ...editorPlugins({ getStyles: () => styles.value }),
+  findPlugin(),
+]
 const makeState = (json) => EditorState.create({ schema, doc: docFromJSON(json), plugins })
 
 let countTimer = null
@@ -349,6 +403,7 @@ function exec(cmd) {
 function createView() {
   view = new EditorView(editorEl.value, {
     state: makeState(emptyDocJSON()),
+    nodeViews: nodeViews(),
     editable: () => !readOnly.value,
     attributes: () => ({ class: `write-doc${online.value ? ' is-online' : ''}`, spellcheck: 'true' }),
     dispatchTransaction(tr) {
@@ -364,9 +419,32 @@ function createView() {
       if (tr.docChanged || tr.selectionSet) countSelection()
     },
     handlePaste(v, e, slice) {
+      // A picture on the clipboard (a screenshot, "copy image"): uploaded. Text
+      // pasted with a picture beside it (some apps add one) stays text.
+      const pics = [...(e.clipboardData?.files || [])].filter((f) => PICTURE_TYPES.includes(f.type))
+      if (pics.length && !(e.clipboardData.getData('text/plain') || '').trim()) {
+        e.preventDefault()
+        addPictures(pics)
+        return true
+      }
       const tr = pasteIntoEmpty(v.state, slice)
       if (!tr) return false
       v.dispatch(tr)
+      return true
+    },
+    // A picture file dropped on the page goes in where it was dropped.
+    handleDrop(v, e, slice, moved) {
+      const files = [...(e.dataTransfer?.files || [])]
+      if (moved || !files.length) return false
+      e.preventDefault()
+      const pics = files.filter((f) => PICTURE_TYPES.includes(f.type))
+      if (!pics.length) {
+        error.value = t('this is not a picture the editor can use (PNG, JPEG, GIF or WebP)')
+        return true
+      }
+      const at = v.posAtCoords({ left: e.clientX, top: e.clientY })
+      if (at && !readOnly.value) v.dispatch(v.state.tr.setSelection(TextSelection.near(v.state.doc.resolve(at.pos))))
+      addPictures(pics)
       return true
     },
     handleDOMEvents: {
@@ -477,7 +555,10 @@ async function openChapter(id) {
   } finally {
     if (token === opening) {
       loadingText.value = false
-      nextTick(() => view?.focus())
+      nextTick(() => {
+        goToBlock()
+        view?.focus()
+      })
     }
   }
 }
@@ -598,7 +679,126 @@ async function saveSettings() {
   }
 }
 const setStyles = (list) => updateSettings({ ...settings.value, styles: list })
-const applyStyle = (id) => exec(setStyle(id))
+
+// ---- Book layout: options per chapter, the table of contents, the page view ---------------
+const panelChapter = ref(null) // the chapter the book panel opens at
+const isFrontMatter = (id) => !!settings.value && chapterOption(settings.value, id).front_matter
+const toggleChapterOption = (id, key) => updateSettings(setChapterOption(settings.value, id, { [key]: !chapterOption(settings.value, id)[key] }))
+function chapterMenu(c) {
+  const o = chapterOption(settings.value || {}, c.id)
+  const check = (on, label) => (on ? '✓ ' : '') + label
+  return [
+    { label: check(o.front_matter, t('Front matter')), action: () => toggleChapterOption(c.id, 'front_matter') },
+    { label: check(o.no_header, t('No running header')), action: () => toggleChapterOption(c.id, 'no_header') },
+    {
+      label: t('Page numbers and layout…'),
+      action: () => {
+        panelChapter.value = c.id
+        panel.value = 'book'
+      },
+    },
+  ]
+}
+
+// The table of contents in the editor lists the chapters that aren't front matter.
+const tocTitles = () => chapters.value.filter((c) => !isFrontMatter(c.id)).map((c) => ({ title: c.title }))
+function nodeViews() {
+  return { toc: tocNodeView(tocTitles, t('Page numbers appear in the page view.')) }
+}
+watch(
+  () => chapters.value.map((c) => c.title).join('\n') + JSON.stringify(settings.value?.chapter_options || {}),
+  () => view?.setProps({ nodeViews: nodeViews() }),
+)
+
+// From a character's Lines (?line=N): the chapter's dialogue N selected, in sight.
+function goToLine() {
+  const want = +route.query.line
+  const { line: _drop, ...rest } = route.query
+  router.replace({ query: rest })
+  let found = null
+  let n = 0
+  view.state.doc.descendants((node, pos) => {
+    if (found != null) return false
+    if (node.type !== schema.nodes.dialogue) return true
+    if (n++ === want) found = { node, pos }
+    return false
+  })
+  if (!found) return
+  const end = found.pos + 1 + found.node.content.size
+  view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, found.pos + 1, end)))
+  const dom = view.nodeDOM(found.pos)
+  if (dom?.scrollIntoView) dom.scrollIntoView({ block: 'center' })
+}
+
+// ---- A dialogue's speaker (Script Mode) ---------------------------------------------------
+const speaker = ref(null) // { pos, top, left }: the dialogue whose options are open
+const speakerBox = ref(null)
+const speakerNode = computed(() => {
+  const s = speaker.value
+  const node = s && editorState.value?.doc.nodeAt(s.pos)
+  return node?.type === schema.nodes.dialogue ? node : null
+})
+function openSpeaker(pos) {
+  speaker.value = { pos, top: 0, left: 0 }
+  nextTick(placeSpeaker)
+}
+function closeSpeaker() {
+  speaker.value = null
+  view?.focus()
+}
+function unwrapSpeaker() {
+  const pos = speaker.value?.pos
+  speaker.value = null
+  if (pos != null) exec(dialogueToParagraph(pos))
+}
+// Under the speaker, kept in the paper area.
+function placeSpeaker() {
+  const area = paperArea.value
+  const s = speaker.value
+  if (!view || !area || !s) return
+  const dom = view.nodeDOM(s.pos)
+  const who = dom?.querySelector?.('.pm-who') || dom
+  if (!who?.getBoundingClientRect) return
+  const a = area.getBoundingClientRect()
+  const r = who.getBoundingClientRect()
+  const w = speakerBox.value?.root?.offsetWidth || 384
+  speaker.value = {
+    ...s,
+    top: Math.round(r.bottom - a.top + area.scrollTop + 6),
+    left: Math.round(Math.max(8, Math.min(r.left - a.left + area.scrollLeft, area.clientWidth - w - 8))),
+  }
+}
+// The options close when the cursor leaves that dialogue (or it is gone).
+watch(editorState, (st) => {
+  const s = speaker.value
+  if (!s || !st) return
+  const { $from } = st.selection
+  const inside = $from.depth >= 1 && $from.before($from.depth) === s.pos
+  if (!speakerNode.value || !inside) speaker.value = null
+})
+
+// From the page view (?at=N): the cursor at the chapter's block N, in sight.
+function goToBlock() {
+  if (route.query.line != null && view) return goToLine()
+  const at = route.query.at
+  if (at == null || !view) return
+  const want = +at
+  let found = null
+  view.state.doc.forEach((node, offset, i) => {
+    if (i === want) found = offset
+  })
+  const { at: _drop, ...rest } = route.query
+  router.replace({ query: rest })
+  if (found == null) return
+  const sel = TextSelection.near(view.state.doc.resolve(Math.min(found + 1, view.state.doc.content.size)))
+  view.dispatch(view.state.tr.setSelection(sel))
+  const dom = view.nodeDOM(found)
+  if (dom?.scrollIntoView) dom.scrollIntoView({ block: 'center' })
+}
+
+// A paragraph style goes on the selected paragraphs, a character style on
+// the selected text.
+const applyStyle = (id) => exec(styleById(styles.value, id)?.kind === 'character' ? setCharStyle(id) : setStyle(id))
 
 const typeLabel = (s) => (s.page_type === 'online' ? t('Online Post') : pageTypeName(s))
 
@@ -623,6 +823,78 @@ async function chooseType({ type, width_mm, height_mm }) {
     busy.value = false
   }
 }
+
+// ---- Pictures ---------------------------------------------------------------------------------
+const pictureInput = ref(null)
+const pictureBox = ref(null)
+const uploading = ref(false)
+const picturePlace = ref({ top: 0, left: 0 })
+const pictureNode = computed(() => {
+  const sel = editorState.value?.selection
+  return sel instanceof NodeSelection && sel.node.type === schema.nodes.image ? sel.node : null
+})
+const pickPicture = () => pictureInput.value?.click()
+
+function onPicture(e) {
+  // Read the file before clearing the input (see CLAUDE.md).
+  const file = e.target.files[0]
+  e.target.value = ''
+  if (file) addPictures([file])
+}
+
+// Uploads each picture, then puts it in the text at the cursor (a dropped
+// picture has moved the cursor to where it was dropped).
+async function addPictures(files) {
+  for (const file of files) {
+    if (!view || readOnly.value) return
+    if (!PICTURE_TYPES.includes(file.type)) {
+      error.value = t('this is not a picture the editor can use (PNG, JPEG, GIF or WebP)')
+      return
+    }
+    if (file.size > MAX_PICTURE) {
+      error.value = t('that picture is too large (over 32 MB)')
+      return
+    }
+    const into = chapterId.value
+    uploading.value = true
+    error.value = ''
+    try {
+      const { src } = await booksApi.uploadPicture(volumeKey.value, file)
+      // The writer went to another chapter meanwhile: the picture is kept, not placed.
+      if (view && chapterId.value === into) exec(insertBlock('image', { src }, { select: true }))
+    } catch (err) {
+      error.value = err.message
+      return
+    } finally {
+      uploading.value = false
+    }
+  }
+}
+
+// The options sit under the selected picture, kept in view.
+function placePictureOptions() {
+  const area = paperArea.value
+  if (!view || !area || !pictureNode.value) return
+  const dom = view.nodeDOM(view.state.selection.from)
+  if (!dom?.getBoundingClientRect) return
+  const a = area.getBoundingClientRect()
+  const r = dom.getBoundingClientRect()
+  const box = pictureBox.value?.root
+  const h = box?.offsetHeight || 190
+  const w = box?.offsetWidth || 368
+  const below = r.bottom - a.top + area.scrollTop + 8
+  const above = r.top - a.top + area.scrollTop - h - 8
+  const lo = area.scrollTop + 8
+  const hi = area.scrollTop + area.clientHeight - h - 8
+  // Under the picture when it fits in view, else above it, else kept in view.
+  const top = below <= hi ? below : above >= lo ? above : Math.max(lo, Math.min(below, hi))
+  const left = r.left - a.left + area.scrollLeft
+  picturePlace.value = {
+    top: Math.round(top),
+    left: Math.round(Math.max(8, Math.min(left, area.clientWidth - w - 8))),
+  }
+}
+watch([pictureNode, zoom, areaWidth], () => nextTick(() => nextTick(placePictureOptions)), { flush: 'post' })
 
 // ---- Upload .docx ----------------------------------------------------------------------------------
 const docxInput = ref(null)
@@ -659,7 +931,7 @@ async function onDocx(e) {
 
 // Takes the file's page type and page, and/or its styles (a style of the
 // same id is replaced, the book's others stay).
-async function applyImport({ page, styles: takeStyles }) {
+async function applyImport({ page, styles: takeStyles, layout: takeLayout, meta: takeMeta }) {
   const r = importReport.value
   const old = settings.value
   let next = { ...old }
@@ -667,6 +939,16 @@ async function applyImport({ page, styles: takeStyles }) {
     next.page_type = r.page_type_guess
     if (r.page && r.page_type_guess !== 'online') next.page = { ...old.page, ...r.page }
   }
+  // The file's headers, footers and page numbers; its front matter is
+  // marked as such (lower roman numbers, no header).
+  if (takeLayout && r.layout) {
+    next.layout = normaliseLayout({ ...old.layout, ...r.layout })
+    for (const c of r.chapters || []) {
+      if (c.front_matter) next = setChapterOption(next, c.id, { front_matter: true })
+      if (c.number_restart != null) next = setChapterOption(next, c.id, { number_restart: c.number_restart })
+    }
+  }
+  if (takeMeta && r.meta) next.meta = { ...old.meta, ...r.meta }
   if (takeStyles && r.styles?.length) {
     const byId = new Map(old.styles.map((s) => [s.id, s]))
     for (const s of r.styles) byId.set(s.id, s)
@@ -931,6 +1213,41 @@ onBeforeUnmount(() => {
 .ch-words {
   font-size: 0.7rem;
   color: var(--text-faint);
+}
+
+.chapter-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.chapter-row .chapter-item {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The chapter's layout menu shows on hover (and when it has the focus). */
+.ch-menu {
+  position: absolute;
+  right: 0.1rem;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.ch-menu :deep(.menu-btn) {
+  min-height: 1.6rem;
+  padding: 0 0.45rem;
+  background: var(--surface);
+}
+
+.chapter-row:hover .ch-menu,
+.ch-menu:focus-within,
+.ch-menu.is-open {
+  opacity: 1;
+}
+
+.pages-link {
+  margin-left: 0.8rem;
 }
 
 .add-chapter {

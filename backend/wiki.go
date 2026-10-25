@@ -310,6 +310,9 @@ type wikiListItem struct {
 	// Aliases are a character's names in its other versions; [[links]] and
 	// search find the character by them too.
 	Aliases []string `json:"aliases,omitempty"`
+	// Nicknames are a character's nicknames in any version; the writing
+	// editor's Tab-to-link finds the character by them (not links).
+	Nicknames []string `json:"nicknames,omitempty"`
 }
 
 // pictureURL turns a stored picture or icon into what the frontend expects:
@@ -359,9 +362,11 @@ func listWikiItems(db wikiQuerier) ([]wikiListItem, error) {
 		rows.Close()
 	}
 	aliases := characterAliases(db)
+	nicknames := characterNicknames(db)
 	for i := range items {
 		if items[i].Type == "character" {
 			items[i].Aliases = aliases[items[i].ID]
+			items[i].Nicknames = nicknames[items[i].ID]
 		}
 	}
 	return items, nil
@@ -385,6 +390,33 @@ func characterAliases(db wikiQuerier) map[int64][]string {
 		if rows.Scan(&id, &name) != nil {
 			continue
 		}
+		k := strconv.FormatInt(id, 10) + ":" + normalizeWikiKey(name)
+		if !seen[k] {
+			seen[k] = true
+			out[id] = append(out[id], name)
+		}
+	}
+	return out
+}
+
+// characterNicknames is every character's nicknames, the current
+// version's first, once each.
+func characterNicknames(db wikiQuerier) map[int64][]string {
+	out := map[int64][]string{}
+	rows, err := db.Query(`SELECT character_id, nickname FROM character_versions
+		WHERE trim(COALESCE(nickname, '')) <> '' ORDER BY is_current DESC, id`)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	seen := map[string]bool{}
+	for rows.Next() {
+		var id int64
+		var name string
+		if rows.Scan(&id, &name) != nil {
+			continue
+		}
+		name = strings.TrimSpace(name)
 		k := strconv.FormatInt(id, 10) + ":" + normalizeWikiKey(name)
 		if !seen[k] {
 			seen[k] = true

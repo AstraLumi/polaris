@@ -87,6 +87,24 @@ func TestDocxSmoke(t *testing.T) {
 	t.Logf("page: %s guess=%s", pg, imp.PageTypeGuess)
 	lo, _ := json.Marshal(imp.LeftOut)
 	t.Logf("left_out: %s", lo)
+	lay, _ := json.MarshalIndent(imp.Layout, "    ", "  ")
+	t.Logf("layout guess: %s", lay)
+	metaKeys := []string{}
+	for k := range imp.Meta {
+		metaKeys = append(metaKeys, k)
+	}
+	sort.Strings(metaKeys)
+	t.Logf("meta found: %v", metaKeys)
+	t.Logf("page number restarts (chapter index: number): %v", imp.Restarts)
+	if len(imp.Chapters) > 0 {
+		var first []string
+		for i, n := range imp.Chapters[0].Doc.Content {
+			if i < 12 {
+				first = append(first, n.Type)
+			}
+		}
+		t.Logf("first chapter starts: %v", first)
+	}
 	for i, p := range imp.Pictures {
 		t.Logf("picture %d: %s %s %d bytes", i, p.Name, p.ContentType, len(p.Data))
 	}

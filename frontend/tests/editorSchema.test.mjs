@@ -17,10 +17,10 @@ import {
 } from '../src/editor/css.js'
 
 // ---- The schema has exactly EDITOR.md's nodes and marks -----------------------
-assert.deepEqual(Object.keys(schema.nodes).sort(), ['bullet_list', 'doc', 'hard_break', 'heading', 'image', 'list_item', 'ordered_list', 'page_break', 'paragraph', 'scene_break', 'tab', 'text'])
+assert.deepEqual(Object.keys(schema.nodes).sort(), ['bullet_list', 'doc', 'hard_break', 'heading', 'image', 'list_item', 'ordered_list', 'page_break', 'paragraph', 'scene_break', 'tab', 'text', 'toc', 'dialogue'].sort())
 assert.deepEqual(
   Object.keys(schema.marks).sort(),
-  ['bold', 'color', 'font', 'highlight', 'italic', 'link', 'size', 'smallcaps', 'story_link', 'strike', 'subscript', 'superscript', 'underline'],
+  ['bold', 'char_style', 'color', 'font', 'highlight', 'italic', 'link', 'size', 'smallcaps', 'story_link', 'strike', 'subscript', 'superscript', 'underline'],
 )
 const paraAttrs = Object.keys(schema.nodes.paragraph.attrs).filter((k) => k !== 'extra').sort()
 assert.deepEqual(paraAttrs, ['align', 'indentFirst', 'indentLeft', 'indentRight', 'keepNext', 'lineHeight', 'spaceAfter', 'spaceBefore', 'style'])

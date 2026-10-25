@@ -15,7 +15,7 @@ import (
 // oldest migration (or a brand new one) gets wiped and recreated from
 // freshSchema — so every schema change from here on should ship with a
 // migration instead of relying on that reset.
-const currentSchemaVersion = "44"
+const currentSchemaVersion = "45"
 
 const freshSchema = `
 CREATE TABLE classes (
@@ -570,6 +570,13 @@ var migrations = map[string]migration{
 		// and its saved versions (editor.go).
 		statements: schema44Statements,
 	},
+	"44": {
+		to: "45",
+		// What each chapter's text names and who speaks in it, for the
+		// "Appears in" lists and each character's Lines (chapterindex.go),
+		// filled from the texts already written.
+		before: migrateChapterIndex,
+	},
 }
 
 // schema20Statements create what schema 20 added. The fresh schema runs them
@@ -652,6 +659,8 @@ func applyMigration(db *sql.DB, m migration) error {
 // tablesInDependencyOrder lists every app-owned table, children before
 // parents, so dropping them in this order never trips a foreign key.
 var tablesInDependencyOrder = []string{
+	"chapter_lines",
+	"chapter_links",
 	"chapter_text_versions",
 	"chapter_texts",
 	"book_settings",
@@ -813,7 +822,7 @@ func ensureSchema(db *sql.DB) error {
 			return fmt.Errorf("create schema: %w", err)
 		}
 	}
-	later := [][]string{wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements, schema24Statements, {gearDescriptionSQL}, schema26Statements, schema27Statements, schema28Statements, schema29Statements, schema30Statements, schema31Statements, schema32Statements, schema33Statements, schema34Statements, schema35Statements, schema36Statements, schema37Statements, schema38Statements, schema39Statements, schema40Statements, schema41Statements, schema44Statements}
+	later := [][]string{wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements, schema24Statements, {gearDescriptionSQL}, schema26Statements, schema27Statements, schema28Statements, schema29Statements, schema30Statements, schema31Statements, schema32Statements, schema33Statements, schema34Statements, schema35Statements, schema36Statements, schema37Statements, schema38Statements, schema39Statements, schema40Statements, schema41Statements, schema44Statements, schema45Statements}
 	for _, stmt := range slices.Concat(later...) {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("create wiki schema: %w", err)

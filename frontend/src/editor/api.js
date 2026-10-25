@@ -20,6 +20,12 @@ void [
   tr('a style is either a paragraph style or a character style'), tr('every style needs a name'), tr('pick a page type'),
   tr("the book's settings are not valid"), tr("the book's settings are too large"), tr('the styles are not valid'),
   tr('two styles have the same id'), tr('unknown page type'),
+  tr("the book's details are not valid"), tr("the book's layout is not valid"), tr('the chapter options are not valid'),
+  tr('a header or footer text is too long'), tr("a header or footer's size must be between 4 and 72 pt"),
+  tr('a chapter starts on the next page or on a right-hand page'), tr('unknown page number format'),
+  tr('a page number must be between 0 and 99999'),
+  tr('failed to save the picture'), tr('choose a picture'), tr('that picture is too large (over 32 MB)'),
+  tr('this is not a picture the editor can use (PNG, JPEG, GIF or WebP)'),
 ]
 
 // A failed call: `status` is the HTTP status (0 when the server couldn't be
@@ -70,11 +76,19 @@ export const booksApi = {
   save: (volume, settings, switchLabel) =>
     call(`/books/${volume}`, json('PUT', switchLabel ? { settings, switch_label: switchLabel } : { settings }), 'failed to save the book'),
   // { chapters: [{ id, title, words }], page, page_type_guess, styles, fonts, left_out }
+  // Every chapter's text, in reading order: [{ id, title, doc }] (the page view).
+  docs: (volume) => call(`/books/${volume}/docs`, undefined, 'failed to load the book'),
   importDocx: (volume, file) => {
     const fd = new FormData()
     fd.append('file', file)
     fd.append('mode', 'append')
     return call(`/books/${volume}/import-docx`, { method: 'POST', body: fd }, 'failed to import the file')
+  },
+  // A picture for an `image` node (PNG, JPEG, GIF or WebP, up to 32 MB): { src }.
+  uploadPicture: (volume, file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return call(`/books/${volume}/pictures`, { method: 'POST', body: fd }, 'failed to save the picture')
   },
 }
 

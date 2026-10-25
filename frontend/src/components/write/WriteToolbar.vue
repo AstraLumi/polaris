@@ -10,6 +10,11 @@
         <option v-if="!fmt.styleId" value="" disabled>—</option>
         <option v-for="s in paragraphStyles" :key="s.id" :value="s.id">{{ nameOf(s) }}</option>
       </select>
+      <select v-if="characterStyles.length" class="tb-style tb-cstyle foldable" :value="fmt.charStyleId || ''" :aria-label="$t('Character style')" :title="$t('Character style (for the selected text)')" @change="exec(setCharStyle($event.target.value || null))">
+        <option value="">{{ $t('No character style') }}</option>
+        <option v-if="fmt.charStyleId && !characterStyles.some((s) => s.id === fmt.charStyleId)" :value="fmt.charStyleId">—</option>
+        <option v-for="s in characterStyles" :key="s.id" :value="s.id">{{ nameOf(s) }}</option>
+      </select>
       <input
         class="tb-font"
         type="text"
@@ -109,9 +114,8 @@
       <button v-bind="btn(t('Numbered list'), fmt.list === 'ordered_list')" @click="exec(toggleList('ordered_list'))"><TbIcon name="list-number" /></button>
       <button v-bind="btn(t('Scene break'))" @click="exec(insertBlock('scene_break'))"><span class="glyph">⁂</span></button>
       <button v-bind="btn(t('Page break') + ' (Ctrl+Enter)')" :disabled="online" @click="exec(insertBlock('page_break'))"><TbIcon name="page-break" /></button>
-      <!-- TODO(stage 2): pictures need an upload route for the editor; the
-           schema and the page already draw them. -->
-      <button v-bind="btn(t('Picture: comes with .docx upload'))" disabled><TbIcon name="picture" /></button>
+      <button v-bind="btn(t('Table of contents'))" class="foldable" :disabled="online" @click="exec(insertBlock('toc', { title: t('Contents') }))"><TbIcon name="toc" /></button>
+      <button v-bind="btn(t('Insert picture'), fmt.atom === 'image')" :disabled="uploading" @click="$emit('picture')"><TbIcon name="picture" /></button>
       <div class="tb-pop">
         <button v-bind="btn(t('Web link'), !!fmt.link)" @click="openLink"><TbIcon name="link" /></button>
         <form v-if="open === 'link'" class="pop glass-panel panel-solid link-pop" @mousedown.stop @submit.prevent="applyLink">
@@ -129,6 +133,7 @@
       <button v-bind="btn(t('Styles'), panel === 'styles')" class="foldable" @click="$emit('panel', 'styles')"><TbIcon name="styles" /></button>
       <button v-bind="btn(t('Saved versions'), panel === 'versions')" class="foldable" @click="$emit('panel', 'versions')"><TbIcon name="versions" /></button>
       <button v-bind="btn(t('Book and page'), panel === 'book')" class="foldable" @click="$emit('panel', 'book')"><TbIcon name="book" /></button>
+      <button v-bind="btn(scriptMode ? t('Script Mode: on (this chapter)') : t('Script Mode: type “Name:” at a line’s start for dialogue'), scriptMode)" class="foldable" @click="exec(setScriptMode(!scriptMode))"><TbIcon name="script" /></button>
       <button v-bind="btn(t('Focus mode'), focusMode)" @click="$emit('focus')"><TbIcon name="focus" /></button>
       <button type="button" class="tb-btn more-btn" :aria-expanded="more" :title="$t('More tools')" :aria-label="$t('More tools')" @click="more = !more">{{ more ? '▴' : '⋯' }}</button>
     </div>
@@ -157,7 +162,9 @@ import {
   insertBlock,
   clearFormatting,
   setLink,
+  setCharStyle,
 } from '../../editor/commands.js'
+import { setScriptMode } from '../../editor/script.js'
 
 const props = defineProps({
   state: { type: Object, required: true },
@@ -166,8 +173,9 @@ const props = defineProps({
   online: { type: Boolean, default: false },
   focusMode: { type: Boolean, default: false },
   panel: { type: String, default: '' },
+  uploading: { type: Boolean, default: false }, // a picture is on its way
 })
-defineEmits(['find', 'panel', 'focus'])
+defineEmits(['find', 'panel', 'focus', 'picture'])
 
 const TEXT_COLORS = ['#000000', '#444444', '#7f7f7f', '#c00000', '#e36c09', '#9c6500', '#2e7d32', '#1f4e79', '#3949ab', '#7030a0', '#ad1457', '#ffffff']
 const HIGHLIGHTS = ['#fff176', '#c5e1a5', '#80deea', '#f8bbd0', '#ffcc80', '#d1c4e9']
@@ -187,6 +195,9 @@ const fmt = computed(() => selectionFormat(props.state, props.styles))
 const canUndo = computed(() => undoDepth(props.state) > 0)
 const canRedo = computed(() => redoDepth(props.state) > 0)
 const paragraphStyles = computed(() => props.styles.filter((s) => (s.kind || 'paragraph') === 'paragraph'))
+const characterStyles = computed(() => props.styles.filter((s) => s.kind === 'character'))
+// Script Mode is the chapter's (its doc root's mode).
+const scriptMode = computed(() => props.state.doc.attrs.mode === 'script')
 const nameOf = (s) => (s.builtin && s.name === BUILTIN_NAMES[s.id] ? t(s.name) : s.name)
 const mm = (v) => (v == null ? '' : String(ptToMm(v)))
 const pt = (v) => (v == null ? '' : num(v))
@@ -269,6 +280,7 @@ const ICONS = {
   'list-bullet': 'M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01',
   'list-number': 'M10 6h11M10 12h11M10 18h11M4 4v4M3 8h2M3 11h2l-2 3h2M3 16h2v4H3M3 18h2',
   'page-break': 'M6 3v5h12V3M6 21v-5h12v5M2 12h3M8 12h3M13 12h3M19 12h3',
+  toc: 'M4 6h10M4 12h10M4 18h10M17 6h3M17 12h3M17 18h3',
   picture: 'M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15 9h.01',
   link: 'M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1',
   find: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-5-5',
@@ -276,6 +288,7 @@ const ICONS = {
   versions: 'M12 8v4l3 2M3.05 11a9 9 0 1 1 .5 4M3 4v7h7',
   book: 'M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3zM4 17a3 3 0 0 1 3-3h11',
   focus: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
+  script: 'M4 5h16v11H10l-4 3v-3H4zM8 9h8M8 12h5',
 }
 const TbIcon = (p) =>
   h('svg', { viewBox: '0 0 24 24', width: 18, height: 18, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' }, [h('path', { d: ICONS[p.name] || '' })])
@@ -368,6 +381,10 @@ sub {
 .tb-style {
   width: 8.5rem;
   margin-right: 0.15rem;
+}
+
+.tb-cstyle {
+  width: 8rem;
 }
 
 .tb-font {

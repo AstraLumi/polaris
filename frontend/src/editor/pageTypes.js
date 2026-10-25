@@ -2,6 +2,7 @@
 // sizes and margins, the text block they leave, and the settings a new or
 // switched book starts from. Pure.
 import { BUILTIN_IDS, builtinStyles, styleById } from './styles.js'
+import { normaliseLayout, normaliseMeta, normaliseChapterOptions } from './bookLayout.js'
 
 export const PAGE_TYPE_KEYS = ['a4', 'a5', 'a6', 'custom', 'online']
 
@@ -72,7 +73,8 @@ export function normaliseSettings(raw) {
   const page = { ...defaultPage(type, s.page || {}), ...(s.page || {}) }
   const styles = Array.isArray(s.styles) ? s.styles.filter((x) => x && x.id) : []
   for (const b of defaultStyles(type)) if (!styleById(styles, b.id)) styles.splice(BUILTIN_IDS.indexOf(b.id), 0, b)
-  return { ...s, page_type: type, page, styles }
+  // Stage 3: the book's details, layout and options per chapter (bookLayout.js).
+  return { ...s, page_type: type, page, styles, meta: normaliseMeta(s.meta), layout: normaliseLayout(s.layout), chapter_options: normaliseChapterOptions(s.chapter_options) }
 }
 
 // Switching page type: the new type's page and built-in styles (keeping

@@ -141,3 +141,25 @@ export function textDeclarations(t) {
   if (t.italic != null) out.push(`font-style: ${t.italic ? 'italic' : 'normal'}`)
   return out
 }
+
+// CSS declarations for a character style's own settings (only what it
+// sets): { font, size, color, bold, italic, underline, strike, smallcaps,
+// superscript, subscript, highlight }. Underline and strike can only be
+// turned on (CSS cannot take a decoration back from the paragraph).
+export function charDeclarations(c) {
+  const out = []
+  if (!c) return out
+  if (c.font) out.push(`font-family: ${familyCSS(c.font)}`)
+  if (c.size != null) out.push(`font-size: ${num(c.size)}pt`)
+  else if (c.superscript || c.subscript) out.push('font-size: 0.83em')
+  if (c.color) out.push(`color: ${c.color}`)
+  if (c.bold != null) out.push(`font-weight: ${c.bold ? 700 : 400}`)
+  if (c.italic != null) out.push(`font-style: ${c.italic ? 'italic' : 'normal'}`)
+  const lines = [c.underline && 'underline', c.strike && 'line-through'].filter(Boolean)
+  if (lines.length) out.push(`text-decoration: ${lines.join(' ')}`)
+  if (c.smallcaps) out.push('font-variant: small-caps')
+  if (c.superscript) out.push('vertical-align: super')
+  else if (c.subscript) out.push('vertical-align: sub')
+  if (c.highlight) out.push(`background-color: ${c.highlight}`)
+  return out
+}

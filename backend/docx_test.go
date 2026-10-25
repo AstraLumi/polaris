@@ -275,8 +275,8 @@ func TestDocxChaptersAndStyles(t *testing.T) {
 	if m := markMap(more.Content[0]); m["font"]["family"] != "Calibri" || m["size"]["pt"] != 12.0 {
 		t.Errorf("More text marks: %v", m)
 	}
-	// The character style is flattened into marks.
-	if m := markMap(textNode(t, imp, "HEY")); m["bold"] == nil || m["color"]["color"] != "#c00000" || m["italic"] != nil {
+	// The character style is named by a mark; its bold and colour are the style's.
+	if m := markMap(textNode(t, imp, "HEY")); m["char_style"]["id"] != "word-shout" || len(m) != 1 {
 		t.Errorf("HEY marks: %v", m)
 	}
 	if m := markMap(textNode(t, imp, "Dear friend")); len(m) != 0 {
@@ -625,8 +625,13 @@ func TestDocxLists(t *testing.T) {
 		}
 		return strings.Join(s, "|")
 	}
-	if items(bs[0]) != "apple|pear" || items(bs[1]) != "first|sub|second" || items(bs[3]) != "third" || items(bs[4]) != "fifth" {
+	if items(bs[0]) != "apple|pear" || items(bs[1]) != "first|second" || items(bs[3]) != "third" || items(bs[4]) != "fifth" {
 		t.Errorf("items: %s / %s / %s / %s", items(bs[0]), items(bs[1]), items(bs[3]), items(bs[4]))
+	}
+	// Word's second level is a list inside the first item.
+	first := bs[1].Content[0]
+	if len(first.Content) != 2 || first.Content[1].Type != "ordered_list" || items(first.Content[1]) != "sub" {
+		t.Errorf("nested level: %s", types(first.Content))
 	}
 	start := func(n *pmNode) int64 { v, _ := pmInt(n.Attrs["start"]); return v }
 	if start(bs[1]) != 1 || start(bs[3]) != 3 || start(bs[4]) != 5 {
@@ -697,17 +702,19 @@ func TestDocxPictures(t *testing.T) {
 		t.Fatalf("pictures: %+v", imp.Pictures)
 	}
 	bs := allBlocks(imp)
-	if got := types(bs); got != "image,paragraph,image,paragraph,image,paragraph,image,image,image,image,image" {
+	// The page-sized picture goes to the start of its page (docxlayout.go):
+	// first, as there is no page break before it.
+	if got := types(bs); got != "image,image,paragraph,image,paragraph,paragraph,image,image,image,image,image" {
 		t.Fatalf("blocks: %s", got)
 	}
 	img := func(i int) map[string]any { return bs[i].Attrs }
-	if a := img(0); a["src"] != "docx-picture:0" || a["align"] != "center" || a["width"] != 72.0 || a["fullPage"] != false || a["alt"] != "A map" {
+	if a := img(1); a["src"] != "docx-picture:0" || a["align"] != "center" || a["width"] != 72.0 || a["fullPage"] != false || a["alt"] != "A map" {
 		t.Errorf("inline: %v", a)
 	}
-	if nodeText(bs[1]) != "text before" || nodeText(bs[3]) != "text after" || img(2)["width"] != 1.0 {
-		t.Errorf("split paragraph: %q %q %v", nodeText(bs[1]), nodeText(bs[3]), img(2))
+	if nodeText(bs[2]) != "text before" || nodeText(bs[4]) != "text after" || img(3)["width"] != 1.0 {
+		t.Errorf("split paragraph: %q %q %v", nodeText(bs[2]), nodeText(bs[4]), img(3))
 	}
-	if a := img(4); a["fullPage"] != true || a["width"] != nil {
+	if a := img(0); a["fullPage"] != true || a["width"] != nil {
 		t.Errorf("cover: %v", a)
 	}
 	if a := img(6); a["align"] != "center" || a["fullPage"] != false {

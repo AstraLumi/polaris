@@ -61,6 +61,9 @@
         <button class="tab-button" :class="{ 'is-active': tab === 'relations' }" :title="$t('Family, friends, rivals and factions')" @click="tab = 'relations'">
           {{ $t('Relations') }}
         </button>
+        <button class="tab-button" :class="{ 'is-active': tab === 'lines' }" :title="$t('Everything they say in the book')" @click="tab = 'lines'">
+          {{ $t('Lines') }}
+        </button>
       </div>
 
       <section v-show="tab === 'story'" class="story-tab glass-panel sheet-part">
@@ -85,6 +88,8 @@
         <button v-if="emptyCount" type="button" class="btn btn-ghost small empty-toggle no-print" @click="showEmpty = !showEmpty">
           {{ showEmpty ? $t('Hide empty fields') : $tn('Show {n} empty field', 'Show {n} empty fields', emptyCount) }}
         </button>
+        <h3 class="group-title appears-title">{{ $t('Appears in') }}</h3>
+        <AppearsIn type="character" :id="data.character_id" />
       </section>
 
       <section v-show="tab === 'build'" class="build-tab glass-panel sheet-part">
@@ -113,6 +118,10 @@
         <RelationsTab :character-id="data.character_id" :character-name="data.name" :point="{ chapterId: data.chapter_id, date: data.version_date }" />
       </section>
 
+      <section v-if="tab === 'lines'" class="gear-tab-wrap glass-panel sheet-part">
+        <CharacterLines :character-id="data.character_id" :name="data.name" />
+      </section>
+
       <Pager :prev="neighbours.prev" :next="neighbours.next" :prev-label="$t('← Previous character')" :next-label="$t('Next character →')" :label="$t('Characters')" />
     </template>
   </div>
@@ -136,6 +145,8 @@ import BuildStatsPanel from '../components/BuildStatsPanel.vue'
 import GearTab from '../components/GearTab.vue'
 import SpellsTab from '../components/SpellsTab.vue'
 import RelationsTab from '../components/RelationsTab.vue'
+import AppearsIn from '../components/AppearsIn.vue'
+import CharacterLines from '../components/CharacterLines.vue'
 
 const props = defineProps({ id: { type: String, required: true } })
 
@@ -270,6 +281,10 @@ function print() {
 
 .empty-toggle {
   margin-top: 0.75rem;
+}
+
+.appears-title {
+  margin-top: 1.4rem;
 }
 
 .nothing-yet {

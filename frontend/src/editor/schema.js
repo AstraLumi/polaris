@@ -90,11 +90,23 @@ function paraFromDOM(el) {
 
 const keep = (spec) => ({ ...spec, extra: { default: null } })
 
+// A dialogue as HTML: the speaker (small caps) and manner (italics) above
+// the line, which is the editable part.
+export function dialogueDOM(attrs) {
+  const { character, speaker, manner } = attrs
+  const dom = { class: 'pm-dialogue', 'data-dialogue': '', 'data-speaker': speaker || '', 'data-manner': manner || '' }
+  if (character != null) dom['data-character'] = String(character)
+  const who = ['span', { class: 'pm-speaker' }, speaker || '…']
+  const who2 = manner ? [who, ['span', { class: 'pm-manner' }, `, ${manner}`]] : [who]
+  return ['div', dom, ['div', { class: 'pm-who', contenteditable: 'false' }, ...who2], ['p', { class: 'pm-line' }, 0]]
+}
+
 const isUpload = (src) => typeof src === 'string' && src.startsWith('/uploads/')
 
 export const schema = new Schema({
   nodes: {
-    doc: { content: 'block+' },
+    // mode: null (prose, the default) or 'script' (stage 4: Script Mode).
+    doc: { content: 'block+', attrs: { mode: { default: null }, extra: { default: null } } },
 
     paragraph: {
       group: 'block',
@@ -151,6 +163,47 @@ export const schema = new Schema({
       toDOM: () => ['div', { class: 'page-break', 'data-page-break': '' }],
     },
 
+    // A table of contents, generated from the book's headings: the editor
+    // lists the chapters (a node view), the page view adds page numbers.
+    toc: {
+      group: 'block',
+      atom: true,
+      selectable: true,
+      attrs: keep({ levels: { default: 1 }, title: { default: 'Contents' } }),
+      parseDOM: [
+        {
+          tag: 'nav[data-toc]',
+          getAttrs: (el) => ({ levels: Math.min(3, Math.max(1, +el.getAttribute('data-levels') || 1)), title: el.getAttribute('data-title') ?? 'Contents' }),
+        },
+      ],
+      toDOM: (node) => [
+        'nav',
+        { class: 'pm-toc', 'data-toc': '', 'data-levels': String(node.attrs.levels || 1), 'data-title': node.attrs.title ?? '' },
+        ['p', { class: 'pm-toc-title' }, node.attrs.title ?? ''],
+      ],
+    },
+
+    // A line of dialogue (stage 4, Script Mode): who speaks (a character's id
+    // or null, and the name as shown), how, and the spoken line as content.
+    // The speaker part is drawn but not editable text (it is attrs).
+    dialogue: {
+      group: 'block',
+      content: 'inline*',
+      defining: true,
+      attrs: keep({ character: { default: null }, speaker: { default: '' }, manner: { default: '' } }),
+      parseDOM: [
+        {
+          tag: 'div[data-dialogue]',
+          contentElement: '.pm-line',
+          getAttrs: (el) => {
+            const id = parseInt(el.getAttribute('data-character'), 10)
+            return { character: id > 0 ? id : null, speaker: el.getAttribute('data-speaker') || '', manner: el.getAttribute('data-manner') || '' }
+          },
+        },
+      ],
+      toDOM: (node) => dialogueDOM(node.attrs),
+    },
+
     image: {
       group: 'block',
       atom: true,
@@ -202,7 +255,8 @@ export const schema = new Schema({
     },
 
     list_item: {
-      content: 'paragraph+',
+      // A paragraph, then more blocks: paragraphs and nested lists.
+      content: 'paragraph block*',
       defining: true,
       attrs: keep({}),
       parseDOM: [{ tag: 'li' }],
@@ -255,7 +309,21 @@ export const schema = new Schema({
           getAttrs: (el) => ({ type: el.getAttribute('data-story-type'), id: el.getAttribute('data-story-id') }),
         },
       ],
-      toDOM: (mark) => ['a', { class: 'story-link', 'data-story-type': mark.attrs.type, 'data-story-id': String(mark.attrs.id ?? '') }, 0],
+      // The href is the item's wiki page, so the wiki's hover preview finds it
+      // (articlePreview.js); a click in the editor only places the cursor.
+      toDOM: (mark) => [
+        'a',
+        { class: 'story-link', href: `/wiki/${mark.attrs.type}/${mark.attrs.id ?? ''}`, 'data-story-type': mark.attrs.type, 'data-story-id': String(mark.attrs.id ?? '') },
+        0,
+      ],
+    },
+
+    // The text uses a character style of the book (its look comes from the
+    // book's stylesheet, styles.js), under the text's own marks.
+    char_style: {
+      attrs: keep({ id: {} }),
+      parseDOM: [{ tag: 'span[data-cstyle]', getAttrs: (el) => ({ id: el.getAttribute('data-cstyle') }) }],
+      toDOM: (mark) => ['span', { class: 'cs', 'data-cstyle': String(mark.attrs.id ?? '') }, 0],
     },
 
     font: {
@@ -422,7 +490,7 @@ export function docFromJSON(json) {
     // Content in a place the schema doesn't allow: keep each block's text.
     const blocks = []
     norm.content.forEach(function walk(n) {
-      if (n.type === 'paragraph' || n.type === 'heading') {
+      if (n.type === 'paragraph' || n.type === 'heading' || n.type === 'dialogue') {
         blocks.push({ type: 'paragraph', content: textOf(n) ? [{ type: 'text', text: textOf(n) }] : undefined })
       } else (n.content || []).forEach(walk)
     })

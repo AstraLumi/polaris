@@ -28,7 +28,8 @@ package main
 //	imp.Page, imp.PageTypeGuess, imp.Styles, imp.Fonts, imp.LeftOut
 //	    The import answer's "page", "page_type_guess", "styles", "fonts",
 //	    "left_out" (JSON tags match EDITOR.md; json.Marshal(imp) gives
-//	    exactly those five keys).
+//	    exactly those five keys, plus "layout" and "meta" when the file
+//	    gives them: see docxlayout.go).
 //
 // Limits (a zip bomb or a huge file fails with errDocxTooBig): at most
 // maxDocxEntries entries and maxDocxTotal bytes uncompressed in all, as
@@ -92,13 +93,16 @@ var docxLeftOutKeys = []string{"headers_footers", "toc", "fields", "fields_as_te
 	"hidden_text", "drop_caps", "borders_shading", "columns", "sections"}
 
 type docxImport struct {
-	Chapters      []docxChapter  `json:"-"`
-	Pictures      []docxPicture  `json:"-"`
-	Page          bookPage       `json:"page"`
-	PageTypeGuess string         `json:"page_type_guess"`
-	Styles        []bookStyle    `json:"styles"`
-	Fonts         []string       `json:"fonts"`
-	LeftOut       map[string]int `json:"left_out"`
+	Chapters      []docxChapter     `json:"-"`
+	Pictures      []docxPicture     `json:"-"`
+	Page          bookPage          `json:"page"`
+	PageTypeGuess string            `json:"page_type_guess"`
+	Styles        []bookStyle       `json:"styles"`
+	Fonts         []string          `json:"fonts"`
+	LeftOut       map[string]int    `json:"left_out"`
+	Layout        *bookLayout       `json:"layout,omitempty"` // docxlayout.go
+	Meta          map[string]string `json:"meta,omitempty"`
+	Restarts      map[int]int       `json:"-"` // chapter index: the page number it restarts at (docxlayout.go)
 }
 
 type docxChapter struct {
@@ -366,7 +370,14 @@ func parseDocx(data []byte) (*docxImport, error) {
 	if err := p.parseBody(docRoot.child("w", "body")); err != nil {
 		return nil, err
 	}
-	return p.finish(), nil
+	p.hoistFullPagePictures() // docxlayout.go
+	imp := p.finish()
+	p.guessLayout(imp, settings, stylesRoot)
+	if imp.Layout != nil {
+		imp.Restarts = p.chapterRestarts(imp)
+	}
+	imp.Meta = docxMeta(pk, pkgRels)
+	return imp, nil
 }
 
 // sniffPicture accepts the picture formats a browser shows.

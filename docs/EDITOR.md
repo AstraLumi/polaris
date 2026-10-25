@@ -52,8 +52,8 @@ Book settings (JSON, stored per book):
       "styles": [ <style>... ]
     }
 
-`page` is ignored for `online`. Stage 3 adds headers, footers and page
-numbering here.
+`page` is ignored for `online`. Stage 3 adds `meta`, `layout` and
+`chapter_options` (see "Stage 3 and 4 additions" below).
 
 ## The document (ProseMirror JSON)
 
@@ -87,8 +87,18 @@ Blocks:
 - `image`: an atom block; attrs `src` (an `/uploads/…` path), `alt`,
   `width` (pt or `null` for natural), `align` (`left` | `center` | `right`),
   `fullPage` (bool: alone on its own page, like a cover).
-- `bullet_list`, `ordered_list` (attr `start`), `list_item` (content:
-  paragraph+).
+- `bullet_list`, `ordered_list` (attr `start`), `list_item` (content: a
+  paragraph, then any paragraphs and nested lists: `paragraph block*`).
+- `toc` (stage 3): an atom block where a table of contents goes; attrs
+  `levels` (1–3, default 1: Heading 1 only) and `title` (default
+  "Contents").
+- `dialogue` (stage 4, Script Mode): attrs `character` (a character id or
+  `null`), `speaker` (the name as shown, kept even when `character` is
+  set, so a deleted character still reads), `manner` (text or `""`);
+  content: inline (the spoken line, without quotes). The server checks
+  `character` is a positive integer or `null` and `speaker` and `manner`
+  are text of at most 200 characters. A dialogue is a block anywhere a
+  paragraph can be; the editor only makes them at the top level.
 
 Inline:
 
@@ -105,6 +115,14 @@ Marks:
 - `story_link` {`type`, `id`}: a link to a story item, the same type keys
   and ids as the wiki's `[[type#id]]` links (`backend/wikilinks.go`,
   `frontend/src/wikiLinks.js`); it shows the text it covers.
+- `char_style` {`id`}: the text uses a character style of the book. Order:
+  the text's own marks > its character style (and that style's
+  `based_on`) > its paragraph's style.
+
+The doc root may carry attrs: `mode`: `prose` (default) or `script`
+(stage 4: the chapter is written in Script Mode). The editor writes
+`script` or leaves the attr out (prose); the server refuses any other
+value. Other root attrs are kept like any unknown attr.
 
 ### Styles
 
@@ -190,12 +208,13 @@ database like every other route).
   formatting most of its text actually has (hand-formatted Normal text
   makes `normal` Merriweather 8 pt justified), so paragraphs and text
   carry only what differs from their style. Character styles are listed
-  but the text carries their formatting as marks (there is no mark that
-  names a character style). All caps is written as capitals; hidden text,
+  (id `word-<styleId>`) and text in one carries a `char_style` mark naming
+  it, plus as marks only the direct formatting beyond its paragraph style
+  and its character style. All caps is written as capitals; hidden text,
   deleted text, tables of contents, page numbers and page references are
   dropped; other fields keep their shown text; tables and text boxes keep
-  their text as paragraphs; nested list levels are items of the same list;
-  a numbered heading gets its number in its text. A paragraph of separator
+  their text as paragraphs; a nested list level (Word's `ilvl`, up to nine
+  levels) is a list inside the item before it; a numbered heading gets its number in its text. A paragraph of separator
   marks (`* * *`, `***`, `◇◇◇`, `☆ ☆ ☆`, a lone `#` or `⁂`…) is a
   `scene_break`; a picture never is. An anchored picture about the size of
   the page and placed on the page is `fullPage`; one placed wholly off the
@@ -210,7 +229,8 @@ database like every other route).
 The words of a doc: text of every block, split on whitespace, counting
 runs that hold a letter or digit (Unicode letters and decimal digits, as
 Go's `unicode.IsLetter`/`IsDigit`); a hard break or tab inside a paragraph
-separates words like a space.
+separates words like a space. A `dialogue` counts its spoken line only,
+not its speaker or manner (they are attrs, as a script's cue isn't text).
 
 ## The client
 
@@ -266,6 +286,282 @@ separates words like a space.
 - The built-in styles and page defaults are also in
   `frontend/src/editor/styles.js` and `pageTypes.js`, used only when the
   server's `defaults` are missing.
-- Not yet: inserting pictures from the toolbar (no upload route for the
-  editor; imported pictures are drawn), character styles (kept, not
-  applied: the schema has no mark for them).
+- Character styles: the toolbar has a second picker (shown once the book has
+  character styles) that puts one on the selected text or takes it off;
+  Styles lists them apart from the paragraph styles, makes new ones and
+  edits them (text formatting only: font, size, colour, bold, italic,
+  underline, strike, small caps; an empty box follows the style it is based
+  on, else the text around it). The book's stylesheet draws a style as a rule
+  on the mark's `span[data-cstyle]`, so the text's own marks, inside it, win.
+  Clear formatting (Ctrl+Space) takes the style off like any other mark.
+- Lists: Tab and Shift+Tab move an item one level in or out (under the item
+  before it; nine levels at most, the server's nesting limit), Enter on an
+  empty item takes it out one level (out of the list from the first).
+- Pictures: the toolbar's picture button uploads a file
+  (`POST /api/books/{volume}/pictures`) and puts an `image` at the cursor,
+  selected; a picture file dropped on the page (where it is dropped) or pasted
+  (a screenshot, "copy image"; not when text comes with it) goes the same way.
+  A selected picture shows a small box with its width in pt (empty = natural),
+  alignment, full page, alt text and Remove (the file stays in the uploads).
+  Pasted HTML pictures that are not uploads are still dropped.
+
+## Stage 3 and 4 additions
+
+### Book settings
+
+    "meta": { "title": "", "subtitle": "", "author": "", "language": "en",
+              "publisher": "", "isbn": "", "rights": "", "description": "" },
+    "layout": {
+      "different_first": true,        // a chapter's first page has its own header/footer
+      "different_odd_even": true,
+      "header": { "odd": <band>, "even": <band>, "first": <band> },
+      "footer": { "odd": <band>, "even": <band>, "first": <band> },
+      "chapter_start": "next",        // "next" page or "odd" (a right-hand page)
+      "numbering": { "format": "arabic", "start": 1 },
+      "toc_dots": true
+    },
+    "chapter_options": { "<chapter id>": { "front_matter": false,
+                         "number_restart": null, "no_header": false } }
+
+A band is `{ "left": "", "center": "{chapter}", "right": "",
+"font": null, "size": null, "italic": false, "smallcaps": false,
+"uppercase": false }`; its texts hold fields: `{page}`, `{chapter}` (the
+chapter's title), `{chapter_number}`, `{book}` (meta title or the volume's),
+`{author}`. `numbering.format`: `arabic`, `roman` (i, ii), `upper_roman`
+(I, II), `alpha`, `upper_alpha`. Front-matter chapters are numbered in
+lower roman from i and get no header; numbering restarts at 1 (or
+`numbering.start`) at the first chapter that isn't front matter, unless a
+chapter sets `number_restart`. Missing keys take these defaults; the
+server keeps what it doesn't know. `layout` is ignored for `online`.
+
+The defaults (`defaultBookLayout` in `backend/booklayout.go`, `defaultLayout`
+in `frontend/src/editor/bookLayout.js`; keep them equal): header odd
+`{chapter}`, even `{book}`, first empty; footer `{page}` centred on every
+page; `meta.language` `en`. A missing key inside a band takes the default
+band's value. The server checks types and limits (band texts up to 300
+characters, sizes 4–72 pt, `chapter_start` `next`/`odd`, the formats
+above, page numbers 0–99999, meta fields up to 300 characters and the
+description 5000, chapter option keys positive ids) and answers `400`
+otherwise. Fields are only the five above; any other `{word}` in a band
+is literal text. "Odd" pages are right-hand pages (recto) and "even" ones
+left-hand pages, by where they lie in the book, not by their number.
+`bookLayoutOf` (Go) reads the three with defaults for the exports.
+
+### Server
+
+- `GET /api/books/{volume}/docs`: every chapter's `{ id, title, doc }` in
+  reading order, for the page view and exports.
+- What the texts name and who speaks (stage 4, `backend/chapterindex.go`,
+  schema 45): every write of a chapter's text (a save, a restore, a .docx
+  import; the migration did the texts already written) rebuilds the
+  chapter's rows in `chapter_links` (`chapter_id`, `type`, `item_id`,
+  `count`) and `chapter_lines` (`chapter_id`, `position`, `character_id`,
+  `speaker`, `manner`, `text`). A mention is a run of text with one
+  `story_link` (text next to text with the same link, bold or not, is one
+  mention) or a dialogue spoken by a character (type `character`).
+  `position` numbers a chapter's dialogues from 0 in reading order. Both
+  go with their chapter; a deleted item's rows stay until the chapter is
+  saved again, and the readers only list chapters that exist.
+  - `GET /api/appears/{type}/{id}`: `[{ chapter_id, title, number,
+    volume_id, volume_title, count }]` in reading order (`volume_id` 0:
+    no volume).
+  - `GET /api/characters/{id}/lines`: the same chapter fields plus
+    `position`, `speaker`, `manner`, `text` for each line, in reading
+    order.
+  - `GET /api/chapters/{id}/speakers`: `[{ character_id, name, lines,
+    words, first }]`, most lines first (`name` is the character's current
+    name, else the speaker as written; `first` the position of their first
+    line; `words` counted like the doc's).
+- `GET /api/wiki` also lists each character's `nicknames` (every
+  version's, the current one's first) for Tab-to-link; they are not link
+  targets.
+- `POST /api/books/{volume}/pictures` (multipart `file`, PNG/JPEG/GIF/WebP,
+  sniffed, up to 32 MB): saves the picture under `uploads/editor/` and
+  answers `{ "src": "/uploads/…" }` for an `image` node.
+- Exports (stage 3), all `GET` (`?chapter=ID` for one chapter; `404` for
+  an unknown book or a chapter not in it), as downloads named after the
+  book (`meta.title`, else the volume's; " - <chapter>" for one chapter;
+  an ASCII `filename` and an RFC 5987 `filename*`). Pictures are read from
+  the story's uploads; a missing one is left out. The code is
+  `backend/export*.go`; the mapping in detail is at the top of each file.
+  - `/api/books/{volume}/export.docx`: a Word file Word lays out like the
+    page view: a section per chapter (next or odd page), page size and
+    margins (mirrored, gutter), headers and footers from the bands with
+    PAGE fields and the chapter's title written out (front matter and
+    `no_header` chapters get none), numbering format and restarts (front
+    matter lower roman from i), styles as Word styles (headings with
+    outline levels, character styles too), lists (nested ones as deeper
+    levels), pictures (`fullPage`: the whole page, over the header and
+    footer), scene breaks as centred paragraphs, `toc` as a TOC field
+    Word updates when the file is opened (`updateFields`; until then it
+    lists the headings without page numbers), dialogue as paragraphs
+    "Speaker, manner: “line”" with the speaker in small caps. Exported and
+    uploaded again, a book comes back the same but for: the `toc`,
+    dialogue (a paragraph), picture ornaments (pictures), page breaks
+    around a full-page picture, a null picture width (its natural width),
+    story links (plain text), a list item's later paragraphs (plain
+    indented ones), ids of styles made in Polaris (`word-<id>`), a renamed
+    built-in style's name, styles nothing uses, and sizes off the half
+    point. Word's TOC also lists a paragraph (not a heading) set in a
+    heading style.
+  - `/api/books/{volume}/export.epub`: EPUB 3 (XHTML per chapter, CSS
+    from the styles in em of the text, nav from the headings and an NCX
+    for older readers, the first `fullPage` picture of the first chapter
+    as the cover, `meta` as metadata, the ISBN as the identifier or a
+    stable `urn:uuid`); no fonts embedded until the fonts library knows
+    their licenses (stage 5).
+  - `/api/books/{volume}/export.html`, `.md`, `.txt`: Online Post exports.
+    HTML is clean for AO3: p, em, strong, u, s, sup, sub, h1–h3, br, ul/
+    ol/li, blockquote for paragraphs in the Quote style, a for web links;
+    no classes or styles but `text-align: center` on centred paragraphs;
+    scene breaks a centred paragraph with the glyph (hr for a picture
+    ornament); fonts, sizes, colours, small caps and pictures left out.
+    Markdown (CommonMark, ~~strike~~) and text likewise.
+- The .docx import also answers `layout` and `meta` guesses (headers and
+  footers mapped onto bands: PAGE fields to `{page}`, a header holding the
+  chapter's title to `{chapter}`; the numbering format; the title from
+  the core properties), offered to the book like the page type. In
+  detail (`backend/docxlayout.go`): the layout comes from the section the
+  page comes from, with Word's inheritance of headers between sections;
+  default/even/first headers and footers are the odd/even/first bands;
+  STYLEREF fields are `{chapter}` too, NUMPAGES and the like are dropped;
+  a text that is a chapter's Heading 1 title (ignoring case, spacing and a
+  leading "1." number) or that changes from one chapter's section to the
+  next ("CHAPTER ONE", "CHAPTER TWO"…) becomes `{chapter}`, with the text
+  around it kept; where text goes comes from positional tabs, tab stops or
+  the paragraph's alignment; font, size, italics, small caps and capitals
+  from the first run (the font left out when it is the body's);
+  `different_first` from the section's titlePg, `different_odd_even` from
+  evenAndOddHeaders, the format from pgNumType, `start` from the first
+  section holding a Heading 1, `chapter_start` `odd` when most chapter
+  sections start on an odd page. `layout` is absent when the file has no
+  headers, footers or page numbering. `meta` holds only what the core
+  properties fill (`title`, `subtitle` from the subject, `author` from the
+  creator, `description`, `language`). Each new chapter in the answer
+  carries `front_matter: true` when it is the text before the first
+  Heading 1; applying the layout marks those chapters as front matter.
+  Starts that go up from one chapter's section to the next are Word
+  carrying the count on; a start lower than the previous one is a restart,
+  given as the chapter's `number_restart` in the answer (applied with the
+  layout). A `fullPage` picture goes at the start of the page its anchor
+  paragraph is on (after the page break before it, after its chapter's
+  Heading 1, or first), as Word draws it over that page.
+
+### Client
+
+- Page view (stage 3): the whole book laid out in pages with paged.js
+  (CSS paged media: `@page` size and mirrored margins, running headers
+  and footers from the bands, page counters with the format and restarts,
+  chapters starting on the next or a right-hand page, the `toc` with page
+  numbers and dot leaders), read-only, with "Print / save as PDF". A click
+  on a page opens that chapter in the editor near that spot. Loaded lazily
+  only with the page view.
+  Built (stage 3): `/write/:volume/pages` (`views/BookPagesPage.vue`;
+  "Page view" beside the breadcrumbs of the writing page), `pagedjs`
+  0.4.3 loaded by `editor/pageView.js` only there. The chapters are drawn
+  with the schema's `toDOM` and the styles' stylesheet, each chapter a
+  `section` whose top-level blocks carry `data-ch` / `data-blk` (the
+  editor opens at `?chapter=ID&at=N`, block N of the chapter's doc, put in
+  sight). The CSS comes from `pagedCSS` in `editor/bookLayout.js` (pure,
+  `tests/bookLayout.test.mjs`): named pages `pvmain` (with header),
+  `pvnohead` (`no_header`), `pvfront` (front matter: lower roman, no
+  header) and `pvfull`; `:right` takes the odd band, `:left` the even one,
+  `:first` (each chapter's first page) the first one; `{chapter}` and
+  `{chapter_number}` are named strings set from each chapter's section;
+  restarts are `counter-reset: page N` on the chapter. A `fullPage`
+  picture is alone on a `pvfull` page with no margins and no header or
+  footer (at the start of a chapter it goes before the chapter, so a cover
+  comes first). `page_break` is a break after. The table of contents
+  lists every heading up to its `levels` (a chapter without a Heading 1,
+  other than front matter, by its title) with `target-counter` page
+  numbers in the target chapter's format and a dotted leader when
+  `toc_dots`. The book lays out hidden with a progress bar (pages so far
+  and how much of the text is done) and can be stopped; "Print / save as
+  PDF" prints the pages alone at their size. Online Post books get a
+  reading view (one column, no pages) instead.
+- In the editor (stage 3) the `toc` node is drawn as a box with its title
+  and the chapters that aren't front matter (no numbers); it is inserted
+  from the toolbar (folds behind "⋯" on phones; disabled for Online Post).
+  Each chapter in the chapter list has a "…" menu: front matter, no
+  running header, and "Page numbers and layout…" (the book panel at that
+  chapter); a front-matter chapter's number shows as "·".
+- Export menu: .docx, EPUB, PDF (page view's print), and for Online Post
+  "Copy as formatted text" (clipboard HTML of the chapter), HTML, Markdown
+  and text.
+  (Built: `components/write/ExportMenu.vue`, an "Export ▾" menu in the
+  page view and an "Export" section of the book panel, which knows the
+  open chapter from the writing page's `?chapter=`. Downloads are links
+  with `download`; PDF prints the page view (from the book panel it opens
+  `/write/:volume/pages?print=1`, which prints once laid out). "Copy …
+  as formatted text" puts export.html (text/html) and export.txt
+  (text/plain) on the clipboard, falling back to copying a selection;
+  the chapter's when one is open, else the book's. Word and EPUB and PDF
+  are left out of the menu for Online Post.)
+- Book panel: the meta fields, the header and footer bands with a field
+  picker, numbering, chapter start, front-matter flags per chapter.
+  (Built: sections "Book details", "Headers and footers" (header/footer ×
+  right/left/first pages, each with left/centre/right texts, a field
+  picker that inserts at the cursor, a preview, font, size, italic, small
+  caps, capitals), "Page numbers and chapters" (format, first number,
+  chapter start, contents' dots) and "Chapters" (front matter, no header,
+  restart at). The import report offers the file's layout and details
+  beside its page type and styles.)
+- Script Mode (stage 4): a chapter's mode switch; in Script Mode Enter
+  after a dialogue starts a line for the next speaker, `Name, manner:` at a line's
+  start becomes a dialogue (Tab completes the speaker from the story's
+  characters), lines without that shape stay paragraphs (action). Drawn
+  like a script: the speaker in small caps in the character's colour, the
+  manner in italics, the line indented below.
+  Built (`editor/script.js`, the toolbar's speech-bubble button, folded
+  behind "⋯" on phones; switching only sets the root's `mode`):
+  `Name:` or `Name, manner:` (a speaker of up to six words and 60
+  characters, a manner up to 200; `parseSpeakerLine` in
+  `editor/nameMatch.js`) typed at the start of a top-level paragraph
+  becomes a dialogue when a space follows; the speaker is kept as typed
+  and `character` is the character whose name, nickname or former name
+  it is exactly (ignoring case and accents), else `null`; text after the
+  caret becomes the line; Ctrl+Z right after undoes it. Enter at the end
+  of a dialogue starts an empty paragraph (not a new dialogue: the next
+  line may be action or another speaker); Enter inside one splits it into
+  two lines of the same speaker. Backspace at a dialogue's start turns it
+  back into the paragraph "Speaker, manner: line" (in both modes). A
+  click on the speaker opens a small box: the character (a picker), the
+  speaker as shown and the manner, and "Back to plain text"; picking a
+  character names the speaker after them unless the speaker is already
+  one of their names. Characters have no colour, so the speaker is drawn
+  in the accent (darkened toward the ink on the paper). Prose Mode draws
+  dialogues the same, so nothing is hidden. The page view draws them
+  with the same classes (`.pm-dialogue`, `.pm-who`, `.pm-line`).
+- Tab-to-link (stage 4): typing three or more letters matching the start
+  of a story item's name, nickname or former name shows the rest in faint
+  text; Tab accepts it as a `story_link` (the typed text kept when it was a
+  nickname), Esc or typing on dismisses; with several matches a small list
+  opens (↑/↓). Tab does nothing special without a suggestion.
+  Built (`editor/nameSuggest.js`, matching in `editor/nameMatch.js`, pure,
+  `tests/nameMatch.test.mjs`): the items are `GET /api/wiki`'s (every
+  type), loaded with the page and again when the window gets the focus
+  back. The typed start begins a word (not after a letter, digit or
+  apostrophe) and the caret ends one; it may hold several words ("Mira V"
+  for "Mira Vey", the longest start that matches wins) but never crosses
+  a link, an inline atom or a hard break, and nothing is offered inside a
+  link. Accepting replaces what was typed with the name (or nickname, or
+  former name) as the story writes it, keeping the typed text's
+  formatting. A whole name already typed shows a small "⇥": Tab links it.
+  Order: characters, then names starting with exactly what was typed,
+  then shorter, then by name; eight at most. With a list, Enter also
+  accepts; a click (or a tap on the faint text, for phones) accepts.
+  Pasted, dropped or undone text never opens a suggestion. In Script
+  Mode, a name typed at the start of a top-level paragraph is a speaker:
+  only characters are offered and the name goes in as plain text, ready
+  for ":". A `story_link` is drawn with a dotted underline; its `href` is
+  the item's wiki page, so hovering shows the wiki's preview card and
+  Ctrl/Cmd+click opens it.
+- "Appears in" (stage 4): the chapters naming the item, with counts, each
+  opening the chapter in the editor: in a character's Story tab and as a
+  section after "What links here" on every wiki article. A character's
+  "Lines" tab lists what they say in reading order (search, a chapter
+  filter with counts; a line opens the editor at `?chapter=ID&line=N`,
+  the chapter's dialogue N selected). A chapter's page shows "Who speaks"
+  when its text has dialogue. The wiki graph doesn't use the texts:
+  chapters aren't nodes there, and items named in the same chapter would
+  join almost everything.

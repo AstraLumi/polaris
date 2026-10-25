@@ -63,6 +63,10 @@ export const setMark = (name, attrs) => (state, dispatch) => {
   return true
 }
 
+// A character style on the selection (replacing the one it had), or none
+// with a null id. With nothing selected it applies to what is typed next.
+export const setCharStyle = (id) => setMark('char_style', id ? { id } : null)
+
 // Every paragraph and heading the selection touches, with its position.
 export function selectedBlocks(state) {
   const out = []
@@ -154,6 +158,7 @@ export function selectionFormat(state, styles) {
     smallcaps: has('smallcaps'),
     highlight: markAttrs(state, 'highlight')?.color || null,
     link: markAttrs(state, 'link')?.href || null,
+    charStyleId: markAttrs(state, 'char_style')?.id || null,
     list,
     atom: node?.type.name || null,
   }
@@ -174,7 +179,8 @@ export const nudgeFontSize = (by, styles) => (state, dispatch) => {
 
 // A block (scene break, page break, picture) at the cursor: the paragraph
 // is split there, and the cursor goes to the text after it.
-export const insertBlock = (typeName, attrs = {}) => (state, dispatch) => {
+// With `select` the new block is selected (a picture, to show its options).
+export const insertBlock = (typeName, attrs = {}, { select = false } = {}) => (state, dispatch) => {
   const type = nodes[typeName]
   if (!dispatch) return true
   const tr = state.tr
@@ -197,8 +203,27 @@ export const insertBlock = (typeName, attrs = {}) => (state, dispatch) => {
     const prev = $pos.parent.isTextblock && $pos.depth === 1 ? $pos.parent : null
     tr.insert(after, nodes.paragraph.create(prev?.type === nodes.paragraph ? prev.attrs : null))
   }
-  tr.setSelection(TextSelection.near(tr.doc.resolve(after + 1)))
+  tr.setSelection(select ? NodeSelection.create(tr.doc, at) : TextSelection.near(tr.doc.resolve(after + 1)))
   dispatch(tr.scrollIntoView())
+  return true
+}
+
+// Changes the selected picture's attrs (width, align, fullPage, alt).
+export const setImageAttrs = (patch) => (state, dispatch) => {
+  const sel = state.selection
+  if (!(sel instanceof NodeSelection) || sel.node.type !== nodes.image) return false
+  if (dispatch) {
+    const tr = state.tr.setNodeMarkup(sel.from, null, { ...sel.node.attrs, ...patch })
+    dispatch(tr.setSelection(NodeSelection.create(tr.doc, sel.from)).scrollIntoView())
+  }
+  return true
+}
+
+// Takes the selected picture out of the text (the file stays in the uploads).
+export const removeImage = (state, dispatch) => {
+  const sel = state.selection
+  if (!(sel instanceof NodeSelection) || sel.node.type !== nodes.image) return false
+  if (dispatch) dispatch(state.tr.deleteSelection().scrollIntoView())
   return true
 }
 

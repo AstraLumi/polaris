@@ -32,6 +32,17 @@
           <input v-model="useStyles" type="checkbox" />
           <span>{{ $tn('Its {n} style (Normal, headings… as the file has them)', 'Its {n} styles (Normal, headings… as the file has them)', report.styles.length) }}</span>
         </label>
+        <label v-if="report.layout" class="check">
+          <input v-model="useLayout" type="checkbox" />
+          <span>
+            {{ $t('Its headers, footers and page numbers') }}
+            <span v-if="layoutSummary" class="faint">{{ layoutSummary }}</span>
+          </span>
+        </label>
+        <label v-if="metaSummary" class="check">
+          <input v-model="useMeta" type="checkbox" />
+          <span>{{ $t('Its details: {what}', { what: metaSummary }) }}</span>
+        </label>
         <p v-if="report.fonts?.length" class="hint">
           {{ $t('Fonts it uses: {fonts}. Those Google Fonts has are loaded; the others show only if this computer has them.', { fonts: report.fonts.join(', ') }) }}
         </p>
@@ -42,7 +53,7 @@
 
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" :disabled="busy" @click="$emit('close')">{{ canApply ? $t('Keep the book as it is') : $t('Close') }}</button>
-        <button v-if="canApply" type="button" class="btn btn-primary" :disabled="busy || (!usePage && !useStyles)" @click="$emit('apply', { page: usePage, styles: useStyles })">
+        <button v-if="canApply" type="button" class="btn btn-primary" :disabled="busy || (!usePage && !useStyles && !useLayout && !useMeta)" @click="$emit('apply', { page: usePage, styles: useStyles, layout: useLayout, meta: useMeta })">
           {{ $t('Apply to the book') }}
         </button>
       </div>
@@ -91,13 +102,35 @@ defineEmits(['apply', 'close'])
 
 const usePage = ref(!!props.report.page_type_guess)
 const useStyles = ref(!!props.report.styles?.length)
+const useLayout = ref(!!props.report.layout)
+const useMeta = ref(!!props.report.meta && Object.keys(props.report.meta).length > 0)
+
+// What the file's layout says, in a few words: where the page number and
+// the chapter's title go, and how pages are numbered.
+const NUMBERS = { arabic: '1, 2, 3', roman: 'i, ii, iii', upper_roman: 'I, II, III', alpha: 'a, b, c', upper_alpha: 'A, B, C' }
+const layoutSummary = computed(() => {
+  const l = props.report.layout
+  if (!l) return ''
+  const bands = ['header', 'footer'].flatMap((p) => ['odd', 'even', 'first'].map((s) => l[p]?.[s] || {}))
+  const has = (f) => bands.some((b) => [b.left, b.center, b.right].some((x) => (x || '').includes(f)))
+  const parts = []
+  if (has('{chapter}')) parts.push(t('chapter titles'))
+  if (has('{page}')) parts.push(t('page numbers {format}', { format: NUMBERS[l.numbering?.format] || '1, 2, 3' }))
+  if (l.different_first) parts.push(t('own first pages'))
+  if (l.different_odd_even) parts.push(t('left and right pages'))
+  return parts.length ? `(${parts.join(', ')})` : ''
+})
+const metaSummary = computed(() => {
+  const m = props.report.meta || {}
+  return [m.title, m.author].filter(Boolean).join(', ')
+})
 
 const leftOut = computed(() =>
   Object.entries(props.report.left_out || {})
     .filter(([, n]) => n > 0)
     .map(([key, n]) => ({ key, n, label: LEFT_OUT[key] ? t(LEFT_OUT[key]) : key.replace(/_/g, ' ') })),
 )
-const canApply = computed(() => !!props.report.page_type_guess || !!props.report.styles?.length)
+const canApply = computed(() => !!props.report.page_type_guess || !!props.report.styles?.length || !!props.report.layout || !!metaSummary.value)
 const nameOf = (type, page) => (type === 'online' ? t('Online Post') : type === 'custom' ? `${t('Custom size')} · ${pageTypeName({ page_type: 'custom', page })}` : pageTypeName({ page_type: type }))
 const guessName = computed(() => nameOf(props.report.page_type_guess, props.report.page))
 const currentName = computed(() => nameOf(props.settings.page_type, props.settings.page))

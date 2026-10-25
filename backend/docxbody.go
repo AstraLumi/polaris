@@ -16,11 +16,17 @@ package main
 //     dropped.
 //   - Numbered paragraphs (numPr, directly or from the style; numbering.xml)
 //     become list items: "bullet" levels a bullet_list, others an
-//     ordered_list whose start continues Word's count. Deeper levels are
-//     items of the same list (EDITOR.md's list_item holds paragraphs only).
-//     The list's own indents are dropped. A numbered heading keeps its
+//     ordered_list whose start continues Word's count. A deeper level (ilvl)
+//     is a list nested in the item before it (EDITOR.md's list_item holds a
+//     paragraph, then blocks), up to Word's nine levels; a deeper level with
+//     no item before it opens the list there. The list's own indents are
+//     dropped. A numbered heading keeps its
 //     heading and gets its number written in front ("Chapter 3"), as Word
 //     shows it.
+//   - A run's character style (w:rStyle) is kept by name (irInline.cstyle)
+//     beside the formatting the run ends up with; emitting turns it into a
+//     `char_style` mark and leaves only the direct formatting as marks
+//     (docxemit.go).
 //   - Runs: w:t text, w:tab and w:ptab a tab, w:br (not page) and w:cr a
 //     hard break, w:sym its character in its font, no-break and soft
 //     hyphens as U+2011 and U+00AD. Hidden text (vanish) is dropped. All
@@ -61,8 +67,11 @@ import (
 type irInline struct {
 	kind byte // 't' text, '\t' tab, 'n' hard break
 	text string
-	r    rFmt
+	r    rFmt // as the text looks, character style included
 	link string
+	// The Word character style id the run uses ("" = none): emitting turns
+	// it into a char_style mark and keeps only the direct formatting as marks.
+	cstyle string
 }
 
 type irListRef struct {
@@ -789,10 +798,14 @@ func (p *docxParser) addText(ps *paraState, text string, wr wRun, charStyle stri
 	if r.caps {
 		text = strings.ToUpper(text)
 	}
+	cs := ""
 	if charStyle != "" && charStyle != p.st.defaultChar {
 		p.usedChar[charStyle] = true
+		if st := p.st.byID[charStyle]; st != nil && st.kind == "character" {
+			cs = charStyle
+		}
 	}
-	p.addInline(ps, irInline{kind: 't', text: text, r: r})
+	p.addInline(ps, irInline{kind: 't', text: text, r: r, cstyle: cs})
 }
 
 func (p *docxParser) addInline(ps *paraState, in irInline) {
@@ -805,7 +818,7 @@ func (p *docxParser) addInline(ps *paraState, in irInline) {
 	}
 	if n := len(ps.cur); n > 0 && in.kind == 't' {
 		last := &ps.cur[n-1]
-		if last.kind == 't' && last.r == in.r && last.link == in.link {
+		if last.kind == 't' && last.r == in.r && last.link == in.link && last.cstyle == in.cstyle {
 			last.text += in.text
 			return
 		}

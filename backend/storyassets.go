@@ -98,6 +98,8 @@ var storyOnlyTables = []string{
 	// The book itself: each book's settings, each chapter's text and its
 	// saved versions (editor.go).
 	"book_settings", "chapter_texts", "chapter_text_versions",
+	// What each chapter's text names, and its lines (chapterindex.go).
+	"chapter_links", "chapter_lines",
 }
 
 func isNullCol(t assetTable, col string) bool {

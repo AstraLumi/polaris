@@ -146,6 +146,12 @@
               <p v-else class="faint">{{ $t('No other article links here yet.') }}</p>
             </section>
 
+            <!-- The chapters whose text names it (the writing editor's links). -->
+            <section id="sec-appears" class="part">
+              <h2>{{ $t('Appears in') }}</h2>
+              <AppearsIn :type="article.type" :id="article.id" />
+            </section>
+
             <p v-if="article.updated_at" class="foot">
               <span :title="exactTime(article.updated_at)">{{ $t('Last edited {when}', { when: editedAt }) }}</span>
             </p>
@@ -374,6 +380,7 @@ import WikiLinkPanel from '../components/WikiLinkPanel.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import DateField from '../components/DateField.vue'
 import WikiGallery from '../components/WikiGallery.vue'
+import AppearsIn from '../components/AppearsIn.vue'
 import HexTerritory from '../components/HexTerritory.vue'
 import PlanetTerritory from '../components/PlanetTerritory.vue'
 import { worldMap } from '../worldMap'
@@ -499,6 +506,7 @@ const toc = computed(() => {
   if (article.value.gallery.length) rows.push({ id: 'sec-gallery', title: t('Gallery') })
   if (shownGroups.value.length) rows.push({ id: 'sec-related', title: t('Related') })
   rows.push({ id: 'sec-backlinks', title: t('What links here') })
+  rows.push({ id: 'sec-appears', title: t('Appears in') })
   return rows
 })
 

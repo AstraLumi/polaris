@@ -87,6 +87,21 @@
         <p v-else class="empty">{{ $t('No character versions point to this chapter. Pick it on a version to list it here.') }}</p>
       </section>
 
+      <!-- Its dialogue (Script Mode lines), by speaker. -->
+      <section v-if="speakers.length" class="glass-panel block">
+        <h2>{{ $t('Who speaks') }}</h2>
+        <ul class="list speakers">
+          <li v-for="s in speakers" :key="(s.character_id ?? 's') + s.name">
+            <RouterLink v-if="s.character_id" :to="`/characters/${s.character_id}`">{{ s.name }}</RouterLink>
+            <span v-else>{{ s.name || '…' }}</span>
+            <span class="faint">
+              <RouterLink :to="{ path: `/write/${chapter.volume_id || 0}`, query: { chapter: chapter.id, line: s.first } }" class="faint">{{ $tn('{n} line', '{n} lines', s.lines, { n: s.lines }) }}</RouterLink>
+              · {{ $tn('{n} word', '{n} words', s.words, { n: s.words }) }}
+            </span>
+          </li>
+        </ul>
+      </section>
+
       <Pager :prev="pagerLink(chapter.prev_id)" :next="pagerLink(chapter.next_id)" :prev-label="$t('← Previous chapter')" :next-label="$t('Next chapter →')" :label="$t('Chapters')" />
     </template>
 
@@ -116,6 +131,7 @@ import NotFoundPanel from '../components/NotFoundPanel.vue'
 import Pager from '../components/Pager.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
+import { mentionsApi } from '../chapterMentions'
 
 const props = defineProps({ id: { type: String, required: true } })
 const route = useRoute()
@@ -131,6 +147,7 @@ const confirmOpen = ref(false)
 const titleEl = ref(null)
 const draft = reactive({ title: '', volumeId: null, notes: '' })
 const wikiItems = ref([])
+const speakers = ref([]) // who speaks in its text (chapterMentions.js)
 let snapshot = ''
 
 const resolver = computed(() => makeLinkResolver(wikiItems.value))
@@ -219,7 +236,8 @@ async function load() {
   editing.value = false
   chapter.value = null
   try {
-    const [c] = await Promise.all([chaptersApi.get(props.id), loadChapters()])
+    const [c, who] = await Promise.all([chaptersApi.get(props.id), mentionsApi.speakers(props.id).catch(() => []), loadChapters()])
+    speakers.value = who
     chapter.value = c
     pageTitle.value = c.title
     // A chapter just made from the Chapters page opens ready to name.

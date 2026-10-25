@@ -28,9 +28,11 @@ const maxDocxUpload = 64 << 20
 var docxPictureExts = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true}
 
 type importedChapter struct {
-	ID    int64  `json:"id"`
-	Title string `json:"title"`
-	Words int    `json:"words"`
+	ID            int64  `json:"id"`
+	Title         string `json:"title"`
+	Words         int    `json:"words"`
+	FrontMatter   bool   `json:"front_matter,omitempty"`   // the text before the first Heading 1
+	NumberRestart *int   `json:"number_restart,omitempty"` // a page number restart the file has (docxlayout.go)
 }
 
 func importDocxHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
@@ -123,9 +125,11 @@ func importDocxHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 		imp.usePictureURLs(urls)
 
 		type newChapter struct {
-			title string
-			doc   []byte
-			words int
+			title   string
+			doc     []byte
+			words   int
+			front   bool
+			restart *int
 		}
 		chapters := make([]newChapter, 0, len(imp.Chapters))
 		for i, c := range imp.Chapters {
@@ -156,7 +160,10 @@ func importDocxHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			if r := []rune(title); len(r) > 200 {
 				title = string(r[:200])
 			}
-			chapters = append(chapters, newChapter{title, doc, docWords(c.Doc)})
+			chapters = append(chapters, newChapter{title, doc, docWords(c.Doc), c.FrontMatter, nil})
+			if n, ok := imp.Restarts[i]; ok {
+				chapters[len(chapters)-1].restart = &n
+			}
 		}
 
 		now := sqlTime(editorNow())
@@ -187,7 +194,11 @@ func importDocxHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 				fail(err)
 				return
 			}
-			out = append(out, importedChapter{ID: id, Title: c.title, Words: c.words})
+			if err := indexChapterText(tx, id, string(c.doc)); err != nil { // chapterindex.go
+				fail(err)
+				return
+			}
+			out = append(out, importedChapter{ID: id, Title: c.title, Words: c.words, FrontMatter: c.front, NumberRestart: c.restart})
 		}
 		if err := tx.Commit(); err != nil {
 			fail(err)

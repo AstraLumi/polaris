@@ -134,3 +134,40 @@ func TestEmptyPMDocIsValid(t *testing.T) {
 		t.Error("empty doc has text")
 	}
 }
+
+func TestPMDocNestedListsAndCharacterStyles(t *testing.T) {
+	ok := map[string]string{
+		"nested list": `{"type":"doc","content":[{"type":"bullet_list","content":[{"type":"list_item","content":[
+			{"type":"paragraph","content":[{"type":"text","text":"a"}]},
+			{"type":"ordered_list","attrs":{"start":2},"content":[{"type":"list_item","content":[{"type":"paragraph"}]}]}]}]}]}`,
+		"item with two paragraphs": `{"type":"doc","content":[{"type":"bullet_list","content":[{"type":"list_item","content":[{"type":"paragraph"},{"type":"paragraph"}]}]}]}`,
+		"character style":          `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"x","marks":[{"type":"char_style","attrs":{"id":"word-shout"}},{"type":"bold"}]}]}]}`,
+	}
+	for name, src := range ok {
+		if _, err := parsePMDoc([]byte(src)); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	bad := map[string]string{
+		"item starting with a list": `{"type":"doc","content":[{"type":"bullet_list","content":[{"type":"list_item","content":[{"type":"bullet_list","content":[{"type":"list_item","content":[{"type":"paragraph"}]}]}]}]}]}`,
+		"unknown block in an item":  `{"type":"doc","content":[{"type":"bullet_list","content":[{"type":"list_item","content":[{"type":"paragraph"},{"type":"table"}]}]}]}`,
+		"item in an item":           `{"type":"doc","content":[{"type":"bullet_list","content":[{"type":"list_item","content":[{"type":"paragraph"},{"type":"list_item","content":[{"type":"paragraph"}]}]}]}]}`,
+		"image with a remote src":   `{"type":"doc","content":[{"type":"bullet_list","content":[{"type":"list_item","content":[{"type":"paragraph"},{"type":"image","attrs":{"src":"https://x.example/a.png"}}]}]}]}`,
+		"style mark without id":     `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"x","marks":[{"type":"char_style"}]}]}]}`,
+		"style mark with number":    `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"x","marks":[{"type":"char_style","attrs":{"id":3}}]}]}]}`,
+		"two style marks":           `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"x","marks":[{"type":"char_style","attrs":{"id":"a"}},{"type":"char_style","attrs":{"id":"b"}}]}]}]}`,
+	}
+	for name, src := range bad {
+		if _, err := parsePMDoc([]byte(src)); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	// Nine list levels, Word's most, fit in the depth limit.
+	doc := `{"type":"paragraph","content":[{"type":"text","text":"deep","marks":[{"type":"char_style","attrs":{"id":"s"}}]}]}`
+	for i := 0; i < 9; i++ {
+		doc = `{"type":"bullet_list","content":[{"type":"list_item","content":[{"type":"paragraph"},` + doc + `]}]}`
+	}
+	if _, err := parsePMDoc([]byte(`{"type":"doc","content":[` + doc + `]}`)); err != nil {
+		t.Errorf("nine levels: %v", err)
+	}
+}

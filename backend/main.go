@@ -268,12 +268,21 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	mux.HandleFunc("GET /api/books/{volume}", getBookHandler(db))
 	mux.HandleFunc("PUT /api/books/{volume}", saveBookHandler(db))
 	mux.HandleFunc("POST /api/books/{volume}/import-docx", importDocxHandler(db, uploadsDir))
+	mux.HandleFunc("POST /api/books/{volume}/pictures", uploadPictureHandler(db, uploadsDir))
+	mux.HandleFunc("GET /api/books/{volume}/docs", getBookDocsHandler(db))
+	for _, f := range []string{"docx", "epub", "html", "md", "txt"} {
+		mux.HandleFunc("GET /api/books/{volume}/export."+f, exportBookHandler(db, uploadsDir, f)) // export.go
+	}
 	mux.HandleFunc("GET /api/chapters/{id}/text", getChapterTextHandler(db))
 	mux.HandleFunc("PUT /api/chapters/{id}/text", putChapterTextHandler(db))
 	mux.HandleFunc("GET /api/chapters/{id}/text/versions", listTextVersionsHandler(db))
 	mux.HandleFunc("POST /api/chapters/{id}/text/versions", createTextVersionHandler(db))
 	mux.HandleFunc("GET /api/chapters/{id}/text/versions/{vid}", getTextVersionHandler(db))
 	mux.HandleFunc("POST /api/chapters/{id}/text/versions/{vid}/restore", restoreTextVersionHandler(db))
+	// What the texts name and who speaks (chapterindex.go).
+	mux.HandleFunc("GET /api/appears/{type}/{id}", appearsInHandler(db))
+	mux.HandleFunc("GET /api/characters/{id}/lines", characterLinesHandler(db))
+	mux.HandleFunc("GET /api/chapters/{id}/speakers", chapterSpeakersHandler(db))
 
 	return mux
 }
