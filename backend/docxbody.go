@@ -55,8 +55,9 @@ package main
 //     the page and at least 85% of the page's width and height is fullPage
 //     (a cover); nothing else is guessed (an ornament used between scenes
 //     stays a picture).
-//   - Tables: their cells' paragraphs in reading order. Text boxes: their
-//     paragraphs after the paragraph they are anchored in.
+//   - Tables: docxtables.go (a table nested in a cell: its cells'
+//     paragraphs in reading order). Text boxes: their paragraphs after the
+//     paragraph they are anchored in.
 
 import (
 	"path"
@@ -96,6 +97,9 @@ type irBlock struct {
 	align    string
 	fullPage bool
 	alt      string
+
+	tbl    *irTable // kind 't': a table (docxtables.go)
+	inCell bool     // a paragraph in a table cell
 }
 
 type docxField struct {
@@ -129,7 +133,8 @@ type docxParser struct {
 	hfParts     map[string]bool
 	counters    map[int][]int
 	usedChar    map[string]bool
-	tocGap      bool // a table of contents was just dropped
+	tocGap      bool     // a table of contents was just dropped
+	tblStyles   []string // the tables being read (their Word styles), outermost first
 }
 
 func newDocxParser(pk *docxPackage, rels map[string]docxRel, st *wStyles, num *wNumbering, th docxTheme) *docxParser {
@@ -234,8 +239,7 @@ func (p *docxParser) walkBlocks(kids []*xEl) {
 		case k.is("w", "p"):
 			p.paragraph(k)
 		case k.is("w", "tbl"):
-			p.count("tables")
-			p.table(k)
+			p.tableBlock(k)
 		case k.is("w", "sdt"):
 			if isTOCSdt(k) {
 				p.count("toc")
@@ -323,7 +327,7 @@ func (p *docxParser) paragraph(el *xEl) {
 	pPr := el.child("w", "pPr")
 	styleID := p.st.paraStyleID(pPr.child("w", "pStyle").attr("val"))
 	direct := parsePPr(pPr)
-	eff := p.st.para(styleID)
+	eff := p.paraIn(styleID)
 	eff.over(direct)
 	if direct.hasBorders || direct.hasShade {
 		p.count("borders_shading")
@@ -700,7 +704,7 @@ func (p *docxParser) fieldChar(kind string) {
 func (p *docxParser) run(el *xEl, ps *paraState) {
 	rPr := el.child("w", "rPr")
 	charStyle := rPr.child("w", "rStyle").attr("val")
-	wr := p.st.run(ps.pStyle, charStyle)
+	wr := p.runIn(ps.pStyle, charStyle)
 	wr.over(parseRPr(rPr, p.th))
 	hidden := wr.vanish != nil && *wr.vanish
 	p.runContent(el.kids, ps, wr, charStyle, hidden)

@@ -76,7 +76,7 @@ var (
 //	footnotes        footnote references (the notes' text is not imported)
 //	endnotes         endnote references
 //	comments         comments
-//	tables           tables (their text is kept, cell by cell, as paragraphs)
+//	tables           tables nested in a table's cell (their text is kept, cell by cell, as paragraphs in that cell)
 //	text_boxes       text boxes (their text is kept as paragraphs after the paragraph they sit in)
 //	equations        equations
 //	tracked_changes  tracked insertions and deletions (accepted: insertions kept, deletions dropped)

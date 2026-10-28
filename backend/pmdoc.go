@@ -322,6 +322,12 @@ func validatePMDoc(doc *pmNode) error {
 		return errors.New("doc: needs at least one block")
 	}
 	for _, c := range doc.Content {
+		if c != nil && c.Type == "table" { // tables only at the top level (pmtable.go)
+			if err := v.table(c, 1); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := v.block(c, "doc", 1); err != nil {
 			return err
 		}

@@ -43,6 +43,48 @@ func kv(pairs ...any) map[string]any {
 	return m
 }
 func para(content ...*pmNode) *pmNode { return blk("paragraph", nil, content...) }
+
+// statBlock: a table with a header row, shading, a vertical alignment, a
+// cell spanning two rows (holding a list) and one spanning two columns.
+func statBlock() *pmNode {
+	w := func(ws ...float64) []any {
+		out := make([]any, len(ws))
+		for i, x := range ws {
+			out[i] = x
+		}
+		return out
+	}
+	return blk("table", kv("borders", "outer", "align", "center"),
+		blk("table_row", nil,
+			blk("table_header", kv("colwidth", w(80)), para(pt("Stat", mk("bold")))),
+			blk("table_header", kv("colwidth", w(120)), para(pt("Value")))),
+		blk("table_row", nil,
+			blk("table_cell", kv("colwidth", w(80), "background", "#d9d9d9", "valign", "middle"), para(pt("Strength"))),
+			blk("table_cell", kv("colwidth", w(120), "rowspan", 2), para(pt("12")), blk("bullet_list", nil, item(para(pt("raw")))))),
+		blk("table_row", nil, blk("table_cell", kv("colwidth", w(80)), para(pt("Agility")))),
+		blk("table_row", nil, blk("table_cell", kv("colspan", 2, "colwidth", w(80, 120)),
+			para(pt("Skills: "), pt("Sword", mk("story_link", "type", "character", "id", 3)), pt(", Bow")))))
+}
+
+// tableSig: what a table is, apart from its cells' text, for comparing:
+// column widths as the page draws them (a table without any comes back
+// from Word with equal shares of the text's width), to the point.
+func tableSig(n *pmNode, textW float64) string {
+	full, w := tableWidth(n)
+	s := fmt.Sprintf("%s %s full=%v w=%v;", tableBorders(n), tableAlign(n), full, w)
+	g, err := tableGridOf(n)
+	if err != nil {
+		return "broken: " + err.Error()
+	}
+	for _, x := range tableColumnsPt(n, g, textW) {
+		s += fmt.Sprintf(" %.0f", x)
+	}
+	s += ";"
+	for _, c := range g.cells {
+		s += fmt.Sprintf(" %s@%d,%d %dx%d %s %s;", c.node.Type, c.row, c.col, c.colspan, c.rowspan, cellBackground(c.node), cellValign(c.node))
+	}
+	return s
+}
 func item(content ...*pmNode) *pmNode { return blk("list_item", nil, content...) }
 
 func writePNG(t *testing.T, path string, w, h int, c color.RGBA) []byte {
@@ -153,6 +195,11 @@ func testBook(t *testing.T) (*exportBook, string) {
 	three := &pmNode{Type: "doc", Content: []*pmNode{
 		blk("heading", kv("level", 1), pt("Chapter Three: "), pt("Restarted", mk("italic"))),
 		para(pt("Short.")),
+		statBlock(),
+		blk("table", kv("borders", "none"),
+			blk("table_row", nil, blk("table_cell", nil, para(pt("Name"))), blk("table_cell", nil, para(pt("Mira | Vey")))),
+			blk("table_row", nil, blk("table_cell", nil, para(pt("Level"))), blk("table_cell", nil, para(pt("12"), blk("hard_break", nil), pt("(max)"))))),
+		para(pt("After the tables.")),
 	}}
 	b := &exportBook{Volume: 1, VolumeTitle: "Book One", uploadsDir: up, Chapters: []exportChapter{
 		{ID: 1, Title: "Front matter", Doc: front},
@@ -264,6 +311,11 @@ func linearize(b *exportBook, doc *pmNode) []linBlock {
 			out = append(out, linBlock{kind: "scene", text: sceneGlyphOf(n)})
 		case "page_break":
 			out = append(out, linBlock{kind: "pb"})
+		case "table":
+			out = append(out, linBlock{kind: "table", text: tableSig(n, b.textWidthPt())})
+			for _, c := range n.Content {
+				walk(c, listKind, first)
+			}
 		case "image":
 			l := linBlock{kind: "image", src: attrString(n, "src"), align: attrString(n, "align")}
 			if attrBool(n, "fullPage") {
@@ -348,7 +400,7 @@ func compareLinear(t *testing.T, chapter string, want, got []linBlock) {
 				t.Errorf("%s: width %v, want %v", where, g.width, w.width)
 			}
 			continue
-		case "scene", "pb":
+		case "scene", "pb", "table":
 			continue
 		}
 		if g.style != expectedStyleID(w.style) {
@@ -793,13 +845,15 @@ func TestExportOnlinePost(t *testing.T) {
 	html := string(h)
 	body := html[strings.Index(html, "<body>")+6 : strings.Index(html, "</body>")]
 	allowed := map[string]bool{"p": true, "em": true, "strong": true, "u": true, "s": true, "sup": true, "sub": true, "h1": true, "h2": true,
-		"h3": true, "hr": true, "blockquote": true, "br": true, "a": true, "ul": true, "ol": true, "li": true}
+		"h3": true, "hr": true, "blockquote": true, "br": true, "a": true, "ul": true, "ol": true, "li": true,
+		"table": true, "thead": true, "tbody": true, "tr": true, "th": true, "td": true}
 	for _, m := range regexp.MustCompile(`<(/?)([a-z0-9]+)([^>]*)>`).FindAllStringSubmatch(body, -1) {
 		if !allowed[m[2]] {
 			t.Errorf("tag %s isn't allowed", m[2])
 		}
 		attrs := strings.TrimSpace(m[3])
-		if attrs != "" && attrs != `style="text-align: center;"` && !strings.HasPrefix(attrs, `href="`) && !strings.HasPrefix(attrs, `start="`) {
+		if attrs != "" && attrs != `style="text-align: center;"` && !strings.HasPrefix(attrs, `href="`) && !strings.HasPrefix(attrs, `start="`) &&
+			!regexp.MustCompile(`^(colspan|rowspan)="\d+"( rowspan="\d+")?$`).MatchString(attrs) {
 			t.Errorf("tag %s has attributes %s", m[2], attrs)
 		}
 	}

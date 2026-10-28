@@ -801,6 +801,8 @@ func (d *docxOut) block(n *pmNode, lc *docxList) {
 		d.list(n, lc)
 	case "toc":
 		d.toc(n)
+	case "table": // docxtables.go
+		d.table(n)
 	default:
 		d.blocks(n.Content, lc)
 	}

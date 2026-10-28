@@ -841,11 +841,15 @@ func TestDocxOtherContent(t *testing.T) {
 	for _, b := range allBlocks(imp) {
 		texts = append(texts, nodeText(b))
 	}
-	want := "keep inserted end|cell one|cell two|anchor|boxed words|noted|Lisbon control custom|inserted paragraph"
+	// The table is a table (docxtables_test.go): its text is in its cells.
+	want := "keep inserted end||anchor|boxed words|noted|Lisbon control custom|inserted paragraph"
 	if got := strings.Join(texts, "|"); got != want {
 		t.Errorf("blocks:\n%s\nwant\n%s", got, want)
 	}
-	for k, v := range map[string]int{"tracked_changes": 4, "tables": 1, "text_boxes": 1, "footnotes": 1, "endnotes": 1, "comments": 1, "equations": 1} {
+	if tb := allBlocks(imp)[1]; tb.Type != "table" || docText(tb) != "cell one\ncell two" {
+		t.Errorf("the table: %s %q", tb.Type, docText(tb))
+	}
+	for k, v := range map[string]int{"tracked_changes": 4, "tables": 0, "text_boxes": 1, "footnotes": 1, "endnotes": 1, "comments": 1, "equations": 1} {
 		if imp.LeftOut[k] != v {
 			t.Errorf("left out %s = %d, want %d (%v)", k, imp.LeftOut[k], v, imp.LeftOut)
 		}

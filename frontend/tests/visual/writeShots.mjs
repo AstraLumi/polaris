@@ -5,9 +5,12 @@
 // it runs while the server side of the editor is still being built. Also
 // checks a few things the screenshots can't show: clicking a word puts the
 // cursor in it at any zoom, pasting Word HTML keeps its formatting, typing
-// helpers and autosave.
+// helpers and autosave. Tables (stage 5): a stat block and a long
+// inventory in the editor (the table box, inserting one from the toolbar,
+// Tab through the cells, a table pasted from Word) and in the page view
+// (rows breaking across pages, the header row repeated).
 //
-//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900]
+//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only tables]
 //
 // Needs Microsoft Edge (or --channel chrome).
 import { mkdirSync } from 'node:fs'
@@ -65,6 +68,43 @@ const chapterOne = {
   ],
 }
 
+// A LitRPG stat block and an inventory long enough to run over pages.
+const cellP = (attrs, ...content) => ({ type: 'table_cell', ...(attrs ? { attrs } : {}), content: [para({ indentFirst: 0 }, ...content)] })
+const headP = (attrs, ...content) => ({ type: 'table_header', ...(attrs ? { attrs } : {}), content: [para({ indentFirst: 0 }, ...content)] })
+const tRow = (...cells) => ({ type: 'table_row', content: cells })
+const statBlock = {
+  type: 'table',
+  attrs: { borders: 'outer', align: 'center', width: 'full' },
+  content: [
+    tRow(headP({ colspan: 4, background: '#1f3864' }, txt('STATUS', 'bold', { type: 'color', attrs: { color: '#ffffff' } }))),
+    tRow(cellP({ colwidth: [60] }, txt('Name', 'bold')), cellP({ colspan: 3, colwidth: [50, 60, 50] }, txt('Mira Vey'))),
+    tRow(cellP({ colwidth: [60], background: '#deeaf6' }, txt('STR', 'smallcaps')), cellP({ colwidth: [50] }, txt('12')), cellP({ colwidth: [60], background: '#deeaf6' }, txt('AGI', 'smallcaps')), cellP({ colwidth: [50] }, txt('17'))),
+    tRow(cellP({ colwidth: [60], background: '#deeaf6' }, txt('INT', 'smallcaps')), cellP({ colwidth: [50] }, txt('9')), cellP({ colwidth: [60], background: '#deeaf6' }, txt('LCK', 'smallcaps')), cellP({ colwidth: [50] }, txt('3'))),
+    tRow(cellP({ colwidth: [60], valign: 'middle' }, txt('Skills', 'bold')), { type: 'table_cell', attrs: { colspan: 3, colwidth: [50, 60, 50] }, content: [{ type: 'bullet_list', content: [{ type: 'list_item', content: [para(null, txt('Lantern-reading (Lv 2)'))] }, { type: 'list_item', content: [para(null, txt('Road sense (Lv 1)'))] }] }] }),
+  ],
+}
+const inventory = {
+  type: 'table',
+  attrs: { borders: 'all' },
+  content: [
+    tRow(headP({ colwidth: [30] }, txt('#', 'bold')), headP({ colwidth: [140] }, txt('Item', 'bold')), headP({ colwidth: [50] }, txt('Weight', 'bold'))),
+    ...Array.from({ length: 34 }, (_, i) =>
+      tRow(cellP({ colwidth: [30] }, txt(String(i + 1))), cellP({ colwidth: [140] }, txt(['Tallow candle', 'Waxed map', 'Copper ring', 'Ford-stone', 'Dried apples', 'Rope (10 m)'][i % 6])), cellP({ colwidth: [50] }, txt(`${(i % 5) + 1}.${i % 10} kg`))),
+    ),
+  ],
+}
+const fordDoc = {
+  type: 'doc',
+  content: [
+    { type: 'heading', attrs: { level: 1 }, content: [txt('The Ford')] },
+    para(null, txt('The window opened the moment her boots touched the water, blue and patient as a held breath.')),
+    statBlock,
+    para(null, txt('She closed it with a blink. The cart creaked on. Later, by the fire, she counted what they still carried.')),
+    inventory,
+    para(null, txt('It was not much, but it was theirs.')),
+  ],
+}
+
 const onlineDoc = {
   type: 'doc',
   content: [
@@ -100,6 +140,7 @@ const db = {
   texts: {
     11: { doc: chapterOne, version: 4, updated_at: now() },
     12: { doc: { type: 'doc', content: [para(null, txt('Hollowmere was smaller than its name.'))] }, version: 1, updated_at: now() },
+    13: { doc: fordDoc, version: 1, updated_at: now() },
     31: { doc: onlineDoc, version: 2, updated_at: now() },
   },
   versions: {
@@ -157,6 +198,10 @@ async function fakeApi(route) {
     const defaults = Object.fromEntries(['a4', 'a5', 'a6', 'custom', 'online'].map((k) => [k, defaultSettings(k)]))
     const title = db.volumes.find((x) => x.id === v)?.title || ''
     return json({ volume: v, title, settings: b.settings, chapters, is_set_up: b.is_set_up, words: chapters.reduce((n, c) => n + c.words, 0), page_types: Object.keys(defaults), defaults })
+  }
+  if ((m = /^\/books\/(\d+)\/docs$/.exec(path))) {
+    const v = +m[1]
+    return json(db.chapters.filter((c) => (c.volume_id ?? 0) === v).map((c) => ({ id: c.id, title: c.title, doc: textOf(c.id).doc })))
   }
   if ((m = /^\/chapters\/(\d+)\/text$/.exec(path))) {
     const id = +m[1]
@@ -244,6 +289,11 @@ async function shoot() {
     saved.push(file)
   }
   const doc = () => page.evaluate(() => window.__writeView.state.doc.toJSON())
+
+  if (option('only', '') === 'tables') {
+    await tableShots(page, snap, checks)
+    return { saved, errors, checks }
+  }
 
   // 1. A book never set up asks for its page type.
   await page.goto(`${BASE}/write/2`)
@@ -439,7 +489,132 @@ async function shoot() {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
   checks.push(`phone: page wider than the screen by ${overflow}px`)
 
+  page = await newPage(browser, { width, height }, errors)
+  await tableShots(page, snap, checks)
   return { saved, errors, checks }
+}
+
+// Tables (stage 5): the editor and the page view.
+async function tableShots(page, snapAt, checks) {
+  const snap = (name, opts) => snapAt(name, opts, page)
+  let s0
+  const state = () => page.evaluate(() => {
+    const v = window.__writeView
+    const { $from } = v.state.selection
+    let cell = null
+    for (let d = $from.depth; d > 0; d--) if (/cell/.test($from.node(d).type.spec.tableRole || '')) cell = $from.node(d).textContent
+    return { cell, doc: v.state.doc.toJSON() }
+  })
+  await page.goto(`${BASE}/write/1?chapter=13`)
+  await page.waitForSelector('.write-doc table.pm-table')
+  await settle(page, 800)
+  // The cursor in the stat block's "Mira Vey": the table box shows.
+  await page.locator('.write-doc td', { hasText: 'Mira Vey' }).click()
+  await page.waitForSelector('.table-options .chip')
+  await settle(page, 300)
+  await snap('10_table_editor.png')
+  await page.locator('.table-options .chip').click()
+  await page.waitForSelector('.table-options .panel')
+  await settle(page, 200)
+  await snap('10a_table_options.png')
+  // Shade the cell from the box; Esc closes the box, the cursor stays.
+  await page.getByRole('button', { name: 'Cell shading #fff2cc' }).click()
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(100)
+  assert.equal(await page.locator('.table-options .panel').count(), 0, 'Esc closes the table box')
+  s0 = await state()
+  assert.equal(JSON.stringify(s0.doc).includes('"background":"#fff2cc"'), true, 'the cell was shaded')
+  checks.push('table box: opens from its button, shades a cell, closes on Esc')
+  await page.locator('.write-doc p', { hasText: 'She closed it' }).click()
+  await page.waitForTimeout(150)
+  assert.equal(await page.locator('.table-options').count(), 0, 'the table box closes outside a table')
+
+  // Insert a 2 × 3 table from the toolbar's grid after the last paragraph,
+  // Tab through it; Tab in the last cell adds a row.
+  await page.locator('.write-doc p', { hasText: 'It was not much' }).click()
+  await page.keyboard.press('End')
+  await page.getByRole('button', { name: 'Insert table', exact: true }).click()
+  await page.getByRole('button', { name: '2 × 3 table' }).click()
+  await page.waitForTimeout(150)
+  for (const w of ['HP', '40', '/ 40', 'MP', '12', '/ 15']) {
+    await page.keyboard.type(w)
+    await page.keyboard.press('Tab')
+  }
+  let s = await state()
+  const made = s.doc.content.filter((n) => n.type === 'table').at(-1)
+  assert.equal(made.content.length, 3, 'Tab in the last cell added a row')
+  assert.equal(s.cell, '', 'the cursor is in the new row')
+  assert.equal(made.content[0].content.map((c) => c.content[0].content?.[0]?.text).join('|'), 'HP|40|/ 40')
+  await page.keyboard.press('Shift+Tab')
+  s = await state()
+  assert.equal(s.cell, '/ 15', 'Shift+Tab goes back a cell')
+  checks.push('insert table, Tab, Tab adds a row, Shift+Tab: ok')
+  await settle(page, 300)
+  await snap('10b_table_inserted.png')
+
+  // A table pasted from Word (in the empty paragraph after the new table)
+  // keeps its cells, spans, shading and borders; the shading isn't also
+  // taken for a highlight on the text.
+  await page.keyboard.press('Control+End')
+  await page.evaluate(() => {
+    const html = `<html><body><!--StartFragment--><table class=MsoTableGrid border=1 cellspacing=0 cellpadding=0 style='border-collapse:collapse;border:none'>
+<tr><td width=200 colspan=2 style='width:150pt;border:solid windowtext 1.0pt;background:#FFF2CC;padding:0cm 5.4pt'><p class=MsoNormal><b>Quest</b></p></td></tr>
+<tr><td width=100 valign=middle style='width:75pt;border:solid windowtext 1.0pt;padding:0cm 5.4pt'><p class=MsoNormal>Reward</p></td>
+<td width=100 style='width:75pt;border:solid windowtext 1.0pt;padding:0cm 5.4pt'><p class=MsoNormal>50 silver</p></td></tr></table><!--EndFragment--></body></html>`
+    const dt = new DataTransfer()
+    dt.setData('text/html', html)
+    dt.setData('text/plain', 'Quest\nReward\t50 silver')
+    window.__writeView.dom.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
+  })
+  await page.waitForTimeout(200)
+  s = await state()
+  const pasted = s.doc.content.find((n) => n.type === 'table' && JSON.stringify(n).includes('Quest'))
+  assert.ok(pasted, 'the pasted table is a table')
+  const q = pasted.content[0].content[0]
+  assert.equal(q.attrs.colspan, 2, JSON.stringify(pasted))
+  assert.ok(!JSON.stringify(q).includes('highlight'), 'no highlight from the cell’s shading')
+  assert.equal(q.attrs.background, '#fff2cc')
+  assert.equal(pasted.attrs.borders, 'all')
+  assert.equal(pasted.content[1].content[0].attrs.valign, 'middle')
+  assert.ok(Math.abs(pasted.content[1].content[1].attrs.colwidth[0] - 100) < 0.5, 'a Word width of 75 pt (100 px)')
+  checks.push('paste a table from Word: ok')
+
+  // Dark paper.
+  await page.locator('.write-doc td', { hasText: 'Mira Vey' }).click()
+  await page.getByRole('button', { name: 'Dark paper' }).click()
+  await settle(page, 200)
+  await snap('10c_table_dark_paper.png')
+  await page.getByRole('button', { name: 'Light paper' }).click()
+
+  // The page view: the inventory breaks between rows, its header repeated.
+  await page.goto(`${BASE}/write/1/pages`)
+  await page.waitForSelector('.pv-pages:not(.is-hidden) .pagedjs_page', { timeout: 60000 })
+  await settle(page, 600)
+  const pv = await page.evaluate(() => {
+    const pages = [...document.querySelectorAll('.pagedjs_page')]
+    const withInventory = pages.filter((p) => [...p.querySelectorAll('td')].some((td) => /kg$/.test(td.textContent.trim())))
+    return {
+      pages: withInventory.length,
+      heads: withInventory.filter((p) => [...p.querySelectorAll('thead th')].some((th) => th.textContent.trim() === '#')).length,
+      colgroups: withInventory.filter((p) => [...p.querySelectorAll('table')].some((t) => /kg/.test(t.textContent) && t.querySelector('colgroup col')?.style.width)).length,
+      first: pages.indexOf(withInventory[0]),
+    }
+  })
+  checks.push(`page view: the inventory runs over ${pv.pages} pages, the header row on ${pv.heads}, its column widths on ${pv.colgroups}`)
+  assert.ok(pv.pages > 1 && pv.heads === pv.pages && pv.colgroups === pv.pages, 'the header row and widths repeat on every page')
+  const shotPages = async (from, name) => {
+    const box = await page.evaluate((i) => {
+      const p = document.querySelectorAll('.pagedjs_page')[i]
+      p.scrollIntoView({ block: 'start' })
+      return null
+    }, from)
+    void box
+    await settle(page, 300)
+    await snap(name)
+  }
+  const statPage = await page.evaluate(() => [...document.querySelectorAll('.pagedjs_page')].findIndex((p) => /STATUS/.test(p.textContent)))
+  await shotPages(statPage, '10d_table_page_view.png')
+  await shotPages(pv.first + 1, '10e_table_page_view_continued.png')
 }
 
 try {
