@@ -565,3 +565,75 @@ left-hand pages, by where they lie in the book, not by their number.
   when its text has dialogue. The wiki graph doesn't use the texts:
   chapters aren't nodes there, and items named in the same chapter would
   join almost everything.
+
+## Where things stand, and stage 5
+
+Status (2026-10-27): stages 1–4 are built and pushed (`126fdc3` the MVP,
+`12df0da` stages 3–4; schemas 42–45). Nothing of stage 5 exists yet.
+The writer's decisions behind this plan: parity with Word in what matters
+to novelists, nothing else (no cloud, macros, track changes, equations);
+page types A4, A5, A6, custom and Online Post, one per book; EPUB yes;
+a spellchecker that knows the story's names yes; offline writing yes;
+the writer's own fonts with a license tracker yes. Build each part so it
+can be tested on its own, with node/Go tests and headless screenshots
+(the scripts under `frontend/tests/visual/`; throwaway data only, servers
+on 127.0.0.1). A real manuscript to test with is never committed.
+
+Known gaps in what exists:
+
+- Tab at the end of a sublist's first item types a tab; uploaded pictures
+  are never cleaned up when no text or version uses them.
+- The editor's `toc` box lists chapter titles only (levels 2–3 show only
+  in the page view); a page that continues after a mid-chapter full-page
+  picture may be treated as a chapter's first page by paged.js; headings'
+  `break-after: avoid` isn't honoured by paged.js; printing was checked
+  headless only, not from a real browser's print dialog.
+- Characters have no colour field, so Script Mode speakers use the accent.
+- The suggestion list for Tab-to-link scales with the page zoom.
+- AO3 may strip `style="text-align:center"` in the HTML export (fallback:
+  `align="center"`); WebP pictures go into .docx as they are.
+
+Stage 5, suggested order (each its own piece of work):
+
+1. **Fonts library with a license tracker.** One library for all stories
+   (not per story database): upload .ttf/.otf/.woff/.woff2; read the
+   file's name table (family, styles, copyright, license text and URL)
+   and the OS/2 `fsType` embedding flags in Go. Per font: license kind
+   (OFL, Apache, commercial, personal use only, other), source, purchase
+   date, an attached receipt or license file, allowed uses (print, ebook,
+   web, commercial). "Used in": which books and styles use it. Warnings
+   when it matters: a personal-use font in a book's styles, exporting PDF
+   or .docx/EPUB with a font that forbids embedding. Then embed allowed
+   fonts in EPUB and (optionally) .docx, and serve them to the editor and
+   page view with `@font-face`. Google Fonts stay pickable as today.
+2. **Spellchecker that knows the story.** LibreOffice/Hunspell
+   dictionaries (en, pt-BR, es to match the interface), checked in a
+   worker; every character, place, faction, creature, asset name,
+   nickname and former name counts as a word; a per-story "add to
+   dictionary". Underlines through a ProseMirror decoration plugin, with
+   suggestions on right click. The browser's own spellcheck is turned off
+   in the editor once this is on.
+3. **Comments.** Notes anchored to a text range (a mark with a comment id,
+   comments stored in their own table per chapter), a side panel,
+   resolve/reopen; kept by the .docx import and export (Word comments).
+4. **Footnotes and endnotes.** An inline atom holding its own content;
+   numbered automatically; page view puts footnotes at the page's foot
+   (paged.js float), exports write Word footnotes and EPUB endnotes;
+   the import stops dropping them (`left_out.footnotes`).
+5. **Tables.** prosemirror-tables; for stat blocks in LitRPG; import,
+   export, page view.
+6. **Boxes and drop caps.** Paragraph borders and shading (LitRPG system
+   windows), and a drop cap on a chapter's first paragraph; both as
+   paragraph attrs, imported from Word (`left_out.borders_shading`,
+   `drop_caps`) and exported.
+7. **Pictures with text wrapping.** Float left/right with wrap, in the
+   editor, page view and exports.
+8. **Read aloud.** The browser's speech synthesis reading the selection or
+   from the caret, with the current sentence highlighted.
+9. **Offline writing.** A service worker caching the app's files and a
+   manifest so it installs as an app; books marked "Available offline"
+   kept in IndexedDB (chapters, styles, settings, fonts) and edited there
+   with no connection; on reconnect, changes upload with the existing
+   version check, and a conflict shows both texts as today (ProseMirror
+   can merge edits to different paragraphs). Needs HTTPS (or localhost).
+   Ask the browser for persistent storage.
