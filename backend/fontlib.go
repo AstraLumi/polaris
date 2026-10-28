@@ -317,6 +317,15 @@ func (l *fontLibrary) addFont(data []byte, originalName string, familyID int64) 
 			familyID, _ = res.LastInsertId()
 		} else if err != nil {
 			return 0, err
+		} else if kind, all := guessLicense(info); kind != "" {
+			// Often only one of a family's files names its license: fill it in
+			// when the family has none yet, whichever file came first.
+			if _, err := tx.Exec(`UPDATE font_families SET license_kind = ?,
+				source = CASE WHEN source = '' THEN ? ELSE source END,
+				use_print = use_print OR ?, use_ebook = use_ebook OR ?, use_web = use_web OR ?, use_commercial = use_commercial OR ?
+				WHERE id = ? AND license_kind = ''`, kind, info.LicenseURL, all, all, all, all, familyID); err != nil {
+				return 0, err
+			}
 		}
 	}
 	var fs sql.NullInt64
