@@ -164,4 +164,5 @@ export default {
   "the book's layout is not valid": "la diagramación del libro no es válida",
   "Page numbers and layout…": "Números de página y diagramación…",
   "Click a page to write there.": "Haz clic en una página para escribir ahí.",
+  "No comments here. Select some text and press Ctrl+Alt+M to comment on it.": "No hay comentarios. Selecciona un texto y presiona Ctrl+Alt+M para comentarlo.",
 }

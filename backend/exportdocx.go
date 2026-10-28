@@ -9,7 +9,10 @@ package main
 // title, subtitle as subject, author as creator, description, ISBN as
 // identifier, language) and app.xml (publisher as company),
 // word/document.xml, styles.xml, numbering.xml (when there are lists),
-// settings.xml, header and footer parts, media/.
+// settings.xml, header and footer parts, media/, comments.xml and
+// commentsExtended.xml when the text has comments (docxcomments.go: the
+// ranges, references, replies and resolved state; the import reads them
+// back the same).
 //
 // Styles (styles.xml): every book style is a Word style. normal is
 // Normal (and the document defaults), heading1–6 are Word's "heading 1"–6
@@ -574,6 +577,7 @@ type docxOut struct {
 	bmUsed    map[string]bool
 	tocAnchor map[*pmNode]string
 	hasTOC    bool
+	cm        *docxCommentsOut // the comments (docxcomments.go)
 
 	absNums, nums strings.Builder
 	numN          int
@@ -613,6 +617,7 @@ func exportDocx(b *exportBook) ([]byte, error) {
 		}
 	}
 
+	d.cm = newDocxCommentsOut(b)
 	d.doc.WriteString(xmlHead + `<w:document ` + docxNSDecl + `><w:body>`)
 	for i, c := range b.Chapters {
 		d.section = i
@@ -632,6 +637,7 @@ func exportDocx(b *exportBook) ([]byte, error) {
 		d.doc.WriteString(d.sectPrFor(-1))
 	}
 	d.doc.WriteString(`</w:body></w:document>`)
+	d.commentParts() // docxcomments.go
 
 	// Package.
 	var entries []zipEntry
@@ -1004,7 +1010,9 @@ func (d *docxOut) inlines(p *docxPara, content []*pmNode, styleID string) {
 		}
 		switch c.Type {
 		case "text":
+			d.cm.before(p, c)
 			d.textRun(p, c.Text, styleID, c.Marks, nil)
+			d.cm.after(p, c)
 		case "hard_break":
 			p.body.WriteString(`<w:r><w:br/></w:r>`)
 		case "tab":

@@ -429,6 +429,19 @@ export const schema = new Schema({
       ],
       toDOM: () => ['span', { 'data-smallcaps': '', style: 'font-variant: small-caps' }, 0],
     },
+
+    // A comment on the text (stage 5): the id of its row (GET
+    // /api/chapters/{id}/comments). A text can carry several, each with its
+    // own id (excludes nothing, not even itself). Drawn as a plain span: the
+    // writing page colours the comments it knows (editor/comments.js), the
+    // page view and the exports never show them.
+    comment: {
+      attrs: keep({ id: {} }),
+      inclusive: false,
+      excludes: '',
+      parseDOM: [{ tag: 'span[data-comment]', getAttrs: (el) => (+el.getAttribute('data-comment') > 0 ? { id: +el.getAttribute('data-comment') } : false) }],
+      toDOM: (mark) => ['span', { class: 'pm-comment', 'data-comment': String(mark.attrs.id ?? '') }, 0],
+    },
   },
 })
 

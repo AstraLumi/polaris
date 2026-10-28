@@ -131,6 +131,8 @@
     <div class="tb-group tools">
       <button v-bind="btn(t('Find and replace') + ' (Ctrl+F)')" @click="$emit('find')"><TbIcon name="find" /></button>
       <button v-bind="btn(t('Styles'), panel === 'styles')" class="foldable" @click="$emit('panel', 'styles')"><TbIcon name="styles" /></button>
+      <button v-bind="btn(t('New comment') + ' (Ctrl+Alt+M)')" @click="$emit('comment')"><TbIcon name="comment" /></button>
+      <button v-bind="btn(t('Comments'), panel === 'comments')" class="foldable" @click="$emit('panel', 'comments')"><TbIcon name="comments" /></button>
       <button v-bind="btn(t('Saved versions'), panel === 'versions')" class="foldable" @click="$emit('panel', 'versions')"><TbIcon name="versions" /></button>
       <button v-bind="btn(t('Book and page'), panel === 'book')" class="foldable" @click="$emit('panel', 'book')"><TbIcon name="book" /></button>
       <button v-bind="btn(scriptMode ? t('Script Mode: on (this chapter)') : t('Script Mode: type “Name:” at a line’s start for dialogue'), scriptMode)" class="foldable" @click="exec(setScriptMode(!scriptMode))"><TbIcon name="script" /></button>
@@ -175,7 +177,7 @@ const props = defineProps({
   panel: { type: String, default: '' },
   uploading: { type: Boolean, default: false }, // a picture is on its way
 })
-defineEmits(['find', 'panel', 'focus', 'picture'])
+defineEmits(['find', 'panel', 'focus', 'picture', 'comment'])
 
 const TEXT_COLORS = ['#000000', '#444444', '#7f7f7f', '#c00000', '#e36c09', '#9c6500', '#2e7d32', '#1f4e79', '#3949ab', '#7030a0', '#ad1457', '#ffffff']
 const HIGHLIGHTS = ['#fff176', '#c5e1a5', '#80deea', '#f8bbd0', '#ffcc80', '#d1c4e9']
@@ -289,6 +291,8 @@ const ICONS = {
   book: 'M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3zM4 17a3 3 0 0 1 3-3h11',
   focus: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
   script: 'M4 5h16v11H10l-4 3v-3H4zM8 9h8M8 12h5',
+  comment: 'M4 4h16v12H9l-5 4zM12 7v6M9 10h6',
+  comments: 'M3 4h12v8H8l-3 3v-3H3zM18 8h3v9h-2v3l-3-3h-5v-2',
 }
 const TbIcon = (p) =>
   h('svg', { viewBox: '0 0 24 24', width: 18, height: 18, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' }, [h('path', { d: ICONS[p.name] || '' })])

@@ -48,6 +48,7 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/bookLayout.test.mjs
     node frontend/tests/nameMatch.test.mjs
     node frontend/tests/editorScript.test.mjs
+    node frontend/tests/comments.test.mjs
 
 Run all of these before committing.
 
@@ -276,6 +277,9 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
 - **Anything that writes `chapter_texts`** must call `indexChapterText`
   in the same transaction (`backend/chapterindex.go`): "Appears in",
   a character's Lines and "Who speaks" read that index, not the docs.
+  It also keeps the chapter's comments in step with its text
+  (`syncChapterComments`, `backend/comments.go`, schema 46: rows per
+  chapter, a `comment` mark by id in the text, plain-text bodies).
 
 ## Deployment
 

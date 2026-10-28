@@ -5,10 +5,25 @@ import (
 	"testing"
 )
 
+// rollBackSchema46 turns a fresh database back into schema 45: no comments
+// on the chapters' texts.
+func rollBackSchema46(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, q := range []string{
+		`DROP TABLE chapter_comments`,
+		`UPDATE schema_meta SET value = '45' WHERE key = 'schema_version'`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+}
+
 // rollBackSchema45 turns a fresh database back into schema 44: no index of
 // what the chapters' texts name or who speaks in them.
 func rollBackSchema45(t *testing.T, db *sql.DB) {
 	t.Helper()
+	rollBackSchema46(t, db)
 	for _, q := range []string{
 		`DROP TABLE chapter_lines`,
 		`DROP TABLE chapter_links`,

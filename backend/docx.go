@@ -75,7 +75,7 @@ var (
 //	fields_as_text   other fields (cross-references, dates…): their shown text is kept as plain text
 //	footnotes        footnote references (the notes' text is not imported)
 //	endnotes         endnote references
-//	comments         comments
+//	comments         comments that mark no text (and their replies), references to comments the file doesn't have
 //	tables           tables (their text is kept, cell by cell, as paragraphs)
 //	text_boxes       text boxes (their text is kept as paragraphs after the paragraph they sit in)
 //	equations        equations
@@ -103,6 +103,7 @@ type docxImport struct {
 	Layout        *bookLayout       `json:"layout,omitempty"` // docxlayout.go
 	Meta          map[string]string `json:"meta,omitempty"`
 	Restarts      map[int]int       `json:"-"` // chapter index: the page number it restarts at (docxlayout.go)
+	Comments      []docxComment     `json:"-"` // the file's comments, by Local (docxcomments.go)
 }
 
 type docxChapter struct {
@@ -367,6 +368,9 @@ func parseDocx(data []byte) (*docxImport, error) {
 
 	p := newDocxParser(pk, rels, parseStyles(stylesRoot, th), parseNumbering(numRoot), th)
 	p.mirror = settings.child("w", "mirrorMargins") != nil && wOn(settings.child("w", "mirrorMargins"))
+	if p.cm, err = parseDocxComments(pk, rels); err != nil { // docxcomments.go
+		return nil, err
+	}
 	if err := p.parseBody(docRoot.child("w", "body")); err != nil {
 		return nil, err
 	}

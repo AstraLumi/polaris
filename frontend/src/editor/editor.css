@@ -9,6 +9,11 @@
   --paper-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 12px 40px rgba(0, 0, 0, 0.35);
   --find: rgba(255, 196, 0, 0.38);
   --find-current: rgba(255, 140, 0, 0.62);
+  /* Comments (stage 5): a soft wash, stronger for the one picked. */
+  --comment: rgba(120, 170, 255, 0.2);
+  --comment-line: rgba(70, 120, 210, 0.45);
+  --comment-active: rgba(120, 170, 255, 0.42);
+  --comment-line-active: rgba(50, 100, 200, 0.9);
 }
 
 .write-page.is-dark-paper {
@@ -17,6 +22,17 @@
   --ink-faint: rgba(230, 225, 214, 0.45);
   --find: rgba(255, 196, 0, 0.3);
   --find-current: rgba(255, 140, 0, 0.55);
+  --comment: rgba(120, 170, 255, 0.16);
+  --comment-line: rgba(140, 180, 255, 0.45);
+  --comment-active: rgba(120, 170, 255, 0.34);
+  --comment-line-active: rgba(160, 195, 255, 0.95);
+}
+
+/* A comment being made (its row is on its way). The others are coloured by
+   the writing page (highlightCSS in comments.js), by id. */
+.write-doc .pm-comment.is-pending {
+  background: var(--comment);
+  border-bottom: 1px dashed var(--comment-line);
 }
 
 .write-doc {
