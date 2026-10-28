@@ -84,13 +84,11 @@ var (
 //	objects          embedded objects (OLE) and embedded files
 //	pictures         pictures in a format a browser can't show (EMF, WMF, TIFF…), missing, too large, or placed wholly off the page
 //	hidden_text      runs of hidden text
-//	drop_caps        drop caps (their letter is kept as text)
-//	borders_shading  paragraph borders and shading
 //	columns          sections set in more than one column
 //	sections         section breaks beyond the first section: their own page setup, numbering and headers (each becomes a page break unless continuous)
 var docxLeftOutKeys = []string{"headers_footers", "toc", "fields", "fields_as_text", "footnotes", "endnotes",
 	"comments", "tables", "text_boxes", "equations", "tracked_changes", "drawings", "objects", "pictures",
-	"hidden_text", "drop_caps", "borders_shading", "columns", "sections"}
+	"hidden_text", "columns", "sections"}
 
 type docxImport struct {
 	Chapters      []docxChapter     `json:"-"`

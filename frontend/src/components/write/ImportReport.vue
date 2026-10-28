@@ -86,8 +86,6 @@ const LEFT_OUT = {
   objects: tr('embedded objects and files'),
   pictures: tr('pictures a browser can\'t show, or too large'),
   hidden_text: tr('hidden text'),
-  drop_caps: tr('drop caps (their letter is kept)'),
-  borders_shading: tr('paragraph borders and shading'),
   columns: tr('sections in more than one column'),
   sections: tr('extra sections (each became a page break)'),
 }

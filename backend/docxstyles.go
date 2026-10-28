@@ -15,6 +15,7 @@ package main
 // off is not followed (it is rare and surprises writers too).
 
 import (
+	"math"
 	"strconv"
 	"strings"
 )
@@ -25,13 +26,18 @@ type wLine struct {
 }
 
 type wPara struct {
-	align                        *string // left center right justify
-	indFirst, indLeft, indRight  *float64
-	before, after                *float64
-	line                         *wLine
-	keepNext, pageBreakBefore    *bool
-	numID, ilvl, outline         *int
-	hasBorders, hasShade, isDrop bool // direct only, for the left-out report
+	align                       *string // left center right justify
+	indFirst, indLeft, indRight *float64
+	before, after               *float64
+	line                        *wLine
+	keepNext, pageBreakBefore   *bool
+	numID, ilvl, outline        *int
+	// Direct only (a style's box is not imported): a border (width in pt,
+	// colour "" = black), the fill, and a drop cap's number of lines.
+	boxW            float64
+	boxColor, shade string
+	isDrop          bool
+	dropLines       int
 }
 
 type wRun struct {
@@ -209,14 +215,30 @@ func parsePPr(e *xEl) wPara {
 				p.outline = ptrI(lv)
 			}
 		case "pBdr":
-			p.hasBorders = len(k.kids) > 0
+			for _, b := range k.kids {
+				if v := b.attr("val"); v == "" || v == "nil" || v == "none" {
+					continue
+				}
+				w := 0.5
+				if sz, err := strconv.ParseFloat(b.attr("sz"), 64); err == nil && sz > 0 {
+					w = math.Min(math.Max(sz/8, 0.25), 20)
+				}
+				if w > p.boxW {
+					p.boxW = w
+					p.boxColor = hexColor(b.attr("color"))
+				}
+			}
 		case "shd":
 			if f := strings.ToLower(k.attr("fill")); f != "" && f != "auto" && f != "ffffff" {
-				p.hasShade = true
+				p.shade = hexColor(f)
 			}
 		case "framePr":
 			if dc := k.attr("dropCap"); dc == "drop" || dc == "margin" {
 				p.isDrop = true
+				p.dropLines = 3
+				if n, err := strconv.Atoi(k.attr("lines")); err == nil {
+					p.dropLines = max(2, min(n, 4))
+				}
 			}
 		}
 	}

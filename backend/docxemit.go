@@ -737,6 +737,18 @@ func paraNodeIn(b *irBlock, s *outStyle, set *styleSet, keep map[string]bool) *p
 	if b.p.keepNext && !s.para.keepNext {
 		attrs["keepNext"] = true
 	}
+	if b.boxW > 0 {
+		attrs["boxWidth"] = r2(b.boxW)
+		if b.boxColor != "" {
+			attrs["boxColor"] = b.boxColor
+		}
+	}
+	if b.shade != "" && b.shade != "#ffffff" {
+		attrs["shade"] = b.shade
+	}
+	if b.dropCap > 0 {
+		attrs["dropCap"] = b.dropCap
+	}
 	for _, name := range b.bookmarks {
 		if keep[name] {
 			attrs["bookmark"] = name

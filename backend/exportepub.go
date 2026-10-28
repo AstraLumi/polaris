@@ -330,7 +330,18 @@ func (e *epubOut) css() []byte {
 		decl := append(paraCSS(p, t.Size), textCSS(t, e.body, st.ID != "normal")...)
 		fmt.Fprintf(&s, "%s { %s; }\n", sel, strings.Join(decl, "; "))
 	}
-	s.WriteString(`li > p, li > h1, li > h2, li > h3 { text-indent: 0; }
+	s.WriteString(`.boxed + .boxed { border-top-width: 0 !important; margin-top: 0 !important; padding-top: 0 !important; }
+.dropcap2, .dropcap3, .dropcap4 { text-indent: 0 !important; }
+.dropcap2::first-letter { initial-letter: 2; }
+.dropcap3::first-letter { initial-letter: 3; }
+.dropcap4::first-letter { initial-letter: 4; }
+@supports not (initial-letter: 2) {
+.dropcap2::first-letter, .dropcap3::first-letter, .dropcap4::first-letter { float: left; line-height: 0.8; padding: 0.05em 0.08em 0 0; }
+.dropcap2::first-letter { font-size: 2.3em; }
+.dropcap3::first-letter { font-size: 3.4em; }
+.dropcap4::first-letter { font-size: 4.5em; }
+}
+li > p, li > h1, li > h2, li > h3 { text-indent: 0; }
 ul, ol { margin: 0.5em 0; padding-left: 2em; }
 .empty { min-height: 1em; }
 .tab { display: inline-block; width: 2em; }
@@ -497,6 +508,12 @@ func (e *epubOut) textBlock(ctx *epubCtx, n *pmNode) {
 	if len(n.Content) == 0 && n.Type != "dialogue" {
 		classes = append(classes, "empty")
 	}
+	if boxCSS(n) != "" {
+		classes = append(classes, "boxed")
+	}
+	if dc, ok := pmInt(n.Attrs["dropCap"]); ok && dc >= 2 && dc <= 4 {
+		classes = append(classes, fmt.Sprintf("dropcap%d", dc))
+	}
 	if len(classes) > 0 {
 		attrs += ` class="` + strings.Join(classes, " ") + `"`
 	}
@@ -532,6 +549,9 @@ func (e *epubOut) textBlock(ctx *epubCtx, n *pmNode) {
 		}
 		if attrBool(n, "keepNext") {
 			decl = append(decl, "page-break-after: avoid")
+		}
+		if b := boxCSS(n); b != "" {
+			decl = append(decl, b)
 		}
 		if len(decl) > 0 {
 			attrs += ` style="` + xe(strings.Join(decl, "; ")) + `"`
@@ -832,4 +852,25 @@ func (e *epubOut) opf(ident string, chapters []exportChapter) []byte {
 	}
 	s.WriteString("</spine>\n</package>\n")
 	return []byte(s.String())
+}
+
+// boxCSS: the declarations of a paragraph's box (border, shading), "" when
+// it has neither. The editor draws the same: 4pt 6pt of padding inside.
+func boxCSS(n *pmNode) string {
+	var d []string
+	w, ok := pmNum(n.Attrs["boxWidth"])
+	if ok && w > 0 {
+		col := "#000000"
+		if c, _ := n.Attrs["boxColor"].(string); pmHexColor(c) {
+			col = c
+		}
+		d = append(d, fmt.Sprintf("border: %spt solid %s", fmtNum(w), col))
+	}
+	if c, _ := n.Attrs["shade"].(string); pmHexColor(c) {
+		d = append(d, "background-color: "+c)
+	}
+	if len(d) > 0 {
+		d = append(d, "padding: 4pt 6pt")
+	}
+	return strings.Join(d, "; ")
 }

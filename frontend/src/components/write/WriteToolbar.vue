@@ -107,6 +107,27 @@
           <option v-for="l in LINE_HEIGHTS" :key="l" :value="String(l)">{{ l }}</option>
         </select>
       </label>
+      <div class="tb-pop">
+        <button v-bind="btn(t('Box, shading and drop cap'), !!(fmt.boxWidth || fmt.shade || fmt.dropCap))" @click="toggle('box')"><span class="glyph">▢</span></button>
+        <div v-if="open === 'box'" class="pop glass-panel panel-solid box-pop" @mousedown.stop>
+          <label class="pop-row">{{ $t('Border (pt)') }}
+            <input type="number" step="0.5" min="0" max="20" :value="fmt.boxWidth || 0" @change="setBox('boxWidth', $event.target.value === '' || +$event.target.value <= 0 ? null : +$event.target.value)" />
+          </label>
+          <label class="pop-row">{{ $t('Border colour') }}
+            <input type="color" :value="fmt.boxColor || '#000000'" @input="setBox('boxColor', $event.target.value)" />
+          </label>
+          <label class="pop-row">{{ $t('Shading') }}
+            <input type="color" :value="fmt.shade || '#ffffff'" @input="setBox('shade', $event.target.value)" />
+            <button type="button" class="btn btn-ghost small" @mousedown.prevent @click="setBox('shade', null)">{{ $t('None') }}</button>
+          </label>
+          <label class="pop-row">{{ $t('Drop cap (lines)') }}
+            <select :value="fmt.dropCap || 0" @change="setBox('dropCap', +$event.target.value || null)">
+              <option :value="0">{{ $t('None') }}</option>
+              <option v-for="n in [2, 3, 4]" :key="n" :value="n">{{ n }}</option>
+            </select>
+          </label>
+        </div>
+      </div>
     </div>
 
     <div class="tb-group foldable">
@@ -274,6 +295,8 @@ function setPara(key, value, inMm = false) {
   if (n != null && !Number.isFinite(n)) return
   exec(setParaAttrs({ [key]: n == null ? null : inMm ? mmToPt(n) : n }))
 }
+
+const setBox = (key, value) => exec(setParaAttrs({ [key]: value }))
 
 const pickColor = (c) => exec(setMark('color', c ? { color: c } : null))
 const pickHighlight = (c) => exec(setMark('highlight', c ? { color: c } : null))
@@ -518,6 +541,8 @@ sub {
   border: 1px solid rgba(127, 127, 127, 0.5);
   cursor: pointer;
 }
+
+.box-pop { min-width: 15rem; display: flex; flex-direction: column; gap: 0.4rem; }
 
 .pop-row {
   display: flex;

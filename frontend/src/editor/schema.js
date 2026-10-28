@@ -19,7 +19,8 @@ import {
 import { tableNodeSpecs, tableAttrsIn, tableAttrsOut } from './tableSchema.js'
 
 // Paragraph formatting, shared by paragraphs and headings.
-export const PARA_ATTRS = ['style', 'align', 'indentFirst', 'indentLeft', 'indentRight', 'spaceBefore', 'spaceAfter', 'lineHeight', 'keepNext']
+export const PARA_ATTRS = ['style', 'align', 'indentFirst', 'indentLeft', 'indentRight', 'spaceBefore', 'spaceAfter', 'lineHeight', 'keepNext', 'boxWidth', 'boxColor', 'shade', 'dropCap']
+const COLOR_RE = /^#[0-9a-fA-F]{6}$/
 const ALIGN_VALUES = new Set(['left', 'center', 'right', 'justify'])
 
 const paraAttrSpec = () => ({
@@ -32,6 +33,10 @@ const paraAttrSpec = () => ({
   spaceAfter: { default: null },
   lineHeight: { default: null },
   keepNext: { default: false },
+  boxWidth: { default: null },
+  boxColor: { default: null },
+  shade: { default: null },
+  dropCap: { default: null },
   extra: { default: null },
 })
 
@@ -55,6 +60,11 @@ function cleanPara(raw) {
     else if (k === 'align') {
       if (ALIGN_VALUES.has(v)) out.align = v
     } else if (k === 'keepNext') out.keepNext = !!v
+    else if (k === 'boxColor' || k === 'shade') {
+      if (COLOR_RE.test(String(v))) out[k] = String(v).toLowerCase()
+    } else if (k === 'dropCap') {
+      if ([2, 3, 4].includes(+v)) out.dropCap = +v
+    }
     else if (Number.isFinite(+v)) out[k] = +v
   }
   if (raw.extra && typeof raw.extra === 'object') out.extra = raw.extra
@@ -69,6 +79,8 @@ function paraToDOM(tag, node) {
   if (Object.keys(own).length || a.extra) dom['data-para'] = JSON.stringify(a.extra ? { ...own, extra: a.extra } : own)
   const css = paraDeclarations(own).join('; ')
   if (css) dom.style = css
+  if (own.boxWidth > 0 || own.shade) dom['data-box'] = ''
+  if (own.dropCap) dom['data-dropcap'] = String(own.dropCap)
   return [tag, dom, 0]
 }
 

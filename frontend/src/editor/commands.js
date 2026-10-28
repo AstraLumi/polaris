@@ -149,6 +149,10 @@ export function selectionFormat(state, styles) {
     styleId: block ? blockStyleId(block.type.name, block.attrs, styles) : null,
     ...r.para,
     ...r.text,
+    boxWidth: block?.attrs.boxWidth ?? null,
+    boxColor: block?.attrs.boxColor ?? null,
+    shade: block?.attrs.shade ?? null,
+    dropCap: block?.attrs.dropCap ?? null,
     bold: has('bold') || !!r.text.bold,
     italic: has('italic') || !!r.text.italic,
     underline: has('underline'),
@@ -263,7 +267,7 @@ export const splitParagraph = (state, dispatch) => {
   const toNormal = atEnd && (block.type === nodes.heading || ['title', 'subtitle'].includes(block.attrs.style))
   const split = splitBlockAs((node, end) => {
     if (node.type === nodes.heading) return end ? { type: nodes.paragraph } : { type: nodes.heading, attrs: node.attrs }
-    if (node.type === nodes.paragraph) return toNormal ? { type: nodes.paragraph } : { type: nodes.paragraph, attrs: node.attrs }
+    if (node.type === nodes.paragraph) return toNormal ? { type: nodes.paragraph } : { type: nodes.paragraph, attrs: { ...node.attrs, dropCap: null } }
     return null
   })
   return split(state, dispatch && ((tr) => {

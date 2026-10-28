@@ -10,7 +10,7 @@
 // Tab through the cells, a table pasted from Word) and in the page view
 // (rows breaking across pages, the header row repeated).
 //
-//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes]
+//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes]
 //
 // --only spell: just the spellchecker (underlines, the menu on a word, Add
 // to dictionary, Ignore, typing, the spelling panel, dark paper, off).
@@ -149,6 +149,7 @@ const db = {
     { id: 14, title: 'Typos', volume_id: 1 },
     { id: 15, title: 'The Crossing', volume_id: 1 },
     { id: 16, title: 'Notes', volume_id: 1 },
+    { id: 17, title: 'Boxes', volume_id: 1 },
     { id: 21, title: 'Opening', volume_id: 2 },
     { id: 31, title: 'Episode 1', volume_id: 3 },
   ],
@@ -180,6 +181,20 @@ const db = {
           { type: 'heading', attrs: { level: 1 }, content: [txt('Notes')] },
           para(null, txt('The ford was lower than the map said'), { type: 'footnote', attrs: { kind: 'footnote' }, content: [para(null, txt('Marked at one and a half feet on the old survey.'))] }, txt(', and Oren cursed it anyway.')),
           para(null, txt('Nobody had crossed since the flood'), { type: 'footnote', attrs: { kind: 'endnote' }, content: [para(null, txt('The flood of 1051, see the almanac.'))] }, txt('.')),
+        ],
+      },
+      version: 1,
+      updated_at: now(),
+    },
+    17: {
+      doc: {
+        type: 'doc',
+        content: [
+          { type: 'heading', attrs: { level: 1 }, content: [txt('Boxes')] },
+          para({ dropCap: 3 }, txt('The road bent north after the ford, and nobody spoke for a long while. Rain came in thin lines across the hills, and the cart wheels sang.')),
+          para({ boxWidth: 1.5, boxColor: '#3366cc', shade: '#e8f0ff' }, txt('[System] Quest updated: Cross the ford.')),
+          para({ boxWidth: 1.5, boxColor: '#3366cc', shade: '#e8f0ff' }, txt('Reward: 120 xp, one wet pair of boots.')),
+          para(null, txt('Mira read it twice, then closed her eyes.')),
         ],
       },
       version: 1,
@@ -402,6 +417,10 @@ async function shoot() {
 
   if (option('only', '') === 'footnotes') {
     await footnoteShots(page, snap, checks)
+    return { saved, errors, checks }
+  }
+  if (option('only', '') === 'boxes') {
+    await boxShots(page, snap, checks)
     return { saved, errors, checks }
   }
   if (option('only', '') === 'tables') {
@@ -805,6 +824,32 @@ async function footnoteShots(page, snap, checks) {
   assert.ok(foot, 'the footnote text is on the page that holds its mark')
   checks.push('page view: footnote at the page foot')
   await snap('11b_footnote_page_view.png')
+}
+
+// Boxes and drop caps (stage 5): a two-paragraph system window and a drop
+// cap, in the editor and in the page view.
+async function boxShots(page, snap, checks) {
+  await page.goto(`${BASE}/write/1?chapter=17`)
+  await page.waitForSelector('.write-doc [data-box]')
+  await settle(page, 800)
+  const boxes = await page.evaluate(() => [...document.querySelectorAll('.write-doc [data-box]')].map((p) => {
+    const c = getComputedStyle(p)
+    return { top: c.borderTopWidth, bottom: c.borderBottomWidth, mt: c.marginTop }
+  }))
+  assert.equal(boxes.length, 2, 'two boxed paragraphs')
+  assert.equal(boxes[0].bottom, '0px', 'the first box has no bottom border, it joins the next')
+  assert.equal(boxes[1].top, '0px', 'the second box has no top border')
+  checks.push('editor: two consecutive boxed paragraphs draw as one box')
+  await snap('12a_boxes_editor.png')
+  await page.goto(`${BASE}/write/1/pages`)
+  await page.waitForSelector('.pv-pages:not(.is-hidden) .pagedjs_page', { timeout: 60000 })
+  await settle(page, 600)
+  const idx = await page.evaluate(() => [...document.querySelectorAll('.pagedjs_page')].findIndex((p) => /Quest updated/.test(p.textContent)))
+  assert.ok(idx >= 0, 'the Boxes chapter is in the page view')
+  await page.evaluate((i) => document.querySelectorAll('.pagedjs_page')[i].scrollIntoView({ block: 'start' }), idx)
+  await settle(page, 400)
+  checks.push('page view: box and drop cap')
+  await snap('12b_boxes_page_view.png')
 }
 
 // Tables (stage 5): the editor and the page view.

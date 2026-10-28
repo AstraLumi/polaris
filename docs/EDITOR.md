@@ -73,6 +73,8 @@ Blocks:
   - `spaceBefore`, `spaceAfter`: pt or `null`;
   - `lineHeight`: multiple or `null`;
   - `keepNext`: bool (`false`);
+  - `boxWidth` (pt, 0 to 20), `boxColor` (`#rrggbb`), `shade` (`#rrggbb`),
+    `dropCap` (2, 3 or 4 lines): stage 5, see "Boxes and drop caps" below;
   - `lineExact`: pt or absent: Word's "exactly" line spacing, kept by the
     .docx import for a later export (`lineHeight` then holds pt / (1.2 ×
     font size)); the editor may ignore it;
@@ -248,7 +250,7 @@ database like every other route).
   `headers_footers`, `toc`, `fields`, `fields_as_text`, `footnotes`,
   `endnotes`, `comments`, `tables`, `text_boxes`, `equations`,
   `tracked_changes`, `drawings`, `objects`, `pictures`, `hidden_text`,
-  `drop_caps`, `borders_shading`, `columns`, `sections` (only those above
+  `columns`, `sections` (only those above
   zero).
 
 The words of a doc: text of every block, split on whitespace, counting
@@ -598,9 +600,9 @@ left-hand pages, by where they lie in the book, not by their number.
 Status (2026-10-28): stages 1–4 are built and pushed (`126fdc3` the MVP,
 `12df0da` stages 3–4; schemas 42–45). Stage 5 items 1 (fonts library),
 2 (spellchecker), 3 (comments, schema 46), 5 (tables) and 8 (read aloud)
-are on main; items 4 (footnotes and endnotes) and 9 (offline writing) are
-built on the local `stage5` branch, not pushed; items 6 and 7 are not
-started (boxes and drop caps, wrapping).
+are on main; items 4 (footnotes and endnotes), 6 (boxes and drop caps)
+and 9 (offline writing) are built on the local `stage5` branch, not
+pushed; item 7 is not started (wrapping).
 The writer's decisions behind this plan: parity with Word in what matters
 to novelists, nothing else (no cloud, macros, track changes, equations);
 page types A4, A5, A6, custom and Online Post, one per book; EPUB yes;
@@ -658,10 +660,8 @@ Stage 5, suggested order (each its own piece of work):
    (stage 5)" below.
 5. **Tables.** prosemirror-tables; for stat blocks in LitRPG; import,
    export, page view. Built: see "Tables (stage 5)" below.
-6. **Boxes and drop caps.** Paragraph borders and shading (LitRPG system
-   windows), and a drop cap on a chapter's first paragraph; both as
-   paragraph attrs, imported from Word (`left_out.borders_shading`,
-   `drop_caps`) and exported.
+6. **Boxes and drop caps.** Built: see "Boxes and drop caps (stage 5)"
+   below.
 7. **Pictures with text wrapping.** Float left/right with wrap, in the
    editor, page view and exports.
 8. **Read aloud** (built; see "Read aloud (stage 5)" below). The browser's speech synthesis reading the selection or
@@ -1145,6 +1145,46 @@ Built (no schema change: notes live in the doc JSON).
   than a page isn't split across pages (paged.js's limit); custom number
   formats or restarting per page; cross-references to a note; notes in
   tables' cells and in headings are not handled specially.
+
+### Boxes and drop caps (stage 5)
+
+Built (no schema change: paragraph attrs in the doc JSON).
+
+- Attrs, on paragraphs and headings: `boxWidth` (pt, a border when > 0),
+  `boxColor` (`#rrggbb`, black when missing), `shade` (`#rrggbb`, a
+  background, with or without a border), `dropCap` (lines, 2 to 4; none
+  when missing). They are the paragraph's own, not a style's: a style
+  cannot carry a box (left out on purpose; "Clear formatting" and applying
+  a style take them off). The checks are in `pmdoc.go`, the copies in
+  `schema.js`.
+- Editor: the "Box, shading and drop cap" button in the paragraph controls
+  (border width, colour, shading, drop cap lines). The box is inline CSS
+  (`border`, `background-color`, 4pt 6pt padding); `data-box` and
+  `data-dropcap` on the paragraph let `editor.css` do the rest. Consecutive
+  boxed paragraphs draw as one box (`[data-box]:has(+ [data-box])`: no
+  border or gap between). They join whatever their colours (known gap).
+  The drop cap is `::first-letter` with `initial-letter` and a float
+  fallback; Enter does not copy a drop cap to the new paragraph.
+- Page view: the same stylesheet (the schema's DOM), nothing extra.
+- Import (.docx): `w:pBdr` (any side counts: one box, the widest side's
+  width and colour), `w:shd` fill (white is none), `w:framePr` with
+  `w:dropCap` (Word's drop cap is its own paragraph holding the letter: it
+  is joined to the next paragraph's text and sets `dropCap`; `w:lines`,
+  3 when missing). Direct formatting only: a style's border or shading is
+  not imported. `left_out.borders_shading` and `drop_caps` are gone.
+- Export: .docx writes `w:pBdr` (four sides, `w:sz` in eighths of a point)
+  and `w:shd`, and a drop cap as Word does: a framed paragraph with the
+  letter (`w:framePr w:dropCap="drop"`) before the paragraph without it
+  (only when the paragraph starts with text; the letter loses its marks).
+  EPUB writes the border and shading as inline CSS and classes `boxed`,
+  `dropcapN` (`initial-letter` with a float fallback); there the first of
+  two boxed paragraphs keeps its bottom border (no `:has`). The Online
+  Post HTML writes border and shading inline. Markdown and text ignore both.
+- Tests: `frontend/tests/editorBoxes.test.mjs`, `boxes_test.go` (validation,
+  .docx round trip), `writeShots.mjs --only boxes`.
+- Known gaps: not opened in Word or LibreOffice; joined boxes of different
+  colours; rounded corners, per-side borders and a drop cap of more than
+  one letter are not supported; a box that runs over a page break is cut.
 
 ### Offline writing (stage 5)
 

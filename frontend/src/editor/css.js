@@ -127,6 +127,9 @@ export function paraDeclarations(p) {
   if (p.spaceAfter != null) out.push(`margin-bottom: ${num(p.spaceAfter)}pt`)
   if (p.lineHeight != null) out.push(`line-height: ${num(p.lineHeight * LINE_FACTOR)}`)
   if (p.keepNext) out.push('break-after: avoid')
+  if (p.boxWidth > 0) out.push(`border: ${num(p.boxWidth)}pt solid ${p.boxColor || '#000000'}`)
+  if (p.shade) out.push(`background-color: ${p.shade}`)
+  if (p.boxWidth > 0 || p.shade) out.push('padding: 4pt 6pt')
   return out
 }
 

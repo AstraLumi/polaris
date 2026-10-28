@@ -23,7 +23,7 @@ assert.deepEqual(
   ['bold', 'char_style', 'color', 'comment', 'font', 'highlight', 'italic', 'link', 'size', 'smallcaps', 'story_link', 'strike', 'subscript', 'superscript', 'underline'],
 )
 const paraAttrs = Object.keys(schema.nodes.paragraph.attrs).filter((k) => k !== 'extra').sort()
-assert.deepEqual(paraAttrs, ['align', 'indentFirst', 'indentLeft', 'indentRight', 'keepNext', 'lineHeight', 'spaceAfter', 'spaceBefore', 'style'])
+assert.deepEqual(paraAttrs, ['align', 'boxColor', 'boxWidth', 'dropCap', 'indentFirst', 'indentLeft', 'indentRight', 'keepNext', 'lineHeight', 'shade', 'spaceAfter', 'spaceBefore', 'style'])
 assert.deepEqual(Object.keys(schema.nodes.heading.attrs).filter((k) => k !== 'extra').sort(), ['level', ...paraAttrs].sort())
 
 // ---- Round trips ------------------------------------------------------------
