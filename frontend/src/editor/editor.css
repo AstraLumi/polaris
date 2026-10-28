@@ -524,6 +524,7 @@
   flex: 1;
   font-weight: 600;
   color: var(--ink-faint);
+  white-space: nowrap;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -534,6 +535,7 @@
   color: var(--ink-faint);
   font: inherit;
   padding: 0.15em 0.35em;
+  white-space: nowrap;
   border-radius: 4px;
   cursor: pointer;
 }
@@ -550,5 +552,6 @@
 
 .pm-fn-pop > .write-doc.pm-fn-body.ProseMirror {
   min-height: 0;
+  padding: 0;
   outline: none;
 }

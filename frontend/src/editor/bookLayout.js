@@ -308,6 +308,7 @@ export function notesCSS(ctx = {}) {
     '.pv-fn-wrap > a[data-footnote-call]::after { content: none; }',
     `.pv-fn[data-footnote-marker] { display: block; list-style: none; ${font}font-size: ${noteSize(ctx.size)}pt; font-weight: normal; font-style: normal; color: ${ctx.color || '#000'}; text-align: left; text-indent: 0; line-height: 1.2; }`,
     '.pv-fn[data-footnote-marker]::marker { content: none; }',
+    '.pv-fn-num { vertical-align: super; font-size: 0.75em; line-height: 0; margin-right: 0.3em; }',
   ]
 }
 

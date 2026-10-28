@@ -324,7 +324,10 @@ export const schema = new Schema({
       atom: true,
       selectable: true,
       content: 'paragraph+',
-      attrs: keep({ kind: { default: 'footnote' } }),
+      // No default on purpose: a node with a required attr is never made up by
+      // the parser to wrap pasted paragraphs (it would, for a node holding
+      // paragraphs). docFromJSON fills a missing kind with 'footnote'.
+      attrs: keep({ kind: {} }),
       parseDOM: [
         {
           tag: 'sup[data-fn]',
@@ -534,6 +537,7 @@ function normalise(json, inline) {
     return { type: 'text', text: String(json.text), marks: marks.length ? marks : undefined }
   }
   const out = { type: type.name, attrs: tableAttrsIn(type.name, splitAttrs(type, json.attrs)) }
+  if (type.name === 'footnote') out.attrs = { ...out.attrs, kind: out.attrs?.kind || 'footnote' }
   if (Array.isArray(json.content) && !type.isLeaf) {
     const content = json.content.map((c) => normalise(c, type.inlineContent)).filter(Boolean)
     if (content.length) out.content = content

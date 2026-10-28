@@ -119,7 +119,11 @@ Inline:
 
 - `text`, with marks;
 - `hard_break` (a line break inside a paragraph);
-- `tab`.
+- `tab`;
+- `footnote` (stage 5, an atom): attr `kind` (`footnote`, the default, or
+  `endnote`); content one or more paragraphs (plain text and marks, no
+  pictures, no comments, no other note). Never stores its number. More in
+  "Footnotes and endnotes (stage 5)" below.
 
 Marks:
 
@@ -593,9 +597,10 @@ left-hand pages, by where they lie in the book, not by their number.
 
 Status (2026-10-28): stages 1–4 are built and pushed (`126fdc3` the MVP,
 `12df0da` stages 3–4; schemas 42–45). Stage 5 items 1 (fonts library),
-2 (spellchecker), 3 (comments, schema 46), 5 (tables) and 8 (read aloud)
-are built on the local `stage5` branch, not pushed; items 4, 6, 7 and 9
-are not started (footnotes, boxes and drop caps, wrapping, offline).
+2 (spellchecker), 3 (comments, schema 46), 4 (footnotes and endnotes),
+5 (tables) and 8 (read aloud) are built on the local `stage5` branch, not
+pushed; items 6, 7 and 9 are not started (boxes and drop caps, wrapping,
+offline).
 The writer's decisions behind this plan: parity with Word in what matters
 to novelists, nothing else (no cloud, macros, track changes, equations);
 page types A4, A5, A6, custom and Online Post, one per book; EPUB yes;
@@ -649,10 +654,8 @@ Stage 5, suggested order (each its own piece of work):
    suggestions on right click. The browser's own spellcheck is turned off
    in the editor once this is on.
 3. **Comments.** Built (schema 46): see "Comments (stage 5)" below.
-4. **Footnotes and endnotes.** An inline atom holding its own content;
-   numbered automatically; page view puts footnotes at the page's foot
-   (paged.js float), exports write Word footnotes and EPUB endnotes;
-   the import stops dropping them (`left_out.footnotes`).
+4. **Footnotes and endnotes.** Built: see "Footnotes and endnotes
+   (stage 5)" below.
 5. **Tables.** prosemirror-tables; for stat blocks in LitRPG; import,
    export, page view. Built: see "Tables (stage 5)" below.
 6. **Boxes and drop caps.** Paragraph borders and shading (LitRPG system
@@ -1104,3 +1107,47 @@ that.
   table's setting), row heights, cell margins other than Word's default,
   text direction, header columns in exports (they are plain cells there),
   tables inside lists, and a table's caption.
+
+### Footnotes and endnotes (stage 5)
+
+Built (no schema change: notes live in the doc JSON).
+
+- Decisions: numbers are per chapter and never stored (footnotes 1, 2, 3;
+  endnotes i, ii, iii, in reading order); notes count as words and feed
+  "Appears in" (`chapterindex.go` walks the whole doc); find and read
+  aloud skip notes; a note has the browser's own spellcheck (the story
+  spellchecker doesn't reach into it); no comments and no pictures inside
+  a note, and no note inside a note; note text is 5/6 of the body size on
+  the half point (`noteSize` in `css.js`, `noteSizeOf` in
+  `exportnotes.go`).
+- The node: inline atom `footnote`, attr `kind` (`footnote` or
+  `endnote`), content paragraphs. Defined twice, `editor/schema.js` and
+  `backend/pmdoc.go` (`footnote` validation rejects a nested note and
+  anything but paragraphs). `docToJSON` used to drop marks on non-text
+  nodes; it keeps them now.
+- Editor: toolbar buttons and Ctrl+Alt+F (footnote) / Ctrl+Alt+D
+  (endnote) (`footnotes.js`, `noteView.js`). The note shows as its number;
+  clicking it (or inserting one) opens a small pop-up with a nested
+  editor, which can turn the note into the other kind, delete it, and
+  return to the text with Esc.
+- Page view: footnotes are floated to the page's foot by paged.js (a short
+  rule above, the number in the text and in the note); endnotes are
+  gathered at the chapter's end. An online post gathers every note at the
+  end (`pageView.js`, `bookLayout.js` `notesCSS`).
+- Exports (`exportnotes.go`): .docx writes real Word footnotes and
+  endnotes (`word/footnotes.xml`, `endnotes.xml`, numbers restarting in
+  each chapter's section); EPUB writes noteref links, footnote asides and
+  an endnotes section; HTML, Markdown and text put the numbers in the text
+  and the notes at the chapter's end.
+- Import (`docxnotes.go`): Word's notes come back as `footnote` nodes with
+  their paragraphs; `left_out.footnotes` / `endnotes` now count only
+  references to notes the file lacks and notes inside notes. A picture or
+  comment in a note is left out. `TestExportDocxRoundTripNotes` keeps the
+  round trip.
+- Screenshots: `node frontend/tests/visual/writeShots.mjs --only footnotes`
+  (a note open in the editor, the page view with the footnote at the
+  page's foot).
+- Not done / not checked: not opened in Word or LibreOffice; a note longer
+  than a page isn't split across pages (paged.js's limit); custom number
+  formats or restarting per page; cross-references to a note; notes in
+  tables' cells and in headings are not handled specially.
