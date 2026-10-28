@@ -221,7 +221,15 @@ func (h *htmlPost) block(n *pmNode, depth int) {
 		if strings.TrimSpace(strings.ReplaceAll(inner, "<br>", "")) == "" {
 			inner = "&nbsp;"
 		}
-		h.s.WriteString("<p" + centred(b.resolvedPara(n)) + ">" + inner + "</p>\n")
+		st := centred(b.resolvedPara(n))
+		if bx := boxCSS(n); bx != "" {
+			if st == "" {
+				st = ` style="` + bx + `"`
+			} else {
+				st = strings.TrimSuffix(st, `;"`) + "; " + bx + `"`
+			}
+		}
+		h.s.WriteString("<p" + st + ">" + inner + "</p>\n")
 	case "heading":
 		lv := min(3, headingLevel(n))
 		inner := htmlInline(b.blockSegs(n))

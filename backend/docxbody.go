@@ -93,7 +93,11 @@ type irBlock struct {
 	list      *irListRef
 	bookmarks []string
 	section   int
-	scene     string // set when a paragraph is a scene break (its glyph)
+	scene     string  // set when a paragraph is a scene break (its glyph)
+	boxW      float64 // border width in pt, 0 = none (colour "" = black)
+	boxColor  string
+	shade     string
+	dropCap   int // lines, 0 = none
 
 	pic      int
 	width    float64 // pt, 0 = natural size
@@ -115,6 +119,7 @@ type docxField struct {
 }
 
 type docxParser struct {
+	drop   *docxDrop // a drop cap waiting for the next paragraph
 	pk     *docxPackage
 	rels   map[string]docxRel
 	st     *wStyles
@@ -329,6 +334,12 @@ func (p *docxParser) table(e *xEl) {
 
 // --- paragraphs ---
 
+type docxDrop struct {
+	text  string
+	lines int
+	r     rFmt
+}
+
 type paraState struct {
 	tmpl       irBlock // what every part of the paragraph shares
 	pStyle     string
@@ -347,16 +358,11 @@ func (p *docxParser) paragraph(el *xEl) {
 	direct := parsePPr(pPr)
 	eff := p.paraIn(styleID)
 	eff.over(direct)
-	if direct.hasBorders || direct.hasShade {
-		p.count("borders_shading")
-	}
-	if direct.isDrop {
-		p.count("drop_caps")
-	}
 
 	ps := &paraState{pStyle: styleID, bookmarks: p.pendingMark}
 	p.pendingMark = nil
-	ps.tmpl = irBlock{kind: 'p', style: styleID, p: concretePara(eff), section: p.sect}
+	ps.tmpl = irBlock{kind: 'p', style: styleID, p: concretePara(eff), section: p.sect,
+		boxW: direct.boxW, boxColor: direct.boxColor, shade: direct.shade}
 
 	// Heading level: the outline level, else a "heading N" style.
 	if eff.outline != nil {
@@ -396,6 +402,48 @@ func (p *docxParser) paragraph(el *xEl) {
 
 	p.inlines(el.kids, ps)
 	p.flush(ps)
+
+	// Word keeps a drop cap's letter in its own framed paragraph: hold it
+	// back and put it in front of the next paragraph's text.
+	if direct.isDrop {
+		var sb strings.Builder
+		var r rFmt
+		for _, it := range ps.items {
+			for _, in := range it.inl {
+				if in.kind == 't' {
+					if sb.Len() == 0 {
+						r = in.r
+					}
+					sb.WriteString(in.text)
+				}
+			}
+		}
+		if sb.Len() > 0 {
+			p.drop = &docxDrop{text: sb.String(), lines: direct.dropLines, r: r}
+			p.pendingMark = ps.bookmarks
+			for _, it := range ps.items {
+				if it.kind != 'p' {
+					p.emit(it)
+				}
+			}
+			return
+		}
+	}
+	if p.drop != nil {
+		d := p.drop
+		p.drop = nil
+		for _, it := range ps.items {
+			if it.kind == 'p' {
+				r := d.r
+				if len(it.inl) > 0 && it.inl[0].kind == 't' {
+					r = it.inl[0].r
+				}
+				it.inl = append([]irInline{{kind: 't', text: d.text, r: r}}, it.inl...)
+				it.dropCap = d.lines
+				break
+			}
+		}
+	}
 
 	if label != "" {
 		for _, it := range ps.items {

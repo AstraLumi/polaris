@@ -566,6 +566,19 @@ func checkBlockAttrs(n *pmNode) error {
 				return wrap(errors.New("attr keepNext: expected true or false"))
 			}
 		}
+		if err := optNum(a, "boxWidth", 0, 20); err != nil {
+			return wrap(err)
+		}
+		for _, k := range []string{"boxColor", "shade"} {
+			if c, err := optString(a, k, 7); err != nil || (c != "" && !pmHexColor(c)) {
+				return wrap(fmt.Errorf("attr %s: expected #rrggbb", k))
+			}
+		}
+		if v, ok := a["dropCap"]; ok && v != nil {
+			if n, ok := pmInt(v); !ok || n < 2 || n > 4 {
+				return wrap(errors.New("attr dropCap: expected 2, 3 or 4"))
+			}
+		}
 		if _, err := optString(a, "bookmark", 200); err != nil {
 			return wrap(err)
 		}
@@ -795,4 +808,17 @@ func docStoryLinks(doc *pmNode) []pmStoryLink {
 		}
 	})
 	return out
+}
+
+// pmHexColor reports whether s is "#rrggbb".
+func pmHexColor(s string) bool {
+	if len(s) != 7 || s[0] != 0x23 {
+		return false
+	}
+	for _, c := range s[1:] {
+		if !(c >= 0x30 && c <= 0x39 || c >= 0x61 && c <= 0x66 || c >= 0x41 && c <= 0x46) {
+			return false
+		}
+	}
+	return true
 }

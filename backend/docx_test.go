@@ -432,7 +432,7 @@ func TestDocxParagraphFormatting(t *testing.T) {
 	if b := byText["a\nb\tc\nd"]; b == nil || types(b.Content) != "text,hard_break,text,tab,text,hard_break,text" {
 		t.Errorf("breaks and tabs: %v", b)
 	}
-	if imp.LeftOut["borders_shading"] != 1 {
+	if imp.LeftOut["borders_shading"] != 0 {
 		t.Errorf("left out: %v", imp.LeftOut)
 	}
 }

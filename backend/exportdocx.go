@@ -854,6 +854,22 @@ func (d *docxOut) textParaPPr(p *docxPara, n *pmNode, lc *docxList) {
 // (a block's, or a note's paragraph's: exportnotes.go).
 func writeParaBox(ppr *strings.Builder, a map[string]any, lc *docxList) {
 	inList := lc != nil
+	// Box and shading come before the spacing (Word's element order).
+	if w, ok := pmNum(a["boxWidth"]); ok && w > 0 {
+		col := "auto"
+		if c, _ := a["boxColor"].(string); pmHexColor(c) {
+			col = strings.ToUpper(c[1:])
+		}
+		sz := int(math.Round(math.Min(w, 20) * 8))
+		ppr.WriteString(`<w:pBdr>`)
+		for _, side := range []string{"top", "left", "bottom", "right"} {
+			fmt.Fprintf(ppr, `<w:%s w:val="single" w:sz="%d" w:space="4" w:color="%s"/>`, side, sz, col)
+		}
+		ppr.WriteString(`</w:pBdr>`)
+	}
+	if c, _ := a["shade"].(string); pmHexColor(c) {
+		fmt.Fprintf(ppr, `<w:shd w:val="clear" w:color="auto" w:fill="%s"/>`, strings.ToUpper(c[1:]))
+	}
 	// Spacing.
 	var sp []string
 	if v, ok := pmNum(a["spaceBefore"]); ok {
@@ -911,6 +927,27 @@ func (d *docxOut) textPara(n *pmNode, lc *docxList) {
 			d.pending.body.WriteString(`<w:r><w:br w:type="page"/></w:r>`)
 		}
 		d.breakNext = false
+	}
+	// A drop cap is Word's own: the first letter in a framed paragraph of
+	// its own, then the paragraph without it (the import joins them again).
+	if dc, ok := pmInt(n.Attrs["dropCap"]); ok && dc >= 2 && dc <= 4 && lc == nil && len(n.Content) > 0 && n.Content[0].Type == "text" && n.Content[0].Text != "" {
+		r := []rune(n.Content[0].Text)
+		fp := d.para()
+		if d.breakBefore() {
+			fp.ppr.WriteString(`<w:pageBreakBefore/>`)
+		}
+		fmt.Fprintf(&fp.ppr, `<w:framePr w:dropCap="drop" w:lines="%d" w:wrap="around" w:vAnchor="text" w:hAnchor="text"/><w:spacing w:before="0" w:after="0" w:line="%d" w:lineRule="exact"/>`, dc, dc*240)
+		fp.body.WriteString(`<w:r><w:t>` + xe(string(r[0])) + `</w:t></w:r>`)
+		cp := *n
+		first := *n.Content[0]
+		first.Text = string(r[1:])
+		cp.Content = append([]*pmNode{}, n.Content...)
+		if first.Text == "" {
+			cp.Content = cp.Content[1:]
+		} else {
+			cp.Content[0] = &first
+		}
+		n = &cp
 	}
 	p := d.para()
 	d.textParaPPr(p, n, lc)

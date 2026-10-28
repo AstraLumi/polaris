@@ -2549,4 +2549,9 @@ export default {
   "Some chapters written offline were also changed elsewhere in the same places. Open them to choose a text (Offline writing lists them).": "Algunos capítulos escritos sin conexión también cambiaron en otro lugar, en los mismos puntos. Ábrelos para elegir un texto (Escribir sin conexión los lista).",
   "Chapters written offline were merged with changes made elsewhere (different paragraphs); your texts before the merge are saved as versions.": "Los capítulos escritos sin conexión se unieron con cambios hechos en otro lugar (párrafos distintos); tus textos de antes de unirlos se guardaron como versiones.",
   "{n} chapters of this book hold text not sent to the server yet. Forget them on this device anyway?": "{n} capítulos de este libro tienen texto aún sin enviar al servidor. ¿Olvidarlos en este dispositivo de todos modos?",
+  "Box, shading and drop cap": "Recuadro, sombreado y letra capital",
+  "Border (pt)": "Borde (pt)",
+  "Border colour": "Color del borde",
+  "Shading": "Sombreado",
+  "Drop cap (lines)": "Letra capital (líneas)",
 }
