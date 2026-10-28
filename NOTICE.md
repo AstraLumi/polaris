@@ -34,3 +34,32 @@ These terms apply to Polaris and to every copy and modified version of it.
    own name and logo; it may say that it is "based on Polaris". An
    unmodified copy may keep the name, but must not suggest that it is
    provided or endorsed by AstraLumi.
+
+## Third-party data
+
+The writing editor's spellchecker ships Hunspell dictionaries from the
+LibreOffice dictionaries repository
+(<https://github.com/LibreOffice/dictionaries>, revision
+`4f1df64b2e8e14751aa7c2205d170ca016071315`), unmodified but gzipped, in
+`frontend/public/dict/`. They are separate works distributed alongside
+Polaris under their own licences; each folder keeps the dictionary's own
+readme and licence files.
+
+- `en_US`: the SCOWL-derived en_US dictionary by Kevin Atkinson and
+  others (README_en_US.txt): permissive terms (SCOWL/VarCon notices, an
+  Ispell BSD-style licence), which must be kept with copies.
+- `en_GB`: the British English dictionary by David Bartlett, Brian Kelk,
+  Andrew Brown and Marco A.G. Pinto (README_en_GB.txt), under the GNU
+  LGPL (version 3, per its changelog).
+- `pt_BR`: VERO, the Brazilian Portuguese dictionary by Raimundo Moura and
+  the LibreOffice Brazilian community (README_pt_BR.txt, README_en.txt),
+  under the GNU LGPL version 3 and the Mozilla Public License.
+- `es_ES`: the RLA-ES Spanish dictionary coordinated by Santiago Bosio
+  (README_hunspell_es.txt, LICENSE.md), under your choice of the GNU GPL
+  version 3 or later, the GNU LGPL version 3 or later or the MPL 1.1 or
+  later.
+
+The licence texts of the GNU GPL 3, the GNU LGPL 3 (which en_GB and
+pt_BR use too) and the MPL 1.1 are in `frontend/public/dict/es_ES/`
+(GPLv3.txt, LGPLv3.txt, MPL-1.1.txt). The dictionaries' source is the
+repository above; `frontend/scripts/dictionaries.mjs` fetches them again.

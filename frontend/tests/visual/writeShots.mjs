@@ -7,7 +7,10 @@
 // cursor in it at any zoom, pasting Word HTML keeps its formatting, typing
 // helpers and autosave.
 //
-//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900]
+//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell]
+//
+// --only spell: just the spellchecker (underlines, the menu on a word, Add
+// to dictionary, Ignore, typing, the spelling panel, dark paper, off).
 //
 // Needs Microsoft Edge (or --channel chrome).
 import { mkdirSync } from 'node:fs'
@@ -103,6 +106,7 @@ const db = {
     { id: 11, title: 'Milestones', volume_id: 1 },
     { id: 12, title: 'Hollowmere', volume_id: 1 },
     { id: 13, title: 'The Ford', volume_id: 1 },
+    { id: 14, title: 'Typos', volume_id: 1 },
     { id: 21, title: 'Opening', volume_id: 2 },
     { id: 31, title: 'Episode 1', volume_id: 3 },
   ],
@@ -114,6 +118,19 @@ const db = {
   texts: {
     11: { doc: chapterOne, version: 4, updated_at: now() },
     12: { doc: { type: 'doc', content: [para(null, txt('Hollowmere was smaller than its name.'))] }, version: 1, updated_at: now() },
+    14: {
+      doc: {
+        type: 'doc',
+        content: [
+          { type: 'heading', attrs: { level: 1 }, content: [txt('Typos')] },
+          para(null, txt('Mira walkd past '), txt('Hollowmer', { type: 'story_link', attrs: { type: 'location', id: 7 } }), txt(' with Zarathul, carrying Oren’s lantren. The Grey Ordr waited by the ford, and '), txt('nobdy', 'italic'), txt(' spoke.')),
+          para(null, txt('LEVEL UP. See https://example.com/wrng-paht for the 3rd map, e.g. the old one.')),
+          { type: 'dialogue', attrs: { character: 1, speaker: 'Mira', manner: 'quitely' }, content: [txt('We shuold turn back.')] },
+        ],
+      },
+      version: 1,
+      updated_at: now(),
+    },
     31: { doc: onlineDoc, version: 2, updated_at: now() },
     13: { doc: fordDoc, version: 3, updated_at: now() },
   },
@@ -132,6 +149,13 @@ const db = {
     ],
   },
   conflictNext: false,
+  wiki: [
+    { type: 'character', id: 1, name: 'Mira Vey', nicknames: ['Mimi'], aliases: [] },
+    { type: 'character', id: 2, name: 'Oren', nicknames: [], aliases: [] },
+    { type: 'location', id: 7, name: 'Hollowmere' },
+    { type: 'faction', id: 3, name: 'The Grey Order' },
+  ],
+  spelling: ['Turret'],
   puts: [],
 }
 let nextVersionId = 100
@@ -243,6 +267,14 @@ async function fakeApi(route) {
     return json(c)
   }
   if (path === '/stat-system') return json({ defs: [], settings: {} })
+  if (path === '/wiki') return json(db.wiki)
+  if (path === '/spelling/words') {
+    if (method === 'POST') {
+      const b = body()
+      db.spelling = [...new Set([...db.spelling, ...(b.add || [])])].filter((w) => !(b.remove || []).includes(w)).sort()
+    }
+    return json({ words: db.spelling })
+  }
   return route.fulfill({ status: 404, contentType: 'text/plain', body: 'not faked' })
 }
 
@@ -584,9 +616,102 @@ async function shoot() {
   return { saved, errors, checks }
 }
 
+// The spellchecker on the "Typos" chapter (English, the book's language).
+async function spellShots() {
+  const browser = await chromium.launch({ channel: option('channel', 'msedge'), headless: true })
+  cleanups.push(() => browser.close())
+  const errors = []
+  const checks = []
+  checks.push = (...c) => (c.forEach((x) => console.log('check: ' + x)), Array.prototype.push.apply(checks, c))
+  mkdirSync(out, { recursive: true })
+  const saved = []
+  const page = await newPage(browser, { width, height }, errors)
+  const snap = async (name) => {
+    const file = join(out, name)
+    await page.screenshot({ path: file })
+    saved.push(file)
+  }
+  const underlined = () => page.evaluate(() => [...document.querySelectorAll('.write-doc .spell-wrong')].map((e) => e.textContent))
+  const rightClick = async (word) => {
+    await page.locator('.write-doc .spell-wrong', { hasText: word }).first().click({ button: 'right' })
+    await page.waitForSelector('.spell-menu')
+    await page.waitForFunction(() => !document.querySelector('.spell-menu .spell-note') || /No suggestions/.test(document.querySelector('.spell-menu').textContent))
+  }
+
+  const t0 = Date.now()
+  await page.goto(`${BASE}/write/1?chapter=14`)
+  await page.waitForSelector('.write-doc .spell-wrong', { timeout: 20000 })
+  await settle(page, 600)
+  checks.push(`dictionary loaded and the chapter checked ${Date.now() - t0} ms after opening the page`)
+  const first = await underlined()
+  checks.push('underlined: ' + first.join(', '))
+  assert.deepEqual([...first].sort(), ['Ordr', 'Zarathul', 'lantren', 'nobdy', 'shuold', 'walkd'], 'names, links, capitals, addresses, numbers and the speaker and manner are not underlined')
+  assert.equal(await page.evaluate(() => document.querySelector('.write-doc').getAttribute('spellcheck')), 'false', "the browser's own spellcheck is off")
+  checks.push('status: ' + (await page.locator('.spell-status').textContent()))
+  await snap('20_spell_underlines.png')
+
+  await rightClick('lantren')
+  const sugs = await page.locator('.spell-menu .spell-sug').allTextContents()
+  checks.push('suggestions for "lantren": ' + sugs.join(', '))
+  assert.equal(sugs[0], 'lantern')
+  await snap('21_spell_menu.png')
+  await page.locator('.spell-menu .spell-sug').first().click()
+  await settle(page, 600)
+  assert.ok(JSON.stringify(await page.evaluate(() => window.__writeView.state.doc.toJSON())).includes('Oren’s lantern.'), 'the suggestion replaced the word')
+
+  await rightClick('Zarathul')
+  await page.getByRole('menuitem', { name: 'Add to dictionary' }).click()
+  await page.waitForFunction(() => ![...document.querySelectorAll('.write-doc .spell-wrong')].some((e) => e.textContent === 'Zarathul'), null, { timeout: 5000 })
+  assert.ok(db.spelling.includes('Zarathul'), 'stored in the story')
+  checks.push("Add to dictionary: stored; the story's words: " + db.spelling.join(', '))
+
+  await rightClick('walkd')
+  await page.getByRole('menuitem', { name: 'Ignore' }).click()
+  await page.waitForFunction(() => ![...document.querySelectorAll('.write-doc .spell-wrong')].some((e) => e.textContent === 'walkd'), null, { timeout: 5000 })
+  assert.ok(!db.spelling.includes('walkd'), 'Ignore is not stored')
+
+  // Typing a wrong word: no underline while the caret is in it, one after.
+  await page.locator('.write-doc h1').click()
+  await page.keyboard.press('End')
+  await page.keyboard.type(' Agian')
+  await page.waitForTimeout(900)
+  const typing = await underlined()
+  await page.keyboard.type(' ')
+  await page.waitForTimeout(900)
+  const after = await underlined()
+  checks.push(`typed "Agian": underlined while typing ${typing.includes('Agian')}, after a space ${after.includes('Agian')}`)
+  assert.ok(!typing.includes('Agian') && after.includes('Agian'))
+
+  await page.locator('.spell-status').click()
+  await page.waitForSelector('.spell-panel')
+  await settle(page, 300)
+  await snap('22_spell_panel.png')
+
+  await page.getByRole('button', { name: 'Dark paper' }).click()
+  await settle(page, 300)
+  await snap('23_spell_dark_paper.png')
+  await page.getByRole('button', { name: 'Light paper' }).click()
+
+  // Off: no underlines, the browser's own spellcheck back; on again.
+  await page.getByRole('checkbox', { name: 'Check spelling as I write' }).uncheck()
+  await page.waitForTimeout(300)
+  assert.equal((await underlined()).length, 0)
+  assert.equal(await page.evaluate(() => document.querySelector('.write-doc').getAttribute('spellcheck')), 'true')
+  await page.getByRole('checkbox', { name: 'Check spelling as I write' }).check()
+  await page.waitForSelector('.write-doc .spell-wrong', { timeout: 10000 })
+  checks.push('off and on again: ok')
+
+  // Another dictionary (it sets the book's language).
+  const t1 = Date.now()
+  await page.getByRole('combobox', { name: /Dictionary/ }).selectOption('pt_BR')
+  await page.waitForFunction(() => /Spelling: Português/.test(document.querySelector('.spell-status')?.textContent || ''), null, { timeout: 30000 })
+  checks.push(`pt_BR loaded in ${Date.now() - t1} ms; book language now ${db.books[1]?.settings?.meta?.language ?? '(not saved yet)'}`)
+  return { saved, errors, checks }
+}
+
 try {
   await startFrontend()
-  const { saved, errors, checks } = await shoot()
+  const { saved, errors, checks } = option('only', '') === 'spell' ? await spellShots() : await shoot()
   for (const f of saved) console.log(f)
   if (errors.length) console.log('page errors:\n' + errors.join('\n'))
 } catch (err) {

@@ -290,6 +290,9 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	mux.HandleFunc("POST /api/chapters/{id}/comments", createCommentHandler(db))
 	mux.HandleFunc("PUT /api/comments/{id}", updateCommentHandler(db))
 	mux.HandleFunc("DELETE /api/comments/{id}", deleteCommentHandler(db))
+	// The spellchecker's per-story words, "Add to dictionary" (spelling.go).
+	mux.HandleFunc("GET /api/spelling/words", getSpellingWordsHandler(db))
+	mux.HandleFunc("POST /api/spelling/words", updateSpellingWordsHandler(db))
 
 	return mux
 }

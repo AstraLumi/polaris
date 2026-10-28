@@ -118,3 +118,11 @@ export const commentsApi = {
   update: (id, patch) => call(`/comments/${id}`, json('PUT', patch), 'failed to save the comment'),
   remove: (id) => call(`/comments/${id}`, { method: 'DELETE' }, 'failed to delete the comment'),
 }
+
+// The story's own words for the spellchecker ("Add to dictionary";
+// backend spelling.go): { words: [...] }.
+void [tr('failed to load the dictionary'), tr('failed to save the dictionary'), tr('a word is 1 to 64 characters, with a letter and no spaces'), tr("the story's dictionary holds at most 5000 words")]
+export const spellingApi = {
+  words: () => call('/spelling/words', undefined, 'failed to load the dictionary'),
+  change: ({ add = [], remove = [] }) => call('/spelling/words', json('POST', { add, remove }), 'failed to save the dictionary'),
+}

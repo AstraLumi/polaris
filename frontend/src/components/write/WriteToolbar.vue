@@ -137,6 +137,7 @@
       <button v-bind="btn(t('Book and page'), panel === 'book')" class="foldable" @click="$emit('panel', 'book')"><TbIcon name="book" /></button>
       <button v-bind="btn(scriptMode ? t('Script Mode: on (this chapter)') : t('Script Mode: type “Name:” at a line’s start for dialogue'), scriptMode)" class="foldable" @click="exec(setScriptMode(!scriptMode))"><TbIcon name="script" /></button>
       <button v-bind="btn(readTitle, reading)" class="foldable" :disabled="!canRead" @click="$emit('read')"><TbIcon name="speaker" /></button>
+      <button v-bind="btn(spellOn ? t('Check spelling: on') : t('Check spelling: off'), spellOn)" class="foldable" @click="$emit('spell')"><TbIcon name="spell" /></button>
       <button v-bind="btn(t('Focus mode'), focusMode)" @click="$emit('focus')"><TbIcon name="focus" /></button>
       <button type="button" class="tb-btn more-btn" :aria-expanded="more" :title="$t('More tools')" :aria-label="$t('More tools')" @click="more = !more">{{ more ? '▴' : '⋯' }}</button>
     </div>
@@ -179,8 +180,9 @@ const props = defineProps({
   uploading: { type: Boolean, default: false }, // a picture is on its way
   canRead: { type: Boolean, default: false }, // the browser can read aloud
   reading: { type: Boolean, default: false }, // the chapter is being read
+  spellOn: { type: Boolean, default: false }, // the spellchecker (useSpellcheck)
 })
-defineEmits(['find', 'panel', 'focus', 'picture', 'read', 'comment'])
+defineEmits(['find', 'panel', 'focus', 'picture', 'read', 'comment', 'spell'])
 const readTitle = computed(() =>
   props.canRead ? t('Read aloud') + ' (Ctrl+Alt+Space)' : t('Your browser cannot read aloud'),
 )
@@ -300,6 +302,7 @@ const ICONS = {
   script: 'M4 5h16v11H10l-4 3v-3H4zM8 9h8M8 12h5',
   comment: 'M4 4h16v12H9l-5 4zM12 7v6M9 10h6',
   comments: 'M3 4h12v8H8l-3 3v-3H3zM18 8h3v9h-2v3l-3-3h-5v-2',
+  spell: 'M3 14 6.5 5l3.5 9M4.3 11h4.4M12 5v9h2.5a2.2 2.2 0 0 0 0-4.5H12M13 18l3 3 6-7',
 }
 const TbIcon = (p) =>
   h('svg', { viewBox: '0 0 24 24', width: 18, height: 18, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' }, [h('path', { d: ICONS[p.name] || '' })])

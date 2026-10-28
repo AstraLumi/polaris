@@ -172,4 +172,7 @@ export default {
   "Manage fonts…": "Administrar fuentes…",
   "TrueType, OpenType, WOFF or WOFF2, up to 40 MB each. Add a family's styles together (regular, bold, italic…): they are grouped by the name inside the file.": "TrueType, OpenType, WOFF o WOFF2, de hasta 40 MB cada uno. Agrega juntos los estilos de una familia (normal, negrita, cursiva…): se agrupan por el nombre que lleva el archivo.",
   "No comments here. Select some text and press Ctrl+Alt+M to comment on it.": "No hay comentarios. Selecciona un texto y presiona Ctrl+Alt+M para comentarlo.",
+  "Add to dictionary": "Agregar al diccionario",
+  "Add a word": "Agregar una palabra",
+  "Words you add with “Add to dictionary” show here.": "Las palabras que agregues con «Agregar al diccionario» aparecen aquí.",
 }

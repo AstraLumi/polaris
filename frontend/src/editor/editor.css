@@ -16,6 +16,7 @@
   --comment-line: rgba(70, 120, 210, 0.45);
   --comment-active: rgba(120, 170, 255, 0.42);
   --comment-line-active: rgba(50, 100, 200, 0.9);
+  --spell-line: #d0312d;
 }
 
 .write-page.is-dark-paper {
@@ -24,6 +25,7 @@
   --ink-faint: rgba(230, 225, 214, 0.45);
   --find: rgba(255, 196, 0, 0.3);
   --find-current: rgba(255, 140, 0, 0.55);
+  --spell-line: #ff7a70;
   --read: rgba(110, 170, 255, 0.28);
   --read-edge: rgba(140, 190, 255, 0.75);
   --comment: rgba(120, 170, 255, 0.16);
@@ -180,6 +182,16 @@
   box-shadow: 0 1px 0 var(--read-edge);
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
+}
+
+/* A word the spellchecker doesn't know (spellPlugin.js). */
+.write-doc .spell-wrong {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: var(--spell-line);
+  text-decoration-thickness: 1px;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 0.18em;
 }
 
 /* The panels beside the page (styles, versions, book). */
