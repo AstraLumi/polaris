@@ -39,6 +39,11 @@
       </ul>
     </template>
 
+    <div v-if="fontWarnings.length" class="font-warn" role="note">
+      <p v-for="w in fontWarnings" :key="w.family">⚠ {{ fontWarningText(w) }}</p>
+      <a href="/fonts" target="_blank" rel="noopener">{{ $t('Open the fonts library') }}</a>
+    </div>
+
     <div class="row-actions">
       <button type="button" class="btn btn-ghost small" @click="addStyle('paragraph')">{{ $t('New style') }}</button>
       <button type="button" class="btn btn-ghost small" @click="addStyle('character')">{{ $t('New character style') }}</button>
@@ -64,6 +69,7 @@
         <label class="field span-2">
           <span>{{ $t('Font') }}</span>
           <input :value="picked.text?.font || ''" :placeholder="inherited.text.font || ''" type="text" list="write-fonts" @change="setText('font', $event.target.value.trim() || null)" />
+          <a class="manage-fonts" href="/fonts" target="_blank" rel="noopener">{{ $t('Manage fonts…') }}</a>
         </label>
         <label class="field">
           <span>{{ $t('Size (pt)') }}</span>
@@ -139,6 +145,8 @@ import { ref, computed, watch } from 'vue'
 import { t, tr } from '../../i18n'
 import { BUILTIN_NAMES, resolveStyle, resolveCharStyle, newStyleId, basedOnChoices, styleById } from '../../editor/styles.js'
 import { mmToPt, ptToMm, num, textDeclarations, charDeclarations } from '../../editor/css.js'
+import { fontLibrary, fontWarningText } from '../../fontLibrary.js'
+import { styleWarnings } from '../../fontRules.js'
 
 void [tr('Normal'), tr('Heading 1'), tr('Heading 2'), tr('Heading 3'), tr('Title'), tr('Subtitle'), tr('Quote')]
 
@@ -159,7 +167,10 @@ watch(
   },
 )
 
-const paragraphStyles = computed(() => props.styles.filter((s) => (s.kind || 'paragraph') === 'paragraph'))
+// Library fonts a style uses that aren't cleared for a book that is sold.
+const fontWarnings = computed(() => styleWarnings(props.styles, fontLibrary.value))
+
+const paragraphStyles = computed(() =>props.styles.filter((s) => (s.kind || 'paragraph') === 'paragraph'))
 const characterStyles = computed(() => props.styles.filter((s) => s.kind === 'character'))
 const picked = computed(() => styleById(props.styles, pickedId.value))
 const isChar = computed(() => picked.value?.kind === 'character')
@@ -333,5 +344,30 @@ function removeStyle() {
   font-size: 0.75rem;
   color: var(--text-faint);
   line-height: 1.4;
+}
+
+.font-warn {
+  margin: 0.6rem 0 0;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--danger-text);
+}
+
+.font-warn p {
+  margin: 0 0 0.3rem;
+}
+
+.font-warn a,
+.manage-fonts {
+  font-size: 0.75rem;
+  color: var(--accent);
+}
+
+.manage-fonts {
+  align-self: flex-start;
+  margin-top: 0.2rem;
 }
 </style>

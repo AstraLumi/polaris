@@ -8,10 +8,14 @@ package main
 // unique identifier, else a urn:uuid made from the book; dcterms:modified),
 // OEBPS/nav.xhtml (the chapters, each with its headings below Heading 1
 // nested), OEBPS/toc.ncx (for EPUB 2 readers), OEBPS/style.css (from the
-// book's styles; no fonts embedded: the fonts library will know their
-// licenses), one OEBPS/chNNN.xhtml per chapter, and OEBPS/images/. The
+// book's styles), one OEBPS/chNNN.xhtml per chapter, and OEBPS/images/. The
 // first chapter's picture is the cover when that chapter starts with a
-// fullPage picture.
+// fullPage picture. Fonts: the library's files in b.Fonts (only the
+// families the book uses whose license allows e-books and whose fsType
+// allows embedding; fontlib.go) go into OEBPS/fonts/ with an @font-face
+// each at the top of the CSS, obfuscated the IDPF way (the first 1040
+// bytes XORed with the SHA-1 of the unique identifier, listed in
+// META-INF/encryption.xml), as font licenses that allow e-books ask.
 //
 // XHTML: paragraphs p, headings h1–h6, each with its style's class
 // (s-<id>; normal is plain p) and its own attrs inline (lengths in em of
@@ -25,6 +29,7 @@ package main
 // with the speaker in small caps.
 
 import (
+	"crypto/sha1"
 	"fmt"
 	"math"
 	"strings"
@@ -44,7 +49,8 @@ type epubOut struct {
 	headFile map[*pmNode]string // heading → file
 	bmIDs    map[*pmNode]string // a block's bookmark → its id
 	cover    *exportPicture
-	body     float64 // normal's size, pt
+	body     float64  // normal's size, pt
+	fonts    []string // b.Fonts' hrefs, in order
 }
 
 func exportEPUB(b *exportBook) ([]byte, error) {
@@ -109,6 +115,9 @@ func exportEPUB(b *exportBook) ([]byte, error) {
 	if isbn := cleanISBN(b.Meta.ISBN); isbn != "" {
 		ident = "urn:isbn:" + isbn
 	}
+	for i, f := range b.Fonts {
+		e.fonts = append(e.fonts, fmt.Sprintf("fonts/f%02d.%s", i+1, f.Format))
+	}
 
 	entries := []zipEntry{
 		{name: "mimetype", data: []byte("application/epub+zip"), store: true},
@@ -126,7 +135,37 @@ func exportEPUB(b *exportBook) ([]byte, error) {
 	for _, pic := range e.imgOrder {
 		entries = append(entries, zipEntry{name: "OEBPS/" + e.images[pic], data: pic.Data, store: true})
 	}
+	if len(b.Fonts) > 0 {
+		var enc strings.Builder
+		enc.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n" +
+			`<encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container" xmlns:enc="http://www.w3.org/2001/04/xmlenc#">` + "\n")
+		for i, f := range b.Fonts {
+			fmt.Fprintf(&enc, `<enc:EncryptedData><enc:EncryptionMethod Algorithm="http://www.idpf.org/2008/embedding"/>`+
+				`<enc:CipherData><enc:CipherReference URI="OEBPS/%s"/></enc:CipherData></enc:EncryptedData>`+"\n", e.fonts[i])
+			entries = append(entries, zipEntry{name: "OEBPS/" + e.fonts[i], data: obfuscateFont(f.Data, ident), store: f.Format == "woff" || f.Format == "woff2"})
+		}
+		enc.WriteString("</encryption>\n")
+		// Right after the container, as readers look for it there.
+		entries = append(entries[:2], append([]zipEntry{{name: "META-INF/encryption.xml", data: []byte(enc.String())}}, entries[2:]...)...)
+	}
 	return writeZip(entries)
+}
+
+// obfuscateFont is the IDPF font obfuscation (EPUB 3 "Font Obfuscation"):
+// the first 1040 bytes XORed with the SHA-1 of the unique identifier,
+// whitespace removed. Doing it again undoes it.
+func obfuscateFont(data []byte, ident string) []byte {
+	key := sha1.Sum([]byte(strings.Map(func(r rune) rune {
+		if r == ' ' || r == '\t' || r == '\r' || r == '\n' {
+			return -1
+		}
+		return r
+	}, ident)))
+	out := append([]byte(nil), data...)
+	for i := 0; i < len(out) && i < 1040; i++ {
+		out[i] ^= key[i%len(key)]
+	}
+	return out
 }
 
 // cssIdent keeps letters, digits, - and _ (ASCII), for class names.
@@ -266,6 +305,14 @@ func (e *epubOut) css() []byte {
 	b := e.b
 	var s strings.Builder
 	s.WriteString("@charset \"UTF-8\";\n/* Made from the book's styles in Polaris. */\n")
+	for i, f := range b.Fonts {
+		style := "normal"
+		if f.Italic {
+			style = "italic"
+		}
+		fmt.Fprintf(&s, "@font-face { font-family: %s; src: url(%s); font-weight: %d; font-style: %s; }\n",
+			strings.TrimSuffix(familyCSS(f.Family), ", serif"), e.fonts[i], f.Weight, style)
+	}
 	s.WriteString("body { margin: 0; padding: 0; }\n")
 	s.WriteString("p, h1, h2, h3, h4, h5, h6 { margin: 0; padding: 0; }\n")
 	s.WriteString("h1, h2, h3, h4, h5, h6 { font-size: 1em; font-weight: normal; }\n")
@@ -759,6 +806,9 @@ func (e *epubOut) opf(ident string, chapters []exportChapter) []byte {
 	s.WriteString(`<item id="css" href="style.css" media-type="text/css"/>` + "\n")
 	for i := range chapters {
 		fmt.Fprintf(&s, `<item id="ch%03d" href="%s" media-type="application/xhtml+xml"/>`+"\n", i+1, e.files[i])
+	}
+	for i, f := range b.Fonts {
+		fmt.Fprintf(&s, `<item id="font%02d" href="%s" media-type="%s"/>`+"\n", i+1, e.fonts[i], fontMIME(f.Format))
 	}
 	for _, pic := range e.imgOrder {
 		props := ""

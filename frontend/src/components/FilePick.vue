@@ -12,12 +12,13 @@
   >
     <button type="button" class="btn btn-ghost small" @click="input?.click()">{{ label || $t('Choose a picture') }}</button>
     <span class="file-name">{{ fileName || $t('or drop one here') }}</span>
-    <input ref="input" type="file" :accept="accept" hidden @change="onChange" />
+    <input ref="input" type="file" :accept="accept" :multiple="multiple" hidden @change="onChange" />
   </div>
 </template>
 
 <script setup>
 import { ref } from 'vue'
+import { tn } from '../i18n'
 
 // Emits `change` with the real input's event, as a plain file input would,
 // so handlers keep reading e.target.files[0] (before clearing the input,
@@ -26,6 +27,7 @@ import { ref } from 'vue'
 defineProps({
   accept: { type: String, default: 'image/*' },
   label: { type: String, default: '' }, // already translated
+  multiple: { type: Boolean, default: false }, // several files (e.target.files)
 })
 const emit = defineEmits(['change'])
 
@@ -34,7 +36,8 @@ const over = ref(false)
 const fileName = ref('')
 
 function onChange(e) {
-  fileName.value = e.target.files[0]?.name || ''
+  const files = e.target.files
+  fileName.value = files?.length > 1 ? tn('{n} file', '{n} files', files.length, { n: files.length }) : files?.[0]?.name || ''
   emit('change', e)
 }
 

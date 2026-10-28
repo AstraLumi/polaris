@@ -6,9 +6,9 @@
     <div v-if="inline || open" class="export-list" :class="{ 'glass-panel panel-solid': !inline }" role="menu" @keydown.esc.stop="open = false">
       <template v-if="!online">
         <p class="group">{{ $t('For print and e-readers') }}</p>
-        <a role="menuitem" class="item" :href="url('docx')" download @click="done">{{ $t('Word (.docx), whole book') }}</a>
-        <a v-if="chapterId" role="menuitem" class="item" :href="url('docx', chapterId)" download @click="done">{{ $t('Word (.docx), this chapter') }}</a>
-        <a role="menuitem" class="item" :href="url('epub')" download @click="done">{{ $t('EPUB (e-book)') }}</a>
+        <a role="menuitem" class="item" :href="url('docx')" download @click="checked($event, 'docx')">{{ $t('Word (.docx), whole book') }}</a>
+        <a v-if="chapterId" role="menuitem" class="item" :href="url('docx', chapterId)" download @click="checked($event, 'docx', chapterId)">{{ $t('Word (.docx), this chapter') }}</a>
+        <a role="menuitem" class="item" :href="url('epub')" download @click="checked($event, 'epub')">{{ $t('EPUB (e-book)') }}</a>
         <button type="button" role="menuitem" class="item" @click="pdf">{{ $t('PDF (print the page view)') }}</button>
       </template>
       <p class="group">{{ online ? $t('Online post') : $t('For posting online') }}</p>
@@ -33,6 +33,8 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { t } from '../../i18n'
 import { STORY_API } from '../../stories'
+import { loadFontLibrary, fetchBookFonts, fontWarningText } from '../../fontLibrary.js'
+import { exportWarnings } from '../../fontRules.js'
 
 const props = defineProps({
   volume: { type: [String, Number], required: true },
@@ -59,9 +61,37 @@ function done() {
   open.value = false
 }
 
-function pdf() {
+// Before a file for print or e-readers: the library's fonts the book names
+// whose license lacks that use, or whose file forbids embedding. A
+// confirm, never a block (nor a reason to fail when it can't be checked).
+async function fontsAllow(format) {
+  try {
+    const [lib, uses] = await Promise.all([loadFontLibrary(), fetchBookFonts(props.volume)])
+    const warns = exportWarnings(format, uses, lib)
+    if (!warns.length) return true
+    const lines = warns.map((w) => `• ${fontWarningText(w)}`).join('\n')
+    const epub = format === 'epub' ? `\n\n${t('Fonts an e-book may not carry are left out of it; e-readers then show their own.')}` : ''
+    return window.confirm(`${t('About the fonts:')}\n${lines}${epub}\n\n${t('Export anyway?')}`)
+  } catch (e) {
+    return true
+  }
+}
+
+async function checked(e, format, chapter) {
+  e.preventDefault()
   open.value = false
-  emit('pdf')
+  if (!(await fontsAllow(format))) return
+  const a = document.createElement('a')
+  a.href = url(format, chapter)
+  a.download = ''
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
+async function pdf() {
+  open.value = false
+  if (await fontsAllow('pdf')) emit('pdf')
 }
 
 async function fetchText(ext) {

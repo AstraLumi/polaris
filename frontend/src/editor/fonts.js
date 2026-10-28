@@ -1,7 +1,11 @@
-// Fonts for the writing page: the families the app already loads, a short
-// list of common book fonts, and any family a document names, loaded from
-// Google Fonts when first used (a family Google doesn't have is left to the
-// computer's own fonts). The fonts library with uploads is stage 5.
+// Fonts for the writing page: the writer's fonts library (fontLibrary.js,
+// served by the app with @font-face), the families the app already loads, a
+// short list of common book fonts, and any family a document names, loaded
+// from Google Fonts when first used (a family Google doesn't have is left to
+// the computer's own fonts). A library family wins over Google's of the same
+// name and is never asked of Google.
+import { fontLibrary, loadFontLibrary } from '../fontLibrary.js'
+import { findFamily, mergeChoices, cssFamily } from '../fontRules.js'
 
 // Loaded by index.html for the interface.
 export const APP_FONTS = ['Fraunces', 'Manrope']
@@ -43,18 +47,15 @@ const SYSTEM_FONTS = new Set(
   ].map((f) => f.toLowerCase()),
 )
 
-export const fontChoices = (extra = []) => {
-  const seen = new Set()
-  const out = []
-  for (const f of [...BOOK_FONTS, ...extra, ...APP_FONTS]) {
-    const k = String(f || '').trim()
-    if (k && !seen.has(k.toLowerCase())) {
-      seen.add(k.toLowerCase())
-      out.push(k)
-    }
-  }
-  return out
-}
+// The pickers' list: the library's families first. Reads the library, so a
+// computed list follows it.
+export const fontChoices = (extra = []) =>
+  mergeChoices(
+    fontLibrary.value.map((f) => f.name),
+    BOOK_FONTS,
+    extra,
+    APP_FONTS,
+  )
 
 const requested = new Map() // lower-case family → promise
 
@@ -76,13 +77,25 @@ function addSheet(href) {
   })
 }
 
+// A library family's every face, loaded now (so a page laid out next has
+// them).
+function loadLibraryFamily(fam) {
+  if (!document.fonts?.load) return Promise.resolve(true)
+  const faces = fam.files?.length ? fam.files : [{ weight: 400, italic: false }]
+  return Promise.all(
+    faces.map((f) => document.fonts.load(`${f.italic ? 'italic ' : ''}${Number(f.weight) || 400} 16px ${cssFamily(fam.name)}`).catch(() => null)),
+  ).then(() => true)
+}
+
 // Loads a family (regular, bold, italic where it has them). Resolves to
-// whether Google had it.
-export function loadFont(family) {
+// whether it was found (in the library, or at Google).
+export async function loadFont(family) {
   const name = String(family || '').trim()
   const key = name.toLowerCase()
-  if (!name || typeof document === 'undefined') return Promise.resolve(false)
-  if (APP_FONTS.some((f) => f.toLowerCase() === key) || SYSTEM_FONTS.has(key)) return Promise.resolve(true)
+  if (!name || typeof document === 'undefined') return false
+  const fam = findFamily(await loadFontLibrary(), name)
+  if (fam) return loadLibraryFamily(fam)
+  if (APP_FONTS.some((f) => f.toLowerCase() === key) || SYSTEM_FONTS.has(key)) return true
   if (!requested.has(key)) {
     // Not every family has bold and italic; ask for them, then for the
     // family alone.

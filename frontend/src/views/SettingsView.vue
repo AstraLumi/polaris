@@ -382,6 +382,14 @@
       </div>
     </section>
 
+    <section id="fonts" class="glass-panel card" :class="{ 'is-flash': flash === 'fonts' }">
+      <h2>{{ $t('Fonts') }}</h2>
+      <p class="lede">
+        {{ $t('Your own font files for the writing editor, with a record of each one\'s license. One library for every story.') }}
+      </p>
+      <router-link to="/fonts" class="btn btn-ghost">{{ $t('Open the fonts library') }}</router-link>
+    </section>
+
     <RestoreDefaultDialog
       v-if="restoring"
       :title="$t(RESTORES[restoring].title)"
@@ -455,6 +463,7 @@ const SECTIONS = [
   { id: 'map', label: tr('Map'), ids: ['map'] },
   { id: 'sky', label: tr('Sky'), ids: ['sky'] },
   { id: 'blood-types', label: tr('Blood types'), ids: ['blood-types'] },
+  { id: 'fonts', label: tr('Fonts'), ids: ['fonts'] },
   { id: 'stats', label: tr('Stats'), ids: ['stats'] },
   { id: 'about', label: tr('About Polaris'), ids: ['about'] },
 ]

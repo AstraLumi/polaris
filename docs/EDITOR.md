@@ -408,8 +408,8 @@ left-hand pages, by where they lie in the book, not by their number.
     from the styles in em of the text, nav from the headings and an NCX
     for older readers, the first `fullPage` picture of the first chapter
     as the cover, `meta` as metadata, the ISBN as the identifier or a
-    stable `urn:uuid`); no fonts embedded until the fonts library knows
-    their licenses (stage 5).
+    stable `urn:uuid`); the fonts library's families the book uses go in
+    when their license and file allow it (see "Fonts library (stage 5)").
   - `/api/books/{volume}/export.html`, `.md`, `.txt`: Online Post exports.
     HTML is clean for AO3: p, em, strong, u, s, sup, sub, h1–h3, br, ul/
     ol/li, blockquote for paragraphs in the Quote style, a for web links;
@@ -595,7 +595,8 @@ Known gaps in what exists:
 
 Stage 5, suggested order (each its own piece of work):
 
-1. **Fonts library with a license tracker.** One library for all stories
+1. **Fonts library with a license tracker.** (Built: see "Fonts library
+   (stage 5)" below; .docx embedding not done.) One library for all stories
    (not per story database): upload .ttf/.otf/.woff/.woff2; read the
    file's name table (family, styles, copyright, license text and URL)
    and the OS/2 `fsType` embedding flags in Go. Per font: license kind
@@ -678,3 +679,110 @@ the chapter. The same shortcut pauses and resumes. Code:
 - Checked headless only with a stand-in `speechSynthesis` that records what
   would be said (`writeShots.mjs`, step 5b); real voices and the browsers'
   quirks have not been heard.
+
+### Fonts library (stage 5)
+
+One library for every story (`backend/fontlib.go`, the files read by
+`backend/fontparse.go`; client `frontend/src/fontLibrary.js`, pure rules
+in `fontRules.js`, `tests/fontLibrary.test.mjs`).
+
+Storage: two tables in the registry (`<DATA_DIR>/stories.db`, made and
+upgraded in place beside `stories`, not a story migration):
+`font_families` (`name` unique ignoring case, `license_kind` `""` |
+`ofl` | `apache` | `commercial` | `personal` | `other`, `source`,
+`purchase_date` `YYYY-MM-DD` or `""`, the attached `license_file` and its
+original name, `use_print` / `use_ebook` / `use_web` / `use_commercial`,
+`notes`) and `font_files` (family, stored name, original name, `format`
+`ttf` | `otf` | `woff` | `woff2`, size, `weight` 100–900, `italic`, and
+what the file says: style, full name, copyright, license text and URL,
+designer, vendor, `fs_type` (NULL when unread), `details_read`). Files in
+`<UPLOADS_DIR>/_fonts/` (never a story's folder: story ids are 16 hex
+digits), named by content (the first 32 hex digits of the SHA-256, then
+the format; the same file twice is refused); receipts and license files in
+`_fonts/licenses/` under random names. Story backups and transfers don't
+carry fonts.
+
+Reading a file: sniffed from its first bytes (TTF `00010000`/`true`, OTF
+`OTTO`, WOFF, WOFF2; `.ttc` collections refused; 40 MB each, 20 per
+upload). The `name` table (Windows English first, then any Windows or
+Unicode record, then Mac Roman; the typographic family and style, ids 16
+and 17, win over 1 and 2), OS/2 `usWeightClass` (put on the 100 steps;
+1–9 read as 100–900), `fsSelection` (italic, oblique, bold) else `head`'s
+`macStyle`, and `fsType`: `installable` (0), else the least restrictive
+bit set: `editable` (8), `preview` (4), `restricted` (2); bits 8 (no
+subsetting) and 9 (bitmap only) apart. A file forbids embedding when it
+is restricted or bitmap only. WOFF tables are inflated with zlib. WOFF2
+needs Brotli, which the standard library lacks and which isn't worth a
+dependency for a few names: a WOFF2 is kept with `details_read` false,
+its family, weight and slant guessed from the file name
+("Foo-SemiBoldItalic.woff2"), its embedding `unknown`; the UI says so and
+the writer corrects them. A new family's license is guessed from the
+file's license text, URL and copyright: the SIL Open Font License or the
+Apache License → that kind with every use ticked; "personal use" or
+"non-commercial" → `personal` with none.
+
+Routes (global, beside `/api/stories`):
+
+- `GET /api/fonts`: `[{ id, name, license_kind, source, purchase_date,
+  license_file (its name or ""), uses: { print, ebook, web, commercial },
+  notes, created_at, files: [{ id, url, format, size, original_name,
+  weight, italic, style, full_name, copyright, license, license_url,
+  designer, vendor, details_read, embedding, no_subsetting, bitmap_only
+  }] }]`, by name.
+- `POST /api/fonts` (multipart `file`, one or more; `family_id` puts them
+  all in that family, else each goes in the family its name gives, made
+  when new): `{ families, added, problems: [{ file, error }] }`; `400`
+  (or `413`) with the first problem when nothing was added.
+- `PUT /api/fonts/{id}`: any of `name`, `license_kind`, `source`,
+  `purchase_date`, `uses`, `notes`, and `files: [{ id, weight, italic }]`;
+  answers the family. `DELETE /api/fonts/{id}` removes the family, its
+  files and its license file.
+- `POST|GET|DELETE /api/fonts/{id}/license-file`: a PDF, picture or text
+  (sniffed, 20 MB), downloaded as an attachment, `nosniff`, sandboxed.
+- `DELETE /api/font-files/{fid}`: one file (answers its family).
+- `GET /api/fonts/used`: `{ "<family id>": [{ story_id, story, volume,
+  book, family, styles: [names], bands, chapters }] }`, scanning every
+  story on demand (books set up or with chapters: their styles'
+  `text.font`, header/footer bands' `font`, and `font` marks of chapter
+  texts that name a font).
+- `GET /uploads/fonts/{name}`: the file, its font type,
+  `Cache-Control: immutable` (the name is the content), `nosniff`.
+- Under each story: `GET /api/books/{volume}/fonts`, the same per-book
+  list for one book (`[{ volume, book, family, styles, bands, chapters }]`).
+
+EPUB: the export handler gets the library from the request's context (the
+story manager adds it) and embeds the files of the families the e-book's
+CSS names (styles and text marks, not bands) whose license has `ebook`
+and whose file doesn't forbid embedding (an unread WOFF2 is left to the
+license): `OEBPS/fonts/fNN.<format>`, an `@font-face` each at the top of
+`style.css`, manifest items, obfuscated the IDPF way (first 1040 bytes
+XORed with the SHA-1 of the unique identifier) and listed in
+`META-INF/encryption.xml`. .docx embedding (Word's obfuscated ODTTF) is
+not done: Word falls back to an installed font of that name.
+
+Client: `/fonts` (`views/FontsLibrary.vue`, lazily loaded; linked from
+Settings → Fonts, the Styles panel's "Manage fonts…" and the warnings):
+upload by `FilePick` (several files), each family as a card with a line
+in its own font (editable sample text), its faces, license kind, uses,
+warnings and "Used in" (story › book: styles, headers and footers,
+chapters); "License…" opens `FontLicenseModal.vue` (name, kind, purchase
+date, where from, uses, receipt, notes, each file's weight and italic, and
+what each file says; `useModalGuard`); the "…" menu adds styles to the
+family, opens the receipt, deletes (warning when books use it). Loading
+the library puts an `@font-face` for every file in the page
+(`#polaris-font-library`), so the editor, page view and library draw
+library families; `editor/fonts.js` lists library families first in the
+pickers (toolbar, Styles panel, bands share the `write-fonts` list),
+loads them with `document.fonts.load` and never asks Google for them.
+Warnings (`fontRules.js`): a library family a book style uses that is
+personal use only or not ticked for commercial use shows in the Styles
+panel and the book panel; Word, EPUB and PDF in the Export menu first ask
+`GET /api/books/{volume}/fonts` and confirm (never block) when a library
+family lacks the use (print for PDF and Word, ebook for EPUB, where
+families only bands use don't count) or its file forbids embedding. The
+library page warns about an unrecorded license, embedding, and a license
+problem when a book's styles use the family.
+
+Not verified: the page in a real browser (only the build and the node and
+Go tests), and readers opening the embedded fonts (the obfuscation
+round-trip is tested).
