@@ -16,6 +16,7 @@ import {
   paraDeclarations,
   paraFromCSS,
 } from './css.js'
+import { tableNodeSpecs, tableAttrsIn, tableAttrsOut } from './tableSchema.js'
 
 // Paragraph formatting, shared by paragraphs and headings.
 export const PARA_ATTRS = ['style', 'align', 'indentFirst', 'indentLeft', 'indentRight', 'spaceBefore', 'spaceAfter', 'lineHeight', 'keepNext']
@@ -106,7 +107,8 @@ const isUpload = (src) => typeof src === 'string' && src.startsWith('/uploads/')
 export const schema = new Schema({
   nodes: {
     // mode: null (prose, the default) or 'script' (stage 4: Script Mode).
-    doc: { content: 'block+', attrs: { mode: { default: null }, extra: { default: null } } },
+    // Tables (stage 5) only at the top level: not in lists, not in cells.
+    doc: { content: '(block | table)+', attrs: { mode: { default: null }, extra: { default: null } } },
 
     paragraph: {
       group: 'block',
@@ -287,6 +289,9 @@ export const schema = new Schema({
       ],
       toDOM: () => ['span', { class: 'pm-tab', 'data-tab': '' }, '\t'],
     },
+
+    // Tables (stage 5): tableSchema.js.
+    ...tableNodeSpecs,
   },
 
   // Order matters: earlier marks wrap later ones.
@@ -482,7 +487,7 @@ function normalise(json, inline) {
       .map((m) => ({ type: m.type, attrs: splitAttrs(schema.marks[m.type], m.attrs) }))
     return { type: 'text', text: String(json.text), marks: marks.length ? marks : undefined }
   }
-  const out = { type: type.name, attrs: splitAttrs(type, json.attrs) }
+  const out = { type: type.name, attrs: tableAttrsIn(type.name, splitAttrs(type, json.attrs)) }
   if (Array.isArray(json.content) && !type.isLeaf) {
     const content = json.content.map((c) => normalise(c, type.inlineContent)).filter(Boolean)
     if (content.length) out.content = content
@@ -532,7 +537,7 @@ function compact(json) {
     for (const m of json.marks || []) if (!m.attrs) delete m.attrs
     return json
   }
-  const attrs = compactAttrs(schema.nodes[json.type], json.attrs)
+  const attrs = compactAttrs(schema.nodes[json.type], tableAttrsOut(json.type, json.attrs))
   if (attrs) json.attrs = attrs
   else delete json.attrs
   if (json.content) json.content = json.content.map(compact)

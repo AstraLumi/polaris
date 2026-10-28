@@ -354,6 +354,7 @@ type wStyle struct {
 	isDefault               bool
 	p                       wPara
 	r                       wRun
+	tblPr                   *xEl // a table style's table properties (docxtables.go)
 }
 
 type wStyles struct {
@@ -387,6 +388,7 @@ func parseStyles(root *xEl, th docxTheme) *wStyles {
 			isDefault: wOnAttr(st, "default") && st.hasAttr("default"),
 			p:         parsePPr(st.child("w", "pPr")),
 			r:         parseRPr(st.child("w", "rPr"), th),
+			tblPr:     st.child("w", "tblPr"),
 		}
 		if ws.id == "" {
 			continue

@@ -144,6 +144,9 @@ export function styleSheet(styles, scope = '.write-doc') {
     // Paragraphs without a style, or with one that no longer exists.
     `${scope} :where(p, h1, h2, h3, h4, h5, h6) { ${decls('normal')} }`,
     `${scope} :where(li) > p:not([data-style]) { text-indent: 0 }`,
+    // Table cells (stage 5): no first-line indent and no paragraph spacing
+    // unless a paragraph sets its own (docs/EDITOR.md, "Tables").
+    `${scope} :where(td, th) > p:not([data-style]) { text-indent: 0; margin-top: 0; margin-bottom: 0 }`,
   ]
   for (const s of styles || []) {
     if (s.kind === 'character') {

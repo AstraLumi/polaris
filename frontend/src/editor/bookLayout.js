@@ -278,6 +278,8 @@ export function pagedCSS(settings, ctx = {}) {
   const start = layout.chapter_start === 'odd' ? 'right' : 'page'
   css.push(`.pv-chapter.pv-later, .pv-full.pv-later { break-before: ${start}; }`)
   css.push('.pv-page-break { break-after: page; height: 0; margin: 0; border: 0; }')
+  // Tables break between rows, not inside one (stage 5).
+  css.push('.pm-table tr { break-inside: avoid; }')
   css.push(`.pv-full { page: pvfull; width: ${mm(w)}; height: ${mm(h - 0.5)}; margin: 0; padding: 0; overflow: hidden; }`)
   css.push('.pv-full > figure { margin: 0; width: 100%; height: 100%; }')
   css.push('.pv-full img { width: 100% !important; height: 100% !important; max-width: none; object-fit: contain; display: block; }')

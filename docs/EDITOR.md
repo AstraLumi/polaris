@@ -99,6 +99,21 @@ Blocks:
   `character` is a positive integer or `null` and `speaker` and `manner`
   are text of at most 200 characters. A dialogue is a block anywhere a
   paragraph can be; the editor only makes them at the top level.
+- `table` (stage 5): only at the doc's top level (not in a list, not in a
+  cell); attrs `borders` (`all`, the default and what a missing attr
+  means, `outer` or `none`), `align` (`null` = left, `center`, `right`),
+  `width` (`null`: the columns' total, or the text's width when no column
+  has one; `"full"`: the text's width; a number of pt, 10–5000).
+  Content: `table_row`s, which have no attrs of their own and hold
+  `table_cell`s and `table_header`s (prosemirror-tables' conventions; a
+  row may be empty when cells above span all of it). Cell attrs:
+  `colspan`, `rowspan` (1 when missing, and left out when 1),
+  `colwidth` (`null` or one width in pt per column the cell spans, 0 =
+  not known), `background` (`#rrggbb` or `null`), `valign` (`null` =
+  top, `middle`, `bottom`). Cell content: paragraphs and lists, at least
+  one block (no headings: Heading 1 starts chapters; no tables). A
+  table's leading rows of header cells are its header rows, repeated on
+  each page it runs onto. More in "Tables (stage 5)" below.
 
 Inline:
 
@@ -217,8 +232,9 @@ database like every other route).
   it, plus as marks only the direct formatting beyond its paragraph style
   and its character style. All caps is written as capitals; hidden text,
   deleted text, tables of contents, page numbers and page references are
-  dropped; other fields keep their shown text; tables and text boxes keep
-  their text as paragraphs; a nested list level (Word's `ilvl`, up to nine
+  dropped; other fields keep their shown text; tables are tables (see
+  "Tables (stage 5)"; one nested in a cell keeps its text as paragraphs in
+  that cell); text boxes keep their text as paragraphs; a nested list level (Word's `ilvl`, up to nine
   levels) is a list inside the item before it; a numbered heading gets its number in its text. A paragraph of separator
   marks (`* * *`, `***`, `◇◇◇`, `☆ ☆ ☆`, a lone `#` or `⁂`…) is a
   `scene_break`; a picture never is. An anchored picture about the size of
@@ -236,6 +252,7 @@ runs that hold a letter or digit (Unicode letters and decimal digits, as
 Go's `unicode.IsLetter`/`IsDigit`); a hard break or tab inside a paragraph
 separates words like a space. A `dialogue` counts its spoken line only,
 not its speaker or manner (they are attrs, as a script's cue isn't text).
+The words in table cells count like any other.
 
 ## The client
 
@@ -417,7 +434,8 @@ left-hand pages, by where they lie in the book, not by their number.
     when their license and file allow it (see "Fonts library (stage 5)").
   - `/api/books/{volume}/export.html`, `.md`, `.txt`: Online Post exports.
     HTML is clean for AO3: p, em, strong, u, s, sup, sub, h1–h3, br, ul/
-    ol/li, blockquote for paragraphs in the Quote style, a for web links;
+    ol/li, blockquote for paragraphs in the Quote style, a for web links,
+    table/thead/tbody/tr/th/td (colspan and rowspan only);
     no classes or styles but `text-align: center` on centred paragraphs;
     scene breaks a centred paragraph with the glyph (hr for a picture
     ornament); fonts, sizes, colours, small caps and pictures left out.
@@ -573,8 +591,11 @@ left-hand pages, by where they lie in the book, not by their number.
 
 ## Where things stand, and stage 5
 
-Status (2026-10-27): stages 1–4 are built and pushed (`126fdc3` the MVP,
-`12df0da` stages 3–4; schemas 42–45). Nothing of stage 5 exists yet.
+Status (2026-10-28): stages 1–4 are built and pushed (`126fdc3` the MVP,
+`12df0da` stages 3–4; schemas 42–45). Stage 5 items 1 (fonts library),
+2 (spellchecker), 3 (comments, schema 46), 5 (tables) and 8 (read aloud)
+are built on the local `stage5` branch, not pushed; items 4, 6, 7 and 9
+are not started (footnotes, boxes and drop caps, wrapping, offline).
 The writer's decisions behind this plan: parity with Word in what matters
 to novelists, nothing else (no cloud, macros, track changes, equations);
 page types A4, A5, A6, custom and Online Post, one per book; EPUB yes;
@@ -597,6 +618,13 @@ Known gaps in what exists:
 - The suggestion list for Tab-to-link scales with the page zoom.
 - AO3 may strip `style="text-align:center"` in the HTML export (fallback:
   `align="center"`); WebP pictures go into .docx as they are.
+- Stage 5 parts were checked with node/Go tests and headless screenshots
+  only: not heard (read aloud), not opened in Word or LibreOffice (comments,
+  tables), not tried on a phone. Each part's subsection lists its own gaps.
+- In `writeShots.mjs` (tables step), Ctrl+End pressed right after Shift+Tab
+  in a table sometimes leaves the caret in the table in the merged build
+  (never on the tables branch alone; not the spellchecker: it happens with
+  it off). The script now settles first; the cause isn't known.
 
 Stage 5, suggested order (each its own piece of work):
 
@@ -626,7 +654,7 @@ Stage 5, suggested order (each its own piece of work):
    (paged.js float), exports write Word footnotes and EPUB endnotes;
    the import stops dropping them (`left_out.footnotes`).
 5. **Tables.** prosemirror-tables; for stat blocks in LitRPG; import,
-   export, page view.
+   export, page view. Built: see "Tables (stage 5)" below.
 6. **Boxes and drop caps.** Paragraph borders and shading (LitRPG system
    windows), and a drop cap on a chapter's first paragraph; both as
    paragraph attrs, imported from Word (`left_out.borders_shading`,
@@ -979,3 +1007,100 @@ added words.
   added to the story's dictionary doesn't take affixes (add "Zarathul's"
   too, or rely on the possessive rule); the tap-to-open on phones was not
   tried on a real phone.
+
+### Tables (stage 5)
+
+Built (no schema change: tables live in the doc JSON). For LitRPG stat
+blocks, status screens and item lists; Word's tables in what matters for
+that.
+
+- The nodes (above) are defined twice: `frontend/src/editor/tableSchema.js`
+  and `backend/pmtable.go` (validation: at most 63 columns and 1000 rows,
+  every row as wide as the grid, no overlapping cells, a span never past
+  the last row, sizes in range). Inside the editor widths are CSS px (what
+  prosemirror-tables' column resizing writes); `docFromJSON` turns the
+  stored pt into px and `docToJSON` back (the HTML's `data-*` widths are
+  pt).
+- Drawn the same in the editor, the page view, the EPUB and the .docx
+  export: single 0.5 pt lines (`all`: every line; `outer`: the edges;
+  `none`), Word's 5.4 pt cell margins left and right, fixed layout, each
+  column its share of the columns' total (a column without a width counts
+  as the others' average) and the table as wide as its `width` but never
+  wider than the text, so a table made for a wider page fits.
+  Normal paragraphs in cells (no `style`) have no first-line indent and no
+  space before or after unless they set their own (`styleSheet`'s
+  `:where(td, th) > p:not([data-style])`, as for list items; the .docx
+  export writes those 0s out, the import leaves 0s out). Header cells look
+  like other cells (bold is the text's own); the editor tints them and
+  shows the lines a table doesn't draw as faint dashes.
+- Editor (`editor/tables.js`, `components/write/TableOptions.vue`): the
+  toolbar's table button opens an 8 × 8 grid to pick rows × columns (folds
+  behind "⋯" on phones; disabled in a table: tables don't nest); the table
+  goes where the cursor is (the paragraph split there, after the list the
+  cursor is in, in place of an empty paragraph) with the cursor in its
+  first cell. Tab and Shift+Tab go to the next and previous cell
+  (selecting its text, as Word does); Tab in the last cell adds a row; at
+  the start of a list item in a cell Tab and Shift+Tab indent and outdent
+  the item instead. prosemirror-tables gives cell selection (drag or
+  Shift+arrows), the arrows between cells, column resizing (drag a cell's
+  right edge) and pasting cells into a table. While the cursor is in a
+  table a small button sits at its top right corner (in the page's margin
+  when there is room, kept in view); it opens the table box: rows (above,
+  below, delete), columns (left, right, delete), merge and split cells,
+  header row on/off, cell shading (light swatches, any colour, none),
+  vertical alignment, the table's alignment, width (fit the columns / full
+  width), borders and Delete table. The box closes on a click elsewhere or
+  Esc. Tab-to-link in a cell: a name still to complete takes Tab as
+  everywhere; a name typed in full (the "⇥" hint) isn't offered, so Tab
+  moves on. Script Mode is unaffected (dialogue only at the top level).
+- Pasting: tables from Word, Google Docs and web pages keep their cells,
+  colspan/rowspan, widths in pt or px (style or `width`), shading (white
+  is none; a cell's shading isn't also read as a highlight on its text),
+  vertical alignment, alignment and a 95–100% width as `full`; borders:
+  cells drawing a line mean `all`, cells saying none mean `none`, nothing
+  said means `all`. prosemirror-tables fixes ragged tables.
+- Page view (`editor/pageView.js`): the header rows go in a `thead`;
+  paged.js 0.4.3 doesn't repeat it, nor keep a split table's `colgroup`,
+  so a small paged.js handler (`repeatingTables`) puts both back on each
+  page a table continues on. Rows don't break across pages
+  (`break-inside: avoid`); a row taller than a page is still cut by
+  paged.js. Header rows the page broke inside aren't repeated, and header
+  rows can be left alone at a page's foot (no keep-with-next). The Online
+  Post reading view draws tables the same, without pages.
+- .docx import (`backend/docxtables.go`): grid widths, gridSpan, vMerge,
+  gridBefore/gridAfter and short rows (filled with empty cells),
+  tblHeader rows at the top, jc, a 100% tblW as `full`, borders from
+  tblBorders set directly or by the table style chain (inside lines: all,
+  edges only: outer, else none; a table whose cells mostly draw their own
+  tcBorders, as Google Docs writes them, is all), shd fill, vAlign; the
+  table style's paragraph and run properties apply to its text between the
+  document defaults and the paragraph's style, as in Word. Headings in a
+  cell are paragraphs; pictures in a cell go right after the table; page
+  breaks in cells are dropped; a table nested in a cell keeps its text as
+  paragraphs in that cell (`left_out.tables`); a table over 1000 rows goes
+  on as a second table.
+- .docx export: a w:tbl with the same, `cantSplit` rows, fixed layout,
+  `tblHeader` on the header rows. Round trip (`TestExportDocxRoundTrip`):
+  a table comes back the same but for: a table without column widths
+  (comes back with equal ones over the text's width, which draws the
+  same), widths wider than the text (scaled to it), header cells outside
+  the header rows (plain cells), explicit 0 indents and spacing on Normal
+  cell paragraphs (left out, the same look), story links (plain text).
+- EPUB: an XHTML table (classes `tb tb-<borders>`, colgroup in %, width a
+  share of the text's, thead for the header rows, shading and vertical
+  alignment inline). HTML for AO3: table, thead, tbody, tr, th, td with
+  colspan/rowspan only, a one-paragraph cell as its text. Markdown: a
+  GitHub pipe table when no cell spans and every cell is one paragraph
+  (its first row is the header row; hard breaks as `<br>`; `|` escaped),
+  else the HTML table. Text: columns lined up with spaces, two between
+  columns, a cell's lines one under another, a line of dashes under the
+  header rows.
+- Word counts (Go and JS) count the cells' words; "Appears in" counts
+  story links in cells (`chapterindex.go` walks the whole doc).
+- Screenshots: `node frontend/tests/visual/writeShots.mjs --only tables`
+  (a stat block and a long inventory, the table box, Tab, a paste from
+  Word, dark paper, the page view with the repeated header row).
+- Not done: per-cell borders (the import reads them only to choose the
+  table's setting), row heights, cell margins other than Word's default,
+  text direction, header columns in exports (they are plain cells there),
+  tables inside lists, and a table's caption.

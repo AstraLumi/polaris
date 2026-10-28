@@ -226,13 +226,13 @@ func (p *docxParser) buildStyles(blocks []*irBlock) *styleSet {
 	addPara(p.st.defaultPara)
 
 	byStyle := map[string][]*irBlock{}
-	for _, b := range blocks {
+	for _, b := range irFlat(blocks) {
 		if b.kind != 'p' || b.scene != "" {
 			continue
 		}
 		o := addPara(b.style)
 		o.used = true
-		if b.list == nil {
+		if b.list == nil && !b.inCell { // a cell's text doesn't shape its style
 			byStyle[b.style] = append(byStyle[b.style], b)
 		}
 	}
@@ -815,6 +815,8 @@ func (p *docxParser) blockNodes(blocks []*irBlock, set *styleSet, keep map[strin
 		switch {
 		case b.kind == 'b':
 			out = append(out, &pmNode{Type: "page_break"})
+		case b.kind == 't':
+			out = append(out, p.tableNode(b.tbl, set, keep))
 		case b.kind == 'i':
 			attrs := map[string]any{"src": docxPictureSrc(b.pic), "alt": b.alt, "width": nil, "align": b.align, "fullPage": b.fullPage}
 			if b.width > 0 {
@@ -844,7 +846,7 @@ func blockText(b *irBlock) string {
 
 func hasContent(blocks []*irBlock) bool {
 	for _, b := range blocks {
-		if b.kind == 'i' || b.scene != "" || b.kind == 'p' && strings.TrimSpace(blockText(b)) != "" {
+		if b.kind == 'i' || b.kind == 't' || b.scene != "" || b.kind == 'p' && strings.TrimSpace(blockText(b)) != "" {
 			return true
 		}
 	}
@@ -866,7 +868,7 @@ func (p *docxParser) finish() *docxImport {
 	}
 	// Bookmarks: the visible ones, and hidden ones a kept link points at.
 	keep := map[string]bool{}
-	for _, b := range blocks {
+	for _, b := range irFlat(blocks) {
 		for _, name := range b.bookmarks {
 			if name != "" && (!strings.HasPrefix(name, "_") || p.linkAnchors[name]) {
 				keep[name] = true
@@ -915,7 +917,7 @@ func (p *docxParser) finish() *docxImport {
 	// Fonts, by how much text is set in them.
 	fontUse := map[string]int{}
 	sectWords := map[int]int{}
-	for _, b := range blocks {
+	for _, b := range irFlat(blocks) {
 		if b.kind != 'p' {
 			continue
 		}

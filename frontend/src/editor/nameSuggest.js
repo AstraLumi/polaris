@@ -33,6 +33,11 @@ function textAround($pos) {
   return { before: all.slice(0, $pos.parentOffset), after: all.slice($pos.parentOffset) }
 }
 
+function inTableCell($pos) {
+  for (let d = $pos.depth; d > 0; d--) if (/cell/.test($pos.node(d).type.spec.tableRole || '')) return true
+  return false
+}
+
 // The suggestion for the caret now, or null.
 function suggestionAt(state, getIndex) {
   const { selection } = state
@@ -54,6 +59,9 @@ function suggestionAt(state, getIndex) {
   }
   if (!found) found = findMatches(index, before, after)
   if (!found) return null
+  // In a table cell Tab moves to the next cell: a name already typed in
+  // full (the "⇥" hint) isn't offered there, a name still to complete is.
+  if (found.matches.every((m) => !m.rest) && inTableCell($pos)) return null
   const from = $pos.start() + found.start
   return { from, to: $pos.pos, typed: found.typed, matches: found.matches, selected: 0, speaker }
 }

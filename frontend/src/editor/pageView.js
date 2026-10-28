@@ -45,6 +45,7 @@ export function buildBook(chapters, settings, { paged = true, doc = document } =
       el.dataset.blk = String(bi)
       el.dataset.gi = String(gi++)
       if (block.type.name === 'heading') el.id = `pv-h-${ch.id}-${bi}`
+      if (block.type.name === 'table') headerRowsToHead(el, doc)
       if (block.type.name === 'page_break') {
         el.className = paged ? 'pv-page-break' : 'page-break'
       }
@@ -80,6 +81,66 @@ export function buildBook(chapters, settings, { paged = true, doc = document } =
   return { fragment, plan, blocks: gi }
 }
 
+// A table's header rows (its leading rows of header cells) go in a thead,
+// which repeatingTables repeats on each page the table runs onto.
+export function headerRowsToHead(table, doc = document) {
+  const body = table.querySelector(':scope > tbody')
+  if (!body) return
+  const rows = []
+  for (const tr of body.children) {
+    if (tr.children.length && [...tr.children].every((c) => c.tagName === 'TH')) rows.push(tr)
+    else break
+  }
+  // A table of header rows only has nothing to repeat them over.
+  if (!rows.length || rows.length === body.children.length) return
+  const head = doc.createElement('thead')
+  for (const tr of rows) head.appendChild(tr)
+  table.insertBefore(head, body)
+}
+
+// A paged.js handler: a table split across pages gets its columns (the
+// colgroup, which holds their widths) and its header rows (thead) again on
+// each page it continues on. paged.js rebuilds a split table from its
+// ancestors alone, so without this the next page's part has neither.
+// Header rows the page broke inside are not repeated (they continue as they are).
+function repeatingTables(Handler) {
+  return class RepeatingTables extends Handler {
+    constructor(chunker, polisher, caller) {
+      super(chunker, polisher, caller)
+      this.split = [] // [{ ref, head }]
+    }
+
+    afterPageLayout(pageElement, page, breakToken, chunker) {
+      this.source = chunker.source
+      this.split = []
+      let node = breakToken?.node
+      if (!node) return
+      if (node.nodeType !== 1) node = node.parentElement
+      let inHead = false
+      for (let el = node; el; el = el.parentElement) {
+        if (el.tagName === 'THEAD') inHead = true
+        if (el.tagName === 'TABLE' && el.dataset.ref) this.split.push({ ref: el.dataset.ref, head: !inHead })
+      }
+    }
+
+    layout(rendered) {
+      for (const { ref, head } of this.split) {
+        const table = rendered.querySelector(`table[data-ref="${ref}"]`)
+        if (!table || !table.hasAttribute('data-split-from') || table.dataset.repeated) continue
+        const source = this.source?.querySelector(`table[data-ref="${ref}"]`)
+        if (!source) continue
+        table.dataset.repeated = '1'
+        const thead = source.querySelector(':scope > thead')
+        if (head && thead && !table.querySelector(':scope > thead')) table.insertBefore(thead.cloneNode(true), table.firstChild)
+        const cols = source.querySelector(':scope > colgroup')
+        if (cols && !table.querySelector(':scope > colgroup')) table.insertBefore(cols.cloneNode(true), table.firstChild)
+      }
+    }
+  }
+}
+
+let handlersRegistered = false
+
 // A table of contents with its entries; the page numbers come from
 // pagedCSS's target-counter rules.
 function tocElement(node, chapters, plan, layout, doc) {
@@ -113,7 +174,11 @@ function tocElement(node, chapters, plan, layout, doc) {
 // page. Gives { pages, cancel(), destroy() }: cancel stops a layout under
 // way, destroy also takes paged.js's styles out of the document.
 export async function layOutBook(fragment, css, renderTo, { onPage } = {}) {
-  const { Previewer } = await import('pagedjs')
+  const { Previewer, Handler, registerHandlers } = await import('pagedjs')
+  if (!handlersRegistered) {
+    registerHandlers(repeatingTables(Handler))
+    handlersRegistered = true
+  }
   // Pictures loaded (and decoded) before the layout measures them; a
   // picture first seen in the hidden pages would otherwise be left out of
   // the print until it had been on screen.

@@ -60,7 +60,7 @@
         <option v-for="(c, i) in chapters" :key="c.id" :value="c.id">{{ i + 1 }}. {{ c.title }}</option>
       </select>
 
-      <div ref="paperArea" class="paper-area" @scroll.passive="placePictureOptions(); placeSpeaker()">
+      <div ref="paperArea" class="paper-area" @scroll.passive="placePictureOptions(); placeSpeaker(); placeTableOptions()">
         <ReadAloudBar
           v-if="readInfo.status !== 'idle'"
           :info="readInfo"
@@ -103,6 +103,7 @@
           @change="(patch) => exec(setImageAttrs(patch))"
           @remove="exec(removeImage)"
         />
+        <TableOptions v-if="tableBox && !focusMode && !readOnly" ref="tableBoxEl" :info="tableBox" :exec="exec" :top="tablePlace.top" :left="tablePlace.left" />
         <SpeakerOptions
           v-if="speaker && speakerNode && !focusMode && !readOnly"
           ref="speakerBox"
@@ -257,6 +258,8 @@ import RowMenu from '../components/RowMenu.vue'
 import { tocNodeView } from '../editor/tocView.js'
 import { chapterOption, setChapterOption, normaliseLayout } from '../editor/bookLayout.js'
 import SpeakerOptions from '../components/write/SpeakerOptions.vue'
+import TableOptions from '../components/write/TableOptions.vue'
+import { tablePlugins, tableInfo } from '../editor/tables.js'
 import { nameSuggest } from '../editor/nameSuggest.js'
 import { scriptPlugins, setDialogueAttrs, dialogueToParagraph } from '../editor/script.js'
 import { useStoryNames } from '../editor/useStoryNames.js'
@@ -584,6 +587,7 @@ const spell = useSpellcheck({ getLanguage: () => settings.value?.meta?.language,
 const plugins = [
   nameSuggest({ getIndex: () => names.index.value, typeLabel: names.typeLabel, hint: t('Tab: link this name') }),
   ...scriptPlugins({ getIndex: () => names.index.value, onSpeaker: openSpeaker }),
+  ...tablePlugins(),
   ...editorPlugins({ getStyles: () => styles.value }),
   findPlugin(),
   readAloudPlugin({ onInterrupt: () => reader.stop() }),
@@ -1168,6 +1172,30 @@ function placePictureOptions() {
 }
 watch([pictureNode, zoom, areaWidth], () => nextTick(() => nextTick(placePictureOptions)), { flush: 'post' })
 
+// ---- Tables (stage 5) -------------------------------------------------------------------------
+// The table box's button sits at the table's top right corner, just
+// outside it (in the page's margin) when there is room, kept in view.
+const tableBoxEl = ref(null)
+const tablePlace = ref({ top: 0, left: 0 })
+const tableBox = computed(() => (editorState.value ? tableInfo(editorState.value) : null))
+function placeTableOptions() {
+  const area = paperArea.value
+  const info = tableBox.value
+  if (!view || !area || !info) return
+  const dom = view.nodeDOM(info.pos)
+  if (!dom?.getBoundingClientRect) return
+  const a = area.getBoundingClientRect()
+  const r = dom.getBoundingClientRect()
+  const size = 28
+  const lo = area.scrollTop + 4
+  const hi = Math.max(lo, r.bottom - a.top + area.scrollTop - size)
+  tablePlace.value = {
+    top: Math.round(Math.max(lo, Math.min(r.top - a.top + area.scrollTop, hi))),
+    left: Math.round(Math.max(4, Math.min(r.right - a.left + area.scrollLeft + 6, area.scrollLeft + area.clientWidth - size - 4))),
+  }
+}
+watch([() => tableBox.value && editorState.value?.doc, () => tableBox.value?.pos, zoom, areaWidth], () => nextTick(() => nextTick(placeTableOptions)), { flush: 'post' })
+
 // ---- Upload .docx ----------------------------------------------------------------------------------
 const docxInput = ref(null)
 const importing = ref(false)
@@ -1393,6 +1421,12 @@ onBeforeUnmount(() => {
 
 .error-banner {
   margin: 0;
+}
+
+/* The toolbar's pop-ups over the page, table cells (positioned) included. */
+.write-tools {
+  position: relative;
+  z-index: 25;
 }
 
 .link-btn {

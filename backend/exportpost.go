@@ -19,7 +19,8 @@ package main
 // <sub> written as HTML); a scene break whose glyph is a thematic break
 // (* * *, ---) stays one, any other glyph is its own escaped line.
 // Text: one line per paragraph (hard breaks as new lines), a blank line
-// between blocks, lists with • or numbers, no formatting.
+// between blocks, lists with • or numbers, no formatting. Tables in all
+// three: exporttables.go.
 
 import (
 	"fmt"
@@ -268,6 +269,9 @@ func (h *htmlPost) block(n *pmNode, depth int) {
 		h.s.WriteString("</ul>\n")
 	case "image", "page_break":
 		// Not in an online post.
+	case "table": // exporttables.go
+		h.endQuote()
+		h.table(n)
 	default:
 		for _, c := range n.Content {
 			h.block(c, depth)
@@ -486,6 +490,8 @@ func (m *mdPost) block(n *pmNode) string {
 		return strings.TrimSpace(strings.Join(lines, "\n"))
 	case "image", "page_break":
 		return ""
+	case "table": // exporttables.go
+		return m.table(n)
 	default:
 		var parts []string
 		for _, c := range n.Content {
@@ -566,6 +572,8 @@ func exportText(b *exportBook) ([]byte, error) {
 			return strings.Join(lines, "\n")
 		case "image", "page_break":
 			return ""
+		case "table": // exporttables.go
+			return textTable(n, indent, walk)
 		default:
 			var parts []string
 			for _, c := range n.Content {

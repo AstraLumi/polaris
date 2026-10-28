@@ -26,7 +26,7 @@ package main
 // glyph (or the ornament picture); page breaks as a break-after div;
 // pictures as figures (fullPage: a page of its own); lists ul/ol; the toc
 // as a linked list of the headings; dialogue as "Speaker, manner: “line”"
-// with the speaker in small caps.
+// with the speaker in small caps; tables: exporttables.go.
 
 import (
 	"crypto/sha1"
@@ -346,6 +346,7 @@ figure.image img { max-width: 100%; height: auto; }
 .toc ol ol { padding-left: 1.5em; }
 .toc a { text-decoration: none; color: inherit; }
 `)
+	s.WriteString(epubTableCSS(e.body))
 	return []byte(s.String())
 }
 
@@ -453,6 +454,8 @@ func (e *epubOut) block(ctx *epubCtx, n *pmNode) {
 		s.WriteString("</" + tag + ">\n")
 	case "toc":
 		e.tocBlock(ctx, n)
+	case "table": // exporttables.go
+		e.table(ctx, n)
 	default:
 		for _, c := range n.Content {
 			e.block(ctx, c)

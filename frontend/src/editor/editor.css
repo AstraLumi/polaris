@@ -368,3 +368,89 @@
   color: var(--text-faint, #888);
   font-size: 11px;
 }
+
+/* Tables (stage 5): Word's look by default, single 0.5 pt lines and its
+   5.4 pt cell margins on the left and right; the widths come from
+   tableSchema.js. Drawn the same in the editor and the page view. */
+.write-doc table.pm-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  max-width: 100%;
+  margin-top: 0;
+  margin-bottom: 0;
+  text-indent: 0;
+}
+
+.write-doc .pm-table td,
+.write-doc .pm-table th {
+  box-sizing: border-box;
+  position: relative;
+  padding: 0 5.4pt;
+  border: 0.5pt solid currentColor;
+  vertical-align: top;
+  font-weight: inherit;
+  text-align: inherit;
+  overflow-wrap: break-word;
+}
+
+.write-doc .pm-table[data-borders='outer'] td,
+.write-doc .pm-table[data-borders='outer'] th,
+.write-doc .pm-table[data-borders='none'] td,
+.write-doc .pm-table[data-borders='none'] th {
+  border: none;
+}
+
+.write-doc .pm-table[data-borders='outer'] {
+  border: 0.5pt solid currentColor;
+}
+
+.write-doc .pm-table :where(ul, ol) {
+  margin: 0;
+}
+
+/* Shaded cells keep dark text on dark paper. */
+.is-dark-paper .write-doc .pm-table [data-background] {
+  color: #1f1c17;
+}
+
+/* In the editor only: the lines a table doesn't draw show faintly (Word's
+   gridlines), header cells are tinted, selected cells and the column being
+   resized are marked. */
+.write-doc .tableWrapper {
+  overflow: visible;
+}
+
+.write-doc.ProseMirror .pm-table[data-borders='outer'] td,
+.write-doc.ProseMirror .pm-table[data-borders='outer'] th,
+.write-doc.ProseMirror .pm-table[data-borders='none'] td,
+.write-doc.ProseMirror .pm-table[data-borders='none'] th {
+  border: 0.5pt dashed var(--ink-faint);
+}
+
+.write-doc.ProseMirror .pm-table th:not([data-background]) {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.write-doc.ProseMirror .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: rgba(70, 130, 220, 0.22);
+  pointer-events: none;
+}
+
+.write-doc.ProseMirror .column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  bottom: 0;
+  width: 4px;
+  z-index: 20;
+  background: rgba(70, 130, 220, 0.6);
+  pointer-events: none;
+}
+
+.write-doc.ProseMirror.resize-cursor {
+  cursor: col-resize;
+}

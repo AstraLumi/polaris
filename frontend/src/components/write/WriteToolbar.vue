@@ -116,6 +116,28 @@
       <button v-bind="btn(t('Page break') + ' (Ctrl+Enter)')" :disabled="online" @click="exec(insertBlock('page_break'))"><TbIcon name="page-break" /></button>
       <button v-bind="btn(t('Table of contents'))" class="foldable" :disabled="online" @click="exec(insertBlock('toc', { title: t('Contents') }))"><TbIcon name="toc" /></button>
       <button v-bind="btn(t('Insert picture'), fmt.atom === 'image')" :disabled="uploading" @click="$emit('picture')"><TbIcon name="picture" /></button>
+      <div class="tb-pop foldable">
+        <button v-bind="btn(t('Insert table'))" :disabled="!canTable" @click="toggle('table')"><TbIcon name="table" /></button>
+        <div v-if="open === 'table'" class="pop glass-panel panel-solid table-pop" @mousedown.stop @mouseleave="grid = { r: 0, c: 0 }">
+          <div class="grid" role="grid" :aria-label="$t('Insert table')">
+            <template v-for="r in GRID" :key="r">
+              <button
+                v-for="c in GRID"
+                :key="c"
+                type="button"
+                class="cell"
+                :class="{ 'is-on': r <= grid.r && c <= grid.c }"
+                :aria-label="$t('{rows} × {cols} table', { rows: r, cols: c })"
+                @mousedown.prevent
+                @mouseenter="grid = { r, c }"
+                @focus="grid = { r, c }"
+                @click="addTable(r, c)"
+              ></button>
+            </template>
+          </div>
+          <p class="grid-size">{{ grid.r ? $t('{rows} × {cols} table', { rows: grid.r, cols: grid.c }) : $t('Insert table') }}</p>
+        </div>
+      </div>
       <div class="tb-pop">
         <button v-bind="btn(t('Web link'), !!fmt.link)" @click="openLink"><TbIcon name="link" /></button>
         <form v-if="open === 'link'" class="pop glass-panel panel-solid link-pop" @mousedown.stop @submit.prevent="applyLink">
@@ -169,6 +191,7 @@ import {
   setCharStyle,
 } from '../../editor/commands.js'
 import { setScriptMode } from '../../editor/script.js'
+import { insertTable } from '../../editor/tables.js'
 
 const props = defineProps({
   state: { type: Object, required: true },
@@ -268,6 +291,15 @@ function applyLink() {
 }
 const removeLink = () => exec(setLink(''))
 
+// Insert table: a grid to pick rows × columns, as in Word.
+const GRID = [1, 2, 3, 4, 5, 6, 7, 8]
+const grid = ref({ r: 0, c: 0 })
+const canTable = computed(() => insertTable(1, 1)(props.state))
+function addTable(r, c) {
+  grid.value = { r: 0, c: 0 }
+  exec(insertTable(r, c))
+}
+
 // A click anywhere else closes an open pop-up.
 const closePops = () => (open.value = '')
 onMounted(() => document.addEventListener('mousedown', closePops))
@@ -303,6 +335,7 @@ const ICONS = {
   comment: 'M4 4h16v12H9l-5 4zM12 7v6M9 10h6',
   comments: 'M3 4h12v8H8l-3 3v-3H3zM18 8h3v9h-2v3l-3-3h-5v-2',
   spell: 'M3 14 6.5 5l3.5 9M4.3 11h4.4M12 5v9h2.5a2.2 2.2 0 0 0 0-4.5H12M13 18l3 3 6-7',
+  table: 'M3 5h18v14H3zM3 10h18M3 14.5h18M9 5v14M15 5v14',
 }
 const TbIcon = (p) =>
   h('svg', { viewBox: '0 0 24 24', width: 18, height: 18, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' }, [h('path', { d: ICONS[p.name] || '' })])
@@ -505,6 +538,39 @@ sub {
 .link-pop {
   min-width: 18rem;
   right: auto;
+}
+
+.table-pop {
+  min-width: 0;
+  gap: 0.35rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1.05rem);
+  gap: 0.2rem;
+}
+
+.grid .cell {
+  width: 1.05rem;
+  height: 1.05rem;
+  padding: 0;
+  border: 1px solid rgba(127, 127, 127, 0.55);
+  border-radius: 3px;
+  background: none;
+  cursor: pointer;
+}
+
+.grid .cell.is-on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.grid-size {
+  margin: 0;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--text-muted);
 }
 
 .more-btn {
