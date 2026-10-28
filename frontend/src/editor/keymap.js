@@ -21,6 +21,7 @@ import {
   splitParagraph,
   clearMarks,
 } from './commands.js'
+import { insertNote } from './footnotes.js'
 
 // Quotes open at the start, after a space, a bracket, a dash or another quote.
 const OPEN = '(?:^|[\\s{[(<\'"‘“—–])'
@@ -100,6 +101,9 @@ export function wordKeymap(getStyles) {
     'Shift-Mod-=': toggleMark('superscript'),
     'Shift-Mod-k': toggleMark('smallcaps'),
     'Mod-Space': clearMarks,
+    // Word's Insert Footnote and Insert Endnote (stage 5).
+    'Mod-Alt-f': insertNote('footnote'),
+    'Mod-Alt-d': insertNote('endnote'),
     'Shift-F3': changeCase,
     'Shift-Enter': insertHardBreak,
     Enter: chainCommands(outdentEmptyListItem(li), splitListItem(li), createParagraphNear, liftEmptyBlock, splitParagraph),

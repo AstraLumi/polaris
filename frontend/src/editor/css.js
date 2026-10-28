@@ -163,3 +163,8 @@ export function charDeclarations(c) {
   if (c.highlight) out.push(`background-color: ${c.highlight}`)
   return out
 }
+
+// A note's text size (stage 5): 5/6 of the body's, on the half point, as
+// Word's 10 pt notes under 12 pt text. The exports use the same rule
+// (noteSizeOf in backend/exportnotes.go).
+export const noteSize = (size) => Math.max(4, Math.round((+size || 10.5) * (5 / 6) * 2) / 2)

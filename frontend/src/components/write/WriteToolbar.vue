@@ -138,6 +138,8 @@
           <p class="grid-size">{{ grid.r ? $t('{rows} × {cols} table', { rows: grid.r, cols: grid.c }) : $t('Insert table') }}</p>
         </div>
       </div>
+      <button v-bind="btn(t('Insert footnote') + ' (Ctrl+Alt+F)')" class="foldable" :disabled="!canNote" @click="exec(insertNote('footnote'))"><TbIcon name="footnote" /></button>
+      <button v-bind="btn(t('Insert endnote') + ' (Ctrl+Alt+D)')" class="foldable" :disabled="!canNote" @click="exec(insertNote('endnote'))"><TbIcon name="endnote" /></button>
       <div class="tb-pop">
         <button v-bind="btn(t('Web link'), !!fmt.link)" @click="openLink"><TbIcon name="link" /></button>
         <form v-if="open === 'link'" class="pop glass-panel panel-solid link-pop" @mousedown.stop @submit.prevent="applyLink">
@@ -192,6 +194,7 @@ import {
 } from '../../editor/commands.js'
 import { setScriptMode } from '../../editor/script.js'
 import { insertTable } from '../../editor/tables.js'
+import { insertNote, canInsertNote } from '../../editor/footnotes.js'
 
 const props = defineProps({
   state: { type: Object, required: true },
@@ -300,6 +303,9 @@ function addTable(r, c) {
   exec(insertTable(r, c))
 }
 
+// Footnotes and endnotes (stage 5): after the selection, in text.
+const canNote = computed(() => canInsertNote(props.state))
+
 // A click anywhere else closes an open pop-up.
 const closePops = () => (open.value = '')
 onMounted(() => document.addEventListener('mousedown', closePops))
@@ -336,6 +342,8 @@ const ICONS = {
   comments: 'M3 4h12v8H8l-3 3v-3H3zM18 8h3v9h-2v3l-3-3h-5v-2',
   spell: 'M3 14 6.5 5l3.5 9M4.3 11h4.4M12 5v9h2.5a2.2 2.2 0 0 0 0-4.5H12M13 18l3 3 6-7',
   table: 'M3 5h18v14H3zM3 10h18M3 14.5h18M9 5v14M15 5v14',
+  footnote: 'M3 7h11M3 11h11M3 15h7M18 3v6M16.5 4.5 18 3M3 20h4M9 20h1',
+  endnote: 'M3 5h11M3 9h11M3 13h11M18 3v6M16.5 4.5 18 3M3 17h18M3 21h9',
 }
 const TbIcon = (p) =>
   h('svg', { viewBox: '0 0 24 24', width: 18, height: 18, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' }, [h('path', { d: ICONS[p.name] || '' })])

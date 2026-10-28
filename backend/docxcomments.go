@@ -191,6 +191,9 @@ func (p *docxParser) comment(wordID string) *docxCmt {
 }
 
 func (p *docxParser) commentStart(wordID string) {
+	if p.inNote { // no comments in a note (docxnotes.go)
+		return
+	}
 	c := p.comment(wordID)
 	if c == nil || c.parent != nil || c.started {
 		return
@@ -200,6 +203,9 @@ func (p *docxParser) commentStart(wordID string) {
 }
 
 func (p *docxParser) commentEnd(wordID string, ps *paraState) {
+	if p.inNote {
+		return
+	}
 	c := p.comment(wordID)
 	if c == nil || c.parent != nil {
 		return
@@ -215,6 +221,9 @@ func (p *docxParser) commentEnd(wordID string, ps *paraState) {
 // commentRef is a commentReference run: a comment with no range of its own
 // is a point.
 func (p *docxParser) commentRef(wordID string, ps *paraState) {
+	if p.inNote {
+		return
+	}
 	c := p.comment(wordID)
 	if c == nil {
 		p.count("comments") // nothing in comments.xml to import

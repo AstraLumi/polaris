@@ -6,7 +6,7 @@
 // Stored documents are ProseMirror JSON. Attributes this schema doesn't know
 // (written by a newer Polaris, or the .docx import) are kept: docFromJSON
 // tucks them into an `extra` attr and docToJSON puts them back.
-import { Schema } from 'prosemirror-model'
+import { Schema, Fragment } from 'prosemirror-model'
 import {
   cssColorToHex,
   cssFontFamily,
@@ -103,6 +103,28 @@ export function dialogueDOM(attrs) {
 }
 
 const isUpload = (src) => typeof src === 'string' && src.startsWith('/uploads/')
+
+// A footnote's paragraphs from our own HTML (data-note), else one empty
+// paragraph. Notes inside it and comments on its text are dropped (a note
+// holds neither).
+function noteContentFromDOM(el, s) {
+  try {
+    const json = JSON.parse(el.getAttribute('data-note') || '[]')
+    const clean = (n) => {
+      if (!n || typeof n !== 'object') return null
+      if (n.type === 'footnote') return null
+      const out = { ...n }
+      if (Array.isArray(n.marks)) out.marks = n.marks.filter((m) => m?.type !== 'comment')
+      if (Array.isArray(n.content)) out.content = n.content.map(clean).filter(Boolean)
+      return out
+    }
+    const content = Fragment.fromJSON(s, (Array.isArray(json) ? json : []).map(clean).filter(Boolean))
+    if (content.childCount && s.nodes.footnote.validContent(content)) return content
+  } catch (e) {
+    /* not ours: an empty note */
+  }
+  return Fragment.from(s.nodes.paragraph.create())
+}
 
 export const schema = new Schema({
   nodes: {
@@ -288,6 +310,33 @@ export const schema = new Schema({
         { tag: 'span', priority: 60, getAttrs: (el) => (/mso-tab-count/i.test(el.getAttribute('style') || '') ? {} : false) },
       ],
       toDOM: () => ['span', { class: 'pm-tab', 'data-tab': '' }, '\t'],
+    },
+
+    // A footnote or endnote (stage 5): an inline atom holding the note's
+    // paragraphs, numbered by where it is (footnotes.js), never by a stored
+    // number. Drawn as its superscript number (a node view on the writing
+    // page; CSS counters); its HTML carries the note as JSON in data-note,
+    // so a copy and paste in the editor keeps it (paragraphs inside a <p>
+    // would not survive the browser's HTML parser).
+    footnote: {
+      inline: true,
+      group: 'inline',
+      atom: true,
+      selectable: true,
+      content: 'paragraph+',
+      // No default on purpose: a node with a required attr is never made up by
+      // the parser to wrap pasted paragraphs (it would, for a node holding
+      // paragraphs). docFromJSON fills a missing kind with 'footnote'.
+      attrs: keep({ kind: {} }),
+      parseDOM: [
+        {
+          tag: 'sup[data-fn]',
+          priority: 60,
+          getAttrs: (el) => ({ kind: el.getAttribute('data-fn') === 'endnote' ? 'endnote' : 'footnote' }),
+          getContent: (el, s) => noteContentFromDOM(el, s),
+        },
+      ],
+      toDOM: (node) => ['sup', { class: 'pm-fn-ref', 'data-fn': node.attrs.kind === 'endnote' ? 'endnote' : 'footnote', 'data-note': JSON.stringify(node.content.toJSON()) }],
     },
 
     // Tables (stage 5): tableSchema.js.
@@ -488,6 +537,7 @@ function normalise(json, inline) {
     return { type: 'text', text: String(json.text), marks: marks.length ? marks : undefined }
   }
   const out = { type: type.name, attrs: tableAttrsIn(type.name, splitAttrs(type, json.attrs)) }
+  if (type.name === 'footnote') out.attrs = { ...out.attrs, kind: out.attrs?.kind || 'footnote' }
   if (Array.isArray(json.content) && !type.isLeaf) {
     const content = json.content.map((c) => normalise(c, type.inlineContent)).filter(Boolean)
     if (content.length) out.content = content
@@ -540,6 +590,9 @@ function compact(json) {
   const attrs = compactAttrs(schema.nodes[json.type], tableAttrsOut(json.type, json.attrs))
   if (attrs) json.attrs = attrs
   else delete json.attrs
+  // Only text carries marks (a bold or a comment put over a line break, a
+  // tab or a note's number isn't stored; the server refuses it).
+  delete json.marks
   if (json.content) json.content = json.content.map(compact)
   return json
 }

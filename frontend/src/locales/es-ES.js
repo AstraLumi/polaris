@@ -2509,4 +2509,12 @@ export default {
   "Spelling: {name}": "Ortografía: {name}",
   "Spelling: no dictionary for “{lang}”": "Ortografía: ningún diccionario para «{lang}»",
   "Spelling: the dictionary didn't load": "Ortografía: el diccionario no se cargó",
+  "Insert footnote": "Insertar nota al pie",
+  "Insert endnote": "Insertar nota al final",
+  "Footnote {n}": "Nota al pie {n}",
+  "Endnote {n}": "Nota al final {n}",
+  "Make it an endnote": "Convertir en nota al final",
+  "Make it a footnote": "Convertir en nota al pie",
+  "Delete note": "Eliminar nota",
+  "Back to the text (Esc)": "Volver al texto (Esc)",
 }

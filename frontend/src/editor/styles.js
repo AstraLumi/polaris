@@ -2,7 +2,7 @@
 // paragraph's formatting is worked out (its own attrs and marks, then its
 // style, then what that is based on, ending at Normal), and the stylesheet
 // that draws them. Pure: no DOM, no Vue.
-import { paraDeclarations, textDeclarations, charDeclarations } from './css.js'
+import { paraDeclarations, textDeclarations, charDeclarations, noteSize } from './css.js'
 
 export const BUILTIN_IDS = ['normal', 'heading1', 'heading2', 'heading3', 'title', 'subtitle', 'quote']
 export const BUILTIN_NAMES = {
@@ -161,6 +161,11 @@ export function styleSheet(styles, scope = '.write-doc') {
     if (m) selectors.push(`${scope} h${m[1]}:not([data-style])`)
     rules.push(`${selectors.join(', ')} { ${decls(s.id)} }`)
   }
+  // Notes (stage 5): their paragraphs in Normal's font at a note's size,
+  // with no first-line indent and no spacing (the note's editor, the page
+  // view's notes at a chapter's end).
+  const ns = `font-size: ${noteSize(normal.text?.size)}pt; text-indent: 0; margin-top: 0; margin-bottom: 0`
+  rules.push(`${scope}.pm-fn-body p, ${scope} .pv-note { ${ns} }`)
   return rules.join('\n')
 }
 

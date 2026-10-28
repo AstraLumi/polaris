@@ -66,7 +66,7 @@ import (
 )
 
 type irInline struct {
-	kind byte // 't' text, '\t' tab, 'n' hard break
+	kind byte // 't' text, '\t' tab, 'n' hard break, 'f' a footnote or endnote (note)
 	text string
 	r    rFmt // as the text looks, character style included
 	link string
@@ -75,6 +75,7 @@ type irInline struct {
 	cstyle string
 	// The comments on the text: their locals, "1,3" (docxcomments.go).
 	comments string
+	note     *irNote // kind 'f' (docxnotes.go)
 }
 
 type irListRef struct {
@@ -143,6 +144,11 @@ type docxParser struct {
 	cm        *docxComments
 	openCm    []*docxCmt
 	pendingCm []*docxCmt
+
+	// Footnotes and endnotes (docxnotes.go): the file's, and whether a
+	// note's text is being read.
+	notes  *docxNotes
+	inNote bool
 }
 
 func newDocxParser(pk *docxPackage, rels map[string]docxRel, st *wStyles, num *wNumbering, th docxTheme) *docxParser {
@@ -740,13 +746,13 @@ func (p *docxParser) runContent(kids []*xEl, ps *paraState, wr wRun, charStyle s
 					p.fields[n-1].instr.WriteString(k.text)
 				}
 				continue
-			case "rPr", "delText", "delInstrText", "lastRenderedPageBreak", "annotationRef", "proofErr":
+			case "rPr", "delText", "delInstrText", "lastRenderedPageBreak", "annotationRef", "proofErr",
+				"footnoteRef", "endnoteRef": // a note's own number: never stored
 				continue
-			case "footnoteReference":
-				p.count("footnotes")
-				continue
-			case "endnoteReference":
-				p.count("endnotes")
+			case "footnoteReference", "endnoteReference":
+				if !hidden && !p.hidingField() {
+					p.noteRef(strings.TrimSuffix(k.name, "Reference"), k.attr("id"), ps) // docxnotes.go
+				}
 				continue
 			case "commentReference":
 				p.commentRef(k.attr("id"), ps) // docxcomments.go
@@ -860,6 +866,10 @@ func (p *docxParser) addInline(ps *paraState, in irInline) {
 // picture gives the index of a related picture in p.pics (-1 when it
 // can't be imported, counted).
 func (p *docxParser) picture(relID string) int {
+	if p.inNote { // no pictures in a note (docxnotes.go)
+		p.count("pictures")
+		return -1
+	}
 	rel, ok := p.rels[relID]
 	if !ok || rel.external {
 		p.count("pictures")

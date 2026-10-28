@@ -128,6 +128,8 @@ type exportBook struct {
 	// The chapters' comments by id (comments.go): the .docx export writes
 	// them as Word comments; the other exports take their marks off.
 	Comments map[int64]*exportComment
+
+	notes map[*pmNode]docNote // each note's number in its chapter (noteOf, exportnotes.go)
 }
 
 // withoutComments takes the comment marks off every chapter's doc (every
