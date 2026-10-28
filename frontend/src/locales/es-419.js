@@ -164,4 +164,7 @@ export default {
   "the book's layout is not valid": "la diagramación del libro no es válida",
   "Page numbers and layout…": "Números de página y diagramación…",
   "Click a page to write there.": "Haz clic en una página para escribir ahí.",
+  "Add to dictionary": "Agregar al diccionario",
+  "Add a word": "Agregar una palabra",
+  "Words you add with “Add to dictionary” show here.": "Las palabras que agregues con «Agregar al diccionario» aparecen aquí.",
 }

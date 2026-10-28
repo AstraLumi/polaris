@@ -606,7 +606,8 @@ Stage 5, suggested order (each its own piece of work):
    or .docx/EPUB with a font that forbids embedding. Then embed allowed
    fonts in EPUB and (optionally) .docx, and serve them to the editor and
    page view with `@font-face`. Google Fonts stay pickable as today.
-2. **Spellchecker that knows the story.** LibreOffice/Hunspell
+2. **Spellchecker that knows the story.** (Built: see "Spellchecker
+   (stage 5)" below.) LibreOffice/Hunspell
    dictionaries (en, pt-BR, es to match the interface), checked in a
    worker; every character, place, faction, creature, asset name,
    nickname and former name counts as a word; a per-story "add to
@@ -637,3 +638,100 @@ Stage 5, suggested order (each its own piece of work):
    version check, and a conflict shows both texts as today (ProseMirror
    can merge edits to different paragraphs). Needs HTTPS (or localhost).
    Ask the browser for persistent storage.
+
+### Spellchecker (stage 5)
+
+Built. Everything runs in the browser; the server only keeps the story's
+added words.
+
+- Dictionaries: LibreOffice/Hunspell `en_US`, `en_GB`, `pt_BR` and
+  `es_ES` from <https://github.com/LibreOffice/dictionaries> at revision
+  `4f1df64b2e8e14751aa7c2205d170ca016071315`, unmodified but gzipped, in
+  `frontend/public/dict/<code>/<code>.{aff,dic}.gz` with each one's readme
+  and licence files (licences in `NOTICE.md`). Fetched again by
+  `node frontend/scripts/dictionaries.mjs`; `DICT_REVISION` in
+  `editor/spellWords.js` goes in the address (`?v=`) so a browser never
+  keeps an old copy, and the files are fetched with `cache:
+  'force-cache'`. Sizes (raw / gzipped): en_US 0.55 / 0.19 MB, en_GB
+  1.27 / 0.45 MB, pt_BR 5.46 / 1.38 MB, es_ES 0.89 / 0.24 MB; 2.4 MB in
+  the build. Only the book's dictionary is downloaded, when the writing
+  page opens.
+- Checker: `editor/hunspell.js`, our own reader of the Hunspell format
+  (pure, no dependency): the stems stay in a Map and a word is checked
+  by taking affixes off it, as Hunspell does (prefixes, suffixes, cross
+  products, two suffixes, conditions, FLAG char/UTF-8/long/num, AF,
+  FORBIDDENWORD, NEEDAFFIX, NOSUGGEST, KEEPCASE, ONLYINCOMPOUND, BREAK,
+  ICONV; Hunspell's case rules: "the" also as "The"/"THE", "Paris" not as
+  "paris"). Not read: compounding (only used for ordinals like "21st";
+  words with digits aren't checked), morphology, PHONE/n-gram
+  suggestions. Suggestions: the case, REP, MAP (accents), one edit
+  (swap, missing, extra, wrong letter from TRY), two words, then two
+  edits within 250 ms; ranked by an edit distance where accents count
+  half; at most six. nspell was measured and dropped: it expands every
+  form at load (en_US 133 ms / 13 MB, en_GB 0.75 s / 48 MB, es_ES 0.8 s
+  / 52 MB, pt_BR did not finish in 280 s); this reader loads en_US in
+  ~40 ms (+4 MB heap), en_GB ~80 ms (+11 MB), es_ES ~50 ms (+9 MB), pt_BR
+  ~380 ms (+45 MB), a check takes well under a millisecond.
+- It runs in a worker, `editor/spell.worker.js` (one dictionary at a
+  time; `load`, `check` a batch → the wrong ones, `suggest` a word), from
+  `editor/spellClient.js`, which remembers every answer per dictionary.
+- Language: the book's `meta.language` picks it (`en*` → en_US, but
+  en-GB/AU/NZ/IE/ZA/IN → en_GB; `pt*` → pt_BR; `es*` → es_ES); an empty
+  one falls back to the interface's; any other language has no
+  dictionary and the checker is off with a note. Picking a dictionary in
+  the spelling panel sets the book's `meta.language` (`en-US`, `en-GB`,
+  `pt-BR`, `es`).
+- What is a word (`tokenize` in `editor/spellWords.js`): letters of any
+  script with accents, joined by an apostrophe or hyphen between two
+  letters ("don't", "Mira's", "fazê-lo"); not words: anything with a
+  digit, one letter alone, web and mail addresses, words joined to
+  others by a dot ("e.g.", "file.txt") or a slash/underscore, and (an
+  option, on by default) words in capitals. A word followed by a full
+  stop also passes with it (abbreviations).
+- The story's words: every name, nickname and former name `GET
+  /api/wiki` lists (`useStoryNames`), word by word (hyphenated ones also
+  in parts), the story's added words and the words ignored this session.
+  A word with a capital in the list passes written with capitals in any
+  case ("Mira", "MIRA", not "mira"); a lower-case one in any case; a
+  possessive ("Mira's", "Mira’s") passes when its word does.
+- Server (`backend/spelling.go`; per story, `app_settings` key
+  `spelling_words`, a JSON list; no schema change):
+  - `GET /api/spelling/words`: `{ "words": [...] }`, sorted ignoring
+    case.
+  - `POST /api/spelling/words` `{ "add": [...], "remove": [...] }`:
+    answers like GET. A word is kept as written (NFC from the browser),
+    1–64 characters, a letter, no spaces or control characters; at most
+    5000 words (`400` otherwise).
+- Underlines (`editor/spellPlugin.js`): inline decorations
+  (`span.spell-wrong`, a wavy line in `--spell-line`, lighter on dark
+  paper). Only textblocks on screen (and a screen above and below) are
+  checked, after a 350 ms pause and on scroll; what a textblock gave is
+  remembered by its node, so typing rechecks one paragraph. The word the
+  caret is in, while typing, isn't underlined until the caret leaves it.
+  Linked text (`story_link`, `link`) isn't checked; a dialogue's line is,
+  its speaker and manner (attrs) aren't.
+- Menu (`components/write/SpellMenu.vue`, in `<body>`): right click on an
+  underlined word (on a touch screen, a tap on the word the caret is
+  already in): up to six suggestions (one replaces the word, keeping its
+  formatting), "Add to dictionary" (the story's), "Ignore" (every
+  occurrence until the page is left; not stored), "Spelling options…".
+- Switch and panel: the toolbar's spelling button turns it on or off
+  (remembered in this browser, `polaris-write-spell`; folded behind "⋯" on
+  phones); while on with a dictionary the editor has `spellcheck="false"`,
+  otherwise the browser's own is back. The status bar shows "Spelling:
+  English (US)" (loading, off, no dictionary) and opens the spelling side
+  panel: on/off, the dictionary, "Ignore words in capitals"
+  (`polaris-write-spell-caps`), the story's dictionary (add, list,
+  remove) and the words ignored for now.
+- Tests: `tests/spellWords.test.mjs` (words, names, language),
+  `tests/spellcheck.test.mjs` (the reader on a small dictionary written
+  in the test, then the four bundled ones), `tests/editorSpell.test.mjs`
+  (what text is checked, the caret rule, replacing a word),
+  `TestSpellingWords*` in Go; screenshots with `node
+  frontend/tests/visual/writeShots.mjs --only spell`.
+- Not done: suggestions for words the dictionary only knows through
+  compounding; no Portuguese (Portugal) or regional Spanish
+  dictionaries (pt-PT uses pt_BR, every Spanish uses es_ES); a word
+  added to the story's dictionary doesn't take affixes (add "Zarathul's"
+  too, or rely on the possessive rule); the tap-to-open on phones was not
+  tried on a real phone.

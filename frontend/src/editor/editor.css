@@ -9,6 +9,7 @@
   --paper-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 12px 40px rgba(0, 0, 0, 0.35);
   --find: rgba(255, 196, 0, 0.38);
   --find-current: rgba(255, 140, 0, 0.62);
+  --spell-line: #d0312d;
 }
 
 .write-page.is-dark-paper {
@@ -17,6 +18,7 @@
   --ink-faint: rgba(230, 225, 214, 0.45);
   --find: rgba(255, 196, 0, 0.3);
   --find-current: rgba(255, 140, 0, 0.55);
+  --spell-line: #ff7a70;
 }
 
 .write-doc {
@@ -151,6 +153,16 @@
 .write-doc .find-match.is-current {
   background: var(--find-current);
   box-shadow: 0 0 0 1px var(--find-current);
+}
+
+/* A word the spellchecker doesn't know (spellPlugin.js). */
+.write-doc .spell-wrong {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: var(--spell-line);
+  text-decoration-thickness: 1px;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 0.18em;
 }
 
 /* The panels beside the page (styles, versions, book). */

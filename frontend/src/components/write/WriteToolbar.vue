@@ -134,6 +134,7 @@
       <button v-bind="btn(t('Saved versions'), panel === 'versions')" class="foldable" @click="$emit('panel', 'versions')"><TbIcon name="versions" /></button>
       <button v-bind="btn(t('Book and page'), panel === 'book')" class="foldable" @click="$emit('panel', 'book')"><TbIcon name="book" /></button>
       <button v-bind="btn(scriptMode ? t('Script Mode: on (this chapter)') : t('Script Mode: type “Name:” at a line’s start for dialogue'), scriptMode)" class="foldable" @click="exec(setScriptMode(!scriptMode))"><TbIcon name="script" /></button>
+      <button v-bind="btn(spellOn ? t('Check spelling: on') : t('Check spelling: off'), spellOn)" class="foldable" @click="$emit('spell')"><TbIcon name="spell" /></button>
       <button v-bind="btn(t('Focus mode'), focusMode)" @click="$emit('focus')"><TbIcon name="focus" /></button>
       <button type="button" class="tb-btn more-btn" :aria-expanded="more" :title="$t('More tools')" :aria-label="$t('More tools')" @click="more = !more">{{ more ? '▴' : '⋯' }}</button>
     </div>
@@ -174,8 +175,9 @@ const props = defineProps({
   focusMode: { type: Boolean, default: false },
   panel: { type: String, default: '' },
   uploading: { type: Boolean, default: false }, // a picture is on its way
+  spellOn: { type: Boolean, default: false }, // the spellchecker (useSpellcheck)
 })
-defineEmits(['find', 'panel', 'focus', 'picture'])
+defineEmits(['find', 'panel', 'focus', 'picture', 'spell'])
 
 const TEXT_COLORS = ['#000000', '#444444', '#7f7f7f', '#c00000', '#e36c09', '#9c6500', '#2e7d32', '#1f4e79', '#3949ab', '#7030a0', '#ad1457', '#ffffff']
 const HIGHLIGHTS = ['#fff176', '#c5e1a5', '#80deea', '#f8bbd0', '#ffcc80', '#d1c4e9']
@@ -289,6 +291,7 @@ const ICONS = {
   book: 'M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3zM4 17a3 3 0 0 1 3-3h11',
   focus: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
   script: 'M4 5h16v11H10l-4 3v-3H4zM8 9h8M8 12h5',
+  spell: 'M3 14 6.5 5l3.5 9M4.3 11h4.4M12 5v9h2.5a2.2 2.2 0 0 0 0-4.5H12M13 18l3 3 6-7',
 }
 const TbIcon = (p) =>
   h('svg', { viewBox: '0 0 24 24', width: 18, height: 18, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' }, [h('path', { d: ICONS[p.name] || '' })])

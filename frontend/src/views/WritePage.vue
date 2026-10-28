@@ -22,6 +22,8 @@
       :focus-mode="focusMode"
       :panel="panel"
       :uploading="uploading"
+      :spell-on="spell.enabled.value"
+      @spell="spell.enabled.value = !spell.enabled.value"
       @picture="pickPicture"
       @find="openFind(false)"
       @panel="togglePanel"
@@ -113,6 +115,7 @@
         @change-type="typeDialog = 'switch'"
         @close="panel = ''"
       />
+      <SpellPanel v-if="panel === 'spelling' && !focusMode" :spell="spell" @language="setBookLanguage" @close="panel = ''" />
     </div>
 
     <footer class="write-status" :class="{ 'is-quiet': focusMode }">
@@ -122,6 +125,7 @@
       <span v-if="uploading" class="stat">{{ $t('Uploading the picture…') }}</span>
       <span class="save-state" :class="`is-${saveState}`" aria-live="polite">{{ saveLabel }}</span>
       <span class="spacer"></span>
+      <button v-if="!focusMode" type="button" class="btn btn-ghost small spell-status" :class="`is-${spell.status.value}`" :aria-pressed="panel === 'spelling'" :title="$t('Spelling options')" @click="togglePanel('spelling')">{{ spell.statusLabel.value }}</button>
       <label v-if="!focusMode" class="zoom">
         <span class="sr-only">{{ $t('Zoom') }}</span>
         <select v-model="zoomChoice" :aria-label="$t('Zoom')">
@@ -137,6 +141,18 @@
     <ImportReport v-if="importReport && settings" :report="importReport" :settings="settings" :set-up="book?.is_set_up !== false" :busy="busy" @apply="applyImport" @close="importReport = null" />
     <datalist id="write-fonts"><option v-for="f in fontList" :key="f" :value="f"></option></datalist>
 
+    <SpellMenu
+      v-if="spellMenu"
+      :word="spellMenu.word"
+      :x="spellMenu.x"
+      :y="spellMenu.y"
+      :suggestions="spellMenu.suggestions"
+      @pick="pickSuggestion"
+      @add="addToDictionary"
+      @ignore="ignoreWord"
+      @options="spellOptions"
+      @close="closeSpellMenu"
+    />
     <PageTypeDialog v-if="typeDialog && settings" :current="settings" :switching="typeDialog === 'switch'" :busy="busy" @choose="chooseType" @cancel="typeDialog = ''" @import="importInstead" />
     <ConflictView
       v-if="conflict"
@@ -206,6 +222,11 @@ import SpeakerOptions from '../components/write/SpeakerOptions.vue'
 import { nameSuggest } from '../editor/nameSuggest.js'
 import { scriptPlugins, setDialogueAttrs, dialogueToParagraph } from '../editor/script.js'
 import { useStoryNames } from '../editor/useStoryNames.js'
+import { spellPlugin, refreshSpell, replaceWord } from '../editor/spellPlugin.js'
+import { useSpellcheck } from '../editor/useSpellcheck.js'
+import { DICTIONARY_LANG } from '../editor/spellWords.js'
+import SpellMenu from '../components/write/SpellMenu.vue'
+import SpellPanel from '../components/write/SpellPanel.vue'
 
 void [tr('Custom size'), tr('Online Post'), tr('Not kept after a conflict'), tr('Before using the copy kept in this browser')]
 const PICTURE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
@@ -363,11 +384,14 @@ function refreshDocFonts() {
 // Tab-to-link and Script Mode (stage 4) go first: their Tab, Enter and
 // Backspace come before the usual ones.
 const names = useStoryNames()
+// The spellchecker (stage 5): the book's language picks the dictionary.
+const spell = useSpellcheck({ getLanguage: () => settings.value?.meta?.language, names })
 const plugins = [
   nameSuggest({ getIndex: () => names.index.value, typeLabel: names.typeLabel, hint: t('Tab: link this name') }),
   ...scriptPlugins({ getIndex: () => names.index.value, onSpeaker: openSpeaker }),
   ...editorPlugins({ getStyles: () => styles.value }),
   findPlugin(),
+  spellPlugin({ getSpell: () => spell.forPlugin(), onMenu: openSpellMenu }),
 ]
 const makeState = (json) => EditorState.create({ schema, doc: docFromJSON(json), plugins })
 
@@ -405,7 +429,7 @@ function createView() {
     state: makeState(emptyDocJSON()),
     nodeViews: nodeViews(),
     editable: () => !readOnly.value,
-    attributes: () => ({ class: `write-doc${online.value ? ' is-online' : ''}`, spellcheck: 'true' }),
+    attributes: () => ({ class: `write-doc${online.value ? ' is-online' : ''}`, spellcheck: spellOwn.value ? 'false' : 'true' }),
     dispatchTransaction(tr) {
       const st = view.state.apply(tr)
       view.updateState(st)
@@ -464,6 +488,53 @@ function createView() {
   if (import.meta.env.DEV) window.__writeView = view
 }
 watch([readOnly, online], () => view?.setProps({}))
+
+// ---- Spelling ------------------------------------------------------------------------------
+// While our checker is on (and has a dictionary), the browser's is off.
+const spellOwn = computed(() => spell.enabled.value && !!spell.language.value.code)
+watch(spellOwn, () => view?.setProps({}))
+watch([spell.gen, spell.status], () => refreshSpell(view, !!spell.forPlugin()))
+const spellMenu = ref(null) // { word, from, to, x, y, suggestions }
+async function openSpellMenu(hit) {
+  if (readOnly.value) return
+  spellMenu.value = { ...hit, suggestions: null }
+  let list = []
+  try {
+    list = await spell.suggest(hit.word)
+  } catch (e) {
+    /* no suggestions */
+  }
+  if (spellMenu.value?.from === hit.from && spellMenu.value?.word === hit.word) spellMenu.value = { ...spellMenu.value, suggestions: list }
+}
+function closeSpellMenu() {
+  spellMenu.value = null
+  view?.focus()
+}
+function pickSuggestion(text) {
+  const m = spellMenu.value
+  spellMenu.value = null
+  if (m && view && !readOnly.value) replaceWord(view, m, text)
+}
+function addToDictionary() {
+  const m = spellMenu.value
+  closeSpellMenu()
+  if (m) spell.addWord(m.word)
+}
+function ignoreWord() {
+  const m = spellMenu.value
+  closeSpellMenu()
+  if (m) spell.ignore(m.word)
+}
+function spellOptions() {
+  spellMenu.value = null
+  panel.value = 'spelling'
+}
+// Picking a dictionary sets the book's language (also the EPUB's).
+function setBookLanguage(code) {
+  const tag = DICTIONARY_LANG[code]
+  if (!tag || !settings.value) return
+  updateSettings({ ...settings.value, meta: { ...(settings.value.meta || {}), language: tag } })
+}
 
 // ---- Loading ------------------------------------------------------------------------------------
 const normal = (json) => docToJSON(docFromJSON(json))
@@ -1359,6 +1430,16 @@ onBeforeUnmount(() => {
 
 .spacer {
   flex: 1;
+}
+
+.spell-status {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.spell-status.is-none,
+.spell-status.is-error {
+  color: var(--accent);
 }
 
 .zoom select {
