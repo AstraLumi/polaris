@@ -34,7 +34,9 @@ type postSeg struct {
 	brk, tab                    bool
 	bold, italic, under, strike bool
 	sup, sub                    bool
-	link                        string // a web link
+	link                        string   // a web link
+	note                        *docNote // a footnote's or endnote's number (exportnotes.go)
+	noteKey                     string   // its Markdown label
 }
 
 // postSegs reads a block's inline content. Formatting counts against
@@ -50,6 +52,9 @@ func (b *exportBook) postSegs(content []*pmNode, styleID string, base exText) []
 			out = append(out, postSeg{brk: true})
 		case "tab":
 			out = append(out, postSeg{tab: true})
+		case "footnote":
+			x := b.noteOf(c)
+			out = append(out, postSeg{note: &x, noteKey: b.postNoteKey(x)})
 		case "text":
 			t := b.resolvedText(styleID, c.Marks)
 			s := postSeg{text: c.Text, bold: t.Bold && !base.Bold, italic: t.Italic && !base.Italic,
@@ -100,8 +105,13 @@ var htmlEsc = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "
 
 func he(s string) string { return htmlEsc.Replace(cleanXMLText(s)) }
 
+// noteMark holds a note's place while runs are joined (cleanXMLText keeps
+// it out of any text), so a note after superscript text stays apart.
+const noteMark = "\x00"
+
 func htmlInline(segs []postSeg) string {
 	var s strings.Builder
+	var notes []string
 	for _, g := range segs {
 		switch {
 		case g.brk:
@@ -109,6 +119,10 @@ func htmlInline(segs []postSeg) string {
 			continue
 		case g.tab:
 			s.WriteString(" ")
+			continue
+		case g.note != nil:
+			s.WriteString(noteMark) // the note's number, put in after the runs are joined
+			notes = append(notes, "<sup>"+he(g.note.Label)+"</sup>")
 			continue
 		}
 		var open, close []string
@@ -144,6 +158,9 @@ func htmlInline(segs []postSeg) string {
 	for _, t := range []string{"strong", "em", "u", "s", "sup", "sub"} {
 		out = strings.ReplaceAll(out, "</"+t+"><"+t+">", "")
 	}
+	for _, n := range notes {
+		out = strings.Replace(out, noteMark, n, 1)
+	}
 	return out
 }
 
@@ -165,6 +182,7 @@ func exportHTML(b *exportBook) ([]byte, error) {
 			h.block(n, 0)
 		}
 		h.endQuote()
+		h.notes(c.Doc) // exportnotes.go
 	}
 	h.s.WriteString("</body>\n</html>\n")
 	return []byte(h.s.String()), nil
@@ -324,6 +342,13 @@ func mdInline(segs []postSeg) string {
 			out.WriteString("\\\n")
 			continue
 		}
+		if g.note != nil { // a footnote reference (exportnotes.go)
+			closeTo(0)
+			out.WriteString(pending)
+			pending = ""
+			out.WriteString("[^" + g.noteKey + "]")
+			continue
+		}
 		text := g.text
 		if g.tab {
 			text = " "
@@ -390,11 +415,14 @@ type mdPost struct {
 
 func exportMarkdown(b *exportBook) ([]byte, error) {
 	m := &mdPost{b: b}
-	for _, c := range b.Chapters {
+	for ci, c := range b.Chapters {
 		for _, n := range trimPageBreaks(c.Doc.Content) {
 			if s := m.block(n); s != "" {
 				m.blocks = append(m.blocks, s)
 			}
+		}
+		if s := m.notes(c.Doc, ci); s != "" { // exportnotes.go
+			m.blocks = append(m.blocks, s)
 		}
 	}
 	return []byte(strings.Join(m.blocks, "\n\n") + "\n"), nil
@@ -513,6 +541,8 @@ func textOf(segs []postSeg) string {
 			s.WriteString("\n")
 		case g.tab:
 			s.WriteString("\t")
+		case g.note != nil:
+			s.WriteString("[" + g.note.Label + "]")
 		default:
 			s.WriteString(cleanXMLText(g.text))
 		}
@@ -590,6 +620,9 @@ func exportText(b *exportBook) ([]byte, error) {
 				continue
 			}
 			blocks = append(blocks, walk(n, ""))
+		}
+		if s := b.textNotes(c.Doc); s != "" { // exportnotes.go
+			blocks = append(blocks, s)
 		}
 	}
 	return []byte(strings.Join(blocks, "\n\n") + "\n"), nil

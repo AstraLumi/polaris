@@ -17,6 +17,7 @@
   --comment-active: rgba(120, 170, 255, 0.42);
   --comment-line-active: rgba(50, 100, 200, 0.9);
   --spell-line: #d0312d;
+  --note: #9a6b00;
 }
 
 .write-page.is-dark-paper {
@@ -26,6 +27,7 @@
   --find: rgba(255, 196, 0, 0.3);
   --find-current: rgba(255, 140, 0, 0.55);
   --spell-line: #ff7a70;
+  --note: #e0b450;
   --read: rgba(110, 170, 255, 0.28);
   --read-edge: rgba(140, 190, 255, 0.75);
   --comment: rgba(120, 170, 255, 0.16);
@@ -453,4 +455,100 @@
 
 .write-doc.ProseMirror.resize-cursor {
   cursor: col-resize;
+}
+
+/* Footnotes and endnotes (stage 5, noteView.js): the number in the text,
+   counted in the chapter by CSS (footnotes 1, 2, 3, endnotes i, ii, iii),
+   and the box with the note's editor under it (beside the page's editor,
+   in .write-host). */
+.write-doc {
+  counter-reset: pm-fn pm-en;
+}
+
+.write-doc .pm-fn-ref {
+  font-size: 0.7em;
+  line-height: 0;
+  vertical-align: super;
+  padding: 0 0.08em;
+  color: var(--note, #9a6b00);
+  cursor: pointer;
+  user-select: none;
+}
+
+.write-doc .pm-fn-ref[data-fn='footnote'] {
+  counter-increment: pm-fn;
+}
+
+.write-doc .pm-fn-ref[data-fn='endnote'] {
+  counter-increment: pm-en;
+}
+
+.write-doc .pm-fn-ref[data-fn='footnote']::after {
+  content: counter(pm-fn);
+}
+
+.write-doc .pm-fn-ref[data-fn='endnote']::after {
+  content: counter(pm-en, lower-roman);
+}
+
+.write-doc.ProseMirror .pm-fn-ref.ProseMirror-selectednode {
+  outline-offset: 0;
+  border-radius: 2px;
+}
+
+.pm-fn-pop {
+  position: absolute;
+  z-index: 6;
+  width: min(30em, 100%);
+  box-sizing: border-box;
+  padding: 0.35em 0.6em 0.5em;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--ink-faint);
+  border-left: 3px solid var(--note, #9a6b00);
+  border-radius: 6px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.22);
+  white-space: normal;
+}
+
+.pm-fn-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  margin-bottom: 0.25em;
+  font-family: system-ui, sans-serif;
+  font-size: 11px;
+}
+
+.pm-fn-title {
+  flex: 1;
+  font-weight: 600;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pm-fn-btn {
+  border: 0;
+  background: none;
+  color: var(--ink-faint);
+  font: inherit;
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.pm-fn-btn:hover:not(:disabled) {
+  color: var(--ink);
+  background: rgba(127, 127, 127, 0.15);
+}
+
+.pm-fn-close {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.pm-fn-pop > .write-doc.pm-fn-body.ProseMirror {
+  min-height: 0;
+  outline: none;
 }

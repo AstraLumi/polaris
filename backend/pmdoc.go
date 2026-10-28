@@ -28,6 +28,14 @@ package main
 //	docCommentIDs(doc)         Every comment mark's id (comments.go); a text
 //	                           may carry several comment marks, each with
 //	                           its own id.
+//	docNotes(doc)              Every footnote and endnote (stage 5) in
+//	                           reading order, with its number per kind
+//	                           (exportnotes.go).
+//
+// Notes (stage 5): a `footnote` is an inline node (attr kind: footnote,
+// the default, or endnote) holding one or more paragraphs, in any block
+// that holds text, never inside another note. Its paragraphs count as
+// words and their story links as mentions, like the text around them.
 
 import (
 	"bytes"
@@ -312,7 +320,8 @@ func safeUploadSrc(src string) bool {
 }
 
 type pmValidator struct {
-	nodes int
+	nodes  int
+	inNote bool // inside a footnote's paragraphs: no notes there
 }
 
 func validatePMDoc(doc *pmNode) error {
@@ -374,7 +383,13 @@ func (v *pmValidator) block(n *pmNode, parent string, depth int) error {
 	switch n.Type {
 	case "paragraph", "heading", "dialogue":
 		for _, c := range n.Content {
-			if err := v.inline(c, n.Type); err != nil {
+			var err error
+			if c != nil && c.Type == "footnote" {
+				err = v.footnote(c, depth+1)
+			} else {
+				err = v.inline(c, n.Type)
+			}
+			if err != nil {
 				return err
 			}
 		}
@@ -402,6 +417,37 @@ func (v *pmValidator) block(n *pmNode, parent string, depth int) error {
 	default: // atoms
 		if len(n.Content) > 0 {
 			return fmt.Errorf("%s: has no content", n.Type)
+		}
+	}
+	return nil
+}
+
+// footnote checks a note (stage 5): its kind, and one or more paragraphs
+// holding no notes.
+func (v *pmValidator) footnote(n *pmNode, depth int) error {
+	if err := v.count(); err != nil {
+		return err
+	}
+	if v.inNote {
+		return errors.New("footnote: a note can't hold another note")
+	}
+	if len(n.Marks) > 0 || n.Text != "" {
+		return errors.New("footnote: only text has marks and text")
+	}
+	if k, ok := n.Attrs["kind"]; ok && k != nil && k != "footnote" && k != "endnote" {
+		return errors.New("footnote: attr kind must be footnote or endnote")
+	}
+	if len(n.Content) == 0 {
+		return errors.New("footnote: needs at least one paragraph")
+	}
+	v.inNote = true
+	defer func() { v.inNote = false }()
+	for _, p := range n.Content {
+		if p == nil || p.Type != "paragraph" {
+			return errors.New("footnote: may only hold paragraphs")
+		}
+		if err := v.block(p, "footnote", depth+2); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -640,7 +686,7 @@ func pmWalk(n *pmNode, fn func(*pmNode)) {
 }
 
 // pmTextblockText is a paragraph's or heading's text, with hard breaks
-// and tabs as given.
+// and tabs as given. A note in it adds nothing (its text is its own).
 func pmTextblockText(n *pmNode, hardBreak, tab string) string {
 	var b strings.Builder
 	for _, c := range n.Content {
@@ -684,8 +730,18 @@ func docWords(doc *pmNode) int {
 	n := 0
 	pmWalk(doc, func(x *pmNode) {
 		// A dialogue's words are its spoken line, not the speaker or manner.
+		// A note's number separates words like a space; its paragraphs are
+		// counted on their own (pmWalk goes into them).
 		if x.Type == "paragraph" || x.Type == "heading" || x.Type == "dialogue" {
-			n += countWords(pmTextblockText(x, " ", " "))
+			var b strings.Builder
+			for _, c := range x.Content {
+				if c.Type == "text" {
+					b.WriteString(c.Text)
+				} else {
+					b.WriteByte(' ')
+				}
+			}
+			n += countWords(b.String())
 		}
 	})
 	return n

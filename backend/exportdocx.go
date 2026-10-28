@@ -159,10 +159,10 @@ var wordBuiltinIDs = map[string]string{"normal": "Normal", "title": "Title", "su
 // Ids and names the export uses for its own styles.
 var wordReservedIDs = []string{"Normal", "Title", "Subtitle", "Quote", "Heading1", "Heading2", "Heading3", "Heading4",
 	"Heading5", "Heading6", "Heading7", "Heading8", "Heading9", "SceneBreak", "TOCHeading", "TOC1", "TOC2", "TOC3",
-	"Header", "Footer", "DefaultParagraphFont"}
+	"Header", "Footer", "DefaultParagraphFont", "FootnoteText", "FootnoteReference", "EndnoteText", "EndnoteReference"}
 var wordReservedNames = []string{"normal", "title", "subtitle", "quote", "heading 1", "heading 2", "heading 3", "heading 4",
 	"heading 5", "heading 6", "heading 7", "heading 8", "heading 9", "scene break", "toc heading", "toc 1", "toc 2", "toc 3",
-	"header", "footer", "default paragraph font"}
+	"header", "footer", "default paragraph font", "footnote text", "footnote reference", "endnote text", "endnote reference"}
 
 type docxStyles struct {
 	id      map[string]string // book style id → Word styleId
@@ -543,6 +543,7 @@ func (d *docxOut) stylesXML() []byte {
 			`<w:pPr><w:tabs><w:tab w:val="center" w:pos="%d"/><w:tab w:val="right" w:pos="%d"/></w:tabs><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:ind w:left="0" w:right="0" w:firstLine="0"/><w:jc w:val="left"/></w:pPr></w:style>`,
 			hf.id, hf.name, tw/2, tw)
 	}
+	s.WriteString(d.noteStylesXML()) // exportnotes.go
 	s.WriteString(`</w:styles>`)
 	return []byte(s.String())
 }
@@ -578,6 +579,8 @@ type docxOut struct {
 	tocAnchor map[*pmNode]string
 	hasTOC    bool
 	cm        *docxCommentsOut // the comments (docxcomments.go)
+	notes     *docxNotesOut    // the footnotes and endnotes (exportnotes.go)
+	noteRels  *strings.Builder // while a note is written: its part's relationships
 
 	absNums, nums strings.Builder
 	numN          int
@@ -638,6 +641,7 @@ func exportDocx(b *exportBook) ([]byte, error) {
 	}
 	d.doc.WriteString(`</w:body></w:document>`)
 	d.commentParts() // docxcomments.go
+	d.noteParts()    // exportnotes.go
 
 	// Package.
 	var entries []zipEntry
@@ -710,7 +714,11 @@ func (d *docxOut) rel(typ, target string, external bool) string {
 	if external {
 		mode = ` TargetMode="External"`
 	}
-	fmt.Fprintf(&d.rels, `<Relationship Id="%s" Type="%s%s" Target="%s"%s/>`, id, relTypeDoc, typ, xe(target), mode)
+	out := &d.rels
+	if d.noteRels != nil {
+		out = d.noteRels
+	}
+	fmt.Fprintf(out, `<Relationship Id="%s" Type="%s%s" Target="%s"%s/>`, id, relTypeDoc, typ, xe(target), mode)
 	return id
 }
 
@@ -827,12 +835,26 @@ func (d *docxOut) textParaPPr(p *docxPara, n *pmNode, lc *docxList) {
 	if d.breakBefore() {
 		p.ppr.WriteString(`<w:pageBreakBefore/>`)
 	}
-	inList := lc != nil
-	if inList && lc.first {
+	if lc != nil && lc.first {
 		fmt.Fprintf(&p.ppr, `<w:numPr><w:ilvl w:val="%d"/><w:numId w:val="%d"/></w:numPr>`, lc.ilvl, lc.numID)
 	}
+	writeParaBox(&p.ppr, n.Attrs, lc)
+	// Outline level: a heading is one whatever its style; a paragraph never.
+	styleLv := d.sm.outline[styleID]
+	if n.Type == "heading" {
+		if lv := headingLevel(n) - 1; lv != styleLv {
+			fmt.Fprintf(&p.ppr, `<w:outlineLvl w:val="%d"/>`, lv)
+		}
+	} else if styleLv >= 0 {
+		p.ppr.WriteString(`<w:outlineLvl w:val="9"/>`)
+	}
+}
+
+// writeParaBox writes a paragraph's own spacing, indents and alignment
+// (a block's, or a note's paragraph's: exportnotes.go).
+func writeParaBox(ppr *strings.Builder, a map[string]any, lc *docxList) {
+	inList := lc != nil
 	// Spacing.
-	a := n.Attrs
 	var sp []string
 	if v, ok := pmNum(a["spaceBefore"]); ok {
 		sp = append(sp, fmt.Sprintf(`w:before="%d"`, twips(math.Max(0, v))))
@@ -846,7 +868,7 @@ func (d *docxOut) textParaPPr(p *docxPara, n *pmNode, lc *docxList) {
 		sp = append(sp, fmt.Sprintf(`w:line="%d" w:lineRule="auto"`, int(math.Round(v*240))))
 	}
 	if len(sp) > 0 {
-		p.ppr.WriteString(`<w:spacing ` + strings.Join(sp, " ") + `/>`)
+		ppr.WriteString(`<w:spacing ` + strings.Join(sp, " ") + `/>`)
 	}
 	var ind []string
 	if inList && !lc.first {
@@ -869,19 +891,10 @@ func (d *docxOut) textParaPPr(p *docxPara, n *pmNode, lc *docxList) {
 		}
 	}
 	if len(ind) > 0 {
-		p.ppr.WriteString(`<w:ind ` + strings.Join(ind, " ") + `/>`)
+		ppr.WriteString(`<w:ind ` + strings.Join(ind, " ") + `/>`)
 	}
 	if al, _ := a["align"].(string); pmAligns[al] {
-		p.ppr.WriteString(`<w:jc w:val="` + wordJc(al) + `"/>`)
-	}
-	// Outline level: a heading is one whatever its style; a paragraph never.
-	styleLv := d.sm.outline[styleID]
-	if n.Type == "heading" {
-		if lv := headingLevel(n) - 1; lv != styleLv {
-			fmt.Fprintf(&p.ppr, `<w:outlineLvl w:val="%d"/>`, lv)
-		}
-	} else if styleLv >= 0 {
-		p.ppr.WriteString(`<w:outlineLvl w:val="9"/>`)
+		ppr.WriteString(`<w:jc w:val="` + wordJc(al) + `"/>`)
 	}
 }
 
@@ -1012,9 +1025,17 @@ func (d *docxOut) inlines(p *docxPara, content []*pmNode, styleID string) {
 		}
 		switch c.Type {
 		case "text":
-			d.cm.before(p, c)
+			if d.noteRels == nil { // no comments in a note
+				d.cm.before(p, c)
+			}
 			d.textRun(p, c.Text, styleID, c.Marks, nil)
-			d.cm.after(p, c)
+			if d.noteRels == nil {
+				d.cm.after(p, c)
+			}
+		case "footnote": // exportnotes.go
+			if d.noteRels == nil {
+				d.noteRef(p, c)
+			}
 		case "hard_break":
 			p.body.WriteString(`<w:r><w:br/></w:r>`)
 		case "tab":
@@ -1567,6 +1588,7 @@ func (d *docxOut) settingsXML() []byte {
 	if d.hasTOC {
 		s.WriteString(`<w:updateFields w:val="true"/>`)
 	}
+	s.WriteString(d.noteSettingsXML()) // exportnotes.go
 	s.WriteString(`<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat>`)
 	fmt.Fprintf(&s, `<w:themeFontLang w:val="%s"/>`, xe(b.Meta.Language))
 	s.WriteString(`</w:settings>`)

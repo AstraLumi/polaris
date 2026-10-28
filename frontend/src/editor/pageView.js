@@ -4,10 +4,70 @@
 // paged.js, which is loaded only here. The layout's rules come from
 // bookLayout.js (pagedCSS).
 import { DOMSerializer } from 'prosemirror-model'
-import { schema, docFromJSON } from './schema.js'
+import { schema, docFromJSON, ownPara } from './schema.js'
+import { paraDeclarations } from './css.js'
 import { bookPlan, pageName, tocEntries, normaliseLayout } from './bookLayout.js'
+import { noteKind, noteLabel } from './footnotes.js'
 
-const textOf = (n) => (n.type === 'text' ? n.text || '' : n.type === 'hard_break' || n.type === 'tab' ? ' ' : (n.content || []).map(textOf).join(''))
+const textOf = (n) =>
+  n.type === 'text' ? n.text || '' : n.type === 'hard_break' || n.type === 'tab' ? ' ' : n.type === 'footnote' ? '' : (n.content || []).map(textOf).join('')
+
+// The schema's serializer, but a note (footnote or endnote, stage 5) is
+// its number (sup.pv-fn-call) followed by its text (span.pv-fn: the number
+// again, then each paragraph as a span.pv-fn-p, a block). Footnotes stay
+// where they are for paged.js (float: footnote, pagedCSS); endnotes, and
+// every note of an online post, are gathered at the chapter's end
+// (gatherNotes). counts: { footnote, endnote }, set to 0 for each chapter.
+function bookSerializer(doc, counts) {
+  const base = DOMSerializer.fromSchema(schema)
+  let serializer = null
+  const footnote = (node) => {
+    const kind = noteKind(node.attrs.kind)
+    const label = noteLabel(kind, ++counts[kind])
+    const wrap = doc.createElement('span')
+    wrap.className = 'pv-fn-wrap'
+    const call = wrap.appendChild(doc.createElement('sup'))
+    call.className = `pv-fn-call pv-${kind}`
+    call.textContent = label
+    const body = wrap.appendChild(doc.createElement('span'))
+    body.className = `pv-fn pv-${kind}`
+    body.dataset.label = label
+    node.forEach((p, _o, i) => {
+      const line = body.appendChild(doc.createElement('span'))
+      line.className = 'pv-fn-p'
+      const css = paraDeclarations(ownPara(p.attrs)).join('; ')
+      if (css) line.setAttribute('style', css)
+      if (i === 0) {
+        const num = line.appendChild(doc.createElement('span'))
+        num.className = 'pv-fn-num'
+        num.textContent = label
+      }
+      line.appendChild(serializer.serializeFragment(p.content, { document: doc }))
+    })
+    return wrap
+  }
+  serializer = new DOMSerializer({ ...base.nodes, footnote }, base.marks)
+  return serializer
+}
+
+// Moves the notes of a chapter (endnotes when paged, every note otherwise:
+// footnotes first, then endnotes) into a list at its end, div.pv-notes.
+function gatherNotes(section, paged, doc) {
+  const found = [...section.querySelectorAll(paged ? '.pv-fn.pv-endnote' : '.pv-fn')]
+  if (!found.length) return
+  const order = paged ? found : [...found.filter((n) => n.classList.contains('pv-footnote')), ...found.filter((n) => n.classList.contains('pv-endnote'))]
+  const list = doc.createElement('div')
+  list.className = 'pv-notes'
+  for (const n of order) {
+    const item = list.appendChild(doc.createElement('div'))
+    item.className = `pv-note ${n.classList.contains('pv-endnote') ? 'pv-endnote' : 'pv-footnote'}`
+    item.dataset.ch = n.dataset.ch
+    item.dataset.blk = n.dataset.blk
+    while (n.firstChild) item.appendChild(n.firstChild)
+    n.remove()
+  }
+  section.appendChild(list)
+}
 
 // The book as HTML: { fragment, plan, blocks (how many top-level blocks,
 // for the progress) }. chapters: [{ id, title, doc (JSON) }]. Each
@@ -15,13 +75,15 @@ const textOf = (n) => (n.type === 'text' ? n.text || '' : n.type === 'hard_break
 // the chapter's doc) and data-gi (its index in the book). With paged
 // false (an online post) nothing is laid out in pages.
 export function buildBook(chapters, settings, { paged = true, doc = document } = {}) {
-  const serializer = DOMSerializer.fromSchema(schema)
+  const counts = { footnote: 0, endnote: 0 }
+  const serializer = bookSerializer(doc, counts)
   const layout = normaliseLayout(settings?.layout)
   const plan = bookPlan(settings, chapters)
   const fragment = doc.createDocumentFragment()
   let gi = 0
   chapters.forEach((ch, ci) => {
     const pl = plan[ci]
+    counts.footnote = counts.endnote = 0
     const node = docFromJSON(ch.doc)
     const h1 = (ch.doc?.content || []).find((n) => n?.type === 'heading' && (+n.attrs?.level || 1) === 1)
     const section = doc.createElement('section')
@@ -44,6 +106,10 @@ export function buildBook(chapters, settings, { paged = true, doc = document } =
       el.dataset.ch = String(ch.id)
       el.dataset.blk = String(bi)
       el.dataset.gi = String(gi++)
+      for (const n of el.querySelectorAll('.pv-fn')) {
+        n.dataset.ch = String(ch.id)
+        n.dataset.blk = String(bi)
+      }
       if (block.type.name === 'heading') el.id = `pv-h-${ch.id}-${bi}`
       if (block.type.name === 'table') headerRowsToHead(el, doc)
       if (block.type.name === 'page_break') {
@@ -67,6 +133,7 @@ export function buildBook(chapters, settings, { paged = true, doc = document } =
       leading = false
       section.appendChild(el)
     })
+    gatherNotes(section, paged, doc)
     if (fragment.childNodes.length && !hoisted) {
       section.classList.add('pv-later')
     }

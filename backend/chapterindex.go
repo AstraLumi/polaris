@@ -146,7 +146,8 @@ func docDialogues(doc *pmNode) []pmDialogue {
 }
 
 // docLinkCounts counts each item a doc names, in order of first mention:
-// story_link runs and the characters of its dialogues.
+// story_link runs and the characters of its dialogues. A footnote's or
+// endnote's text (stage 5) names items like any other text.
 func docLinkCounts(doc *pmNode) []pmLinkCount {
 	var out []pmLinkCount
 	at := map[pmStoryLink]int{}
@@ -171,6 +172,9 @@ func docLinkCounts(doc *pmNode) []pmLinkCount {
 		}
 		var prev *pmStoryLink
 		for _, c := range n.Content {
+			if c != nil && c.Type == "footnote" {
+				continue // a note's number doesn't split a mention; its own text is walked on its own
+			}
 			l := storyLinkOf(c)
 			if l != nil && (prev == nil || *prev != *l) {
 				add(*l)

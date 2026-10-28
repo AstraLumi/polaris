@@ -3,6 +3,7 @@
 // start, the options per chapter, and the CSS paged media the page view
 // lays the book out with (paged.js). Pure: no DOM, no Vue. The server's
 // defaults are booklayout.go's (defaultBookLayout); keep the two the same.
+import { noteSize } from './css.js'
 
 export const BAND_FIELDS = ['{page}', '{chapter}', '{chapter_number}', '{book}', '{author}']
 export const NUMBER_FORMATS = ['arabic', 'roman', 'upper_roman', 'alpha', 'upper_alpha']
@@ -287,16 +288,38 @@ export function pagedCSS(settings, ctx = {}) {
   // The table of contents' page numbers, in each chapter's own format.
   css.push(`.pv-toc a.pv-n-main::after { content: target-counter(attr(href), page, ${counterStyle(layout.numbering.format)}); }`)
   css.push('.pv-toc a.pv-n-front::after { content: target-counter(attr(href), page, lower-roman); }')
+  css.push(...notesCSS(ctx))
   return css.join('\n')
+}
+
+// Footnotes (stage 5) at the foot of the page they are called on: paged.js
+// moves each span.pv-fn.pv-footnote (pageView.js) into the page's footnote
+// area. Its own call and marker (a counter running through the whole book)
+// are hidden: the note's number is written in the text (sup.pv-fn-call)
+// and in the note (span.pv-fn-num), counted per chapter. Notes are set in
+// the body's font at 5/6 of its size, on the half point (Word's 10 pt
+// notes under 12 pt text: noteSize), under a short rule.
+
+export function notesCSS(ctx = {}) {
+  const font = ctx.font ? `font-family: ${cssString(ctx.font)}, serif; ` : ''
+  return [
+    '@page { @footnote { margin-top: 0.8em; padding-top: 0.5em; background: linear-gradient(currentColor, currentColor) top left / 30% 0.5pt no-repeat; } }',
+    '.pv-fn.pv-footnote { float: footnote; }',
+    '.pv-fn-wrap > a[data-footnote-call]::after { content: none; }',
+    `.pv-fn[data-footnote-marker] { display: block; list-style: none; ${font}font-size: ${noteSize(ctx.size)}pt; font-weight: normal; font-style: normal; color: ${ctx.color || '#000'}; text-align: left; text-indent: 0; line-height: 1.2; }`,
+    '.pv-fn[data-footnote-marker]::marker { content: none; }',
+  ]
 }
 
 // The entries of a table of contents: every heading up to `levels` deep
 // in the chapters' docs (JSON), each { level, text, chapter, block (its
 // index in the chapter's doc), front }; a chapter without a Heading 1
-// (other than front matter) is listed by its title.
+// (other than front matter) is listed by its title. A note in a heading
+// isn't part of its text.
 export function tocEntries(chapters, plan, levels = 1) {
   const out = []
-  const textOf = (n) => (n.type === 'text' ? n.text || '' : n.type === 'hard_break' || n.type === 'tab' ? ' ' : (n.content || []).map(textOf).join(''))
+  const textOf = (n) =>
+    n.type === 'text' ? n.text || '' : n.type === 'hard_break' || n.type === 'tab' ? ' ' : n.type === 'footnote' ? '' : (n.content || []).map(textOf).join('')
   ;(chapters || []).forEach((ch, ci) => {
     const pl = plan[ci] || {}
     const at = out.length

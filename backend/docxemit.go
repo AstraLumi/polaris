@@ -662,6 +662,9 @@ func inlineNodes(b *irBlock, s *outStyle, set *styleSet) []*pmNode {
 		case 'n':
 			out = append(out, &pmNode{Type: "hard_break"})
 			lastKey = "\x00"
+		case 'f': // a footnote or endnote (docxnotes.go)
+			out = append(out, noteNode(in.note, set))
+			lastKey = "\x00"
 		default:
 			if in.text == "" {
 				continue
@@ -689,7 +692,12 @@ func firstSize(b *irBlock, fallback float64) float64 {
 }
 
 func (p *docxParser) paraNode(b *irBlock, set *styleSet, keep map[string]bool) *pmNode {
-	s := set.byWid[b.style]
+	return paraNodeIn(b, set.byWid[b.style], set, keep)
+}
+
+// paraNodeIn makes a paragraph measured against style s (a note's
+// paragraph against its Word style: docxnotes.go).
+func paraNodeIn(b *irBlock, s *outStyle, set *styleSet, keep map[string]bool) *pmNode {
 	attrs := map[string]any{}
 	n := &pmNode{Type: "paragraph", Attrs: attrs}
 	if b.level > 0 {

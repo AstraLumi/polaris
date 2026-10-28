@@ -260,6 +260,8 @@ import { chapterOption, setChapterOption, normaliseLayout } from '../editor/book
 import SpeakerOptions from '../components/write/SpeakerOptions.vue'
 import TableOptions from '../components/write/TableOptions.vue'
 import { tablePlugins, tableInfo } from '../editor/tables.js'
+import { notesPlugin } from '../editor/footnotes.js'
+import { noteNodeView } from '../editor/noteView.js'
 import { nameSuggest } from '../editor/nameSuggest.js'
 import { scriptPlugins, setDialogueAttrs, dialogueToParagraph } from '../editor/script.js'
 import { useStoryNames } from '../editor/useStoryNames.js'
@@ -588,6 +590,7 @@ const plugins = [
   nameSuggest({ getIndex: () => names.index.value, typeLabel: names.typeLabel, hint: t('Tab: link this name') }),
   ...scriptPlugins({ getIndex: () => names.index.value, onSpeaker: openSpeaker }),
   ...tablePlugins(),
+  notesPlugin(),
   ...editorPlugins({ getStyles: () => styles.value }),
   findPlugin(),
   readAloudPlugin({ onInterrupt: () => reader.stop() }),
@@ -979,7 +982,16 @@ function chapterMenu(c) {
 // The table of contents in the editor lists the chapters that aren't front matter.
 const tocTitles = () => chapters.value.filter((c) => !isFrontMatter(c.id)).map((c) => ({ title: c.title }))
 function nodeViews() {
-  return { toc: tocNodeView(tocTitles, t('Page numbers appear in the page view.')) }
+  return {
+    toc: tocNodeView(tocTitles, t('Page numbers appear in the page view.')),
+    // Footnotes and endnotes (stage 5): the number, and the note's editor
+    // while it is selected.
+    footnote: noteNodeView({
+      title: (kind, n) => (kind === 'endnote' ? t('Endnote {n}', { n }) : t('Footnote {n}', { n })),
+      text: { toEndnote: t('Make it an endnote'), toFootnote: t('Make it a footnote'), remove: t('Delete note'), close: t('Back to the text (Esc)') },
+      readOnly: () => readOnly.value,
+    }),
+  }
 }
 watch(
   () => chapters.value.map((c) => c.title).join('\n') + JSON.stringify(settings.value?.chapter_options || {}),
@@ -1616,6 +1628,7 @@ onBeforeUnmount(() => {
 }
 
 .write-host {
+  position: relative; /* a note's box (noteView.js) is placed in it */
   min-height: 100%;
 }
 

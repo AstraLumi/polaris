@@ -73,8 +73,8 @@ var (
 //	toc              tables of contents (a TOC field or a TOC content control)
 //	fields           page numbers, page references and index entries (dropped)
 //	fields_as_text   other fields (cross-references, dates…): their shown text is kept as plain text
-//	footnotes        footnote references (the notes' text is not imported)
-//	endnotes         endnote references
+//	footnotes        footnote references to notes the file doesn't have, or inside a note (docxnotes.go)
+//	endnotes         endnote references likewise
 //	comments         comments that mark no text (and their replies), references to comments the file doesn't have
 //	tables           tables nested in a table's cell (their text is kept, cell by cell, as paragraphs in that cell)
 //	text_boxes       text boxes (their text is kept as paragraphs after the paragraph they sit in)
@@ -369,6 +369,9 @@ func parseDocx(data []byte) (*docxImport, error) {
 	p := newDocxParser(pk, rels, parseStyles(stylesRoot, th), parseNumbering(numRoot), th)
 	p.mirror = settings.child("w", "mirrorMargins") != nil && wOn(settings.child("w", "mirrorMargins"))
 	if p.cm, err = parseDocxComments(pk, rels); err != nil { // docxcomments.go
+		return nil, err
+	}
+	if p.notes, err = parseDocxNotes(pk, rels); err != nil { // docxnotes.go
 		return nil, err
 	}
 	if err := p.parseBody(docRoot.child("w", "body")); err != nil {

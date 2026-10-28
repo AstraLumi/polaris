@@ -49,8 +49,9 @@ type epubOut struct {
 	headFile map[*pmNode]string // heading → file
 	bmIDs    map[*pmNode]string // a block's bookmark → its id
 	cover    *exportPicture
-	body     float64  // normal's size, pt
-	fonts    []string // b.Fonts' hrefs, in order
+	body     float64               // normal's size, pt
+	fonts    []string              // b.Fonts' hrefs, in order
+	noteIDs  map[*pmNode][2]string // a note → its reference's id and its own (exportnotes.go)
 }
 
 func exportEPUB(b *exportBook) ([]byte, error) {
@@ -99,6 +100,7 @@ func exportEPUB(b *exportBook) ([]byte, error) {
 			}
 		})
 	}
+	e.noteIDsFor(chapters) // exportnotes.go
 	// The cover: the first chapter starting with a full-page picture.
 	if len(chapters) > 0 && len(chapters[0].Doc.Content) > 0 {
 		if first := chapters[0].Doc.Content[0]; first != nil && first.Type == "image" && attrBool(first, "fullPage") {
@@ -347,6 +349,7 @@ figure.image img { max-width: 100%; height: auto; }
 .toc a { text-decoration: none; color: inherit; }
 `)
 	s.WriteString(epubTableCSS(e.body))
+	s.WriteString(epubNotesCSS())
 	return []byte(s.String())
 }
 
@@ -386,6 +389,7 @@ func (e *epubOut) chapterXHTML(ci int, c exportChapter) []byte {
 	for _, n := range blocks {
 		e.block(ctx, n)
 	}
+	e.chapterNotesXHTML(&s, c.Doc) // exportnotes.go
 	s.WriteString("</section>\n</body>\n</html>\n")
 	return []byte(s.String())
 }
@@ -567,6 +571,8 @@ func (e *epubOut) inlines(s *strings.Builder, content []*pmNode, styleID string)
 			s.WriteString("<br/>")
 		case "tab":
 			s.WriteString(`<span class="tab"> </span>`)
+		case "footnote": // exportnotes.go
+			e.noteRef(s, c)
 		case "text":
 			t := e.b.resolvedText(styleID, c.Marks)
 			var open, close []string
