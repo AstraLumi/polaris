@@ -32,3 +32,31 @@ func TestSPAHandlerServesPagesThatShareAFolderName(t *testing.T) {
 		t.Errorf("built script: got %d %q", rec.Code, rec.Body.String())
 	}
 }
+
+// Offline writing's service worker relies on these: the page and /sw.js are
+// asked for again every time (a release shows at once), hashed built files
+// are kept for good.
+func TestSPAHandlerCacheHeaders(t *testing.T) {
+	static := fstest.MapFS{
+		"index.html":        {Data: []byte("<html>app</html>")},
+		"sw.js":             {Data: []byte("self.x = 1")},
+		"assets/index-1.js": {Data: []byte("console.log(1)")},
+		"favicon.svg":       {Data: []byte("<svg/>")},
+	}
+	h := spaHandler(static)
+	for path, want := range map[string]string{
+		"/":                  "no-cache",
+		"/write/3":           "no-cache",
+		"/assets":            "no-cache",
+		"/sw.js":             "no-cache",
+		"/assets/index-1.js": "public, max-age=31536000, immutable",
+		"/assets/gone-2.js":  "no-cache", // the page, not a script: never kept
+		"/favicon.svg":       "",
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if got := rec.Header().Get("Cache-Control"); got != want {
+			t.Errorf("%s: Cache-Control %q, want %q", path, got, want)
+		}
+	}
+}

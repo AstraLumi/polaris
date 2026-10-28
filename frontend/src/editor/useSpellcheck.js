@@ -31,7 +31,9 @@ const write = (k, v) => {
 const ignored = ref([])
 
 // getLanguage(): the book's meta.language. names: useStoryNames().
-export function useSpellcheck({ getLanguage, names }) {
+// fetchWords: the story's added words (from an offline book's copy when
+// the server can't be reached).
+export function useSpellcheck({ getLanguage, names, fetchWords = () => spellingApi.words() }) {
   const enabled = ref(read(ON_KEY, '1') !== '0')
   const skipCaps = ref(read(CAPS_KEY, '1') !== '0')
   watch(enabled, (v) => write(ON_KEY, v ? '1' : '0'))
@@ -54,7 +56,7 @@ export function useSpellcheck({ getLanguage, names }) {
 
   async function loadWords() {
     try {
-      added.value = (await spellingApi.words()).words || []
+      added.value = (await fetchWords()).words || []
     } catch (e) {
       /* the dictionary works without them */
     }

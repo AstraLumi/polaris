@@ -11,6 +11,10 @@
       {{ error }}
       <button type="button" class="link-btn" @click="error = ''">{{ $t('Dismiss') }}</button>
     </p>
+    <p v-if="notice" class="write-notice" role="status">
+      {{ notice }}
+      <button type="button" class="link-btn" @click="notice = ''">{{ $t('Dismiss') }}</button>
+    </p>
 
     <WriteToolbar
       v-if="editorState && !focusMode"
@@ -153,6 +157,7 @@
         @close="panel = ''"
       />
       <SpellPanel v-if="panel === 'spelling' && !focusMode" :spell="spell" @language="setBookLanguage" @close="panel = ''" />
+      <OfflinePanel v-if="panel === 'offline' && !focusMode" :offline="offline" :chapters="chapters" :volume="volumeKey" @toggle="toggleOffline" @open="goChapter" @sync="sendKept" @close="panel = ''" />
     </div>
 
     <footer class="write-status" :class="{ 'is-quiet': focusMode }">
@@ -160,9 +165,10 @@
       <span v-if="!focusMode" class="stat">{{ $tn('{n} word in the book', '{n} words in the book', bookWords, { n: formatNum(bookWords) }) }}</span>
       <span v-if="selWords" class="stat">{{ $tn('{n} selected', '{n} selected', selWords, { n: formatNum(selWords) }) }}</span>
       <span v-if="uploading" class="stat">{{ $t('Uploading the picture…') }}</span>
-      <span class="save-state" :class="`is-${saveState}`" aria-live="polite">{{ saveLabel }}</span>
+      <span class="save-state" :class="`is-${saveShown}`" :title="saveShown === 'device' ? $t('Sent to the server when it can be reached again.') : undefined" aria-live="polite">{{ saveLabel }}</span>
       <span class="spacer"></span>
       <button v-if="!focusMode" type="button" class="btn btn-ghost small spell-status" :class="`is-${spell.status.value}`" :aria-pressed="panel === 'spelling'" :title="$t('Spelling options')" @click="togglePanel('spelling')">{{ spell.statusLabel.value }}</button>
+      <button v-if="!focusMode" type="button" class="btn btn-ghost small offline-status" :class="{ 'is-on': offline.available.value, 'is-away': !offline.connected.value }" :aria-pressed="panel === 'offline'" :title="$t('Offline writing')" @click="togglePanel('offline')">{{ offlineLabel }}</button>
       <label v-if="!focusMode" class="zoom">
         <span class="sr-only">{{ $t('Zoom') }}</span>
         <select v-model="zoomChoice" :aria-label="$t('Zoom')">
@@ -237,7 +243,7 @@ import { readAloudPlugin, createReader } from '../editor/readAloudPlugin.js'
 import { selectionFormat, setStyle, setCharStyle, pasteIntoEmpty, insertBlock, setImageAttrs, removeImage } from '../editor/commands.js'
 import { styleSheet, styleFonts, resolveStyle, styleById } from '../editor/styles.js'
 import { normaliseSettings, defaultSettings, switchPageType, textBlockMm, pageTypeName } from '../editor/pageTypes.js'
-import { countNode } from '../editor/wordCount.js'
+import { countNode, countDocJSON } from '../editor/wordCount.js'
 import { loadFonts, docFonts, fontChoices } from '../editor/fonts.js'
 import { createSaver } from '../editor/autosave.js'
 import { keepCopy, readCopy, dropCopy } from '../editor/localCopy.js'
@@ -272,6 +278,13 @@ import { useSpellcheck } from '../editor/useSpellcheck.js'
 import { DICTIONARY_LANG } from '../editor/spellWords.js'
 import SpellMenu from '../components/write/SpellMenu.vue'
 import SpellPanel from '../components/write/SpellPanel.vue'
+import OfflinePanel from '../components/write/OfflinePanel.vue'
+import { useOfflineBook } from '../editor/useOfflineBook.js'
+import { mergeDocs } from '../offline/merge.js'
+import { whenBack } from '../offline/connection.js'
+import { currentStory } from '../stories'
+import { wikiApi } from '../wiki'
+import { spellingApi } from '../editor/api.js'
 
 void [tr('Custom size'), tr('Online Post'), tr('Not kept after a conflict'), tr('Before using the copy kept in this browser')]
 const PICTURE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
@@ -326,6 +339,27 @@ watch(
 const bookWords = computed(() => chapters.value.reduce((n, c) => n + (c.id === chapterId.value ? words.value : c.words || 0), 0))
 const format = computed(() => (editorState.value ? selectionFormat(editorState.value, styles.value) : null))
 const readOnly = computed(() => loadingText.value || !!conflict.value || !!offer.value || chapterId.value == null)
+// ---- Offline writing (stage 5) ---------------------------------------------------------
+// A book kept on this device (editor/useOfflineBook.js): its chapters open
+// from there with no connection, and a save that can't reach the server
+// is kept there and sent when it is back.
+const offline = useOfflineBook({
+  story: activeStoryId,
+  volume: () => volumeKey.value,
+  normalize: (d) => normal(d),
+  storyInfo: () => (currentStory.value ? { name: currentStory.value.name } : null),
+})
+const pendingHere = ref(false) // the open chapter's text is on this device only
+let serverBase = null // { id, version, doc }: the open chapter's text on the server, as last known
+const notice = ref('')
+const offlineLabel = computed(() => {
+  const n = offline.pendingHere.value.length
+  if (!offline.connected.value) return t('No connection')
+  if (offline.available.value && n) return t('Available offline: {n} to send', { n })
+  return offline.available.value ? t('Available offline') : t('Offline: off')
+})
+
+const saveShown = computed(() => (pendingHere.value && saveState.value === 'saved' ? 'device' : saveState.value))
 const saveLabel = computed(
   () =>
     ({
@@ -333,7 +367,8 @@ const saveLabel = computed(
       saving: t('Saving…'),
       local: t('Not saved yet: kept in this browser'),
       conflict: t('Changed somewhere else: choose a text'),
-    })[saveState.value],
+      device: t('Saved on this device'),
+    })[saveShown.value],
 )
 const formatNum = (n) => Number(n || 0).toLocaleString(locale.value)
 
@@ -472,8 +507,14 @@ async function loadComments(id) {
   try {
     const list = await commentsApi.list(id)
     if (chapterId.value === id) comments.value = Array.isArray(list) ? list : []
+    if (Array.isArray(list)) offline.comments(id, list)
   } catch (e) {
-    if (chapterId.value === id) commentError.value = e.message
+    // No connection: the comments as the book was kept (read only).
+    const kept = e.offline ? await offline.chapter(id) : null
+    if (chapterId.value === id) {
+      if (Array.isArray(kept?.comments)) comments.value = kept.comments
+      else commentError.value = e.message
+    }
   } finally {
     commentsLoading.value = false
   }
@@ -574,7 +615,7 @@ async function dropComment(id) {
 // ---- The editor ----------------------------------------------------------------------------
 // Tab-to-link and Script Mode (stage 4) go first: their Tab, Enter and
 // Backspace come before the usual ones.
-const names = useStoryNames()
+const names = useStoryNames({ fetchItems: () => offline.cached('names', () => wikiApi.list()) })
 // Read aloud (stage 5): typing or clicking in the text stops it.
 const readInfo = ref({ status: 'idle', index: 0, total: 0, rate: 1, voice: '', voices: [] })
 const reader = createReader({
@@ -583,7 +624,7 @@ const reader = createReader({
   onChange: (s) => (readInfo.value = s),
 })
 // The spellchecker (stage 5): the book's language picks the dictionary.
-const spell = useSpellcheck({ getLanguage: () => settings.value?.meta?.language, names })
+const spell = useSpellcheck({ getLanguage: () => settings.value?.meta?.language, names, fetchWords: () => offline.cached('spelling', () => spellingApi.words()) })
 const plugins = [
   nameSuggest({ getIndex: () => names.index.value, typeLabel: names.typeLabel, hint: t('Tab: link this name') }),
   ...scriptPlugins({ getIndex: () => names.index.value, onSpeaker: openSpeaker }),
@@ -745,13 +786,29 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 
 async function loadBook() {
   error.value = ''
+  const want = volumeKey.value
+  // What was written on this device without a connection goes first (a
+  // book's settings too).
+  if ((await offline.load()) || offline.dirty.value.length) await offline.sync()
+  if (want !== volumeKey.value) return
   try {
-    const res = await booksApi.get(volumeKey.value)
+    const res = await booksApi.get(want)
     book.value = { ...res, settings: normaliseSettings(res.settings), chapters: res.chapters || [] }
     if (res.is_set_up === false) typeDialog.value = 'first'
     pickChapter()
+    // The kept copy brought up to date (what changed only), now and then.
+    const kept = offline.record.value
+    if (kept && Date.now() - (kept.saved_at || 0) > 60000) offline.refresh({ quiet: true })
   } catch (e) {
-    error.value = e.message
+    // No connection: the book as it was kept on this device.
+    const kept = e.offline ? await offline.load() : null
+    if (!kept || want !== volumeKey.value) {
+      error.value = e.message
+      return
+    }
+    book.value = { ...kept.book, settings: normaliseSettings(kept.book.settings), chapters: kept.book.chapters || [] }
+    offline.adoptLibrary()
+    pickChapter()
   }
 }
 
@@ -790,6 +847,8 @@ async function openChapter(id) {
   loadingText.value = true
   offer.value = null
   conflict.value = null
+  pendingHere.value = false
+  serverBase = null
   if (find.value.open) closeFind()
   try {
     await closeChapter()
@@ -800,11 +859,22 @@ async function openChapter(id) {
       setDoc(emptyDocJSON())
       return
     }
+    await offline.idle()
+    const kept = await offline.chapter(id) // this chapter's record, when the book is kept here
+    if (token !== opening) return
     let server = null
     let local = null
     try {
       server = await textApi.get(id)
     } catch (e) {
+      if (kept && e.offline) {
+        // No connection: the text kept on this device, sent when the server is back.
+        setDoc(normal(kept.doc))
+        serverBase = { id, version: kept.version || 0, doc: normal(kept.dirty ? kept.base_doc ?? kept.doc : kept.doc) }
+        startSaver(id, kept.version || 0)
+        pendingHere.value = !!kept.dirty
+        return
+      }
       // The server can't be reached: what this browser kept is better than nothing.
       local = await readCopy(activeStoryId, id)
       if (token !== opening) return
@@ -818,7 +888,10 @@ async function openChapter(id) {
     if (token !== opening) return
     const serverDoc = normal(server.doc)
     setDoc(serverDoc)
+    serverBase = { id, version: server.version || 0, doc: serverDoc }
     startSaver(id, server.version || 0)
+    if (kept?.dirty) return await takeKept(id, kept, server, serverDoc)
+    if (kept) offline.saved(id, serverDoc, server) // the kept copy follows the server
     local = await readCopy(activeStoryId, id)
     if (token !== opening) return
     if (local && local.doc) {
@@ -841,33 +914,164 @@ async function openChapter(id) {
 function startSaver(id, version) {
   saver?.dispose()
   saveState.value = 'saved'
+  const baseOf = () => (serverBase?.id === id ? serverBase : null)
   saver = createSaver({
     getDoc: () => docToJSON(view.state.doc),
-    save: (doc, base) => textApi.save(id, doc, base),
-    keep: (entry) => keepCopy(activeStoryId, id, entry),
+    save: async (doc, base) => {
+      try {
+        const res = await textApi.save(id, doc, base)
+        offline.saved(id, doc, res)
+        return res
+      } catch (e) {
+        // A kept book with no connection: kept on this device, sent later.
+        if (e.offline && (await offline.edited(id, doc, baseOf()))) return { version: base, offline: true, words: countDocJSON(doc) }
+        throw e
+      }
+    },
+    // A kept book's chapters are kept in its record; others as a draft.
+    keep: async (entry) => (offline.available.value && (await offline.edited(id, entry.doc, baseOf()))) || keepCopy(activeStoryId, id, entry),
     drop: () => dropCopy(activeStoryId, id),
     base: version,
     onState: (s) => {
       if (chapterId.value === id) saveState.value = s
     },
-    onSaved: (res) => {
+    onSaved: (res, doc) => {
+      if (chapterId.value === id) {
+        pendingHere.value = !!res?.offline
+        if (res && !res.offline) serverBase = { id, version: res.version ?? 0, doc }
+      }
       const c = book.value?.chapters.find((x) => x.id === id)
       if (c && res) {
         if (res.words != null) c.words = res.words
         if (res.version != null) c.version = res.version
       }
     },
-    onConflict: (stored, mine) => {
+    onConflict: async (stored, mine) => {
+      if (chapterId.value !== id) return
+      const theirs = normal(stored?.doc)
+      if (await mergeConflict(id, mine, theirs, stored?.version ?? 0)) return
       if (chapterId.value !== id) return
       conflict.value = {
         kind: 'save',
         mine,
-        theirs: normal(stored?.doc),
+        theirs,
         version: stored?.version ?? 0,
         theirsWhen: stored?.updated_at ? ago(stored.updated_at) : '',
       }
     },
   })
+}
+
+// ---- Merging (stage 5, with offline writing) ----------------------------------------------------
+const MERGE_LABEL = () => t('Before merging with changes made elsewhere')
+
+// Puts a doc in the editor as a change of the text (not a new state), so
+// the cursor stays where it was and undo goes on; the change itself isn't
+// undone by Ctrl+Z.
+function replaceDoc(json) {
+  if (!view) return
+  const next = docFromJSON(json)
+  const cur = view.state.doc
+  const tr = view.state.tr
+  const start = cur.content.findDiffStart(next.content)
+  if (start != null) {
+    let { a: endA, b: endB } = cur.content.findDiffEnd(next.content)
+    const overlap = start - Math.min(endA, endB)
+    if (overlap > 0) {
+      endA += overlap
+      endB += overlap
+    }
+    tr.replace(start, endA, next.slice(start, endB))
+  }
+  if (typeof tr.setDocAttribute === 'function') for (const [k, v] of Object.entries(next.attrs)) if (cur.attrs[k] !== v) tr.setDocAttribute(k, v)
+  if (!tr.docChanged) return
+  view.dispatch(tr.setMeta('addToHistory', false))
+}
+
+// A save found the chapter changed elsewhere. When the two texts changed
+// different paragraphs both are kept (what was sent is saved as a version
+// first) and true is answered; otherwise the writer chooses.
+async function mergeConflict(id, mine, theirs, version) {
+  const base = serverBase?.id === id ? serverBase : null
+  if (!base || !view) return false
+  const m = mergeDocs(normal(base.doc), normal(mine), theirs)
+  if (!m.ok) return false
+  try {
+    await textApi.saveVersion(id, MERGE_LABEL(), mine)
+  } catch (e) {
+    return false
+  }
+  if (chapterId.value !== id || !view) return true
+  // Typed while that was on its way: merged too.
+  const now = normal(docToJSON(view.state.doc))
+  let doc = m.doc
+  if (!sameDoc(now, mine)) {
+    const again = mergeDocs(normal(mine), now, normal(m.doc))
+    if (!again.ok) return false
+    doc = again.doc
+  }
+  serverBase = { id, version, doc: theirs }
+  saver.resolved(version, true)
+  replaceDoc(doc)
+  notice.value = t('This chapter was also changed elsewhere, in other paragraphs: both changes are kept. Your text before the merge is saved as a version.')
+  return true
+}
+
+// A chapter written on this device without a connection, opened with the
+// server back: sent as it is when the server's text hasn't changed since,
+// merged when the two changed different paragraphs, else offered as the
+// copy kept in this browser.
+async function takeKept(id, kept, server, serverDoc) {
+  const mine = normal(kept.doc)
+  const version = server.version || 0
+  if (sameDoc(mine, serverDoc)) return offline.settle(id, serverDoc, version)
+  if ((kept.version || 0) === version) {
+    setDoc(mine)
+    pendingHere.value = true
+    saver.changed()
+    return
+  }
+  const m = mergeDocs(normal(kept.base_doc ?? kept.doc), mine, serverDoc)
+  if (m.ok) {
+    try {
+      await textApi.saveVersion(id, MERGE_LABEL(), mine)
+      setDoc(normal(m.doc))
+      saver.changed()
+      notice.value = t('This chapter was also changed elsewhere, in other paragraphs: both changes are kept. Your text before the merge is saved as a version.')
+      return
+    } catch (e) {
+      /* the writer chooses */
+    }
+  }
+  offer.value = { source: 'offline', local: { doc: mine, base_version: kept.version || 0, saved_at: kept.edited_at }, server: { ...server, doc: serverDoc } }
+}
+
+// Back online: the open chapter's text kept here goes through the editor's
+// save (and its merge), the rest of the story's through the sync.
+async function sendKept() {
+  if (settingsTimer) saveSettings()
+  if (saver && chapterId.value != null && !conflict.value && !offer.value && (pendingHere.value || saver.dirty)) saver.changed()
+  const r = await offline.sync((id) => id === chapterId.value)
+  if (!r) return
+  if (r.conflict.length || r.missing.length) notice.value = t('Some chapters written offline were also changed elsewhere in the same places. Open them to choose a text (Offline writing lists them).')
+  else if (r.merged.length) notice.value = t('Chapters written offline were merged with changes made elsewhere (different paragraphs); your texts before the merge are saved as versions.')
+}
+const stopBack = whenBack(sendKept)
+
+async function toggleOffline(on) {
+  if (on) {
+    await offline.enable()
+    // The open chapter's record starts from what the editor holds.
+    if (saver?.dirty) saver.changed()
+    return
+  }
+  const unsent = offline.pendingHere.value.length
+  if (unsent && !window.confirm(t('{n} chapters of this book hold text not sent to the server yet. Forget them on this device anyway?', { n: unsent }))) return
+  await offline.disable()
+  // The open chapter's unsent text is still in the editor: a draft again.
+  const had = pendingHere.value
+  pendingHere.value = false
+  if (had) saver?.changed()
 }
 
 // ---- A copy kept in this browser, and conflicts -----------------------------------------------
@@ -880,6 +1084,7 @@ async function useLocal() {
     conflict.value = null
     setDoc(local.doc)
     saver.base = server.version
+    serverBase = { id: chapterId.value, version: server.version || 0, doc: server.doc }
     saver.changed()
   } catch (e) {
     error.value = e.message
@@ -889,7 +1094,9 @@ async function useLocal() {
 }
 
 function discardLocal() {
-  dropCopy(activeStoryId, chapterId.value)
+  const o = offer.value
+  if (o?.source === 'offline') offline.settle(chapterId.value, o.server.doc, o.server.version || 0)
+  else dropCopy(activeStoryId, chapterId.value)
   offer.value = null
   conflict.value = null
 }
@@ -910,13 +1117,17 @@ async function keepFromConflict(which) {
       // The other text becomes a version; mine goes on top of it.
       await textApi.saveVersion(id, t('Not kept after a conflict'))
       conflict.value = null
+      serverBase = { id, version: c.version, doc: c.theirs }
       saver.resolved(c.version, true)
     } else {
       // Mine is saved as a version; the stored text stays.
       await textApi.saveVersion(id, t('Not kept after a conflict'), c.mine)
       conflict.value = null
       setDoc(c.theirs)
+      serverBase = { id, version: c.version, doc: c.theirs }
       saver.resolved(c.version, false)
+      offline.settle(id, c.theirs, c.version)
+      pendingHere.value = false
     }
   } catch (e) {
     error.value = e.message
@@ -929,8 +1140,12 @@ async function keepFromConflict(which) {
 async function onRestored(res) {
   try {
     const text = res && res.doc ? res : await textApi.get(chapterId.value)
-    setDoc(normal(text.doc))
+    const doc = normal(text.doc)
+    setDoc(doc)
+    serverBase = { id: chapterId.value, version: text.version || 0, doc }
     saver?.resolved(text.version, false)
+    offline.settle(chapterId.value, doc, text.version)
+    pendingHere.value = false
     loadComments(chapterId.value) // a restored version may bring comments back
   } catch (e) {
     error.value = e.message
@@ -947,10 +1162,15 @@ function updateSettings(next) {
 async function saveSettings() {
   clearTimeout(settingsTimer)
   settingsTimer = null
+  const sent = settings.value
   try {
-    await booksApi.save(volumeKey.value, settings.value)
+    await booksApi.save(volumeKey.value, sent)
     if (book.value) book.value = { ...book.value, is_set_up: true }
+    offline.settingsSaved(sent)
   } catch (e) {
+    // A kept book with no connection: kept on this device, sent later (the
+    // last settings saved win).
+    if (e.offline && (await offline.settingsEdited(sent))) return
     error.value = e.message
   }
 }
@@ -1370,6 +1590,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  stopBack()
   reader.destroy()
   window.removeEventListener('keydown', onKey)
   window.removeEventListener('beforeunload', onUnload)
@@ -1672,8 +1893,33 @@ onBeforeUnmount(() => {
 }
 
 .save-state.is-local,
-.save-state.is-conflict {
+.save-state.is-conflict,
+.save-state.is-device {
   color: var(--accent);
+}
+
+/* Offline writing (stage 5). */
+.write-notice {
+  margin: 0;
+  padding: 0.5rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  background: var(--accent-soft);
+  font-size: 0.85rem;
+}
+
+.offline-status {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.offline-status.is-on {
+  color: var(--text-primary);
+}
+
+.offline-status.is-away {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .spacer {

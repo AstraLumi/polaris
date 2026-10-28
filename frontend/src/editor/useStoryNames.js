@@ -7,12 +7,14 @@ import { wikiApi, TYPE_LABELS } from '../wiki'
 import { t } from '../i18n'
 import { buildNameIndex, resolveSpeaker } from './nameMatch.js'
 
-export function useStoryNames() {
+// fetchItems: the article list (the writing page answers it from an offline
+// book's copy when the server can't be reached).
+export function useStoryNames({ fetchItems = () => wikiApi.list() } = {}) {
   const index = shallowRef([])
   let loading = null
   function load() {
-    loading ||= wikiApi
-      .list()
+    loading ||= Promise.resolve()
+      .then(fetchItems)
       .then((items) => (index.value = buildNameIndex(items)))
       .catch(() => {})
       .finally(() => (loading = null))

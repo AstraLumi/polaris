@@ -175,4 +175,5 @@ export default {
   "Add to dictionary": "Agregar al diccionario",
   "Add a word": "Agregar una palabra",
   "Words you add with “Add to dictionary” show here.": "Las palabras que agregues con «Agregar al diccionario» aparecen aquí.",
+  "Offline writing needs Polaris opened over HTTPS (or on this computer, as localhost).": "Escribir sin conexión necesita Polaris abierto por HTTPS (o en esta computadora, como localhost).",
 }
