@@ -84,7 +84,8 @@ func migrateChapterIndex(tx *sql.Tx) error {
 	}
 	rows.Close()
 	for _, x := range all {
-		if err := indexChapterText(tx, x.id, x.doc); err != nil {
+		// Schema 45's index only: the comments' table comes with schema 46.
+		if err := indexChapterLinks(tx, x.id, x.doc); err != nil {
 			return err
 		}
 	}
@@ -198,24 +199,43 @@ func storyLinkOf(n *pmNode) *pmStoryLink {
 	return nil
 }
 
-// indexChapterText rebuilds a chapter's links and lines from its stored doc.
-// A doc that can't be read leaves the chapter with none.
+// indexChapterText rebuilds a chapter's links and lines from its stored doc
+// and keeps its comments in step with it (syncChapterComments, comments.go).
+// A doc that can't be read leaves the chapter with no links or lines and its
+// comments as they were.
 func indexChapterText(tx editorDB, chapterID int64, doc string) error {
-	if _, err := tx.Exec(`DELETE FROM chapter_links WHERE chapter_id = ?`, chapterID); err != nil {
+	d, err := indexChapterDoc(tx, chapterID, doc)
+	if err != nil || d == nil {
 		return err
 	}
+	return syncChapterComments(tx, chapterID, d)
+}
+
+// indexChapterLinks rebuilds a chapter's links and lines from its stored doc
+// (schema 45's part of indexChapterText).
+func indexChapterLinks(tx editorDB, chapterID int64, doc string) error {
+	_, err := indexChapterDoc(tx, chapterID, doc)
+	return err
+}
+
+// indexChapterDoc rebuilds a chapter's links and lines and gives the doc it
+// read (nil when it can't be read: the chapter then has none).
+func indexChapterDoc(tx editorDB, chapterID int64, doc string) (*pmNode, error) {
+	if _, err := tx.Exec(`DELETE FROM chapter_links WHERE chapter_id = ?`, chapterID); err != nil {
+		return nil, err
+	}
 	if _, err := tx.Exec(`DELETE FROM chapter_lines WHERE chapter_id = ?`, chapterID); err != nil {
-		return err
+		return nil, err
 	}
 	var d pmNode
 	if err := json.Unmarshal([]byte(doc), &d); err != nil {
 		log.Printf("index chapter %d: %v", chapterID, err)
-		return nil
+		return nil, nil
 	}
 	for _, l := range docLinkCounts(&d) {
 		if _, err := tx.Exec(`INSERT INTO chapter_links (chapter_id, type, item_id, count) VALUES (?, ?, ?, ?)`,
 			chapterID, l.Type, l.ID, l.Count); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	for i, x := range docDialogues(&d) {
@@ -225,10 +245,10 @@ func indexChapterText(tx editorDB, chapterID int64, doc string) error {
 		}
 		if _, err := tx.Exec(`INSERT INTO chapter_lines (chapter_id, position, character_id, speaker, manner, text) VALUES (?, ?, ?, ?, ?, ?)`,
 			chapterID, i, who, x.Speaker, x.Manner, x.Text); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return &d, nil
 }
 
 // ---- Reading ------------------------------------------------------------------

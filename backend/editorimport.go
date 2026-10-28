@@ -23,6 +23,46 @@ import (
 
 const maxDocxUpload = 64 << 20
 
+// insertImportedComments makes the rows of one imported chapter's comments
+// (chapter: its index in the import) and gives each comment's new id by its
+// Local: the comments first, then the replies.
+func insertImportedComments(tx editorDB, chapterID int64, chapter int, list []docxComment, now time.Time) (map[int64]int64, error) {
+	ids := map[int64]int64{}
+	ordered := make([]docxComment, 0, len(list))
+	for _, reply := range []bool{false, true} {
+		for _, c := range list {
+			if c.Chapter == chapter && (c.Parent != 0) == reply {
+				ordered = append(ordered, c)
+			}
+		}
+	}
+	for _, c := range ordered {
+		var parent any
+		if c.Parent != 0 {
+			p, ok := ids[c.Parent]
+			if !ok {
+				continue
+			}
+			parent = p
+		}
+		at := c.Created
+		if at.IsZero() || at.After(now) {
+			at = now
+		}
+		var resolvedAt any
+		if c.Resolved && c.Parent == 0 {
+			resolvedAt = sqlTime(now)
+		}
+		res, err := tx.Exec(`INSERT INTO chapter_comments (chapter_id, parent_id, text, resolved, resolved_at, anchored, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, 1, ?, ?)`, chapterID, parent, c.Text, c.Resolved && c.Parent == 0, resolvedAt, sqlTime(at), sqlTime(at))
+		if err != nil {
+			return nil, err
+		}
+		ids[c.Local], _ = res.LastInsertId()
+	}
+	return ids, nil
+}
+
 // docxPictureExts are the picture types an import keeps (the ones parseDocx
 // sniffs; anything else is never written to the uploads).
 var docxPictureExts = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true}
@@ -130,6 +170,8 @@ func importDocxHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			words   int
 			front   bool
 			restart *int
+			node    *pmNode
+			index   int
 		}
 		chapters := make([]newChapter, 0, len(imp.Chapters))
 		for i, c := range imp.Chapters {
@@ -160,7 +202,7 @@ func importDocxHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			if r := []rune(title); len(r) > 200 {
 				title = string(r[:200])
 			}
-			chapters = append(chapters, newChapter{title, doc, docWords(c.Doc), c.FrontMatter, nil})
+			chapters = append(chapters, newChapter{title, doc, docWords(c.Doc), c.FrontMatter, nil, c.Doc, i})
 			if n, ok := imp.Restarts[i]; ok {
 				chapters[len(chapters)-1].restart = &n
 			}
@@ -189,6 +231,18 @@ func importDocxHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 				return
 			}
 			id, _ := res.LastInsertId()
+			// The chapter's comments (docxcomments.go): their rows first, then
+			// their ids in the marks.
+			if ids, err := insertImportedComments(tx, id, c.index, imp.Comments, editorNow()); err != nil {
+				fail(err)
+				return
+			} else if len(ids) > 0 {
+				mapCommentMarks(c.node, ids)
+				if c.doc, err = json.Marshal(c.node); err != nil {
+					fail(err)
+					return
+				}
+			}
 			if _, err := tx.Exec(`INSERT INTO chapter_texts (chapter_id, doc, version, words, updated_at, auto_since)
 				VALUES (?, ?, 1, ?, ?, ?)`, id, string(c.doc), c.words, now, now); err != nil {
 				fail(err)

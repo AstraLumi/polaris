@@ -103,3 +103,18 @@ export const textApi = {
   saveVersion: (id, label, doc) => call(`/chapters/${id}/text/versions`, json('POST', doc ? { label, doc } : { label }), 'failed to save the version'),
   restore: (id, vid) => call(`/chapters/${id}/text/versions/${vid}/restore`, { method: 'POST' }, 'failed to restore the version'),
 }
+
+// Comments on a chapter's text (stage 5, backend comments.go): rows
+// { id, chapter_id, parent_id, text, resolved, resolved_at, created_at, updated_at }.
+void [
+  tr('failed to load the comments'), tr('failed to save the comment'), tr('failed to delete the comment'), tr('comment not found'),
+  tr("the comment's text is not valid"), tr('that comment is too long'), tr('write the reply first'), tr('a reply is resolved with its thread'),
+]
+export const commentsApi = {
+  list: (chapterId) => call(`/chapters/${chapterId}/comments`, undefined, 'failed to load the comments'),
+  // { text, parent_id? }: a reply joins its comment's thread.
+  create: (chapterId, body) => call(`/chapters/${chapterId}/comments`, json('POST', body), 'failed to save the comment'),
+  // { text?, resolved? }
+  update: (id, patch) => call(`/comments/${id}`, json('PUT', patch), 'failed to save the comment'),
+  remove: (id) => call(`/comments/${id}`, { method: 'DELETE' }, 'failed to delete the comment'),
+}

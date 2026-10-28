@@ -131,6 +131,8 @@
     <div class="tb-group tools">
       <button v-bind="btn(t('Find and replace') + ' (Ctrl+F)')" @click="$emit('find')"><TbIcon name="find" /></button>
       <button v-bind="btn(t('Styles'), panel === 'styles')" class="foldable" @click="$emit('panel', 'styles')"><TbIcon name="styles" /></button>
+      <button v-bind="btn(t('New comment') + ' (Ctrl+Alt+M)')" @click="$emit('comment')"><TbIcon name="comment" /></button>
+      <button v-bind="btn(t('Comments'), panel === 'comments')" class="foldable" @click="$emit('panel', 'comments')"><TbIcon name="comments" /></button>
       <button v-bind="btn(t('Saved versions'), panel === 'versions')" class="foldable" @click="$emit('panel', 'versions')"><TbIcon name="versions" /></button>
       <button v-bind="btn(t('Book and page'), panel === 'book')" class="foldable" @click="$emit('panel', 'book')"><TbIcon name="book" /></button>
       <button v-bind="btn(scriptMode ? t('Script Mode: on (this chapter)') : t('Script Mode: type “Name:” at a line’s start for dialogue'), scriptMode)" class="foldable" @click="exec(setScriptMode(!scriptMode))"><TbIcon name="script" /></button>
@@ -178,7 +180,7 @@ const props = defineProps({
   canRead: { type: Boolean, default: false }, // the browser can read aloud
   reading: { type: Boolean, default: false }, // the chapter is being read
 })
-defineEmits(['find', 'panel', 'focus', 'picture', 'read'])
+defineEmits(['find', 'panel', 'focus', 'picture', 'read', 'comment'])
 const readTitle = computed(() =>
   props.canRead ? t('Read aloud') + ' (Ctrl+Alt+Space)' : t('Your browser cannot read aloud'),
 )
@@ -296,6 +298,8 @@ const ICONS = {
   focus: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
   speaker: 'M11 5 6 9H3v6h3l5 4zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13',
   script: 'M4 5h16v11H10l-4 3v-3H4zM8 9h8M8 12h5',
+  comment: 'M4 4h16v12H9l-5 4zM12 7v6M9 10h6',
+  comments: 'M3 4h12v8H8l-3 3v-3H3zM18 8h3v9h-2v3l-3-3h-5v-2',
 }
 const TbIcon = (p) =>
   h('svg', { viewBox: '0 0 24 24', width: 18, height: 18, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' }, [h('path', { d: ICONS[p.name] || '' })])

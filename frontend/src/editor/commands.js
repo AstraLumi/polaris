@@ -316,7 +316,7 @@ export const clearFormatting = (state, dispatch) => {
   if (!dispatch) return true
   const tr = state.tr
   const { from, to, empty } = state.selection
-  const keepMarks = new Set([marks.link, marks.story_link])
+  const keepMarks = new Set([marks.link, marks.story_link, marks.comment])
   if (empty) tr.setStoredMarks(marksAtSelection(state).filter((m) => keepMarks.has(m.type)))
   else for (const type of Object.values(marks)) if (!keepMarks.has(type)) tr.removeMark(from, to, type)
   for (const { node, pos } of selectedBlocks(state)) tr.setNodeMarkup(pos, null, { ...cleared(node.attrs), style: node.attrs.style, ...(node.type === nodes.heading ? { level: node.attrs.level } : {}) })
@@ -329,7 +329,7 @@ export const clearMarks = (state, dispatch) => {
   const { from, to, empty } = state.selection
   if (!dispatch) return true
   const tr = state.tr
-  const keepMarks = new Set([marks.link, marks.story_link])
+  const keepMarks = new Set([marks.link, marks.story_link, marks.comment])
   if (empty) tr.setStoredMarks(marksAtSelection(state).filter((m) => keepMarks.has(m.type)))
   else for (const type of Object.values(marks)) if (!keepMarks.has(type)) tr.removeMark(from, to, type)
   dispatch(tr)

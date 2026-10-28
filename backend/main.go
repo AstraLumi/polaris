@@ -285,6 +285,11 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	mux.HandleFunc("GET /api/appears/{type}/{id}", appearsInHandler(db))
 	mux.HandleFunc("GET /api/characters/{id}/lines", characterLinesHandler(db))
 	mux.HandleFunc("GET /api/chapters/{id}/speakers", chapterSpeakersHandler(db))
+	// Comments on a chapter's text (comments.go).
+	mux.HandleFunc("GET /api/chapters/{id}/comments", listCommentsHandler(db))
+	mux.HandleFunc("POST /api/chapters/{id}/comments", createCommentHandler(db))
+	mux.HandleFunc("PUT /api/comments/{id}", updateCommentHandler(db))
+	mux.HandleFunc("DELETE /api/comments/{id}", deleteCommentHandler(db))
 
 	return mux
 }

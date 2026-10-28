@@ -72,6 +72,8 @@ type irInline struct {
 	// The Word character style id the run uses ("" = none): emitting turns
 	// it into a char_style mark and keeps only the direct formatting as marks.
 	cstyle string
+	// The comments on the text: their locals, "1,3" (docxcomments.go).
+	comments string
 }
 
 type irListRef struct {
@@ -130,6 +132,12 @@ type docxParser struct {
 	counters    map[int][]int
 	usedChar    map[string]bool
 	tocGap      bool // a table of contents was just dropped
+
+	// Comments (docxcomments.go): the file's, the ones whose range is open,
+	// and point comments waiting for the next word.
+	cm        *docxComments
+	openCm    []*docxCmt
+	pendingCm []*docxCmt
 }
 
 func newDocxParser(pk *docxPackage, rels map[string]docxRel, st *wStyles, num *wNumbering, th docxTheme) *docxParser {
@@ -254,6 +262,10 @@ func (p *docxParser) walkBlocks(kids []*xEl) {
 			p.skipped(k)
 		case k.is("w", "bookmarkStart"):
 			p.pendingMark = append(p.pendingMark, k.attr("name"))
+		case k.is("w", "commentRangeStart"):
+			p.commentStart(k.attr("id"))
+		case k.is("w", "commentRangeEnd"):
+			p.commentEnd(k.attr("id"), nil)
 		case k.is("mc", "AlternateContent"):
 			p.walkBlocks(chooseAlternate(k))
 		case k.is("w", "altChunk"):
@@ -657,6 +669,10 @@ func (p *docxParser) inlines(kids []*xEl, ps *paraState) {
 			p.deletedFields(k)
 		case k.is("w", "bookmarkStart"):
 			ps.bookmarks = append(ps.bookmarks, k.attr("name"))
+		case k.is("w", "commentRangeStart"):
+			p.commentStart(k.attr("id"))
+		case k.is("w", "commentRangeEnd"):
+			p.commentEnd(k.attr("id"), ps)
 		case k.is("m", "oMath"), k.is("m", "oMathPara"):
 			p.count("equations")
 			ps.suppressed = true
@@ -729,7 +745,7 @@ func (p *docxParser) runContent(kids []*xEl, ps *paraState, wr wRun, charStyle s
 				p.count("endnotes")
 				continue
 			case "commentReference":
-				p.count("comments")
+				p.commentRef(k.attr("id"), ps) // docxcomments.go
 				continue
 			}
 		}
@@ -805,7 +821,12 @@ func (p *docxParser) addText(ps *paraState, text string, wr wRun, charStyle stri
 			cs = charStyle
 		}
 	}
-	p.addInline(ps, irInline{kind: 't', text: text, r: r, cstyle: cs})
+	in := irInline{kind: 't', text: text, r: r, cstyle: cs}
+	if len(p.pendingCm) > 0 {
+		p.addTextWithPoints(ps, in) // docxcomments.go
+		return
+	}
+	p.addInline(ps, in)
 }
 
 func (p *docxParser) addInline(ps *paraState, in irInline) {
@@ -816,9 +837,13 @@ func (p *docxParser) addInline(ps *paraState, in irInline) {
 	if strings.HasPrefix(in.link, "#") {
 		p.linkAnchors[in.link[1:]] = true
 	}
+	if in.kind == 't' {
+		in.comments = unionCommentKeys(in.comments, p.commentKey())
+		p.markCommented(in.comments)
+	}
 	if n := len(ps.cur); n > 0 && in.kind == 't' {
 		last := &ps.cur[n-1]
-		if last.kind == 't' && last.r == in.r && last.link == in.link && last.cstyle == in.cstyle {
+		if last.kind == 't' && last.r == in.r && last.link == in.link && last.cstyle == in.cstyle && last.comments == in.comments {
 			last.text += in.text
 			return
 		}

@@ -124,6 +124,19 @@ type exportBook struct {
 	Missing  int // pictures that could not be read
 	pics     map[string]*exportPicture
 	picBytes int64
+
+	// The chapters' comments by id (comments.go): the .docx export writes
+	// them as Word comments; the other exports take their marks off.
+	Comments map[int64]*exportComment
+}
+
+// withoutComments takes the comment marks off every chapter's doc (every
+// export but .docx: comments never show in a book).
+func (b *exportBook) withoutComments() {
+	for _, c := range b.Chapters {
+		stripCommentMarks(c.Doc)
+	}
+	b.Comments = nil
 }
 
 // exportPicture is one picture read from the uploads.
@@ -376,6 +389,13 @@ func loadExportBook(db editorDB, vol, chapterID int64, uploadsDir string) (*expo
 	}
 	if !found {
 		return nil, errNoChapter
+	}
+	ids := map[int64]bool{}
+	for _, c := range b.Chapters {
+		ids[c.ID] = true
+	}
+	if b.Comments, err = loadExportComments(db, ids); err != nil {
+		return nil, err
 	}
 	parseExportSettings(settings, b)
 	return b, nil
@@ -1056,6 +1076,9 @@ func exportBookHandler(db *sql.DB, uploadsDir, format string) http.HandlerFunc {
 			log.Printf("export book %d: %v", vol, err)
 			http.Error(w, "failed to export the book", http.StatusInternalServerError)
 			return
+		}
+		if format != "docx" {
+			b.withoutComments()
 		}
 		if format == "epub" {
 			if lib := fontLibraryFrom(r.Context()); lib != nil {

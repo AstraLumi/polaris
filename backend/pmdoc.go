@@ -25,6 +25,9 @@ package main
 //	    repeats: what a chapter links to, for "appears in" lists.
 //	    (chapterindex.go counts them, and the dialogues, per chapter.)
 //	emptyPMDoc() *pmNode       A doc holding one empty paragraph.
+//	docCommentIDs(doc)         Every comment mark's id (comments.go); a text
+//	                           may carry several comment marks, each with
+//	                           its own id.
 
 import (
 	"bytes"
@@ -240,6 +243,9 @@ var (
 	pmInlineTypes = map[string]bool{"text": true, "hard_break": true, "tab": true}
 	pmAtomTypes   = map[string]bool{"scene_break": true, "page_break": true, "image": true, "toc": true, "hard_break": true, "tab": true}
 	pmMarkTypes   = map[string]bool{"bold": true, "italic": true, "underline": true, "strike": true, "superscript": true, "subscript": true, "smallcaps": true, "font": true, "size": true, "color": true, "highlight": true, "link": true, "story_link": true, "char_style": true}
+	// Marks a text may carry more than once, with different ids (stage 5's
+	// overlapping comments; comments.go).
+	pmRepeatMarks = map[string]bool{"comment": true}
 	pmAligns      = map[string]bool{"left": true, "center": true, "right": true, "justify": true}
 	pmColorRe     = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 	pmStoryTypeRe = regexp.MustCompile(`^[a-z_]{1,40}$`)
@@ -423,13 +429,17 @@ func (v *pmValidator) inline(n *pmNode, parent string) error {
 	}
 	seen := map[string]bool{}
 	for _, m := range n.Marks {
-		if !pmMarkTypes[m.Type] {
+		if !pmMarkTypes[m.Type] && !pmRepeatMarks[m.Type] {
 			return fmt.Errorf("unknown mark %q", m.Type)
 		}
-		if seen[m.Type] {
+		key := m.Type
+		if pmRepeatMarks[m.Type] {
+			key += ":" + fmt.Sprint(m.Attrs["id"])
+		}
+		if seen[key] {
 			return fmt.Errorf("mark %q twice on one text", m.Type)
 		}
-		seen[m.Type] = true
+		seen[key] = true
 		if err := checkMarkAttrs(m); err != nil {
 			return err
 		}
@@ -593,6 +603,10 @@ func checkMarkAttrs(m pmMark) error {
 		id, ok := a["id"].(string)
 		if !ok || id == "" || utf8.RuneCountInString(id) > 120 || strings.ContainsAny(id, "\x00\r\n") {
 			return wrap(errors.New("attr id: expected a style id"))
+		}
+	case "comment": // a comment on the text (stage 5, comments.go)
+		if id, ok := pmInt(a["id"]); !ok || id < 1 {
+			return wrap(errors.New("attr id: expected a comment id"))
 		}
 	case "story_link":
 		t, ok := a["type"].(string)

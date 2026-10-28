@@ -78,6 +78,20 @@ const onlineDoc = {
   ],
 }
 
+// A chapter with comments (stage 5): two overlapping, one across two
+// paragraphs with a reply, one resolved.
+const cmk = (id) => ({ type: 'comment', attrs: { id } })
+const fordDoc = {
+  type: 'doc',
+  content: [
+    { type: 'heading', attrs: { level: 1 }, content: [txt('The Ford')] },
+    para(null, txt('The ford was higher than Oren had promised. '), txt('Mira watched the water climb', cmk(501)), txt(' the cart’s wheels', cmk(501), cmk(502)), txt(' and said nothing, because saying something would make it real.')),
+    para(null, txt('“Hold the lantern,” he said. ', cmk(503))),
+    para(null, txt('She held the lantern.', cmk(503)), txt(' The far bank was a smear of reeds and one crooked post, and on the post someone had nailed a board with a single word burned into it: '), txt('TURN', 'bold', cmk(504)), txt('.')),
+    para(null, txt('They did not turn.')),
+  ],
+}
+
 const now = () => new Date().toISOString()
 const db = {
   volumes: [
@@ -101,7 +115,15 @@ const db = {
     11: { doc: chapterOne, version: 4, updated_at: now() },
     12: { doc: { type: 'doc', content: [para(null, txt('Hollowmere was smaller than its name.'))] }, version: 1, updated_at: now() },
     31: { doc: onlineDoc, version: 2, updated_at: now() },
+    13: { doc: fordDoc, version: 3, updated_at: now() },
   },
+  comments: [
+    { id: 501, chapter_id: 13, parent_id: null, text: 'Too slow here? Cut to the water.', resolved: false, resolved_at: null, created_at: '2026-10-26 20:11:00', updated_at: '2026-10-26 20:11:00' },
+    { id: 502, chapter_id: 13, parent_id: null, text: 'Wheels: wooden or iron-rimmed? Check chapter 2.', resolved: false, resolved_at: null, created_at: '2026-10-27 09:02:00', updated_at: '2026-10-27 09:02:00' },
+    { id: 503, chapter_id: 13, parent_id: null, text: 'Echo of the lantern in chapter 1.\nKeep both lines short.', resolved: false, resolved_at: null, created_at: '2026-10-27 10:30:00', updated_at: '2026-10-27 10:30:00' },
+    { id: 505, chapter_id: 13, parent_id: 503, text: 'Done in the last pass.', resolved: false, resolved_at: null, created_at: '2026-10-27 18:45:00', updated_at: '2026-10-27 18:45:00' },
+    { id: 504, chapter_id: 13, parent_id: null, text: 'Burned or painted?', resolved: true, resolved_at: '2026-10-27 19:00:00', created_at: '2026-10-25 08:00:00', updated_at: '2026-10-25 08:00:00' },
+  ],
   versions: {
     11: [
       { id: 3, label: 'Before switching from A5 to A6', created_at: '2026-10-20 18:02:11', doc: { type: 'doc', content: chapterOne.content.slice(0, 5) } },
@@ -113,6 +135,7 @@ const db = {
   puts: [],
 }
 let nextVersionId = 100
+let nextCommentId = 600
 const words = (doc) => countDocJSON(doc)
 const textOf = (id) => {
   const t = db.texts[id] || { doc: { type: 'doc', content: [{ type: 'paragraph' }] }, version: 0, updated_at: null }
@@ -193,6 +216,31 @@ async function fakeApi(route) {
       return json(textOf(id))
     }
     return json({ id: v.id, label: v.label, words: words(v.doc), created_at: v.created_at, doc: v.doc })
+  }
+  if ((m = /^\/chapters\/(\d+)\/comments$/.exec(path))) {
+    const id = +m[1]
+    if (method === 'POST') {
+      const b = body()
+      const c = { id: nextCommentId++, chapter_id: id, parent_id: b.parent_id ?? null, text: b.text || '', resolved: false, resolved_at: null, created_at: now(), updated_at: now() }
+      db.comments.push(c)
+      return json(c)
+    }
+    return json(db.comments.filter((c) => c.chapter_id === id))
+  }
+  if ((m = /^\/comments\/(\d+)$/.exec(path))) {
+    const c = db.comments.find((x) => x.id === +m[1])
+    if (!c) return route.fulfill({ status: 404, body: 'comment not found' })
+    if (method === 'DELETE') {
+      db.comments = db.comments.filter((x) => x.id !== c.id && x.parent_id !== c.id)
+      return route.fulfill({ status: 204 })
+    }
+    const b = body()
+    if (b.text != null) c.text = b.text
+    if (b.resolved != null) {
+      c.resolved = b.resolved
+      c.resolved_at = b.resolved ? now() : null
+    }
+    return json(c)
   }
   if (path === '/stat-system') return json({ defs: [], settings: {} })
   return route.fulfill({ status: 404, contentType: 'text/plain', body: 'not faked' })
@@ -449,6 +497,60 @@ async function shoot() {
   await page.getByRole('button', { name: 'Dark paper' }).click()
   await settle(page, 200)
   await snap('07_dark_paper.png')
+  await page.getByRole('button', { name: 'Light paper' }).click()
+
+  // 7b. Comments (stage 5): the panel beside the page, threads in the order
+  // of the text; picking one selects its text.
+  await page.goto(`${BASE}/write/1?chapter=13`)
+  await page.waitForSelector('.write-doc h1')
+  await page.getByRole('button', { name: 'Comments', exact: true }).click()
+  await page.waitForSelector('.comments-panel .thread')
+  const threads = await page.locator('.comments-panel .thread > .entry .cm-text').allTextContents()
+  assert.equal(threads.length, 3, 'the resolved comment is hidden: ' + threads.join(' / '))
+  assert.ok(threads[0].startsWith('Too slow') && threads[1].startsWith('Wheels'), 'in the order of the text')
+  await page.locator('.comments-panel .thread').nth(1).locator('.quote').click()
+  const picked = await page.evaluate(() => {
+    const { from, to } = window.__writeView.state.selection
+    return window.__writeView.state.doc.textBetween(from, to)
+  })
+  assert.equal(picked, ' the cart’s wheels')
+  await settle(page, 300)
+  await snap('07b_comments_panel.png')
+  // Clicking commented text makes its comment the active one.
+  await clickWord('Hold')
+  await page.waitForTimeout(150)
+  assert.match(await page.locator('.comments-panel .thread.is-active .cm-text').first().textContent(), /Echo of the lantern/)
+  // Ctrl+Alt+M with nothing selected comments the word at the cursor.
+  await clickWord('reeds')
+  await page.keyboard.press('Control+Alt+m')
+  await page.waitForSelector('.comments-panel .thread textarea')
+  await page.keyboard.type('Which reeds? Bulrushes?')
+  await page.keyboard.press('Control+Enter')
+  await page.waitForTimeout(300)
+  const made = db.comments.find((c) => c.text === 'Which reeds? Bulrushes?')
+  assert.ok(made, 'the new comment is saved')
+  const marked = await page.evaluate((id) => {
+    let out = ''
+    window.__writeView.state.doc.descendants((n) => {
+      if (n.isText && n.marks.some((m) => m.type.name === 'comment' && m.attrs.id === id)) out += n.text
+    })
+    return out
+  }, made.id)
+  assert.equal(marked, 'reeds')
+  // Resolving takes the highlight away.
+  await page.locator('.comments-panel .thread').first().getByRole('button', { name: 'Resolve', exact: true }).click()
+  await page.waitForTimeout(300)
+  const css = await page.evaluate(() => document.querySelector('style[data-write-comments]').textContent)
+  assert.ok(!css.includes('"501"') && css.includes(`"${made.id}"`), 'resolved comments are not highlighted')
+  await page.waitForTimeout(2000) // the mark goes in with the chapter's autosave
+  assert.ok(JSON.stringify(db.texts[13].doc).includes(`"id":${made.id}`), "the mark is saved with the chapter's text")
+  checks.push(`comments: ${db.comments.length} rows; new one on "${marked}"; 501 resolved: ${db.comments.find((c) => c.id === 501).resolved}`)
+  await page.getByRole('checkbox', { name: /Show resolved/ }).check()
+  await settle(page, 300)
+  await snap('07c_comments_new_and_resolved.png')
+  await page.getByRole('button', { name: 'Dark paper' }).click()
+  await settle(page, 200)
+  await snap('07d_comments_dark_paper.png')
   await page.getByRole('button', { name: 'Light paper' }).click()
 
   // 8. An Online Post book.

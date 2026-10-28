@@ -634,7 +634,7 @@ func marksFor(in irInline, s *outStyle, set *styleSet) []pmMark {
 	if r.highlight != "" && r.highlight != highlight {
 		ms = append(ms, pmMark{Type: "highlight", Attrs: map[string]any{"color": r.highlight}})
 	}
-	return ms
+	return append(ms, commentMarks(in.comments)...) // docxcomments.go
 }
 
 func marksKey(ms []pmMark) string {
@@ -963,6 +963,7 @@ func (p *docxParser) finish() *docxImport {
 	if len(p.hfParts) > 0 {
 		imp.LeftOut["headers_footers"] = len(p.hfParts)
 	}
+	p.finishComments(imp) // docxcomments.go
 	return imp
 }
 

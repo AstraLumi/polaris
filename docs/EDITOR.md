@@ -118,6 +118,11 @@ Marks:
 - `char_style` {`id`}: the text uses a character style of the book. Order:
   the text's own marks > its character style (and that style's
   `based_on`) > its paragraph's style.
+- `comment` {`id`} (stage 5): the text is commented on; `id` is the row of
+  the chapter's comment (a positive integer). A text may carry several
+  `comment` marks with different ids (overlapping comments; never the same
+  id twice). Not inclusive: typing at its end doesn't extend it. It never
+  shows outside the writing page (see "Comments (stage 5)").
 
 The doc root may carry attrs: `mode`: `prose` (default) or `script`
 (stage 4: the chapter is written in Script Mode). The editor writes
@@ -614,9 +619,7 @@ Stage 5, suggested order (each its own piece of work):
    dictionary". Underlines through a ProseMirror decoration plugin, with
    suggestions on right click. The browser's own spellcheck is turned off
    in the editor once this is on.
-3. **Comments.** Notes anchored to a text range (a mark with a comment id,
-   comments stored in their own table per chapter), a side panel,
-   resolve/reopen; kept by the .docx import and export (Word comments).
+3. **Comments.** Built (schema 46): see "Comments (stage 5)" below.
 4. **Footnotes and endnotes.** An inline atom holding its own content;
    numbered automatically; page view puts footnotes at the page's foot
    (paged.js float), exports write Word footnotes and EPUB endnotes;
@@ -786,3 +789,95 @@ problem when a book's styles use the family.
 Not verified: the page in a real browser (only the build and the node and
 Go tests), and readers opening the embedded fonts (the obfuscation
 round-trip is tested).
+
+### Comments (stage 5)
+
+Notes the writer leaves on their own manuscript, like Word's comments (one
+writer: no authors). Built: `backend/comments.go`, `docxcomments.go`,
+`frontend/src/editor/comments.js` (pure, `tests/comments.test.mjs`),
+`editor/commentPlugin.js`, `components/write/CommentsPanel.vue`.
+
+Storage (schema 46): `chapter_comments` (`id` AUTOINCREMENT, so an id is
+never reused by a newer comment; `chapter_id` cascading with the chapter;
+`parent_id` for a reply, cascading with its comment; `text`; `resolved`,
+`resolved_at`; `anchored`, `detached_at`; `created_at`, `updated_at`).
+Story-only (`storyOnlyTables`). A comment's text is plain text (new lines
+and tabs kept, at most 10 000 characters): no wiki links, no Markdown.
+Replies are one level deep: a reply to a reply joins the first comment's
+thread. Resolving is a thread's (a reply can't be resolved on its own).
+
+Routes (story prefix):
+
+- `GET /api/chapters/{id}/comments`: every comment of the chapter, by id:
+  `[{ id, chapter_id, parent_id, text, resolved, resolved_at, created_at,
+  updated_at }]` (`404` for an unknown chapter).
+- `POST /api/chapters/{id}/comments` `{ text, parent_id? }`: the new row. A
+  comment may be empty (the editor makes it, then the writer types); a
+  reply may not (`400`); a parent in another chapter is `404`.
+- `PUT /api/comments/{id}` `{ text?, resolved? }`: the row.
+- `DELETE /api/comments/{id}`: `204`; its replies go with it.
+
+Lifecycle. The row is made first, and only then is the mark put on the
+text (the chapter's next save carries it), so a mark never points at a
+comment that doesn't exist. Every write of a chapter's text (save, restore,
+import: `indexChapterText` → `syncChapterComments`, in the same
+transaction) compares the chapter's comments with the marks:
+
+- in the text: `anchored`, `detached_at` cleared;
+- not in the text but in one of the chapter's saved versions: kept as is,
+  for a restore to bring back;
+- anchored once and now in neither: `detached_at` set, and deleted at the
+  first write of the text a day (`commentGrace`) later, so an undo or a
+  paste back in the meantime finds it;
+- never anchored (its mark was never saved, e.g. the tab closed first):
+  deleted at the first write of the text a day after it was made.
+
+A mark whose comment is gone (deleted, or a restored version's mark of a
+deleted comment) draws as plain text and is dropped by the exports.
+Deleting a comment in the panel deletes the row and takes its marks off
+the text. Pasted text keeps only the comments of the open chapter that are
+no longer in its text (a cut and paste moves a comment; a copy, or text
+from another chapter, comes without). Clear formatting keeps comments.
+Comments are not words and don't touch `chapter_links` / `chapter_lines`.
+
+Editor: "New comment" in the toolbar and Ctrl+Alt+M (Word's) comment the
+selection; with nothing selected, the word at the cursor (or just before
+it); a selection with no text (a picture alone, an empty paragraph) gets a
+message instead. While the row is being made the range is drawn as pending
+and follows edits (a plugin); if its text is gone by then, the row is
+deleted again. The new comment opens for writing in the "Comments" panel
+(Ctrl+Enter saves, Esc on a comment never written deletes it). Each
+comment's text is saved on its own call, apart from the chapter's
+autosave. The panel lists the threads whose text is in the chapter, in the
+order of the text, each with a quote of what it covers, its replies, Reply,
+Resolve / Reopen, and a "…" menu (Edit, Resolve or Reopen, Delete);
+"Show resolved" lists resolved ones too; a line counts the comments whose
+text was deleted. Clicking a thread selects its text and scrolls to it;
+the cursor in commented text makes the innermost comment there the
+active one (scrolled into view in the panel). Highlights: a soft wash and
+underline on every open comment the chapter knows, stronger for the active
+one, for light and dark paper (CSS rules by id from `highlightCSS`;
+resolved comments are not highlighted). The page view, PDF, EPUB and the
+HTML / Markdown / text exports never show comments (the HTTP exports take
+the marks off and join the text they split; the page view draws the mark
+as an unstyled span).
+
+.docx: the import reads `word/comments.xml` (text, date; author ignored)
+and `commentsExtended.xml` (`done` = resolved, `paraIdParent` = a reply)
+and the body's `commentRangeStart` / `commentRangeEnd` (between or inside
+paragraphs, across paragraphs too); a reply's own range is ignored; a
+comment with no text in its range (a point) takes the word before it in
+its paragraph, else the next word. A range crossing a Heading 1 belongs to
+the chapter where its text starts; its marks in later chapters are
+dropped. The rows are made in the import's transaction (`anchored`).
+`left_out.comments` now counts only comments that mark no text (with
+their replies) and references to comments the file doesn't have. The
+export writes `comments.xml` (author: the book's `meta.author`, else
+"Polaris"; the date made; one paragraph per line) and
+`commentsExtended.xml` (`done`, `paraIdParent`), with their relationships
+and content types; `commentRangeStart` before a comment's first text and
+`commentRangeEnd` plus a `commentReference` run after its last (a reply's
+beside its comment's); only comments whose text is in the exported
+chapters are written. Exported and imported again, comments come back with
+their text, dates, replies, resolved state and ranges (a comment whose
+marks had a gap comes back as one stretch).

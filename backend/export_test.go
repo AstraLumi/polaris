@@ -421,6 +421,7 @@ func reimport(t *testing.T, data []byte, uploads string) (*docxImport, *exportBo
 
 func TestExportDocxRoundTrip(t *testing.T) {
 	b, up := testBook(t)
+	addTestComments(b) // docxcomments_test.go
 	data, err := exportDocx(b)
 	if err != nil {
 		t.Fatal(err)
@@ -494,6 +495,8 @@ func TestExportDocxRoundTrip(t *testing.T) {
 	if imp.LeftOut["toc"] != 1 {
 		t.Errorf("left_out %v: the table of contents should be counted once", imp.LeftOut)
 	}
+	// Comments, their ranges, replies and resolved state.
+	checkCommentsCameBack(t, imp)
 }
 
 // --- the package's structure ---

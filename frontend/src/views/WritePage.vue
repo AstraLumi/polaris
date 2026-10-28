@@ -27,6 +27,7 @@
       @read="reader.toggle()"
       @picture="pickPicture"
       @find="openFind(false)"
+      @comment="newComment"
       @panel="togglePanel"
       @focus="focusMode = !focusMode"
     />
@@ -116,6 +117,28 @@
 
       <StylesPanel v-if="panel === 'styles' && !focusMode && settings" :styles="styles" :current-id="format?.styleId || null" :current-char-id="format?.charStyleId || null" @update="setStyles" @apply="applyStyle" @close="panel = ''" />
       <VersionsPanel v-if="panel === 'versions' && !focusMode && chapterId" :chapter-id="chapterId" :online="online" :flush="flushText" @restored="onRestored" @close="panel = ''" />
+      <CommentsPanel
+        v-if="panel === 'comments' && !focusMode && chapterId"
+        :threads="commentModel.threads"
+        :detached="commentModel.detached"
+        :resolved-count="commentModel.resolved"
+        :show-resolved="showResolved"
+        :active-id="activeComment"
+        :edit-id="editComment"
+        :loading="commentsLoading"
+        :busy="commentBusy"
+        :read-only="readOnly"
+        :error="commentError"
+        @new="newComment"
+        @select="selectComment"
+        @save="saveComment"
+        @cancel-new="dropComment"
+        @reply="replyTo"
+        @resolve="resolveComment"
+        @remove="dropComment"
+        @show-resolved="(v) => (showResolved = v)"
+        @close="panel = ''"
+      />
       <BookPanel
         v-if="panel === 'book' && !focusMode && settings"
         :settings="settings"
@@ -221,6 +244,10 @@ import SpeakerOptions from '../components/write/SpeakerOptions.vue'
 import { nameSuggest } from '../editor/nameSuggest.js'
 import { scriptPlugins, setDialogueAttrs, dialogueToParagraph } from '../editor/script.js'
 import { useStoryNames } from '../editor/useStoryNames.js'
+import CommentsPanel from '../components/write/CommentsPanel.vue'
+import { commentsApi } from '../editor/api.js'
+import { commentRanges, panelThreads, shownIds, activeAt, highlightCSS, wordRange, hasText } from '../editor/comments.js'
+import { commentPlugin, startPending, takePending, addCommentMark, removeCommentMark } from '../editor/commentPlugin.js'
 
 void [tr('Custom size'), tr('Online Post'), tr('Not kept after a conflict'), tr('Before using the copy kept in this browser')]
 const PICTURE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
@@ -374,6 +401,152 @@ function refreshDocFonts() {
   }, 600)
 }
 
+// ---- Comments (stage 5) ------------------------------------------------------------------------
+// The rows are the chapter's (GET /api/chapters/{id}/comments); the marks in
+// the text say where each is. A new comment's row is made first and its
+// mark put in the text after, so the chapter's next save carries it and a
+// mark never points at nothing. A comment's text is saved on its own.
+const comments = ref([])
+const commentsLoading = ref(false)
+const commentBusy = ref(false)
+const commentError = ref('')
+const showResolved = ref(false)
+const activeComment = ref(null)
+const editComment = ref(null) // a new comment, opened for writing in the panel
+
+// Where each comment is, worked out again only when the text changes.
+let rangeCache = { doc: null, ranges: new Map() }
+const commentPlaces = computed(() => {
+  const doc = editorState.value?.doc
+  if (!doc || !comments.value.length) return new Map()
+  if (rangeCache.doc !== doc) rangeCache = { doc, ranges: commentRanges(doc) }
+  return rangeCache.ranges
+})
+const commentModel = computed(() => panelThreads(comments.value, commentPlaces.value, { showResolved: showResolved.value }))
+const shownComments = computed(() => shownIds(comments.value))
+
+// Highlights: the open comments the chapter knows, the active one stronger.
+const commentStyleEl = document.createElement('style')
+commentStyleEl.dataset.writeComments = ''
+watch([shownComments, activeComment], ([ids, active]) => (commentStyleEl.textContent = highlightCSS(ids, active, '.write-host .write-doc')), { immediate: true })
+
+// The cursor in commented text makes that comment the active one.
+watch(editorState, (st) => {
+  if (!st || !comments.value.length) return
+  const { from, to } = st.selection
+  const ids = showResolved.value ? new Set(comments.value.filter((c) => !c.parent_id).map((c) => c.id)) : shownComments.value
+  const id = activeAt(commentPlaces.value, from, to, ids)
+  if (id != null || st.selection.empty) activeComment.value = id
+})
+
+async function loadComments(id) {
+  comments.value = []
+  activeComment.value = null
+  commentError.value = ''
+  if (id == null) return
+  commentsLoading.value = true
+  try {
+    const list = await commentsApi.list(id)
+    if (chapterId.value === id) comments.value = Array.isArray(list) ? list : []
+  } catch (e) {
+    if (chapterId.value === id) commentError.value = e.message
+  } finally {
+    commentsLoading.value = false
+  }
+}
+
+const replaceComment = (c) => (comments.value = comments.value.map((x) => (x.id === c.id ? c : x)))
+
+// A comment on the selection (Ctrl+Alt+M): with nothing selected, on the word
+// at the cursor, as in Word.
+async function newComment() {
+  if (!view || readOnly.value || chapterId.value == null) return
+  panel.value = 'comments'
+  let { from, to, empty } = view.state.selection
+  if (empty) {
+    const w = wordRange(view.state.doc, from)
+    if (w) ({ from, to } = w)
+  }
+  if (from === to || !hasText(view.state.doc, from, to)) {
+    commentError.value = t('Select the text to comment on first.')
+    return
+  }
+  commentError.value = ''
+  const into = chapterId.value
+  const key = startPending(view, from, to)
+  commentBusy.value = true
+  try {
+    const c = await commentsApi.create(into, { text: '' })
+    const place = view ? takePending(view, key) : null
+    if (chapterId.value !== into || !place) {
+      // The writer moved on or the text went meanwhile: the row isn't needed.
+      commentsApi.remove(c.id).catch(() => {})
+      return
+    }
+    comments.value = [...comments.value, c]
+    view.dispatch(addCommentMark(view.state, place.from, place.to, c.id))
+    activeComment.value = c.id
+    editComment.value = null
+    await nextTick()
+    editComment.value = c.id
+  } catch (e) {
+    if (view) takePending(view, key)
+    commentError.value = e.message
+  } finally {
+    commentBusy.value = false
+  }
+}
+
+// Picking a comment in the panel selects its text and brings it into sight.
+function selectComment(id) {
+  const r = commentPlaces.value.get(id)
+  activeComment.value = id
+  if (!view || !r) return
+  view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, r.from, r.to)).scrollIntoView())
+  const dom = view.domAtPos(r.from)?.node
+  const el = dom?.nodeType === 1 ? dom : dom?.parentElement
+  el?.scrollIntoView?.({ block: 'center' })
+}
+
+async function commentCall(fn) {
+  commentBusy.value = true
+  commentError.value = ''
+  try {
+    return await fn()
+  } catch (e) {
+    commentError.value = e.message
+    return null
+  } finally {
+    commentBusy.value = false
+  }
+}
+
+async function saveComment(id, text) {
+  const c = await commentCall(() => commentsApi.update(id, { text }))
+  if (c) replaceComment(c)
+}
+
+async function resolveComment(id, resolved) {
+  const c = await commentCall(() => commentsApi.update(id, { resolved }))
+  if (c) replaceComment(c)
+}
+
+async function replyTo(id, text) {
+  const into = chapterId.value
+  const c = await commentCall(() => commentsApi.create(into, { text, parent_id: id }))
+  if (c && chapterId.value === into) comments.value = [...comments.value, c]
+}
+
+// Deletes a comment (and its replies) and takes its mark off the text.
+async function dropComment(id) {
+  const c = comments.value.find((x) => x.id === id)
+  const ok = await commentCall(() => commentsApi.remove(id).then(() => true))
+  if (!ok) return
+  comments.value = comments.value.filter((x) => x.id !== id && x.parent_id !== id)
+  if (activeComment.value === id) activeComment.value = null
+  if (c && !c.parent_id && view && !readOnly.value) view.dispatch(removeCommentMark(view.state, id))
+}
+
 // ---- The editor ----------------------------------------------------------------------------
 // Tab-to-link and Script Mode (stage 4) go first: their Tab, Enter and
 // Backspace come before the usual ones.
@@ -391,6 +564,7 @@ const plugins = [
   ...editorPlugins({ getStyles: () => styles.value }),
   findPlugin(),
   readAloudPlugin({ onInterrupt: () => reader.stop() }),
+  commentPlugin({ known: () => new Set(comments.value.filter((c) => !c.parent_id).map((c) => c.id)) }),
 ]
 const makeState = (json) => EditorState.create({ schema, doc: docFromJSON(json), plugins })
 
@@ -546,6 +720,7 @@ async function openChapter(id) {
     await closeChapter()
     if (token !== opening) return
     chapterId.value = id
+    loadComments(id)
     if (id == null) {
       setDoc(emptyDocJSON())
       return
@@ -681,6 +856,7 @@ async function onRestored(res) {
     const text = res && res.doc ? res : await textApi.get(chapterId.value)
     setDoc(normal(text.doc))
     saver?.resolved(text.version, false)
+    loadComments(chapterId.value) // a restored version may bring comments back
   } catch (e) {
     error.value = e.message
   }
@@ -1048,6 +1224,10 @@ function onKey(e) {
   } else if (mod && (key === 'f' || key === 'h') && !e.shiftKey) {
     e.preventDefault()
     openFind(key === 'h')
+  } else if ((e.ctrlKey || e.metaKey) && e.altKey && key === 'm' && !e.shiftKey) {
+    // Word's "New Comment".
+    e.preventDefault()
+    newComment()
   } else if (e.key === 'Escape' && !document.querySelector('.overlay')) {
     if (find.value.open) closeFind()
     else if (focusMode.value) focusMode.value = false
@@ -1080,6 +1260,7 @@ watch(() => route.query.chapter, () => pickChapter())
 
 onMounted(() => {
   document.head.appendChild(styleEl)
+  document.head.appendChild(commentStyleEl)
   createView()
   loadChapters()
   loadBook()
@@ -1099,6 +1280,7 @@ onBeforeUnmount(() => {
   view?.destroy()
   view = null
   styleEl.remove()
+  commentStyleEl.remove()
   clearTimeout(countTimer)
   clearTimeout(fontTimer)
   pageTitle.value = ''

@@ -100,6 +100,8 @@ var storyOnlyTables = []string{
 	"book_settings", "chapter_texts", "chapter_text_versions",
 	// What each chapter's text names, and its lines (chapterindex.go).
 	"chapter_links", "chapter_lines",
+	// The comments on the chapters' texts (comments.go).
+	"chapter_comments",
 }
 
 func isNullCol(t assetTable, col string) bool {
