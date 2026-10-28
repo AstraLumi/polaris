@@ -217,6 +217,22 @@ async function newPage(browser, viewport, errors) {
     localStorage.setItem('polaris-story', story)
     localStorage.setItem('polaris-nav-collapsed', '0')
   }, STORY)
+  // A speech synthesis that says nothing and never finishes a sentence, so
+  // read aloud can be looked at (the real voices can't be heard headless).
+  await context.addInitScript(() => {
+    const spoken = (window.__spoken = [])
+    const fake = {
+      getVoices: () => [
+        { name: 'Fake English', lang: 'en-US', voiceURI: 'fake-en', default: true },
+        { name: 'Fake Portuguese', lang: 'pt-BR', voiceURI: 'fake-pt' },
+      ],
+      speak: (u) => spoken.push(u.text),
+      cancel: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }
+    Object.defineProperty(window, 'speechSynthesis', { value: fake, configurable: true })
+  })
   await context.route('**/api/**', fakeApi)
   const page = await context.newPage()
   page.on('pageerror', (e) => errors.push(e.message))
@@ -391,6 +407,30 @@ async function shoot() {
   await settle(page, 300)
   await snap('05_versions_panel.png')
   await page.getByRole('button', { name: 'Saved versions', exact: true }).click()
+
+  // 5b. Read aloud: Ctrl+Alt+Space from the caret highlights the sentence and
+  // shows the control; a click in the text stops it.
+  await clickWord('lantern')
+  await page.keyboard.press('Control+Alt+Space')
+  await page.waitForSelector('.read-bar')
+  await page.waitForSelector('.write-doc .read-now')
+  await settle(page, 300)
+  await snap('05b_read_aloud.png')
+  const sentence = await page.locator('.write-doc .read-now').first().textContent()
+  assert.ok((await page.evaluate(() => window.__spoken.length)) >= 1, 'something was said: ' + (await page.evaluate(() => JSON.stringify([window.__spoken, String(window.speechSynthesis.speak)]))))
+  await page.getByRole('button', { name: 'Next sentence' }).click()
+  await page.waitForTimeout(100)
+  assert.notEqual(await page.locator('.write-doc .read-now').first().textContent(), sentence, 'next sentence moves the highlight')
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(100)
+  assert.equal(await page.locator('.read-bar').count(), 0, 'Esc stops reading')
+  await clickWord('lantern')
+  await page.keyboard.press('Control+Alt+Space')
+  await page.waitForSelector('.read-bar')
+  await clickWord('lantern')
+  await page.waitForTimeout(100)
+  assert.equal(await page.locator('.read-bar').count(), 0, 'a click in the text stops reading')
+  checks.push('read aloud: highlight "' + sentence.slice(0, 40) + '", next, Esc and click stop: ok')
 
   // 6. A conflict: the next save finds the chapter changed elsewhere.
   db.conflictNext = true

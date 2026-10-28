@@ -628,7 +628,7 @@ Stage 5, suggested order (each its own piece of work):
    `drop_caps`) and exported.
 7. **Pictures with text wrapping.** Float left/right with wrap, in the
    editor, page view and exports.
-8. **Read aloud.** The browser's speech synthesis reading the selection or
+8. **Read aloud** (built; see "Read aloud (stage 5)" below). The browser's speech synthesis reading the selection or
    from the caret, with the current sentence highlighted.
 9. **Offline writing.** A service worker caching the app's files and a
    manifest so it installs as an app; books marked "Available offline"
@@ -637,3 +637,44 @@ Stage 5, suggested order (each its own piece of work):
    version check, and a conflict shows both texts as today (ProseMirror
    can merge edits to different paragraphs). Needs HTTPS (or localhost).
    Ask the browser for persistent storage.
+
+### Read aloud (stage 5)
+
+The toolbar's speaker button (folded behind "⋯" on phones; disabled with a
+tooltip when the browser has no `speechSynthesis`) or Ctrl+Alt+Space
+reads the selection, or from the sentence holding the caret to the end of
+the chapter. The same shortcut pauses and resumes. Code:
+`src/editor/readAloud.js` (pure, `tests/readAloud.test.mjs`),
+`readAloudPlugin.js` (the decoration plugin and the reader),
+`components/write/ReadAloudBar.vue` (the floating control).
+
+- **One utterance per sentence**, not boundary events: many voices give no
+  `boundary`, and Chrome stops long utterances after about 15 s. The
+  highlight (`.read-now`, a decoration, theme variables `--read`) therefore
+  follows exactly and is scrolled gently into view when it leaves the
+  middle of the page. A sentence over 220 characters is spoken in pieces
+  cut at a comma or space (`chunkText`), still one highlight.
+- `splitSentences` ends a sentence at `.` `!` `?` `…` (runs of them), with
+  closing quotes and brackets kept; it does not end it after an
+  abbreviation (English: Mr., Mrs., Dr., St., e.g., i.e. ...; pt/es: Sr.,
+  Sra., Dr., ...), a lone initial, inside a number (3.5), or when the next
+  word starts in lower case (`"Stop!" she said.`, `wait... and then`).
+  `collectSentences` maps each sentence back to document positions
+  (`from`/`to`) and gives the silence after it: headings 900 ms,
+  paragraphs 350 ms, a scene break 1100 ms. Pictures, page breaks and the
+  contents box are skipped; a selection cuts sentences at its edges.
+- A dialogue line is spoken as "Speaker: line" (its first sentence only;
+  the `speakers` option, on). Nothing in the UI turns it off yet.
+- Pause cancels the sentence and says it again from its start on resume
+  (`speechSynthesis.pause()` is unreliable). Previous/next sentence work
+  while playing or paused. Speed 0.5-2x; the voice picker lists the voices
+  of the book's `meta.language` first, then the rest (`voiceschanged`
+  fills it in); both are remembered per browser in localStorage
+  (`polaris.readAloud`, wrapped in try/catch). Changing either restarts
+  the current sentence.
+- Stops: Esc, the stop button, a click in the text, any change to the
+  document (typing, a restored version), opening another chapter,
+  leaving the page. Clicking elsewhere (toolbar, panels) does not.
+- Checked headless only with a stand-in `speechSynthesis` that records what
+  would be said (`writeShots.mjs`, step 5b); real voices and the browsers'
+  quirks have not been heard.
