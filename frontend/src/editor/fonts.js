@@ -104,6 +104,16 @@ export async function loadFont(family) {
   return requested.get(key)
 }
 
+// The Google Fonts stylesheets loadFont asks for a family (with bold and
+// italic, then alone); none for a family Google isn't asked for. Offline
+// writing keeps them (offline/caches.js).
+export function googleSheets(family, library = fontLibrary.value) {
+  const name = String(family || '').trim()
+  const key = name.toLowerCase()
+  if (!name || findFamily(library, name) || APP_FONTS.some((f) => f.toLowerCase() === key) || SYSTEM_FONTS.has(key)) return []
+  return [cssUrl(name, true), cssUrl(name, false)]
+}
+
 export const loadFonts = (families) => Promise.all([...new Set(families.filter(Boolean))].map(loadFont))
 
 // Every font family a document's marks name.

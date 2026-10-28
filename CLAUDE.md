@@ -56,6 +56,9 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/editorSpell.test.mjs
     node frontend/tests/editorTables.test.mjs
     node frontend/tests/footnotes.test.mjs
+    node frontend/tests/offlineMerge.test.mjs
+    node frontend/tests/offlineStore.test.mjs
+    node frontend/tests/serviceWorker.test.mjs
 
 Run all of these before committing.
 

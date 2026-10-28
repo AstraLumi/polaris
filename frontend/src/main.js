@@ -5,6 +5,7 @@ import './style.css'
 import { loadSavedTheme } from './theme'
 import { loadSavedLocale, i18nPlugin } from './i18n'
 import { trackRecent } from './recentTracker'
+import { registerServiceWorker } from './offline/index.js'
 
 loadSavedTheme()
 loadSavedLocale()
@@ -27,3 +28,6 @@ document.addEventListener(
 trackRecent(router)
 
 createApp(App).use(router).use(i18nPlugin).mount('#app')
+
+// Offline writing (docs/EDITOR.md): the app's files kept by a service worker.
+if (import.meta.env.PROD) registerServiceWorker()

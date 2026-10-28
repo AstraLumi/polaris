@@ -13,6 +13,19 @@
       <p v-if="notice" class="notice-banner">{{ notice }}</p>
       <p v-if="!storiesLoaded && !error" class="loading-hint">{{ $t('Loading…') }}</p>
 
+      <template v-if="!storiesLoaded && kept.length">
+        <p class="empty">{{ $t('Stories with books kept on this device for writing offline:') }}</p>
+        <ul class="grid">
+          <li v-for="k in kept" :key="k.id" class="card glass-panel" :class="{ 'is-current': k.id === activeStoryId }">
+            <button class="card-open" type="button" @click="openStory(k.id)">
+              <span class="card-icon"><IconImage src="" :name="k.name" /></span>
+              <span class="card-name" data-tip-overflow>{{ k.name }}</span>
+              <span class="card-meta">{{ $tn('{n} book kept offline', '{n} books kept offline', k.books) }}</span>
+            </button>
+          </li>
+        </ul>
+      </template>
+
       <template v-if="storiesLoaded">
         <p v-if="!stories.length" class="empty">
           {{ $t('No stories yet. Create your first one, or import one from a backup.') }}
@@ -80,6 +93,8 @@ import {
 } from '../stories'
 import { t } from '../i18n'
 import { timeAgo } from '../timeAgo'
+import { offlineStore } from '../offline/index.js'
+import { storyCache } from '../offline/caches.js'
 
 // An export older than a month (or none at all) is worth a nudge.
 const STALE_DAYS = 30
@@ -97,14 +112,43 @@ const toDelete = ref(null)
 const importing = ref(false)
 const fileInput = ref(null)
 
+// Without the server: the stories this browser keeps books of for writing
+// offline (docs/EDITOR.md, "Offline writing"), so one can still be opened.
+const kept = ref([])
+async function listKept() {
+  try {
+    const by = new Map()
+    for (const b of await offlineStore.allBooks()) by.set(b.story, (by.get(b.story) || 0) + 1)
+    const out = []
+    for (const [id, books] of by) {
+      const info = (await offlineStore.getStory(id))?.info
+      out.push({ id, books, name: info?.name || id })
+    }
+    kept.value = out.sort((a, b) => a.name.localeCompare(b.name))
+  } catch (e) {
+    kept.value = []
+  }
+}
+
 async function refresh() {
   try {
     await loadStories()
   } catch (err) {
     error.value = err.message || t("Couldn't load your stories. Try refreshing.")
+    listKept()
   }
 }
 onMounted(refresh)
+
+// A deleted story's books kept offline go with it.
+async function forgetOffline(id) {
+  try {
+    for (const b of await offlineStore.listBooks(id)) await offlineStore.removeBook(id, b.volume)
+    if (typeof caches !== 'undefined') await caches.delete(storyCache(id))
+  } catch (e) {
+    /* nothing kept */
+  }
+}
 
 function closeForm() {
   creating.value = false
@@ -123,6 +167,7 @@ async function onSaved(saved, wasNew) {
 async function onDeleted(story) {
   toDelete.value = null
   if (story.id === activeStoryId) forgetStory()
+  forgetOffline(story.id)
   await refresh()
 }
 

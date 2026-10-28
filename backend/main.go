@@ -301,6 +301,11 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 // index.html for any path that isn't a real file — so a browser refresh on
 // a vue-router route like /characters/3/versions still works instead of
 // 404ing.
+//
+// Caching (docs/EDITOR.md, "Offline writing"): the page and the service
+// worker are asked for again every time, so a new release shows at once;
+// built files under /assets/ have their content's hash in their name and
+// never change.
 func spaHandler(staticFS fs.FS) http.Handler {
 	fileServer := http.FileServer(http.FS(staticFS))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -309,11 +314,18 @@ func spaHandler(staticFS fs.FS) http.Handler {
 			// Folders count as missing too: /assets is both a page and the
 			// folder of built scripts, and must load the page.
 			if info, err := fs.Stat(staticFS, path); err != nil || info.IsDir() {
+				w.Header().Set("Cache-Control", "no-cache")
 				r2 := r.Clone(r.Context())
 				r2.URL.Path = "/"
 				fileServer.ServeHTTP(w, r2)
 				return
 			}
+		}
+		switch {
+		case path == "" || path == "index.html" || path == "sw.js":
+			w.Header().Set("Cache-Control", "no-cache")
+		case strings.HasPrefix(path, "assets/"):
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		}
 		fileServer.ServeHTTP(w, r)
 	})

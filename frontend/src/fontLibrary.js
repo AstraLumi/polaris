@@ -77,6 +77,12 @@ export function loadFontLibrary(force = false) {
   return loading
 }
 
+// The library as an offline book kept it (docs/EDITOR.md, "Offline
+// writing"), used while the server can't be reached and nothing was loaded.
+export function adoptFontLibrary(list) {
+  if (!fontLibrary.value.length && Array.isArray(list) && list.length) use(list)
+}
+
 // Several files at once; familyId puts them all in that family. Answers
 // { families, added, problems: [{ file, error }] }.
 export async function uploadFonts(files, familyId = null) {

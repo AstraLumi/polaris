@@ -84,6 +84,7 @@
     <div v-if="menuOpen" class="nav-backdrop" @click="menuOpen = false"></div>
 
     <main class="stage">
+      <OfflineBanner />
       <router-view />
     </main>
 
@@ -107,6 +108,7 @@ import SearchPalette from './components/SearchPalette.vue'
 import TooltipLayer from './components/TooltipLayer.vue'
 import LinkPreviewLayer from './components/LinkPreviewLayer.vue'
 import PictureViewer from './components/PictureViewer.vue'
+import OfflineBanner from './components/OfflineBanner.vue'
 import { currentStory } from './stories'
 
 const route = useRoute()

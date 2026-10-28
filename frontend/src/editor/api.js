@@ -2,6 +2,7 @@
 // the open story's prefix like every other call.
 import { t, tr } from '../i18n'
 import { STORY_API } from '../stories'
+import { reportReach } from '../offline/connection.js'
 
 // Messages these calls can give (backend editor.go, chaptertext.go,
 // editorimport.go, docx.go); listed so they get translated.
@@ -46,8 +47,13 @@ async function call(path, options, fallback) {
   try {
     res = await fetch(`${STORY_API}${path}`, options)
   } catch (e) {
+    reportReach(false)
     throw new ApiError(t("can't reach the server"), 0)
   }
+  // A proxy in front of Polaris answers these while Polaris is down.
+  const gone = res.status === 502 || res.status === 503 || res.status === 504
+  reportReach(!gone)
+  if (gone) throw new ApiError(t("can't reach the server"), 0)
   if (res.status === 409) {
     let stored = null
     try {
