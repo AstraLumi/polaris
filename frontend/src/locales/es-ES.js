@@ -2309,4 +2309,13 @@ export default {
   "failed to export the book": "no se pudo exportar el libro",
   "{format}, this chapter": "{format}, este capítulo",
   "{format}, whole book": "{format}, libro completo",
+  "Read aloud": "Leer en voz alta",
+  "Your browser cannot read aloud": "Tu navegador no puede leer en voz alta",
+  "Previous sentence": "Frase anterior",
+  "Next sentence": "Frase siguiente",
+  "Resume": "Continuar",
+  "Stop reading": "Detener la lectura",
+  "Voice": "Voz",
+  "Voices for this book’s language": "Voces del idioma de este libro",
+  "Other voices": "Otras voces",
 }

@@ -22,6 +22,9 @@
       :focus-mode="focusMode"
       :panel="panel"
       :uploading="uploading"
+      :can-read="reader.supported"
+      :reading="readInfo.status !== 'idle'"
+      @read="reader.toggle()"
       @picture="pickPicture"
       @find="openFind(false)"
       @panel="togglePanel"
@@ -55,6 +58,16 @@
       </select>
 
       <div ref="paperArea" class="paper-area" @scroll.passive="placePictureOptions(); placeSpeaker()">
+        <ReadAloudBar
+          v-if="readInfo.status !== 'idle'"
+          :info="readInfo"
+          :language="book?.settings?.meta?.language || 'en'"
+          @toggle="reader.toggle()"
+          @stop="reader.stop(); view?.focus()"
+          @step="(by) => reader.step(by)"
+          @rate="(r) => reader.setRate(r)"
+          @voice="(v) => reader.setVoice(v)"
+        />
         <FindPanel v-if="find.open && view && editorState" ref="findPanel" :view="view" :state="editorState" :replace="find.replace" :initial="find.initial" @close="closeFind" />
 
         <div v-if="offer" class="offer glass-panel panel-solid" role="alert">
@@ -180,6 +193,7 @@ import { pageTitle } from '../navigation'
 import { schema, docFromJSON, docToJSON, emptyDocJSON } from '../editor/schema.js'
 import { editorPlugins } from '../editor/keymap.js'
 import { findPlugin } from '../editor/findPlugin.js'
+import { readAloudPlugin, createReader } from '../editor/readAloudPlugin.js'
 import { selectionFormat, setStyle, setCharStyle, pasteIntoEmpty, insertBlock, setImageAttrs, removeImage } from '../editor/commands.js'
 import { styleSheet, styleFonts, resolveStyle, styleById } from '../editor/styles.js'
 import { normaliseSettings, defaultSettings, switchPageType, textBlockMm, pageTypeName } from '../editor/pageTypes.js'
@@ -192,6 +206,7 @@ import { ago } from '../editor/when.js'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import WriteToolbar from '../components/write/WriteToolbar.vue'
 import FindPanel from '../components/write/FindPanel.vue'
+import ReadAloudBar from '../components/write/ReadAloudBar.vue'
 import StylesPanel from '../components/write/StylesPanel.vue'
 import PictureOptions from '../components/write/PictureOptions.vue'
 import VersionsPanel from '../components/write/VersionsPanel.vue'
@@ -363,11 +378,19 @@ function refreshDocFonts() {
 // Tab-to-link and Script Mode (stage 4) go first: their Tab, Enter and
 // Backspace come before the usual ones.
 const names = useStoryNames()
+// Read aloud (stage 5): typing or clicking in the text stops it.
+const readInfo = ref({ status: 'idle', index: 0, total: 0, rate: 1, voice: '', voices: [] })
+const reader = createReader({
+  getView: () => view,
+  getLang: () => book.value?.settings?.meta?.language || 'en',
+  onChange: (s) => (readInfo.value = s),
+})
 const plugins = [
   nameSuggest({ getIndex: () => names.index.value, typeLabel: names.typeLabel, hint: t('Tab: link this name') }),
   ...scriptPlugins({ getIndex: () => names.index.value, onSpeaker: openSpeaker }),
   ...editorPlugins({ getStyles: () => styles.value }),
   findPlugin(),
+  readAloudPlugin({ onInterrupt: () => reader.stop() }),
 ]
 const makeState = (json) => EditorState.create({ schema, doc: docFromJSON(json), plugins })
 
@@ -385,6 +408,7 @@ function countSelection() {
 }
 
 function setDoc(json) {
+  reader.stop()
   const st = makeState(json)
   view.updateState(st)
   editorState.value = st
@@ -513,6 +537,7 @@ async function closeChapter() {
 let opening = 0
 async function openChapter(id) {
   const token = ++opening
+  reader.stop()
   loadingText.value = true
   offer.value = null
   conflict.value = null
@@ -1010,7 +1035,13 @@ function togglePanel(name) {
 function onKey(e) {
   const mod = (e.ctrlKey || e.metaKey) && !e.altKey
   const key = e.key.toLowerCase()
-  if (mod && key === 's') {
+  if ((e.ctrlKey || e.metaKey) && e.altKey && e.code === 'Space') {
+    e.preventDefault()
+    reader.toggle()
+  } else if (e.key === 'Escape' && reader.status !== 'idle') {
+    reader.stop()
+    view?.focus()
+  } else if (mod && key === 's') {
     e.preventDefault()
     flushText()
     if (settingsTimer) saveSettings()
@@ -1059,6 +1090,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  reader.destroy()
   window.removeEventListener('keydown', onKey)
   window.removeEventListener('beforeunload', onUnload)
   resizer?.disconnect()

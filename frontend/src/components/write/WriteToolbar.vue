@@ -134,6 +134,7 @@
       <button v-bind="btn(t('Saved versions'), panel === 'versions')" class="foldable" @click="$emit('panel', 'versions')"><TbIcon name="versions" /></button>
       <button v-bind="btn(t('Book and page'), panel === 'book')" class="foldable" @click="$emit('panel', 'book')"><TbIcon name="book" /></button>
       <button v-bind="btn(scriptMode ? t('Script Mode: on (this chapter)') : t('Script Mode: type “Name:” at a line’s start for dialogue'), scriptMode)" class="foldable" @click="exec(setScriptMode(!scriptMode))"><TbIcon name="script" /></button>
+      <button v-bind="btn(readTitle, reading)" class="foldable" :disabled="!canRead" @click="$emit('read')"><TbIcon name="speaker" /></button>
       <button v-bind="btn(t('Focus mode'), focusMode)" @click="$emit('focus')"><TbIcon name="focus" /></button>
       <button type="button" class="tb-btn more-btn" :aria-expanded="more" :title="$t('More tools')" :aria-label="$t('More tools')" @click="more = !more">{{ more ? '▴' : '⋯' }}</button>
     </div>
@@ -174,8 +175,13 @@ const props = defineProps({
   focusMode: { type: Boolean, default: false },
   panel: { type: String, default: '' },
   uploading: { type: Boolean, default: false }, // a picture is on its way
+  canRead: { type: Boolean, default: false }, // the browser can read aloud
+  reading: { type: Boolean, default: false }, // the chapter is being read
 })
-defineEmits(['find', 'panel', 'focus', 'picture'])
+defineEmits(['find', 'panel', 'focus', 'picture', 'read'])
+const readTitle = computed(() =>
+  props.canRead ? t('Read aloud') + ' (Ctrl+Alt+Space)' : t('Your browser cannot read aloud'),
+)
 
 const TEXT_COLORS = ['#000000', '#444444', '#7f7f7f', '#c00000', '#e36c09', '#9c6500', '#2e7d32', '#1f4e79', '#3949ab', '#7030a0', '#ad1457', '#ffffff']
 const HIGHLIGHTS = ['#fff176', '#c5e1a5', '#80deea', '#f8bbd0', '#ffcc80', '#d1c4e9']
@@ -288,6 +294,7 @@ const ICONS = {
   versions: 'M12 8v4l3 2M3.05 11a9 9 0 1 1 .5 4M3 4v7h7',
   book: 'M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3zM4 17a3 3 0 0 1 3-3h11',
   focus: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
+  speaker: 'M11 5 6 9H3v6h3l5 4zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13',
   script: 'M4 5h16v11H10l-4 3v-3H4zM8 9h8M8 12h5',
 }
 const TbIcon = (p) =>
