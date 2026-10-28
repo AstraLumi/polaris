@@ -563,9 +563,10 @@ async function shoot() {
   assert.equal(await page.locator('.read-bar').count(), 0, 'a click in the text stops reading')
   checks.push('read aloud: highlight "' + sentence.slice(0, 40) + '", next, Esc and click stop: ok')
 
-  // 6. A conflict: the next save finds the chapter changed elsewhere.
+  // 6. A conflict: the next save finds the same paragraph changed elsewhere
+  // (edits to different paragraphs are merged without asking).
   db.conflictNext = true
-  db.texts[11] = { doc: { type: 'doc', content: [...chapterOne.content.slice(0, 4), para(null, txt('(Changed in another tab: Mira never found the map.)', 'italic'))] }, version: db.texts[11].version + 1, updated_at: now() }
+  db.texts[11] = { doc: { type: 'doc', content: chapterOne.content.map((blk) => (JSON.stringify(blk).includes('said Oren') ? para(null, txt('(Changed in another tab: Oren never spoke.)', 'italic')) : blk)) }, version: db.texts[11].version + 1, updated_at: now() }
   await clickWord('Oren')
   await page.keyboard.type(' (edited here)')
   await page.waitForSelector('.conflict', { timeout: 6000 })

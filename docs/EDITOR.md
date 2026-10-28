@@ -594,8 +594,9 @@ left-hand pages, by where they lie in the book, not by their number.
 Status (2026-10-28): stages 1–4 are built and pushed (`126fdc3` the MVP,
 `12df0da` stages 3–4; schemas 42–45). Stage 5 items 1 (fonts library),
 2 (spellchecker), 3 (comments, schema 46), 5 (tables) and 8 (read aloud)
-are built on the local `stage5` branch, not pushed; items 4, 6, 7 and 9
-are not started (footnotes, boxes and drop caps, wrapping, offline).
+are on main; item 9 (offline writing) is built (on its own branch until
+merged); items 4, 6 and 7 are not started (footnotes, boxes and drop
+caps, wrapping).
 The writer's decisions behind this plan: parity with Word in what matters
 to novelists, nothing else (no cloud, macros, track changes, equations);
 page types A4, A5, A6, custom and Online Post, one per book; EPUB yes;
@@ -663,13 +664,7 @@ Stage 5, suggested order (each its own piece of work):
    editor, page view and exports.
 8. **Read aloud** (built; see "Read aloud (stage 5)" below). The browser's speech synthesis reading the selection or
    from the caret, with the current sentence highlighted.
-9. **Offline writing.** A service worker caching the app's files and a
-   manifest so it installs as an app; books marked "Available offline"
-   kept in IndexedDB (chapters, styles, settings, fonts) and edited there
-   with no connection; on reconnect, changes upload with the existing
-   version check, and a conflict shows both texts as today (ProseMirror
-   can merge edits to different paragraphs). Needs HTTPS (or localhost).
-   Ask the browser for persistent storage.
+9. **Offline writing.** Built: see "Offline writing (stage 5)" below.
 
 ### Read aloud (stage 5)
 
@@ -1104,3 +1099,35 @@ that.
   table's setting), row heights, cell margins other than Word's default,
   text direction, header columns in exports (they are plain cells there),
   tables inside lists, and a table's caption.
+
+### Offline writing (stage 5)
+
+A book marked "Available offline" (`OfflinePanel.vue`, `editor/useOfflineBook.js`)
+can be opened and written with no connection; the writing page shows
+`OfflineBanner.vue` while it is offline and what is waiting to upload.
+
+- Service worker (`frontend/src/offline/sw.js`, filled in at build by a Vite
+  plugin, `swBuild.js`): the app's files are kept in a versioned cache
+  (`polaris-app-<BUILD>`, filled at install, older ones deleted on
+  activate). Pages are network-first with the kept page as fallback. `/api/`
+  is never cached or touched: what offline books need is stored by the page.
+  Uploads are network-first; copies the writing page kept for offline books
+  are served from their own caches with their original headers. Spelling
+  dictionaries and Google Fonts (CSS and files) are kept once fetched.
+- IndexedDB (`polaris-offline`, `offline/kv.js`): per story, the stories,
+  books (settings, styles, page types) and chapters (doc, version, words,
+  comments, a `dirty` flag for text written offline).
+- Sync (`offline/sync.js`): on reconnect each dirty chapter is saved with the
+  version it was based on. On a `409`, if the two sides edited different
+  top-level blocks they are merged automatically (`offline/merge.js`, a
+  three-way merge) and your text is saved as a version first; if the same
+  block changed, the usual conflict view shows both texts.
+- The page asks the browser for persistent storage when a book is made
+  available offline, and shows whether it was granted.
+- Needs HTTPS or localhost (a secure context); otherwise the option is hidden.
+- Tests: `offlineMerge`, `offlineStore`, `serviceWorker`;
+  screenshots: `node frontend/tests/visual/offlineShots.mjs`.
+- Known gaps: the page view needs the connection; comments are read-only
+  offline; pictures cannot be added offline; two tabs writing the same book
+  offline means the last one wins; not tried on a real phone or a real HTTPS
+  install.
