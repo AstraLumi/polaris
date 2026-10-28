@@ -48,6 +48,7 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/bookLayout.test.mjs
     node frontend/tests/nameMatch.test.mjs
     node frontend/tests/editorScript.test.mjs
+    node frontend/tests/fontLibrary.test.mjs
 
 Run all of these before committing.
 

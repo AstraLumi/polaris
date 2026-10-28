@@ -164,4 +164,11 @@ export default {
   "the book's layout is not valid": "la diagramación del libro no es válida",
   "Page numbers and layout…": "Números de página y diagramación…",
   "Click a page to write there.": "Haz clic en una página para escribir ahí.",
+  "Add font files": "Agregar archivos de fuente",
+  "Add fonts": "Agregar fuentes",
+  "Add styles…": "Agregar estilos…",
+  "Add the font files you bought or downloaded. The writing editor offers them first, and the e-book export carries the ones their license allows.": "Agrega los archivos de fuente que compraste o descargaste. El editor de escritura las ofrece primero, y la exportación de libro electrónico lleva las que su licencia permite.",
+  "Adding…": "Agregando…",
+  "Manage fonts…": "Administrar fuentes…",
+  "TrueType, OpenType, WOFF or WOFF2, up to 40 MB each. Add a family's styles together (regular, bold, italic…): they are grouped by the name inside the file.": "TrueType, OpenType, WOFF o WOFF2, de hasta 40 MB cada uno. Agrega juntos los estilos de una familia (normal, negrita, cursiva…): se agrupan por el nombre que lleva el archivo.",
 }

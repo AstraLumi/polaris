@@ -117,6 +117,10 @@ type exportBook struct {
 	Single      bool // one chapter (?chapter=ID)
 	uploadsDir  string
 
+	// Fonts from the library the export may embed (the EPUB; filled by
+	// the handler from the fonts library, fontlib.go).
+	Fonts []exportFont
+
 	Missing  int // pictures that could not be read
 	pics     map[string]*exportPicture
 	picBytes int64
@@ -1052,6 +1056,11 @@ func exportBookHandler(db *sql.DB, uploadsDir, format string) http.HandlerFunc {
 			log.Printf("export book %d: %v", vol, err)
 			http.Error(w, "failed to export the book", http.StatusInternalServerError)
 			return
+		}
+		if format == "epub" {
+			if lib := fontLibraryFrom(r.Context()); lib != nil {
+				b.Fonts = lib.embeddable(exportFamilies(b))
+			}
 		}
 		data, err := write(b)
 		if err != nil {

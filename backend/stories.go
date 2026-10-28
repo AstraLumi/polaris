@@ -55,6 +55,7 @@ type storyManager struct {
 	dataDir     string
 	uploadsRoot string
 	reg         *sql.DB
+	fonts       *fontLibrary // the fonts library, one for every story (fontlib.go)
 
 	mu   sync.Mutex
 	apps map[string]*storyApp
@@ -102,12 +103,17 @@ func newStoryManager(dataDir, uploadsRoot string) (*storyManager, error) {
 	if err := addColumnIfMissing(reg, "stories", "last_exported_at", "TEXT"); err != nil {
 		return nil, fmt.Errorf("upgrade registry: %w", err)
 	}
-	return &storyManager{
+	m := &storyManager{
 		dataDir:     dataDir,
 		uploadsRoot: uploadsRoot,
 		reg:         reg,
 		apps:        map[string]*storyApp{},
-	}, nil
+	}
+	if m.fonts, err = newFontLibrary(reg, uploadsRoot, m); err != nil {
+		reg.Close()
+		return nil, err
+	}
+	return m, nil
 }
 
 func (m *storyManager) Close() {
@@ -429,6 +435,7 @@ func (m *storyManager) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/stories/{id}/export", m.exportHandler)
 	mux.HandleFunc("/api/s/{id}/{rest...}", m.storyHandler)
 	mux.HandleFunc("GET /uploads/s/{id}/{path...}", m.uploadsHandler)
+	m.fonts.registerRoutes(mux)
 }
 
 func (m *storyManager) fail(w http.ResponseWriter, err error) {
@@ -525,7 +532,8 @@ func (m *storyManager) storyHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	r2 := r.Clone(r.Context())
+	// The library goes with the request: the EPUB export embeds its fonts.
+	r2 := r.Clone(withFontLibrary(r.Context(), m.fonts))
 	u := *r.URL
 	u.Path = "/api/" + r.PathValue("rest")
 	u.RawPath = ""

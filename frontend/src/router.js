@@ -70,6 +70,8 @@ const routes = [
   // :volume is a volume's id, or 0 for the chapters without one.
   { path: '/write/:volume', name: 'write', component: () => import('./views/WritePage.vue'), meta: { title: tr('Write') }, props: true },
   { path: '/write/:volume/pages', name: 'write-pages', component: () => import('./views/BookPagesPage.vue'), meta: { title: tr('Page view') }, props: true },
+  // The fonts library: one for every story (fontLibrary.js), loaded on its own.
+  { path: '/fonts', name: 'fonts', component: () => import('./views/FontsLibrary.vue'), meta: { title: tr('Fonts') } },
   { path: '/wiki', name: 'wiki', component: WikiHome, meta: { title: tr('Wiki') } },
   { path: '/wiki/graph', name: 'wiki-graph', component: GraphView, meta: { title: tr('Graph') } },
   { path: '/wiki/:type/:id', name: 'wiki-article', component: WikiArticle, meta: { title: tr('Wiki') }, props: true },

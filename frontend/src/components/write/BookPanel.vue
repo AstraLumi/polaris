@@ -13,6 +13,12 @@
       <button type="button" class="btn btn-ghost small" @click="$emit('change-type')">{{ $t('Change…') }}</button>
     </div>
 
+    <!-- Library fonts the styles use that aren't cleared for a book that is sold. -->
+    <div v-if="fontWarnings.length" class="font-warn" role="note">
+      <p v-for="w in fontWarnings" :key="w.family">⚠ {{ fontWarningText(w) }}</p>
+      <a href="/fonts" target="_blank" rel="noopener">{{ $t('Open the fonts library') }}</a>
+    </div>
+
     <template v-if="!online">
       <p class="hint">{{ $t('Text block: {w} mm wide.', { w: textWidth }) }}</p>
       <div v-if="settings.page_type === 'custom'" class="grid">
@@ -231,6 +237,8 @@ import { t } from '../../i18n'
 import { textBlockMm, pageTypeName } from '../../editor/pageTypes.js'
 import { resolveStyle } from '../../editor/styles.js'
 import { normaliseLayout, normaliseMeta, chapterOption, setChapterOption, bandText, formatNumber } from '../../editor/bookLayout.js'
+import { fontLibrary, fontWarningText } from '../../fontLibrary.js'
+import { styleWarnings } from '../../fontRules.js'
 
 const props = defineProps({
   settings: { type: Object, required: true },
@@ -271,6 +279,7 @@ const FORMATS = computed(() => [
 ])
 
 const online = computed(() => props.settings.page_type === 'online')
+const fontWarnings = computed(() => styleWarnings(props.settings.styles, fontLibrary.value))
 const page = computed(() => props.settings.page || {})
 const textWidth = computed(() => textBlockMm(props.settings))
 const typeName = computed(() => (online.value ? t('Online Post') : props.settings.page_type === 'custom' ? `${t('Custom size')} · ${pageTypeName(props.settings)}` : pageTypeName(props.settings)))
@@ -383,6 +392,25 @@ onMounted(showFocus)
 </script>
 
 <style scoped>
+.font-warn {
+  margin: 0.6rem 0 0;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--danger-text);
+}
+
+.font-warn p {
+  margin: 0 0 0.3rem;
+}
+
+.font-warn a {
+  font-size: 0.75rem;
+  color: var(--accent);
+}
+
 .type-line {
   display: flex;
   align-items: center;
