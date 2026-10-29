@@ -41,6 +41,19 @@ Switching a book's page type warns that formatting may not carry over,
 saves every chapter as a version labelled "Before switching from X to Y",
 then applies the new type's defaults.
 
+The default body font is Merriweather (`defaultBookFont` in
+`backend/editor.go`, `DEFAULT_FONT` in `frontend/src/editor/styles.js`; keep
+them equal). Books that already stored settings keep the font they have.
+
+Adding a volume (`POST /api/volumes`) may carry `copy_settings_from: <volume
+id>` (400 if it doesn't exist): in the same transaction the new volume gets
+that book's settings and `is_set_up` (`copyBookSettings`), except
+`chapter_options` (keyed by chapter ids) and `meta.title`, `meta.subtitle`,
+`meta.isbn` and `meta.description`. A source never set up copies nothing. The
+chapters list tells each volume's `book_set_up`; its "New volume" form offers
+"Copy the book settings from {name}" (on by default) for the last volume by
+position that has settings.
+
 Book settings (JSON, stored per book):
 
     {

@@ -44,6 +44,9 @@ type volumeOut struct {
 	ID       int64  `json:"id"`
 	Title    string `json:"title"`
 	Position int    `json:"position"`
+	// BookSetUp: the volume's book settings were saved (offered as the
+	// source when a new volume is added).
+	BookSetUp bool `json:"book_set_up"`
 }
 
 type chapterSummary struct {
@@ -51,7 +54,7 @@ type chapterSummary struct {
 	VolumeID     *int64 `json:"volume_id"`
 	Title        string `json:"title"`
 	Position     int    `json:"position"`
-	Number       int    `json:"number"` // 1-based, within its volume (or among those without one); 0 for front matter
+	Number       int    `json:"number"`                 // 1-based, within its volume (or among those without one); 0 for front matter
 	FrontMatter  bool   `json:"front_matter,omitempty"` // marked so in its book (the writing editor's chapter options)
 	EventCount   int    `json:"event_count"`
 	VersionCount int    `json:"version_count"`
@@ -68,14 +71,16 @@ type chapterIndex struct {
 // chapters by position.
 func loadChapterIndex(db *sql.DB) (chapterIndex, error) {
 	idx := chapterIndex{Volumes: []volumeOut{}, Chapters: []chapterSummary{}}
-	rows, err := db.Query(`SELECT id, title, position FROM volumes ORDER BY position, id`)
+	rows, err := db.Query(`SELECT id, title, position,
+		EXISTS(SELECT 1 FROM book_settings b WHERE b.volume_id = volumes.id AND b.is_set_up = 1)
+		FROM volumes ORDER BY position, id`)
 	if err != nil {
 		return idx, err
 	}
 	order := map[int64]int{}
 	for rows.Next() {
 		var v volumeOut
-		if err := rows.Scan(&v.ID, &v.Title, &v.Position); err != nil {
+		if err := rows.Scan(&v.ID, &v.Title, &v.Position, &v.BookSetUp); err != nil {
 			rows.Close()
 			return idx, err
 		}
@@ -454,6 +459,9 @@ func deleteChapterHandler(db *sql.DB) http.HandlerFunc {
 
 type volumeIn struct {
 	Title string `json:"title"`
+	// CopySettingsFrom: a volume whose book settings the new one starts
+	// with (see copyBookSettings).
+	CopySettingsFrom *int64 `json:"copy_settings_from"`
 }
 
 func createVolumeHandler(db *sql.DB) http.HandlerFunc {
@@ -466,7 +474,20 @@ func createVolumeHandler(db *sql.DB) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		res, err := db.Exec(`INSERT INTO volumes (title, position)
+		if in.CopySettingsFrom != nil {
+			var one int
+			if db.QueryRow(`SELECT 1 FROM volumes WHERE id = ?`, *in.CopySettingsFrom).Scan(&one) != nil {
+				http.Error(w, "the volume to copy the book settings from does not exist", http.StatusBadRequest)
+				return
+			}
+		}
+		tx, err := db.Begin()
+		if err != nil {
+			http.Error(w, "failed to save the volume", http.StatusInternalServerError)
+			return
+		}
+		defer tx.Rollback()
+		res, err := tx.Exec(`INSERT INTO volumes (title, position)
 			SELECT ?, COALESCE(MAX(position), -1) + 1 FROM volumes`, title)
 		if err != nil {
 			log.Printf("create volume: %v", err)
@@ -474,8 +495,57 @@ func createVolumeHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 		id, _ := res.LastInsertId()
+		if in.CopySettingsFrom != nil {
+			if err := copyBookSettings(tx, *in.CopySettingsFrom, id); err != nil {
+				log.Printf("copy book settings: %v", err)
+				http.Error(w, "failed to copy the book settings", http.StatusInternalServerError)
+				return
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			http.Error(w, "failed to save the volume", http.StatusInternalServerError)
+			return
+		}
 		writeJSON(w, map[string]any{"id": id, "title": title})
 	}
+}
+
+// copyBookSettings gives volume `to` the book settings of volume `from`
+// (is_set_up too), except what belongs to the one book: meta title,
+// subtitle, isbn and description, and `chapter_options` (keyed by the
+// other volume's chapter ids). A source never set up copies nothing. What
+// the server doesn't know is kept, as saves do.
+func copyBookSettings(db editorDB, from, to int64) error {
+	var s string
+	var setUp bool
+	err := db.QueryRow(`SELECT settings, is_set_up FROM book_settings WHERE volume_id = ?`, from).Scan(&s, &setUp)
+	if err == sql.ErrNoRows || (err == nil && !setUp) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(s), &m); err != nil {
+		return err
+	}
+	delete(m, "chapter_options")
+	if raw, ok := m["meta"]; ok {
+		var meta map[string]json.RawMessage
+		if json.Unmarshal(raw, &meta) == nil {
+			for _, k := range []string{"title", "subtitle", "isbn", "description"} {
+				delete(meta, k)
+			}
+			m["meta"], _ = json.Marshal(meta)
+		}
+	}
+	out, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`INSERT INTO book_settings (volume_id, settings, is_set_up, updated_at) VALUES (?, ?, 1, ?)`,
+		to, string(out), sqlTime(editorNow()))
+	return err
 }
 
 func updateVolumeHandler(db *sql.DB) http.HandlerFunc {

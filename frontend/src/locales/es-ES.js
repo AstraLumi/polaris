@@ -2582,6 +2582,8 @@ export default {
   "{n} MP": "{n} MP",
   "{n} HP": "{n} HP",
   "{kind}: {name}": "{kind}: {name}",
+  "Copy the book settings from {name}": "Copiar los ajustes del libro de {name}",
+  "Add volume": "Añadir volumen",
   "Show pages while writing": "Mostrar las páginas mientras se escribe",
   "Draws the gap between pages as you write, where each page ends in the page view. Only on this browser.": "Dibuja el espacio entre las páginas mientras escribes, donde termina cada página en la vista de páginas. Solo en este navegador.",
 }

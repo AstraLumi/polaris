@@ -660,3 +660,60 @@ func TestImportDocx(t *testing.T) {
 		t.Fatalf("failed imports added chapters: %d", n)
 	}
 }
+
+// A new volume can start with a copy of another's book settings, minus
+// what belongs to the one book.
+func TestCreateVolumeCopiesBookSettings(t *testing.T) {
+	_, h, base, vol := editorSetup(t)
+	ch := addChapter(t, h, base, "One", vol)
+	code, _, body := putBook(t, h, base, vol, fmt.Sprintf(`{"settings":{"page_type":"a6",
+		"meta":{"title":"Book One","subtitle":"Sub","author":"Me","isbn":"123","description":"d","publisher":"P"},
+		"chapter_options":{"%d":{"front_matter":true}},"extra":{"k":1}}}`, ch))
+	if code != 200 {
+		t.Fatal(code, body)
+	}
+	create := func(payload string) (int, int64) {
+		rec := do(t, h, "POST", base+"/volumes", strings.NewReader(payload), "application/json")
+		var v struct{ ID int64 }
+		json.Unmarshal(rec.Body.Bytes(), &v)
+		return rec.Code, v.ID
+	}
+	settingsOf := func(id int64) (map[string]json.RawMessage, bool) {
+		rec := do(t, h, "GET", fmt.Sprintf("%s/books/%d", base, id), nil, "")
+		var b struct {
+			Settings map[string]json.RawMessage
+			IsSetUp  bool `json:"is_set_up"`
+		}
+		json.Unmarshal(rec.Body.Bytes(), &b)
+		return b.Settings, b.IsSetUp
+	}
+	// Nothing is copied unless asked.
+	code, plain := create(`{"title":"Two"}`)
+	if _, set := settingsOf(plain); code != 200 || set {
+		t.Fatal("no copy expected", code, set)
+	}
+	code, copy := create(fmt.Sprintf(`{"title":"Three","copy_settings_from":%d}`, vol))
+	if code != 200 {
+		t.Fatal(code)
+	}
+	m, set := settingsOf(copy)
+	if !set || !strings.Contains(string(m["page_type"]), "a6") || string(m["extra"]) != `{"k":1}` {
+		t.Fatalf("copy: %v %v", m, set)
+	}
+	if _, has := m["chapter_options"]; has {
+		t.Fatal("chapter_options copied")
+	}
+	var meta map[string]string
+	json.Unmarshal(m["meta"], &meta)
+	if meta["author"] != "Me" || meta["publisher"] != "P" || meta["title"] != "" || meta["subtitle"] != "" || meta["isbn"] != "" || meta["description"] != "" {
+		t.Fatalf("meta: %v", meta)
+	}
+	if code, _ := create(`{"title":"Four","copy_settings_from":9999}`); code != 400 {
+		t.Fatalf("bad id: %d", code)
+	}
+	var idx chapterIndex
+	json.Unmarshal(do(t, h, "GET", base+"/chapters", nil, "").Body.Bytes(), &idx)
+	if n := len(idx.Volumes); n != 3 {
+		t.Fatalf("a bad copy must not leave a volume: %d", n)
+	}
+}

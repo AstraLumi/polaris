@@ -703,7 +703,8 @@ export const chaptersApi = {
   remove: (id) => request(`/chapters/${id}`, { method: 'DELETE' }, 'failed to delete the chapter'),
   // { volumes: [ids], chapters: [{ id, volume_id }] }, both in reading order
   reorder: (order) => request('/chapters/order', jsonBody('PUT', order), 'failed to save the order'),
-  createVolume: (title) => request('/volumes', jsonBody('POST', { title }), 'failed to save the volume'),
+  createVolume: (title, copySettingsFrom) =>
+    request('/volumes', jsonBody('POST', copySettingsFrom ? { title, copy_settings_from: copySettingsFrom } : { title }), 'failed to save the volume'),
   renameVolume: (id, title) => request(`/volumes/${id}`, jsonBody('PUT', { title }), 'failed to save the volume'),
   removeVolume: (id) => request(`/volumes/${id}`, { method: 'DELETE' }, 'failed to delete the volume'),
 }

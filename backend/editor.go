@@ -137,7 +137,7 @@ func pageProblem(p bookPage) string {
 // builtinStyleIDs are always present: renamable, never deletable.
 var builtinStyleIDs = []string{"normal", "heading1", "heading2", "heading3", "title", "subtitle", "quote"}
 
-const defaultBookFont = "Georgia"
+const defaultBookFont = "Merriweather"
 
 func roundPt(v float64) float64 { return math.Round(v*10) / 10 }
 

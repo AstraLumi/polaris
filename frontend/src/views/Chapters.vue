@@ -67,6 +67,19 @@
       </section>
     </template>
 
+    <div v-if="newVolume && copySource" class="overlay" @click.self="newVolume = null">
+      <form class="modal glass-panel panel-solid" @submit.prevent="createVolume(newVolume.copy ? copySource.id : null)">
+        <h2>{{ $t('New volume') }}</h2>
+        <label class="check">
+          <input v-model="newVolume.copy" type="checkbox" />
+          {{ $t('Copy the book settings from {name}', { name: copySource.title }) }}
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" @click="newVolume = null">{{ $t('Cancel') }}</button>
+          <button type="submit" class="btn btn-primary">{{ $t('Add volume') }}</button>
+        </div>
+      </form>
+    </div>
     <ConfirmDialog
       v-if="confirmVolume"
       :title="$t('Delete {name}?', { name: confirmVolume.title })"
@@ -256,10 +269,21 @@ function moveVolume(i, by) {
   saveOrder(vols, idx.value.chapters)
 }
 
+// The last volume (by position) whose book settings were saved: a new
+// volume can start with a copy of them.
+const copySource = computed(() => [...idx.value.volumes].reverse().find((v) => v.book_set_up) || null)
+const newVolume = ref(null)
+
 function addVolume() {
+  if (copySource.value) newVolume.value = { copy: true }
+  else createVolume(null)
+}
+
+function createVolume(from) {
+  newVolume.value = null
   run(async () => {
     const n = idx.value.volumes.length + 1
-    const v = await chaptersApi.createVolume(t('Volume {n}', { n }))
+    const v = await chaptersApi.createVolume(t('Volume {n}', { n }), from)
     await loadChapters(true)
     startRename(v)
   })

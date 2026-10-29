@@ -22,7 +22,7 @@ export const CHAR_KEYS = [...TEXT_KEYS, 'underline', 'strike', 'smallcaps', 'sup
 
 // The built-ins below mirror the server's defaults (defaultStyles in
 // backend/editor.go), which win when it sends them (GET /api/books' defaults).
-export const DEFAULT_FONT = 'Georgia'
+export const DEFAULT_FONT = 'Merriweather'
 
 const r1 = (n) => Math.round(n * 10) / 10
 
