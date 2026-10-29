@@ -2582,4 +2582,6 @@ export default {
   "{n} MP": "{n} MP",
   "{n} HP": "{n} HP",
   "{kind}: {name}": "{kind}: {name}",
+  "Show pages while writing": "Mostrar as páginas enquanto escreve",
+  "Draws the gap between pages as you write, where each page ends in the page view. Only on this browser.": "Desenha o espaço entre as páginas enquanto você escreve, onde cada página termina na vista de páginas. Só neste navegador.",
 }

@@ -1350,3 +1350,73 @@ to keep it on; Esc or the button again turns it off.
 - No keyboard shortcut: Ctrl+Shift+C opens the browser's developer tools and
   Ctrl+Shift+V is the browser's "paste as plain text".
 - Test: `node frontend/tests/editorFormatPainter.test.mjs`.
+
+## Page breaks while writing
+
+With a page-based page type (anything but Online Post) the editor draws the
+chapter as separate pages, the way Word's Print Layout does, so a writer can
+plan paragraphs around the natural page breaks. The document is never
+changed: the gaps are widget decorations (`src/editor/pagination.js`, a
+plugin added in `WritePage.vue`), and the page view (paged.js) stays the
+final word.
+
+- **Switch:** "Show pages while writing" in the Book and page panel (the
+  status bar's "Page: …" button). On by default, remembered per browser
+  (`localStorage` `polaris-write-pages`); no status-bar button. Online Post
+  never shows pages. Narrow screens (`compact`) still break at the real
+  page height, only the margins stay small.
+- **Page height:** the page's height less its top and bottom margins
+  (`page.height_mm`, `margin_top_mm`, `margin_bottom_mm`; mirrored margins
+  only change the sides, so they don't matter here). The sheet is zoomed with
+  CSS `zoom`; everything is measured in px as if it weren't (the scale is the
+  doc's measured width over the text block's known width).
+- **Measuring:** per text block the browser's own line boxes (Range rects:
+  nothing about line height is assumed, so it follows whatever the stylesheet
+  does); a picture, table, table of contents, scene break or page break is
+  one unit (a table is never split between rows here; a picture with text
+  wrapping takes no room of its own). One pass reads the layout, then
+  writes; it runs after a pause (about 140 ms) after a change, a resize, a
+  zoom, a settings or styles change, or fonts loading, never on a keystroke,
+  and repeats (at most five times) until the answer stops changing. A
+  10,000-word chapter takes tens of milliseconds a pass.
+- **Rules (`src/editor/pageBreaks.js`, pure, `pageBreaks.test.mjs`):** input
+  is the lines in order (`pos, top, bottom, block, first, last, keepNext,
+  hard, unit, spaceBefore`) and the content height; the output is the line
+  each new page starts at. A line fits when its bottom is within the content
+  height. Widow/orphan control is always on: never one line of a paragraph
+  alone at a page's foot or head, and a paragraph of 2-3 lines moves whole.
+  `keepNext` (the paragraph's own or its style's: the headings) keeps a block
+  on the page of the next one unless that would empty the page. A
+  `page_break` node starts a new page with the next block, and takes no
+  room. A paragraph's space before is dropped at the top of a page after a
+  natural break and kept after a hard one. A unit that doesn't fit starts a
+  page; a unit taller than a page overflows its own page.
+- **No oscillation:** positions are measured as if no gap were there. Each
+  drawn gap knows how much it moved what follows (`shift`) and that is taken
+  off again, so measuring after a gap was drawn gives the same answer.
+- **The gap** is one widget as wide as the sheet (a negative left margin
+  brings it out over the margins): the rest of the page (paper), its foot
+  (the bottom margin, with the footer), a dark space (`--page-gap`), and the
+  next page's head (the top margin, with the header). Inside a paragraph it
+  is a float just before the first character of the page's first line (a
+  float as wide as the sheet, so the text starts a fresh line below it: the
+  line before is laid out as before, a first-line indent still applies to a
+  paragraph that begins a page, and a list marker stays with its text); in
+  front of a picture, table or scene break it is a block. It is
+  `contenteditable=false`, ignored by the selection, and lets clicks
+  through to the text (`pointer-events: none`). The header and footer use the
+  book's layout (`bookLayout.js`, `bandText`); the page number counts pages
+  of this chapter (from the chapter's restart number), not of the whole book.
+  The last page's foot hangs in the sheet's bottom margin.
+- **Known differences from the page view:** footnotes take no room at the
+  page foot here (the page view places them); page 1 has no header drawn
+  (the sheet's top margin is empty padding); a table is not split between
+  rows; the page numbers are the chapter's. Where the page view breaks a
+  paragraph differently (its own widow/orphan handling) the two can disagree
+  by a line or a paragraph until the next hard break, picture or table
+  resyncs them.
+- Screenshots and checks: `node frontend/tests/visual/writeShots.mjs --only
+  pages` (the gaps, equal breaks after measuring again and after typing a
+  character and deleting it, a hard break, widows and orphans, every page
+  as tall as the page type, the switch, Online Post, a long chapter, and the
+  first words of each page against the page view's).
