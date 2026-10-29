@@ -165,7 +165,7 @@
       <span v-if="!focusMode" class="stat">{{ $tn('{n} word in the book', '{n} words in the book', bookWords, { n: formatNum(bookWords) }) }}</span>
       <span v-if="selWords" class="stat">{{ $tn('{n} selected', '{n} selected', selWords, { n: formatNum(selWords) }) }}</span>
       <span v-if="uploading" class="stat">{{ $t('Uploading the picture…') }}</span>
-      <span class="save-state" :class="`is-${saveShown}`" :title="saveShown === 'device' ? $t('Sent to the server when it can be reached again.') : undefined" aria-live="polite">{{ saveLabel }}</span>
+      <span class="save-state" :class="`is-${saveShown}`" :title="saveShown === 'device' ? $t('Sent to the server when it can be reached again.') : saveLabel" aria-live="polite">{{ saveLabel }}</span>
       <span class="spacer"></span>
       <button v-if="!focusMode" type="button" class="btn btn-ghost small spell-status" :class="`is-${spell.status.value}`" :aria-pressed="panel === 'spelling'" :title="$t('Spelling options')" @click="togglePanel('spelling')">{{ spell.statusLabel.value }}</button>
       <button v-if="!focusMode && settings" type="button" class="btn btn-ghost small" :aria-pressed="panel === 'book'" :title="$t('Book and page')" @click="togglePanel('book')">{{ $t('Page: {type}', { type: typeLabel(settings) }) }}</button>
@@ -1933,7 +1933,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.3rem 1rem;
+  gap: 0.3rem 0.7rem;
   padding: 0.1rem 0.4rem;
   font-size: 0.8rem;
   color: var(--text-muted);
@@ -1945,6 +1945,16 @@ onBeforeUnmount(() => {
 
 .write-status.is-quiet {
   opacity: 0.55;
+}
+
+/* The save state takes the room that is left and shortens with "…" rather
+   than pushing the buttons onto a second line. */
+.save-state {
+  flex: 1 1 0;
+  min-width: 4.5em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .save-state.is-saved {
