@@ -471,7 +471,10 @@ left-hand pages, by where they lie in the book, not by their number.
   properties fill (`title`, `subtitle` from the subject, `author` from the
   creator, `description`, `language`). Each new chapter in the answer
   carries `front_matter: true` when it is the text before the first
-  Heading 1; applying the layout marks those chapters as front matter.
+  Heading 1, and the import marks those chapters as front matter in the
+  book's `chapter_options` itself (in its transaction; a book never set
+  up stays so), whether or not the file's layout is applied. The import
+  report tags them and doesn't count them as chapters.
   Starts that go up from one chapter's section to the next are Word
   carrying the count on; a start lower than the previous one is a restart,
   given as the chapter's `number_restart` in the answer (applied with the
@@ -516,7 +519,8 @@ left-hand pages, by where they lie in the book, not by their number.
   from the toolbar (folds behind "⋯" on phones; disabled for Online Post).
   Each chapter in the chapter list has a "…" menu: front matter, no
   running header, and "Page numbers and layout…" (the book panel at that
-  chapter); a front-matter chapter's number shows as "·".
+  chapter); a front-matter chapter's number shows as "·", and the others
+  are numbered among the chapters that aren't front matter.
 - Export menu: .docx, EPUB, PDF (page view's print), and for Online Post
   "Copy as formatted text" (clipboard HTML of the chapter), HTML, Markdown
   and text.

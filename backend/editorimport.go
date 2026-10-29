@@ -254,6 +254,10 @@ func importDocxHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			}
 			out = append(out, importedChapter{ID: id, Title: c.title, Words: c.words, FrontMatter: c.front, NumberRestart: c.restart})
 		}
+		if err := markFrontMatter(tx, vol, out); err != nil {
+			fail(err)
+			return
+		}
 		if err := tx.Commit(); err != nil {
 			fail(err)
 			return
@@ -264,4 +268,52 @@ func importDocxHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			*docxImport
 		}{out, imp})
 	}
+}
+
+// markFrontMatter marks the chapters made of the text before the file's
+// first Heading 1 as front matter in the book's chapter options, whether or
+// not the file's layout is taken afterwards, so they are never counted as
+// chapters. A book that was never set up stays so.
+func markFrontMatter(db editorDB, vol int64, chapters []importedChapter) error {
+	var ids []int64
+	for _, c := range chapters {
+		if c.FrontMatter {
+			ids = append(ids, c.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	raw, setUp, err := loadBookSettings(db, vol)
+	if err != nil {
+		return err
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return err
+	}
+	opts := map[string]map[string]any{}
+	if r := m["chapter_options"]; len(r) > 0 && string(r) != "null" {
+		if err := json.Unmarshal(r, &opts); err != nil {
+			return err
+		}
+	}
+	for _, id := range ids {
+		key := fmt.Sprint(id)
+		if opts[key] == nil {
+			opts[key] = map[string]any{}
+		}
+		opts[key]["front_matter"] = true
+	}
+	if m["chapter_options"], err = json.Marshal(opts); err != nil {
+		return err
+	}
+	settings, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`INSERT INTO book_settings (volume_id, settings, is_set_up, updated_at) VALUES (?, ?, ?, ?)
+		ON CONFLICT(volume_id) DO UPDATE SET settings = excluded.settings, updated_at = excluded.updated_at`,
+		vol, string(settings), setUp, sqlTime(editorNow()))
+	return err
 }

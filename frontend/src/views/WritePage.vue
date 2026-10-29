@@ -45,9 +45,9 @@
       <nav v-if="!focusMode" class="chapter-nav glass-panel" :aria-label="$t('Chapters of this book')">
         <p class="book-title">{{ bookTitle }}</p>
         <ol class="chapter-list">
-          <li v-for="(c, i) in chapters" :key="c.id" class="chapter-row">
+          <li v-for="c in chapters" :key="c.id" class="chapter-row">
             <button type="button" class="chapter-item" :class="{ 'is-here': c.id === chapterId }" :aria-current="c.id === chapterId ? 'true' : undefined" @click="goChapter(c.id)">
-              <span class="ch-num" :title="isFrontMatter(c.id) ? $t('Front matter') : undefined">{{ isFrontMatter(c.id) ? '·' : i + 1 }}</span>
+              <span class="ch-num" :title="isFrontMatter(c.id) ? $t('Front matter') : undefined">{{ isFrontMatter(c.id) ? '·' : chapterNumbers.get(c.id) }}</span>
               <span class="ch-title">{{ c.title }}</span>
               <span class="ch-words">{{ formatNum(c.id === chapterId ? words : c.words || 0) }}</span>
             </button>
@@ -61,7 +61,7 @@
         <RouterLink to="/chapters" class="order-link">{{ $t('Reorder in Chapters') }}</RouterLink>
       </nav>
       <select v-if="!focusMode && chapters.length" class="chapter-select" :value="chapterId ?? ''" :aria-label="$t('Chapter')" @change="goChapter(+$event.target.value)">
-        <option v-for="(c, i) in chapters" :key="c.id" :value="c.id">{{ i + 1 }}. {{ c.title }}</option>
+        <option v-for="c in chapters" :key="c.id" :value="c.id">{{ isFrontMatter(c.id) ? "·" : chapterNumbers.get(c.id) }}. {{ c.title }}</option>
       </select>
 
       <div ref="paperArea" class="paper-area" @scroll.passive="placePictureOptions(); placeSpeaker(); placeTableOptions()">
@@ -1182,6 +1182,12 @@ const setStyles = (list) => updateSettings({ ...settings.value, styles: list })
 // ---- Book layout: options per chapter, the table of contents, the page view ---------------
 const panelChapter = ref(null) // the chapter the book panel opens at
 const isFrontMatter = (id) => !!settings.value && chapterOption(settings.value, id).front_matter
+// A chapter's number counts only the chapters that aren't front matter, as
+// the book's {chapter_number} does.
+const chapterNumbers = computed(() => {
+  let n = 0
+  return new Map(chapters.value.map((c) => [c.id, isFrontMatter(c.id) ? 0 : ++n]))
+})
 const toggleChapterOption = (id, key) => updateSettings(setChapterOption(settings.value, id, { [key]: !chapterOption(settings.value, id)[key] }))
 function chapterMenu(c) {
   const o = chapterOption(settings.value || {}, c.id)
@@ -1450,7 +1456,9 @@ async function onDocx(e) {
     const report = await booksApi.importDocx(volumeKey.value, file)
     loadChapters(true)
     const res = await booksApi.get(volumeKey.value)
-    book.value = { ...book.value, chapters: res.chapters || [], words: res.words }
+    // The import marks the text before the first chapter as front matter
+    // in the book's settings, so take them too.
+    book.value = { ...book.value, chapters: res.chapters || [], words: res.words, settings: normaliseSettings(res.settings || book.value.settings) }
     loadFonts(report.fonts || [])
     importReport.value = { ...report, chapters: report.chapters || [] }
     if (report.chapters?.length) goChapter(report.chapters[0].id)

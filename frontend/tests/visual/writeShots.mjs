@@ -10,7 +10,7 @@
 // Tab through the cells, a table pasted from Word) and in the page view
 // (rows breaking across pages, the header row repeated).
 //
-//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes|wrap]
+//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes|wrap|import]
 //
 // --only spell: just the spellchecker (underlines, the menu on a word, Add
 // to dictionary, Ignore, typing, the spelling panel, dark paper, off).
@@ -273,6 +273,21 @@ async function fakeApi(route) {
     db.chapters.push(c)
     return json(c)
   }
+  if ((m = /^\/books\/(\d+)\/import-docx$/.exec(path))) {
+    // As the server does: the text before the first Heading 1 is front
+    // matter, marked in the book's chapter options too.
+    const v = +m[1]
+    const para = (t) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: t }] }] })
+    const made = [['Front matter', 'For everyone who waited at the ford.', true], ['1. RECODED', 'The road bent north.', false], ['2. WARM CHAINS', 'Rain came in thin lines.', false]].map(([title, text, front]) => {
+      const c = { id: 100 + db.chapters.length, title, volume_id: v || null }
+      db.chapters.push(c)
+      db.texts[c.id] = { doc: para(text), version: 1, updated_at: now() }
+      return { id: c.id, title, words: text.split(' ').length, front_matter: front }
+    })
+    const b = (db.books[v] ||= { settings: defaultSettings('a5'), is_set_up: false })
+    b.settings = { ...b.settings, chapter_options: { ...(b.settings.chapter_options || {}), [made[0].id]: { front_matter: true } } }
+    return json({ chapters: made, left_out: { headers_footers: 2 }, fonts: [] })
+  }
   if ((m = /^\/books\/(\d+)$/.exec(path))) {
     const v = +m[1]
     if (method === 'PUT') {
@@ -435,6 +450,10 @@ async function shoot() {
 
   if (option('only', '') === 'footnotes') {
     await footnoteShots(page, snap, checks)
+    return { saved, errors, checks }
+  }
+  if (option('only', '') === 'import') {
+    await importShots(page, snap, checks)
     return { saved, errors, checks }
   }
   if (option('only', '') === 'wrap') {
@@ -876,6 +895,25 @@ async function boxShots(page, snap, checks) {
 
 // Pictures with text wrapping (stage 5): a left and a right float, one at
 // the chapter's end, in the editor and in the page view.
+// A Word file's front matter: marked as such by the import, without
+// taking the file's layout.
+async function importShots(page, snap, checks) {
+  await page.goto(`${BASE}/write/1?chapter=11`)
+  await page.waitForSelector('.write-doc h1')
+  await page.setInputFiles('input[type=file][accept^=".docx"]', { name: 'Book.docx', mimeType: 'application/octet-stream', buffer: Buffer.from('PK') })
+  await page.waitForSelector('.import-report')
+  await settle(page, 400)
+  assert.equal(await page.locator('.new-chapters .front .tag').count(), 1, 'the front matter is tagged in the report')
+  checks.push('import report: front matter tagged, not counted')
+  await snap('14a_import_report.png')
+  await page.locator('.import-report .btn-ghost').click()
+  await settle(page, 400)
+  const nums = await page.locator('.chapter-list .ch-num').allTextContents()
+  assert.deepEqual(nums.slice(-3), ['·', '9', '10'], 'front matter is not counted in the chapter numbers')
+  checks.push('chapter list: front matter not counted')
+  await snap('14b_import_chapter_list.png')
+}
+
 async function wrapShots(page, snap, checks) {
   await page.goto(`${BASE}/write/1?chapter=18`)
   await page.waitForSelector('.write-doc figure.pm-image[data-wrap]')

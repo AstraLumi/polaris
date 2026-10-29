@@ -193,12 +193,28 @@ func TestImportMarksFrontMatter(t *testing.T) {
 	}
 	var out struct {
 		Chapters []struct {
+			ID          int64
 			Title       string
 			FrontMatter bool `json:"front_matter"`
 		}
 	}
 	json.Unmarshal(rec.Body.Bytes(), &out)
 	if len(out.Chapters) != 3 || !out.Chapters[0].FrontMatter || out.Chapters[1].FrontMatter || out.Chapters[2].FrontMatter {
-		t.Errorf("chapters: %+v", out.Chapters)
+		t.Fatalf("chapters: %+v", out.Chapters)
+	}
+	// The book marks it too, without the file's layout being taken, and a
+	// book that wasn't set up stays so.
+	rec = do(t, h, "GET", fmt.Sprintf("%s/books/%d", base, vol), nil, "")
+	var book struct {
+		IsSetUp  bool `json:"is_set_up"`
+		Settings json.RawMessage
+	}
+	json.Unmarshal(rec.Body.Bytes(), &book)
+	opts := bookLayoutOf(book.Settings).ChapterOptions
+	if !opts[out.Chapters[0].ID].FrontMatter || opts[out.Chapters[1].ID].FrontMatter {
+		t.Errorf("chapter options: %+v", opts)
+	}
+	if book.IsSetUp {
+		t.Error("the import set the book up")
 	}
 }

@@ -3,13 +3,15 @@
     <div class="modal glass-panel panel-solid is-wide import-report" role="dialog" aria-modal="true" :aria-label="$t('Word file imported')">
       <h2>{{ $t('Word file imported') }}</h2>
 
-      <p class="lead">{{ $tn('{n} chapter was added at the end of the book:', '{n} chapters were added at the end of the book:', report.chapters.length) }}</p>
-      <ol class="new-chapters">
-        <li v-for="c in report.chapters" :key="c.id">
+      <p class="lead">{{ $tn('{n} chapter was added at the end of the book:', '{n} chapters were added at the end of the book:', chapterCount) }}</p>
+      <ul class="new-chapters">
+        <li v-for="c in report.chapters" :key="c.id" :class="{ front: c.front_matter }">
           <span class="title">{{ c.title }}</span>
+          <span v-if="c.front_matter" class="tag">{{ $t('Front matter') }}</span>
           <span class="words">{{ $tn('{n} word', '{n} words', c.words || 0) }}</span>
         </li>
-      </ol>
+      </ul>
+      <p v-if="chapterCount < report.chapters.length" class="hint">{{ $t('The text before the first chapter heading is marked as front matter: it is not counted as a chapter and its pages are numbered i, ii, iii. To change that, use its … menu in the chapter list.') }}</p>
 
       <template v-if="leftOut.length">
         <h3>{{ $t('Left out or simplified') }}</h3>
@@ -123,6 +125,8 @@ const metaSummary = computed(() => {
   return [m.title, m.author].filter(Boolean).join(', ')
 })
 
+const chapterCount = computed(() => props.report.chapters.filter((c) => !c.front_matter).length)
+
 const leftOut = computed(() =>
   Object.entries(props.report.left_out || {})
     .filter(([, n]) => n > 0)
@@ -146,13 +150,27 @@ const currentName = computed(() => nameOf(props.settings.page_type, props.settin
 
 .new-chapters {
   margin: 0 0 1rem;
-  padding-left: 1.4rem;
+  padding-left: 0;
+  list-style: none;
   max-height: 12rem;
   overflow-y: auto;
 }
 
 .new-chapters li {
   padding: 0.15rem 0;
+}
+
+.new-chapters .front .title {
+  font-style: italic;
+}
+
+.new-chapters .tag {
+  margin-left: 0.5rem;
+  padding: 0 0.4rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
 }
 
 .new-chapters .words,
