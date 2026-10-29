@@ -88,7 +88,10 @@ Blocks:
 - `page_break`: an atom; a forced new page (ignored for `online`).
 - `image`: an atom block; attrs `src` (an `/uploads/…` path), `alt`,
   `width` (pt or `null` for natural), `align` (`left` | `center` | `right`),
-  `fullPage` (bool: alone on its own page, like a cover).
+  `fullPage` (bool: alone on its own page, like a cover), `wrap`
+  (`inline`, the default and what a doc without it means, | `left` |
+  `right`: the picture floats and text flows around it; stage 5, see
+  "Pictures with text wrapping" below).
 - `bullet_list`, `ordered_list` (attr `start`), `list_item` (content: a
   paragraph, then any paragraphs and nested lists: `paragraph block*`).
 - `toc` (stage 3): an atom block where a table of contents goes; attrs
@@ -601,7 +604,9 @@ Status (2026-10-28): stages 1–4 are built and pushed (`126fdc3` the MVP,
 `12df0da` stages 3–4; schemas 42–45). Stage 5 items 1 (fonts library),
 2 (spellchecker), 3 (comments, schema 46), 4 (footnotes and endnotes),
 5 (tables), 6 (boxes and drop caps), 8 (read aloud) and 9 (offline
-writing) are built and pushed; item 7 is not started (wrapping).
+writing) are built and pushed; item 7 (pictures with text wrapping) is
+built on the stage 5 branch, not pushed yet. With it, all of stage 5's
+items are built.
 The writer's decisions behind this plan: parity with Word in what matters
 to novelists, nothing else (no cloud, macros, track changes, equations);
 page types A4, A5, A6, custom and Online Post, one per book; EPUB yes;
@@ -661,8 +666,8 @@ Stage 5, suggested order (each its own piece of work):
    export, page view. Built: see "Tables (stage 5)" below.
 6. **Boxes and drop caps.** Built: see "Boxes and drop caps (stage 5)"
    below.
-7. **Pictures with text wrapping.** Float left/right with wrap, in the
-   editor, page view and exports.
+7. **Pictures with text wrapping.** Built: see "Pictures with text
+   wrapping (stage 5)" below.
 8. **Read aloud** (built; see "Read aloud (stage 5)" below). The browser's speech synthesis reading the selection or
    from the caret, with the current sentence highlighted.
 9. **Offline writing.** Built: see "Offline writing (stage 5)" below.
@@ -1184,6 +1189,48 @@ Built (no schema change: paragraph attrs in the doc JSON).
 - Known gaps: not opened in Word or LibreOffice; joined boxes of different
   colours; rounded corners, per-side borders and a drop cap of more than
   one letter are not supported; a box that runs over a page break is cut.
+
+### Pictures with text wrapping (stage 5)
+
+Built (no schema change: an image attr in the doc JSON).
+
+- Attr: `wrap` on `image`: `inline` (default; a doc without it is
+  unchanged), `left` or `right` (the picture floats to that side, text
+  flows around it). The width attr is kept; a wrapped picture without a
+  width takes 40% of the text, and never more than 60%. `align` is not
+  used while it floats (the import sets both alike). `fullPage` wins over
+  `wrap`. The gap to the text is fixed: 8pt. Checks in `pmdoc.go`, the
+  copy in `schema.js` (`data-wrap` on the figure).
+- Editor: "Text wrapping" buttons (In line, Text on the right, Text on the
+  left) in the picture's options box, under the width. A floated picture
+  is a block placed before the paragraph that should wrap it; the text of
+  the next paragraphs flows beside it. Floats are cleared before headings,
+  before a picture that is not wrapped and at the end of the text
+  (`editor.css`).
+- Page view: the same CSS (the chapter is drawn with `write-doc`), and the
+  chapter clears its floats at its end. A floated picture near the foot of
+  a page may be pushed whole to the next page by paged.js (accepted).
+- Export: .docx writes a `wp:anchor` with `wp:wrapSquare
+  wrapText="bothSides"`, `wp:positionH relativeFrom="column"` aligned
+  left or right, 8pt of distance on the text's side, in a hair-thin
+  (exact 1pt) paragraph of its own so no empty line shows; EPUB and HTML
+  a `figure.image` with `float`, its width in % and a margin as inline CSS
+  (plus a class `wrap-left` / `wrap-right`); Markdown and text as before.
+- Import (.docx): a `wp:anchor` picture with `wrapSquare`, `wrapTight` or
+  `wrapThrough` and a left or right place (Word's `wp:align`, or by its
+  offset) becomes `wrap` left or right; `wrapTopAndBottom`, no wrapping,
+  or a centred picture stays a picture on its own line (as before). None
+  of this is counted in `left_out`. The picture goes right after the
+  paragraph it was anchored in, so the text that wraps it is the next
+  paragraph, not the anchor paragraph's own.
+- Tests: `frontend/tests/editorWrap.test.mjs`, `backend/wrap_test.go` (the
+  validation, the .docx XML and a round trip with a left and a right
+  picture); screenshots:
+  `node frontend/tests/visual/writeShots.mjs --only wrap`.
+- Known gaps: not opened in Word or LibreOffice (only our own round trip);
+  no wrapping inside lists or tables; tight and through wrapping are read
+  as square; a picture floated at a chapter's end leaves its own space
+  below it; it cannot be dragged to a side, only set in its options.
 
 ### Offline writing (stage 5)
 

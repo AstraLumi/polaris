@@ -603,6 +603,9 @@ func checkBlockAttrs(n *pmNode) error {
 		if al, err := optString(a, "align", 10); err != nil || (al != "" && al != "left" && al != "center" && al != "right") {
 			return wrap(errors.New("attr align: unknown value"))
 		}
+		if wr, err := optString(a, "wrap", 10); err != nil || (wr != "" && wr != "inline" && wr != "left" && wr != "right") {
+			return wrap(errors.New("attr wrap: unknown value"))
+		}
 	case "ordered_list":
 		if err := optNum(a, "start", 0, 1e9); err != nil {
 			return wrap(err)

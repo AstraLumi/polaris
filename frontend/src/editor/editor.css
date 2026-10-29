@@ -156,6 +156,41 @@
   text-align: right;
 }
 
+/* Text flows around a picture set to wrap (stage 5); 8pt gap on the text's side. */
+.write-doc figure.pm-image[data-wrap] {
+  width: 40%; /* a picture without a width; one with a width sets its own */
+  max-width: 60%;
+  margin-top: 0.3em;
+  margin-bottom: 0.3em;
+}
+
+.write-doc figure.pm-image[data-wrap='left'] {
+  float: left;
+  margin-left: 0;
+  margin-right: 8pt;
+}
+
+.write-doc figure.pm-image[data-wrap='right'] {
+  float: right;
+  margin-left: 8pt;
+  margin-right: 0;
+}
+
+/* Floats end at headings, a picture of its own and the end of the text. */
+.write-doc h1,
+.write-doc h2,
+.write-doc h3,
+.write-doc figure.pm-image:not([data-wrap]) {
+  clear: both;
+}
+
+.write-doc.ProseMirror::after,
+.write-doc.pv-chapter::after {
+  content: '';
+  display: block;
+  clear: both;
+}
+
 .write-doc figure.pm-image img {
   max-width: 100%;
   height: auto;

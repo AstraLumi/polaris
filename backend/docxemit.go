@@ -838,7 +838,7 @@ func (p *docxParser) blockNodes(blocks []*irBlock, set *styleSet, keep map[strin
 		case b.kind == 't':
 			out = append(out, p.tableNode(b.tbl, set, keep))
 		case b.kind == 'i':
-			attrs := map[string]any{"src": docxPictureSrc(b.pic), "alt": b.alt, "width": nil, "align": b.align, "fullPage": b.fullPage}
+			attrs := map[string]any{"src": docxPictureSrc(b.pic), "alt": b.alt, "width": nil, "align": b.align, "fullPage": b.fullPage, "wrap": b.wrapOrInline()}
 			if b.width > 0 {
 				attrs["width"] = r2(b.width)
 			}

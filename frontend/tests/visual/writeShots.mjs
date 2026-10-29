@@ -10,7 +10,7 @@
 // Tab through the cells, a table pasted from Word) and in the page view
 // (rows breaking across pages, the header row repeated).
 //
-//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes]
+//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes|wrap]
 //
 // --only spell: just the spellchecker (underlines, the menu on a word, Add
 // to dictionary, Ignore, typing, the spelling panel, dark paper, off).
@@ -40,6 +40,7 @@ const out = resolve(option('out', join(here, 'out')))
 
 // ---- The fake story -------------------------------------------------------------
 const STORY = 'shots'
+const WRAP_TEXT = 'The road bent north after the ford, and nobody spoke for a long while. Rain came in thin lines across the hills, the cart wheels sang, and Mira counted the lanterns one more time before the light went.'
 const txt = (text, ...marks) => (marks.length ? { type: 'text', text, marks: marks.map((m) => (typeof m === 'string' ? { type: m } : m)) } : { type: 'text', text })
 const para = (attrs, ...content) => ({ type: 'paragraph', ...(attrs ? { attrs } : {}), content })
 
@@ -150,6 +151,7 @@ const db = {
     { id: 15, title: 'The Crossing', volume_id: 1 },
     { id: 16, title: 'Notes', volume_id: 1 },
     { id: 17, title: 'Boxes', volume_id: 1 },
+    { id: 18, title: 'Wrapping', volume_id: 1 },
     { id: 21, title: 'Opening', volume_id: 2 },
     { id: 31, title: 'Episode 1', volume_id: 3 },
   ],
@@ -195,6 +197,21 @@ const db = {
           para({ boxWidth: 1.5, boxColor: '#3366cc', shade: '#e8f0ff' }, txt('[System] Quest updated: Cross the ford.')),
           para({ boxWidth: 1.5, boxColor: '#3366cc', shade: '#e8f0ff' }, txt('Reward: 120 xp, one wet pair of boots.')),
           para(null, txt('Mira read it twice, then closed her eyes.')),
+        ],
+      },
+      version: 1,
+      updated_at: now(),
+    },
+    18: {
+      doc: {
+        type: 'doc',
+        content: [
+          { type: 'heading', attrs: { level: 1 }, content: [txt('Wrapping')] },
+          { type: 'image', attrs: { src: '/uploads/editor/wrap.svg', alt: 'A left picture', width: 110, align: 'left', wrap: 'left' } },
+          ...[1, 2, 3].map((i) => para(null, txt(WRAP_TEXT + ' ' + i))),
+          { type: 'image', attrs: { src: '/uploads/editor/wrap.svg', alt: 'A right picture', width: 110, align: 'right', wrap: 'right' } },
+          ...[4, 5, 6].map((i) => para(null, txt(WRAP_TEXT + ' ' + i))),
+          { type: 'image', attrs: { src: '/uploads/editor/wrap.svg', alt: 'At the end', width: 90, align: 'left', wrap: 'left' } },
         ],
       },
       version: 1,
@@ -388,6 +405,7 @@ async function newPage(browser, viewport, errors) {
     Object.defineProperty(window, 'speechSynthesis', { value: fake, configurable: true })
   })
   await context.route('**/api/**', fakeApi)
+  await context.route('**/uploads/**', (route) => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="220" height="160"><rect width="220" height="160" fill="#d9a441"/><circle cx="110" cy="80" r="50" fill="#3366cc"/></svg>' }))
   const page = await context.newPage()
   page.on('pageerror', (e) => errors.push(e.message))
   page.on('console', (m) => m.type() === 'error' && !/404|Failed to load resource/.test(m.text()) && errors.push(m.text()))
@@ -417,6 +435,10 @@ async function shoot() {
 
   if (option('only', '') === 'footnotes') {
     await footnoteShots(page, snap, checks)
+    return { saved, errors, checks }
+  }
+  if (option('only', '') === 'wrap') {
+    await wrapShots(page, snap, checks)
     return { saved, errors, checks }
   }
   if (option('only', '') === 'boxes') {
@@ -850,6 +872,27 @@ async function boxShots(page, snap, checks) {
   await settle(page, 400)
   checks.push('page view: box and drop cap')
   await snap('12b_boxes_page_view.png')
+}
+
+// Pictures with text wrapping (stage 5): a left and a right float, one at
+// the chapter's end, in the editor and in the page view.
+async function wrapShots(page, snap, checks) {
+  await page.goto(`${BASE}/write/1?chapter=18`)
+  await page.waitForSelector('.write-doc figure.pm-image[data-wrap]')
+  await settle(page, 800)
+  const f = await page.evaluate(() => [...document.querySelectorAll('.write-doc figure.pm-image')].map((e) => getComputedStyle(e).float))
+  assert.deepEqual(f, ['left', 'right', 'left'], 'pictures float')
+  checks.push('editor: pictures float left and right')
+  await snap('13a_wrap_editor.png')
+  await page.goto(`${BASE}/write/1/pages`)
+  await page.waitForSelector('.pv-pages:not(.is-hidden) .pagedjs_page', { timeout: 60000 })
+  await settle(page, 800)
+  const idx = await page.evaluate(() => [...document.querySelectorAll('.pagedjs_page')].findIndex((p) => p.querySelector('figure.pm-image[data-wrap]')))
+  assert.ok(idx >= 0, 'the Wrapping chapter is in the page view')
+  await page.evaluate((i) => document.querySelectorAll('.pagedjs_page')[i].scrollIntoView({ block: 'start' }), idx)
+  await settle(page, 400)
+  checks.push('page view: floated pictures')
+  await snap('13b_wrap_page_view.png')
 }
 
 // Tables (stage 5): the editor and the page view.

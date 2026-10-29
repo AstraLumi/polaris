@@ -1160,7 +1160,7 @@ func (d *docxOut) sceneBreak(n *pmNode) {
 			}
 			p.ppr.WriteString(`<w:spacing w:line="240" w:lineRule="auto"/>`)
 			w := float64(pic.W) * 0.75
-			d.inlinePicture(p, pic, math.Min(w, d.textW/2), attrString(n, "glyph"))
+			d.inlinePicture(p, pic, math.Min(w, d.textW/2), attrString(n, "glyph"), "")
 			return
 		}
 	}
@@ -1199,7 +1199,7 @@ func (d *docxOut) graphicXML(pic *exportPicture, rid string, cx, cy int64, crop,
 
 // inlinePicture writes a picture in the run flow, widthPt wide (kept in
 // the text block).
-func (d *docxOut) inlinePicture(p *docxPara, pic *exportPicture, widthPt float64, alt string) {
+func (d *docxOut) inlinePicture(p *docxPara, pic *exportPicture, widthPt float64, alt, wrap string) {
 	if widthPt <= 0 {
 		widthPt = float64(pic.W) * 0.75
 	}
@@ -1212,6 +1212,20 @@ func (d *docxOut) inlinePicture(p *docxPara, pic *exportPicture, widthPt float64
 	cx, cy := int64(math.Round(widthPt*emuPerPt)), int64(math.Round(h*emuPerPt))
 	rid := d.pictureRel(pic)
 	d.docPr++
+	if wrap == "left" || wrap == "right" {
+		// A floating picture: text wraps on both sides of it, it sits at
+		// the column's left or right edge, 8pt (101600 EMU) from the text.
+		gapL, gapR := 0, 101600
+		if wrap == "right" {
+			gapL, gapR = 101600, 0
+		}
+		fmt.Fprintf(&p.body, `<w:r><w:drawing><wp:anchor distT="0" distB="0" distL="%d" distR="%d" simplePos="0" relativeHeight="%d" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="0">`+
+			`<wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="column"><wp:align>%s</wp:align></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV>`+
+			`<wp:extent cx="%d" cy="%d"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapSquare wrapText="bothSides"/><wp:docPr id="%d" name="Picture %d" descr="%s"/>`+
+			`<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>%s</wp:anchor></w:drawing></w:r>`,
+			gapL, gapR, 251658240+d.docPr, wrap, cx, cy, d.docPr, d.docPr, xe(alt), d.graphicXML(pic, rid, cx, cy, "", ""))
+		return
+	}
 	fmt.Fprintf(&p.body, `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="%d" cy="%d"/><wp:effectExtent l="0" t="0" r="0" b="0"/>`+
 		`<wp:docPr id="%d" name="Picture %d" descr="%s"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>%s</wp:inline></w:drawing></w:r>`,
 		cx, cy, d.docPr, d.docPr, xe(alt), d.graphicXML(pic, rid, cx, cy, "", ""))
@@ -1239,9 +1253,19 @@ func (d *docxOut) image(n *pmNode, lc *docxList) {
 	if align != "left" && align != "right" {
 		align = "center"
 	}
-	fmt.Fprintf(&p.ppr, `<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:ind w:left="%d" w:right="0" w:firstLine="0"/><w:jc w:val="%s"/>`, left, align)
 	w, _ := pmNum(n.Attrs["width"])
-	d.inlinePicture(p, pic, w, alt)
+	if wr := attrString(n, "wrap"); wr == "left" || wr == "right" {
+		// The anchor's paragraph is a hair-thin line; the text after it
+		// wraps the picture.
+		fmt.Fprintf(&p.ppr, `<w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/><w:ind w:left="%d" w:right="0" w:firstLine="0"/>`, left)
+		if w <= 0 {
+			w = float64(pic.W) * 0.75
+		}
+		d.inlinePicture(p, pic, math.Min(w, d.textW*0.6), alt, wr)
+		return
+	}
+	fmt.Fprintf(&p.ppr, `<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:ind w:left="%d" w:right="0" w:firstLine="0"/><w:jc w:val="%s"/>`, left, align)
+	d.inlinePicture(p, pic, w, alt, "")
 }
 
 // fullPage: the picture anchored to the page at the page's size (cropped

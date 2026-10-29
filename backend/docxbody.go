@@ -51,7 +51,9 @@ package main
 //     become image blocks: an inline one splits its paragraph where it
 //     sits, an anchored one goes right after its paragraph. width is the
 //     picture's size in pt; align from wp:align or where it sits, an inline
-//     one the paragraph's alignment. An anchored picture placed relative to
+//     one the paragraph's alignment. Square, tight and through wrapping
+//     beside the text on the left or right gives wrap "left" or "right".
+//     An anchored picture placed relative to
 //     the page and at least 85% of the page's width and height is fullPage
 //     (a cover); nothing else is guessed (an ornament used between scenes
 //     stays a picture).
@@ -103,6 +105,7 @@ type irBlock struct {
 	width    float64 // pt, 0 = natural size
 	align    string
 	fullPage bool
+	wrap     string // "left" or "right" for a picture text flows around
 	alt      string
 
 	tbl    *irTable // kind 't': a table (docxtables.go)
@@ -984,6 +987,13 @@ func (p *docxParser) sectionSize() (pageW, pageH, textW, textLeft float64) {
 	return
 }
 
+func (b *irBlock) wrapOrInline() string {
+	if b.wrap == "left" || b.wrap == "right" {
+		return b.wrap
+	}
+	return "inline"
+}
+
 func paraImageAlign(align string) string {
 	switch align {
 	case "center", "right":
@@ -1049,6 +1059,12 @@ func (p *docxParser) drawing(el *xEl, ps *paraState) {
 			img.align = "center"
 		} else {
 			img.align = anchorAlign(posH, cx, pageW, textW)
+			// Text flowing around it (square, tight, through) beside the
+			// text on the left or right: a wrapped picture; top-and-bottom,
+			// none and centred ones stay pictures of their own line.
+			if (img.align == "left" || img.align == "right") && (frame.child("wp", "wrapSquare") != nil || frame.child("wp", "wrapTight") != nil || frame.child("wp", "wrapThrough") != nil) {
+				img.wrap = img.align
+			}
 		}
 		ps.after = append(ps.after, img)
 	}

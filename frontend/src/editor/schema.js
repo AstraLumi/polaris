@@ -244,7 +244,7 @@ export const schema = new Schema({
       group: 'block',
       atom: true,
       draggable: true,
-      attrs: keep({ src: { default: '' }, alt: { default: '' }, width: { default: null }, align: { default: 'center' }, fullPage: { default: false } }),
+      attrs: keep({ src: { default: '' }, alt: { default: '' }, width: { default: null }, align: { default: 'center' }, fullPage: { default: false }, wrap: { default: 'inline' } }),
       parseDOM: [
         {
           tag: 'figure.pm-image',
@@ -259,6 +259,7 @@ export const schema = new Schema({
               width: Number.isFinite(w) ? w : null,
               align: el.getAttribute('data-align') || 'center',
               fullPage: el.hasAttribute('data-full-page'),
+              wrap: ['left', 'right'].includes(el.getAttribute('data-wrap')) ? el.getAttribute('data-wrap') : 'inline',
             }
           },
         },
@@ -266,10 +267,15 @@ export const schema = new Schema({
         { tag: 'img[src]', getAttrs: (el) => (isUpload(el.getAttribute('src')) ? { src: el.getAttribute('src'), alt: el.getAttribute('alt') || '' } : false) },
       ],
       toDOM: (node) => {
-        const { src, alt, width, align, fullPage } = node.attrs
+        const { src, alt, width, align, fullPage, wrap } = node.attrs
         const dom = { class: 'pm-image', 'data-align': align || 'center' }
         if (width != null) dom['data-width'] = String(width)
         if (fullPage) dom['data-full-page'] = ''
+        const floated = !fullPage && (wrap === 'left' || wrap === 'right')
+        if (floated) {
+          dom['data-wrap'] = wrap
+          if (width != null) dom.style = `width: ${num(width)}pt`
+        }
         return ['figure', dom, ['img', { src, alt, style: width != null ? `width: ${num(width)}pt` : null }]]
       },
     },

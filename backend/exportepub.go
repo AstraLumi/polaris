@@ -350,6 +350,7 @@ ul, ol { margin: 0.5em 0; padding-left: 2em; }
 .page-break { page-break-after: always; break-after: page; height: 0; margin: 0; }
 figure.image { margin: 0.5em 0; text-indent: 0; }
 figure.image img { max-width: 100%; height: auto; }
+h1, h2, h3, .page-break, .scene-break { clear: both; }
 .full-page { page-break-before: always; break-before: page; page-break-after: always; break-after: page; margin: 0; padding: 0; text-align: center; text-indent: 0; height: 100%; }
 .full-page img { max-width: 100%; max-height: 100%; height: auto; }
 .speaker { font-variant: small-caps; }
@@ -444,6 +445,17 @@ func (e *epubOut) block(ctx *epubCtx, n *pmNode) {
 			width = w
 		}
 		pct := math.Min(100, width/e.b.textWidthPt()*100)
+		if wr := attrString(n, "wrap"); wr == "left" || wr == "right" {
+			// Text flows around it: a float, 60% of the text at most.
+			pct = math.Min(pct, 60)
+			gap := "margin: 0.3em 0.6em 0.3em 0"
+			if wr == "right" {
+				gap = "margin: 0.3em 0 0.3em 0.6em"
+			}
+			fmt.Fprintf(s, `<figure class="image wrap-%s" style="float: %s; width: %s%%; %s"><img src="%s" alt="%s" style="width: 100%%"/></figure>`+"\n",
+				wr, wr, fmtNum(math.Round(pct*10)/10), gap, e.image(pic), alt)
+			return
+		}
 		fmt.Fprintf(s, `<figure class="image" style="text-align: %s"><img src="%s" alt="%s" style="width: %s%%"/></figure>`+"\n",
 			align, e.image(pic), alt, fmtNum(math.Round(pct*10)/10))
 	case "bullet_list", "ordered_list":
