@@ -10,7 +10,7 @@
 // Tab through the cells, a table pasted from Word) and in the page view
 // (rows breaking across pages, the header row repeated).
 //
-//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes|wrap|import|speaker]
+//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes|wrap|import|speaker|painter]
 //
 // --only spell: just the spellchecker (underlines, the menu on a word, Add
 // to dictionary, Ignore, typing, the spelling panel, dark paper, off).
@@ -27,7 +27,7 @@ import { countDocJSON } from '../../src/editor/wordCount.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const frontend = resolve(here, '../..')
-const WEB_PORT = 15177
+const WEB_PORT = Number(process.env.WRITE_SHOTS_PORT) || 15177
 const BASE = `http://127.0.0.1:${WEB_PORT}`
 
 const args = process.argv.slice(2)
@@ -469,6 +469,10 @@ async function shoot() {
     await importShots(page, snap, checks)
     return { saved, errors, checks }
   }
+  if (option('only', '') === 'painter') {
+    await painterShots(page, snap, checks)
+    return { saved, errors, checks }
+  }
   if (option('only', '') === 'speaker') {
     await speakerShots(page, snap, checks)
     return { saved, errors, checks }
@@ -908,6 +912,61 @@ async function boxShots(page, snap, checks) {
   await settle(page, 400)
   checks.push('page view: box and drop cap')
   await snap('12b_boxes_page_view.png')
+}
+
+// Format Painter: bold + colour the first words of one paragraph, copy them
+// with the brush, drag over the next paragraph's text: it is painted, and
+// the painter turns off.
+async function painterShots(page, snap, checks) {
+  await page.goto(`${BASE}/write/1?chapter=11`)
+  await page.waitForSelector('.write-doc p')
+  await settle(page, 800)
+  const paras = await page.evaluate(() => {
+    const v = window.__writeView
+    const blocks = []
+    v.state.doc.descendants((n, pos) => {
+      if (n.isTextblock && n.type.name === 'paragraph' && n.content.size > 12 && blocks.length < 2) blocks.push(pos)
+    })
+    const { schema } = v.state
+    let tr = v.state.tr.addMark(blocks[0] + 1, blocks[0] + 8, schema.marks.bold.create()).addMark(blocks[0] + 1, blocks[0] + 8, schema.marks.color.create({ color: '#cc2222' }))
+    tr = tr.setSelection(v.state.selection.constructor.create(tr.doc, blocks[0] + 3))
+    v.dispatch(tr)
+    return blocks
+  })
+  await settle(page, 300)
+  await page.click('button[aria-label="Format Painter"]')
+  await page.waitForSelector('.write-doc.is-painting')
+  assert.equal(await page.getAttribute('button[aria-label="Format Painter"]', 'aria-pressed'), 'true', 'the button shows pressed')
+  checks.push('the brush arms the painter (paint cursor class, button pressed)')
+  await snap('14a_painter_armed.png')
+  const rect = await page.evaluate((pos) => {
+    const dom = window.__writeView.nodeDOM(pos)
+    const r = document.createRange()
+    r.selectNodeContents(dom)
+    const b = r.getClientRects()[0]
+    return { x0: b.left + 2, x1: b.left + Math.min(b.width, 200), y: b.top + b.height / 2 }
+  }, paras[1])
+  await page.mouse.move(rect.x0, rect.y)
+  await page.mouse.down()
+  await page.mouse.move(rect.x1, rect.y, { steps: 5 })
+  await page.mouse.up()
+  await settle(page, 400)
+  const out = await page.evaluate((pos) => {
+    const n = window.__writeView.state.doc.nodeAt(pos)
+    const marks = []
+    n.forEach((c) => marks.push(c.marks.map((m) => m.type.name).sort().join('+')))
+    return { marks, painting: !!document.querySelector('.write-doc.is-painting') }
+  }, paras[1])
+  assert.ok(out.marks.some((m) => m.includes('bold') && m.includes('color')), 'the dragged text is bold and coloured: ' + out.marks)
+  assert.equal(out.painting, false, 'the painter turned off')
+  checks.push('dragging over text paints bold + colour and turns the painter off')
+  await snap('14b_painter_painted.png')
+  await page.click('button[aria-label="Format Painter"]')
+  await page.waitForSelector('.write-doc.is-painting')
+  await page.keyboard.press('Escape')
+  await settle(page, 200)
+  assert.equal(await page.$('.write-doc.is-painting'), null, 'Esc turns it off')
+  checks.push('Esc cancels the painter')
 }
 
 // "Tag character": select a quote in a prose paragraph, right-click, pick a

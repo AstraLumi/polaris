@@ -33,6 +33,8 @@
       :show-tags="showTags"
       @tags="showTags = !showTags"
       @spell="spell.enabled.value = !spell.enabled.value"
+      :painter="!!painter"
+      @painter="togglePainter"
       @picture="pickPicture"
       @find="openFind(false)"
       @comment="newComment"
@@ -247,6 +249,7 @@
 import 'prosemirror-view/style/prosemirror.css'
 import 'prosemirror-gapcursor/style/gapcursor.css'
 import '../editor/editor.css'
+import { copyFormat, applyFormat } from '../editor/formatPainter.js'
 import { ref, shallowRef, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { EditorState, NodeSelection, TextSelection } from 'prosemirror-state'
@@ -691,6 +694,29 @@ function setDoc(json) {
   refreshDocFonts()
 }
 
+// ---- Format Painter (editor/formatPainter.js) ----------------------------------------------
+const painter = ref(null) // { fmt, locked } while armed
+function togglePainter(how) {
+  if (!view || readOnly.value) return
+  if (how === 'lock') {
+    const fmt = painter.value?.fmt || copyFormat(view.state)
+    painter.value = fmt ? { fmt, locked: true } : null
+  } else if (painter.value) painter.value = null
+  else {
+    const fmt = copyFormat(view.state)
+    painter.value = fmt ? { fmt, locked: false } : null
+  }
+  view.setProps({})
+  view.focus()
+}
+function paintNow() {
+  if (!view || !painter.value) return
+  const tr = applyFormat(view.state, painter.value.fmt)
+  if (tr) view.dispatch(tr)
+  if (!painter.value.locked) painter.value = null
+  view.setProps({})
+}
+
 // Runs a toolbar command and puts the cursor back in the text.
 function exec(cmd) {
   if (!view || readOnly.value) return
@@ -703,7 +729,7 @@ function createView() {
     state: makeState(emptyDocJSON()),
     nodeViews: nodeViews(),
     editable: () => !readOnly.value,
-    attributes: () => ({ class: `write-doc${online.value ? ' is-online' : ''}`, spellcheck: spellOwn.value ? 'false' : 'true' }),
+    attributes: () => ({ class: `write-doc${online.value ? ' is-online' : ''}${painter.value ? ' is-painting' : ''}`, spellcheck: spellOwn.value ? 'false' : 'true' }),
     dispatchTransaction(tr) {
       const st = view.state.apply(tr)
       view.updateState(st)
@@ -746,6 +772,11 @@ function createView() {
       return true
     },
     handleDOMEvents: {
+      // Format Painter: paint what the mouse just selected (or clicked).
+      mouseup() {
+        if (painter.value) setTimeout(paintNow, 0)
+        return false
+      },
       // Ctrl+click opens a link (a plain click only places the cursor).
       click(v, e) {
         const a = e.target.closest?.('a')
@@ -1629,6 +1660,9 @@ function onKey(e) {
   if ((e.ctrlKey || e.metaKey) && e.altKey && e.code === 'Space') {
     e.preventDefault()
     reader.toggle()
+  } else if (e.key === 'Escape' && painter.value) {
+    painter.value = null
+    view?.setProps({})
   } else if (e.key === 'Escape' && reader.status !== 'idle') {
     reader.stop()
     view?.focus()
@@ -1937,6 +1971,9 @@ onBeforeUnmount(() => {
   min-height: 100%;
 }
 
+.write-host :deep(.write-doc.is-painting) {
+  cursor: copy;
+}
 .write-host :deep(.write-doc) {
   min-height: 6em;
 }

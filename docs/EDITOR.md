@@ -1328,3 +1328,25 @@ can be opened and written with no connection; the writing page shows
   offline; pictures cannot be added offline; two tabs writing the same book
   offline means the last one wins; not tried on a real phone or a real HTTPS
   install.
+
+## Format Painter
+
+A brush button in the toolbar (`src/editor/formatPainter.js`, wired in
+`WritePage.vue`). Click it: it copies the formatting at the caret or the
+selection's start, and the page shows a copy cursor. The next selection made
+with the mouse gets it, then the painter turns off. Double-click the button
+to keep it on; Esc or the button again turns it off.
+
+- Copied: the formatting marks (`FORMAT_MARKS`: character style, font, size,
+  colour, highlight, bold, italic, underline, strike, super/subscript, small
+  caps) and the paragraph's attrs (`PARA_ATTRS`, with a heading's level).
+  Links, story links, comments and speaker tags are never copied nor
+  removed.
+- Painted: on a selection, the formatting marks of the range are replaced by
+  the copied ones. Paragraph attrs are painted on the paragraphs the
+  selection covers whole, or on every paragraph it touches when the copied
+  text was a whole paragraph (as in Word). A plain click (no selection)
+  paints the clicked paragraph only. A heading source makes a heading.
+- No keyboard shortcut: Ctrl+Shift+C opens the browser's developer tools and
+  Ctrl+Shift+V is the browser's "paste as plain text".
+- Test: `node frontend/tests/editorFormatPainter.test.mjs`.
