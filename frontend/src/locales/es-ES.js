@@ -2559,4 +2559,5 @@ export default {
   "Shading": "Sombreado",
   "Drop cap (lines)": "Letra capital (líneas)",
   "The text before the first chapter heading is marked as front matter: it is not counted as a chapter and its pages are numbered i, ii, iii. To change that, use its … menu in the chapter list.": "El texto anterior al primer título de capítulo se ha marcado como preliminares: no cuenta como capítulo y sus páginas se numeran i, ii, iii. Para cambiarlo, usa su menú … en la lista de capítulos.",
+  "Page: {type}": "Página: {type}",
 }

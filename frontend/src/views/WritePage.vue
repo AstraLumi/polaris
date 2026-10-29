@@ -168,6 +168,7 @@
       <span class="save-state" :class="`is-${saveShown}`" :title="saveShown === 'device' ? $t('Sent to the server when it can be reached again.') : undefined" aria-live="polite">{{ saveLabel }}</span>
       <span class="spacer"></span>
       <button v-if="!focusMode" type="button" class="btn btn-ghost small spell-status" :class="`is-${spell.status.value}`" :aria-pressed="panel === 'spelling'" :title="$t('Spelling options')" @click="togglePanel('spelling')">{{ spell.statusLabel.value }}</button>
+      <button v-if="!focusMode && settings" type="button" class="btn btn-ghost small" :aria-pressed="panel === 'book'" :title="$t('Book and page')" @click="togglePanel('book')">{{ $t('Page: {type}', { type: typeLabel(settings) }) }}</button>
       <button v-if="!focusMode" type="button" class="btn btn-ghost small offline-status" :class="{ 'is-on': offline.available.value, 'is-away': !offline.connected.value }" :aria-pressed="panel === 'offline'" :title="$t('Offline writing')" @click="togglePanel('offline')">{{ offlineLabel }}</button>
       <label v-if="!focusMode" class="zoom">
         <span class="sr-only">{{ $t('Zoom') }}</span>

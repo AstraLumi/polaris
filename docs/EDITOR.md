@@ -536,7 +536,7 @@ left-hand pages, by where they lie in the book, not by their number.
   (text/plain) on the clipboard, falling back to copying a selection;
   the chapter's when one is open, else the book's. Word and EPUB and PDF
   are left out of the menu for Online Post.)
-- Book panel: the meta fields, the header and footer bands with a field
+- Book panel (opened from the toolbar or the status bar's "Page: A6" button, which names the book's page type): the meta fields, the header and footer bands with a field
   picker, numbering, chapter start, front-matter flags per chapter.
   (Built: sections "Book details", "Headers and footers" (header/footer ×
   right/left/first pages, each with left/centre/right texts, a field
