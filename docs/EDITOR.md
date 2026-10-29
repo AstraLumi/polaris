@@ -147,6 +147,12 @@ Marks:
   `comment` marks with different ids (overlapping comments; never the same
   id twice). Not inclusive: typing at its end doesn't extend it. It never
   shows outside the writing page (see "Comments (stage 5)").
+- `speaker` {`character`, `speaker`} (stage 5, "Tagging speakers in
+  prose"): who said the text. `character` is a character id (positive
+  integer) or null, `speaker` the name as shown (up to 200 characters,
+  kept so a deleted character still reads). At most one per text, not
+  inclusive. Paragraphs and headings may carry it (the editor tags
+  paragraphs). It never shows outside the writing page.
 
 The doc root may carry attrs: `mode`: `prose` (default) or `script`
 (stage 4: the chapter is written in Script Mode). The editor writes
@@ -1195,6 +1201,30 @@ Built (no schema change: paragraph attrs in the doc JSON).
 - Known gaps: not opened in Word or LibreOffice; joined boxes of different
   colours; rounded corners, per-side borders and a drop cap of more than
   one letter are not supported; a box that runs over a page break is cut.
+
+### Tagging speakers in prose (stage 5)
+
+A line of dialogue in a normal chapter can say who spoke it without
+Script Mode. Select the text (a quote inside a paragraph, or the whole
+paragraph), right-click and choose "Tag character…" (or press
+Ctrl/Cmd+Alt+K), then pick a character: type to filter, ↑/↓ and Enter pick,
+or use a typed name that is not a character. The selection is trimmed of
+surrounding spaces and gets the `speaker` mark. Right-clicking inside a
+tagged text offers "Change character…" and "Remove tag". A selection's
+menu wins over the spelling menu; a misspelled word with nothing selected
+keeps the spelling menu. (Deviation: the menus are not merged into one.)
+
+Tagged text is underlined with a thin dotted accent line and a hover title
+"Said by {name}", in the writing page only. The chapter index
+(`indexChapterText`) records each tagged run as a `chapter_lines` row like a
+Script Mode dialogue (consecutive text nodes with the same tag are one
+line, in reading order among the chapter's dialogues), and the character
+counts as named in the chapter, so a character's Lines and "Who speaks" show
+them. The page view, .docx, EPUB, HTML, Markdown and text exports and read
+aloud, find, spellcheck and word count see plain text: exports and the .docx
+emitter look marks up by name and ignore this one; a Word import never makes
+it. Code: `editor/speaker.js`, `components/write/SpeakerTag.vue`,
+`markedLines` in `backend/chapterindex.go`.
 
 ### Pictures with text wrapping (stage 5)
 

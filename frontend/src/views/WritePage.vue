@@ -185,6 +185,18 @@
     <ImportReport v-if="importReport && settings" :report="importReport" :settings="settings" :set-up="book?.is_set_up !== false" :busy="busy" @apply="applyImport" @close="importReport = null" />
     <datalist id="write-fonts"><option v-for="f in fontList" :key="f" :value="f"></option></datalist>
 
+    <SpeakerTag
+      v-if="speakerTag"
+      :key="speakerTag.n"
+      :x="speakerTag.x"
+      :y="speakerTag.y"
+      :characters="names.characters.value"
+      :has-tag="!!speakerTag.tag"
+      :direct="!!speakerTag.direct"
+      @pick="pickSpeakerTag"
+      @remove="removeSpeakerTag"
+      @close="closeSpeakerTag"
+    />
     <SpellMenu
       v-if="spellMenu"
       :word="spellMenu.word"
@@ -280,6 +292,8 @@ import { spellPlugin, refreshSpell, replaceWord } from '../editor/spellPlugin.js
 import { useSpellcheck } from '../editor/useSpellcheck.js'
 import { DICTIONARY_LANG } from '../editor/spellWords.js'
 import SpellMenu from '../components/write/SpellMenu.vue'
+import SpeakerTag from '../components/write/SpeakerTag.vue'
+import { speakerPlugin, tagSpeaker, removeSpeaker } from '../editor/speaker.js'
 import SpellPanel from '../components/write/SpellPanel.vue'
 import OfflinePanel from '../components/write/OfflinePanel.vue'
 import { useOfflineBook } from '../editor/useOfflineBook.js'
@@ -637,6 +651,7 @@ const plugins = [
   findPlugin(),
   readAloudPlugin({ onInterrupt: () => reader.stop() }),
   commentPlugin({ known: () => new Set(comments.value.filter((c) => !c.parent_id).map((c) => c.id)) }),
+  speakerPlugin({ onMenu: openSpeakerTag, label: (name) => t('Said by {name}', { name }) }),
   spellPlugin({ getSpell: () => spell.forPlugin(), onMenu: openSpellMenu }),
 ]
 const makeState = (json) => EditorState.create({ schema, doc: docFromJSON(json), plugins })
@@ -741,6 +756,28 @@ watch([readOnly, online], () => view?.setProps({}))
 const spellOwn = computed(() => spell.enabled.value && !!spell.language.value.code)
 watch(spellOwn, () => view?.setProps({}))
 watch([spell.gen, spell.status], () => refreshSpell(view, !!spell.forPlugin()))
+// "Tag character": the right-click menu / Ctrl+Alt+K picker.
+const speakerTag = ref(null) // { x, y, range, tag, direct, n }
+let speakerTagN = 0
+function openSpeakerTag(info) {
+  if (readOnly.value) return
+  speakerTag.value = { ...info, n: ++speakerTagN }
+}
+function closeSpeakerTag() {
+  speakerTag.value = null
+  view?.focus()
+}
+function pickSpeakerTag(who) {
+  const s = speakerTag.value
+  speakerTag.value = null
+  const range = s?.range || (s?.tag && { from: s.tag.from, to: s.tag.to })
+  if (view && range) exec(tagSpeaker(who, range))
+}
+function removeSpeakerTag() {
+  const s = speakerTag.value
+  speakerTag.value = null
+  if (s?.tag && view) exec(removeSpeaker({ from: s.tag.from, to: s.tag.to }))
+}
 const spellMenu = ref(null) // { word, from, to, x, y, suggestions }
 async function openSpellMenu(hit) {
   if (readOnly.value) return

@@ -23,6 +23,7 @@ import (
 	"cmp"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"slices"
@@ -134,12 +135,74 @@ func dialogueLead(n *pmNode) string {
 	return ""
 }
 
-// docDialogues lists a doc's dialogues in reading order.
+// speakerMark is the speaker mark of a text node (the writing editor's
+// "Tag character", docs/EDITOR.md), or nil.
+func speakerMark(n *pmNode) *pmMark {
+	for i := range n.Marks {
+		if n.Marks[i].Type == "speaker" {
+			return &n.Marks[i]
+		}
+	}
+	return nil
+}
+
+// markedLines lists the runs of a paragraph that carry a speaker mark: text
+// nodes in a row under the same character and name are one line.
+func markedLines(n *pmNode) []pmDialogue {
+	var out []pmDialogue
+	var cur *pmDialogue
+	var key string
+	flush := func() {
+		if cur != nil {
+			cur.Text = strings.Join(strings.Fields(cur.Text), " ")
+			if cur.Text != "" {
+				out = append(out, *cur)
+			}
+			cur = nil
+		}
+	}
+	for _, c := range n.Content {
+		if c == nil {
+			continue
+		}
+		if c.Type != "text" {
+			if cur != nil && (c.Type == "hard_break" || c.Type == "tab") {
+				cur.Text += " "
+			}
+			continue
+		}
+		m := speakerMark(c)
+		if m == nil {
+			flush()
+			continue
+		}
+		d := pmDialogue{Speaker: attrText(&pmNode{Attrs: m.Attrs}, "speaker")}
+		if id, ok := pmInt(m.Attrs["character"]); ok && id > 0 {
+			d.Character = id
+		}
+		k := fmt.Sprint(d.Character, "|", d.Speaker)
+		if cur != nil && k != key {
+			flush()
+		}
+		if cur == nil {
+			cur, key = &d, k
+		}
+		cur.Text += c.Text
+	}
+	flush()
+	return out
+}
+
+// docDialogues lists a doc's dialogues in reading order: Script Mode's
+// dialogue nodes and the speaker-tagged runs of prose paragraphs.
 func docDialogues(doc *pmNode) []pmDialogue {
 	var out []pmDialogue
 	pmWalk(doc, func(n *pmNode) {
-		if n.Type == "dialogue" {
+		switch n.Type {
+		case "dialogue":
 			out = append(out, dialogueOf(n))
+		case "paragraph":
+			out = append(out, markedLines(n)...)
 		}
 	})
 	return out
@@ -168,6 +231,13 @@ func docLinkCounts(doc *pmNode) []pmLinkCount {
 		if n.Type == "dialogue" {
 			if d := dialogueOf(n); d.Character > 0 {
 				add(pmStoryLink{"character", d.Character})
+			}
+		}
+		if n.Type == "paragraph" {
+			for _, d := range markedLines(n) {
+				if d.Character > 0 {
+					add(pmStoryLink{"character", d.Character})
+				}
 			}
 		}
 		var prev *pmStoryLink

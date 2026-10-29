@@ -514,6 +514,19 @@ export const schema = new Schema({
       parseDOM: [{ tag: 'span[data-comment]', getAttrs: (el) => (+el.getAttribute('data-comment') > 0 ? { id: +el.getAttribute('data-comment') } : false) }],
       toDOM: (mark) => ['span', { class: 'pm-comment', 'data-comment': String(mark.attrs.id ?? '') }, 0],
     },
+
+    // Who said a stretch of prose ("Tag character", docs/EDITOR.md): the
+    // character's id (null for someone who isn't one) and the name as shown,
+    // kept so a deleted character still reads. It feeds a character's Lines
+    // and "Who speaks" like Script Mode's dialogue; the writing page draws it
+    // faintly, the page view and the exports show plain text.
+    speaker: {
+      attrs: keep({ character: { default: null }, speaker: { default: '' } }),
+      inclusive: false,
+      excludes: 'speaker',
+      parseDOM: [{ tag: 'span[data-said]', getAttrs: (el) => ({ character: +el.getAttribute('data-said') > 0 ? +el.getAttribute('data-said') : null, speaker: el.getAttribute('data-said-name') || '' }) }],
+      toDOM: (mark) => ['span', { class: 'pm-said', 'data-said': String(mark.attrs.character ?? ''), 'data-said-name': mark.attrs.speaker || '' }, 0],
+    },
   },
 })
 

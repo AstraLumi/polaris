@@ -2560,4 +2560,13 @@ export default {
   "Drop cap (lines)": "Letra capitular (linhas)",
   "The text before the first chapter heading is marked as front matter: it is not counted as a chapter and its pages are numbered i, ii, iii. To change that, use its … menu in the chapter list.": "O texto antes do primeiro título de capítulo foi marcado como pré-textual: não conta como capítulo e suas páginas são numeradas i, ii, iii. Para mudar isso, use o menu … dele na lista de capítulos.",
   "Page: {type}": "Página: {type}",
+  "Tag character": "Marcar personagem",
+  "Tag character…": "Marcar personagem…",
+  "Change character…": "Trocar personagem…",
+  "Remove tag": "Remover marca",
+  "Who said this?": "Quem disse isto?",
+  "Character…": "Personagem…",
+  "No characters yet": "Ainda não há personagens",
+  "Use “{name}” (not a character)": "Usar “{name}” (não é um personagem)",
+  "Said by {name}": "Dito por {name}",
 }

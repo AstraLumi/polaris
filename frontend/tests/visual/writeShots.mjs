@@ -10,7 +10,7 @@
 // Tab through the cells, a table pasted from Word) and in the page view
 // (rows breaking across pages, the header row repeated).
 //
-//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes|wrap|import]
+//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes|wrap|import|speaker]
 //
 // --only spell: just the spellchecker (underlines, the menu on a word, Add
 // to dictionary, Ignore, typing, the spelling panel, dark paper, off).
@@ -458,6 +458,10 @@ async function shoot() {
     await importShots(page, snap, checks)
     return { saved, errors, checks }
   }
+  if (option('only', '') === 'speaker') {
+    await speakerShots(page, snap, checks)
+    return { saved, errors, checks }
+  }
   if (option('only', '') === 'wrap') {
     await wrapShots(page, snap, checks)
     return { saved, errors, checks }
@@ -893,6 +897,57 @@ async function boxShots(page, snap, checks) {
   await settle(page, 400)
   checks.push('page view: box and drop cap')
   await snap('12b_boxes_page_view.png')
+}
+
+// "Tag character": select a quote in a prose paragraph, right-click, pick a
+// character; the line is underlined and titled "Said by …".
+async function speakerShots(page, snap, checks) {
+  await page.goto(`${BASE}/write/1?chapter=11`)
+  await page.waitForSelector('.write-doc p')
+  await settle(page, 800)
+  const rect = await page.evaluate(() => {
+    const w = document.createTreeWalker(document.querySelector('.write-doc'), NodeFilter.SHOW_TEXT)
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      const i = n.data.indexOf('“We’re late,”')
+      if (i < 0) continue
+      const r = document.createRange()
+      r.setStart(n, i)
+      r.setEnd(n, i + '“We’re late,” '.length) // takes a trailing space along
+      const sel = getSelection()
+      sel.removeAllRanges()
+      sel.addRange(r)
+      const b = r.getBoundingClientRect()
+      return { x: b.left + b.width / 2, y: b.top + b.height / 2 }
+    }
+    return null
+  })
+  assert.ok(rect, 'the quote is on the page')
+  await settle(page, 300)
+  await page.mouse.click(rect.x, rect.y, { button: 'right' })
+  await page.waitForSelector('.speaker-tag-menu')
+  checks.push('right-click on a selected quote opens the Tag character menu')
+  await snap('13a_speaker_menu.png')
+  await page.click('.speaker-tag-menu .menu-item')
+  await page.waitForSelector('.speaker-tag-input')
+  await page.keyboard.type('ore')
+  await snap('13b_speaker_picker.png')
+  await page.keyboard.press('Enter')
+  await settle(page, 400)
+  const tagged = await page.evaluate(() => {
+    const s = document.querySelector('.write-doc .pm-said')
+    return s && { text: s.textContent, title: (s.closest('[title]') || s.querySelector('[title]'))?.getAttribute('title'), mark: JSON.stringify(window.__writeView.state.doc.toJSON()).match(/"type":"speaker","attrs":\{[^}]*\}/)?.[0] }
+  })
+  assert.ok(tagged, 'the tagged text is drawn')
+  assert.equal(tagged.text, '“We’re late,”', 'trimmed of the space')
+  assert.match(tagged.title, /Oren/, 'hover title names the character')
+  assert.match(tagged.mark, /"character":2/)
+  checks.push('picking a character tags the trimmed quote (title: ' + tagged.title + ')')
+  await page.mouse.click(5, 5)
+  await snap('13c_speaker_tagged.png')
+  // Dark paper.
+  const dark = await page.$('.write-page')
+  await dark.evaluate((el) => el.classList.add('is-dark-paper'))
+  await snap('13d_speaker_tagged_dark.png')
 }
 
 // Pictures with text wrapping (stage 5): a left and a right float, one at

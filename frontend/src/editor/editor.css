@@ -36,6 +36,15 @@
   --comment-line-active: rgba(160, 195, 255, 0.95);
 }
 
+/* Tagged speaker (stage 5, "Tag character"): a thin dotted underline in the
+   accent, in the writing page only; the page view and the exports show plain
+   text. The ink mix keeps it visible on dark paper. */
+.write-doc .pm-said {
+  text-decoration: underline dotted 1px;
+  text-decoration-color: color-mix(in srgb, var(--accent, #b5862b) 75%, var(--ink));
+  text-underline-offset: 3px;
+}
+
 /* A comment being made (its row is on its way). The others are coloured by
    the writing page (highlightCSS in comments.js), by id. */
 .write-doc .pm-comment.is-pending {
