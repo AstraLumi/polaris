@@ -76,6 +76,7 @@
           </div>
         </div>
       </div>
+      <button v-bind="btn(t('Format Painter'), painter)" class="foldable" @click="onPainter" @dblclick="$emit('painter', 'lock')"><TbIcon name="brush" /></button>
       <button v-bind="btn(t('Clear formatting'))" class="foldable" @click="exec(clearFormatting)"><TbIcon name="clear" /></button>
     </div>
 
@@ -228,8 +229,11 @@ const props = defineProps({
   canRead: { type: Boolean, default: false }, // the browser can read aloud
   reading: { type: Boolean, default: false }, // the chapter is being read
   spellOn: { type: Boolean, default: false }, // the spellchecker (useSpellcheck)
+  painter: { type: Boolean, default: false }, // the Format Painter is armed
 })
-defineEmits(['find', 'panel', 'focus', 'picture', 'read', 'comment', 'spell'])
+const emit = defineEmits(['find', 'panel', 'focus', 'picture', 'read', 'comment', 'spell', 'painter'])
+// A double click is two clicks and a dblclick: the second click is left to it.
+const onPainter = (e) => e.detail < 2 && emit('painter')
 const readTitle = computed(() =>
   props.canRead ? t('Read aloud') + ' (Ctrl+Alt+Space)' : t('Your browser cannot read aloud'),
 )
@@ -338,6 +342,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', closePops))
 const ICONS = {
   undo: 'M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11',
   redo: 'M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 0 0 0 11H13',
+  brush: 'M18 3 9 12l3 3 9-9zM9 12c-3 0-5 2-5 5 0 2-1 3-1 3s5 1 7-1c2-2 2-4 0-6',
   clear: 'M4 7V4h16v3M9 20h6M12 4 8 20M3 3l18 18',
   'align-left': 'M3 6h18M3 10h12M3 14h18M3 18h12',
   'align-center': 'M3 6h18M6 10h12M3 14h18M6 18h12',

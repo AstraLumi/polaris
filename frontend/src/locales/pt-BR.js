@@ -2008,6 +2008,7 @@ export default {
   "Chapter notes": "Notas do capítulo",
   "Chapters of this book": "Capítulos deste livro",
   "Chapters without a volume": "Capítulos sem volume",
+  "Format Painter": "Pincel de formatação",
   "Clear formatting": "Limpar formatação",
   "Custom size": "Tamanho personalizado",
   "Dark paper": "Papel escuro",
