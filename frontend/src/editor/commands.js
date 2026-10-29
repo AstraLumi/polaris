@@ -168,6 +168,23 @@ export function selectionFormat(state, styles) {
   }
 }
 
+// The fonts the selected text is in, in order (each once): its font marks,
+// else its paragraph style's font. Empty with nothing selected. The font
+// box is blank when there are two or more, as in Word.
+export function fontsInSelection(state, styles) {
+  const out = []
+  const { from, to, empty } = state.selection
+  if (empty) return out
+  state.doc.nodesBetween(from, to, (node, pos, parent) => {
+    if (!node.isText) return true
+    const mark = marks.font.isInSet(node.marks)
+    const f = mark ? mark.attrs.family : resolveBlock(styles, parent.type.name, parent.attrs, node.marks).text.font
+    if (f && !out.some((o) => o.toLowerCase() === String(f).toLowerCase())) out.push(f)
+    return false
+  })
+  return out
+}
+
 // One step up or down Word's size list from the size at the selection.
 export const stepFontSize = (dir, styles) => (state, dispatch) => {
   const current = selectionFormat(state, styles).size || 12

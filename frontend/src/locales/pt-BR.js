@@ -2657,4 +2657,11 @@ export default {
   "{n} symbols in {font}": "{n} símbolos em {font}",
   "that is the same font": "é a mesma fonte",
   "The last changes are not saved yet. Try again in a moment.": "As últimas mudanças ainda não foram salvas. Tente de novo daqui a pouco.",
+  "Several fonts": "Várias fontes",
+  "The style's font": "A fonte do estilo",
+  "All fonts": "Todas as fontes",
+  "Best matches": "Mais parecidas",
+  "Favourites": "Favoritas",
+  "Add to favourites": "Adicionar às favoritas",
+  "Remove from favourites": "Tirar das favoritas",
 }

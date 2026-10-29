@@ -58,6 +58,7 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/fontCredits.test.mjs
     node frontend/tests/fontPlaces.test.mjs
     node frontend/tests/glyphs.test.mjs
+    node frontend/tests/fontSearch.test.mjs
     node frontend/tests/pageBreaks.test.mjs
     node frontend/tests/editorSpellTag.test.mjs
     node frontend/tests/editorFormatPainter.test.mjs

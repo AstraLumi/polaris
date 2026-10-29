@@ -15,16 +15,7 @@
         <option v-if="fmt.charStyleId && !characterStyles.some((s) => s.id === fmt.charStyleId)" :value="fmt.charStyleId">—</option>
         <option v-for="s in characterStyles" :key="s.id" :value="s.id">{{ nameOf(s) }}</option>
       </select>
-      <input
-        class="tb-font"
-        type="text"
-        list="write-fonts"
-        :value="fmt.font || ''"
-        :aria-label="$t('Font')"
-        :title="$t('Font')"
-        @change="setFont($event.target.value)"
-        @keydown.enter.prevent="$event.target.blur()"
-      />
+      <FontPicker class="tb-font" :value="selFonts.length > 1 ? '' : fmt.font || ''" :mixed="selFonts.length > 1" :fonts="fonts" @pick="setFont" />
       <input
         class="tb-size"
         type="number"
@@ -202,6 +193,7 @@ import { t } from '../../i18n'
 import { BUILTIN_NAMES } from '../../editor/styles.js'
 import { ptToMm, mmToPt, num } from '../../editor/css.js'
 import { loadFont } from '../../editor/fonts.js'
+import FontPicker from './FontPicker.vue'
 import {
   FONT_SIZES,
   LINE_HEIGHTS,
@@ -215,6 +207,7 @@ import {
   clearFormatting,
   setLink,
   setCharStyle,
+  fontsInSelection,
 } from '../../editor/commands.js'
 import { setScriptMode } from '../../editor/script.js'
 import { insertTable } from '../../editor/tables.js'
@@ -233,6 +226,7 @@ const props = defineProps({
   spellOn: { type: Boolean, default: false }, // the spellchecker (useSpellcheck)
   showTags: { type: Boolean, default: true }, // the underlines of tagged characters and spells
   painter: { type: Boolean, default: false }, // the Format Painter is armed
+  fonts: { type: Array, default: () => [] }, // the font picker's list
 })
 const emit = defineEmits(['find', 'panel', 'focus', 'picture', 'read', 'comment', 'spell', 'tags', 'painter'])
 // A double click is two clicks and a dblclick: the second click is left to it.
@@ -256,6 +250,8 @@ const linkText = ref('')
 const linkEl = ref(null)
 
 const fmt = computed(() => selectionFormat(props.state, props.styles))
+// Two or more: the font box is blank, as in Word.
+const selFonts = computed(() => fontsInSelection(props.state, props.styles))
 const canUndo = computed(() => undoDepth(props.state) > 0)
 const canRedo = computed(() => redoDepth(props.state) > 0)
 const paragraphStyles = computed(() => props.styles.filter((s) => (s.kind || 'paragraph') === 'paragraph'))

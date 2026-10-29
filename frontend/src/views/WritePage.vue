@@ -21,6 +21,7 @@
       class="write-tools"
       :state="editorState"
       :styles="styles"
+      :fonts="fontList"
       :exec="exec"
       :online="online"
       :focus-mode="focusMode"

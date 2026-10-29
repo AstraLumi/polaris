@@ -951,6 +951,27 @@ Open Font License 1.1) and Turret Road (…)." System fonts are left out.
 Text that comes from font files is shown as plain text, never as HTML.
 Screenshot: `writeShots.mjs --only fonts`.
 
+### Font picker
+
+The toolbar's font box is `components/write/FontPicker.vue`, not a
+datalist: a datalist hides every font that doesn't match the text in the
+box, and picking the font already shown changes nothing. The picker lists
+every font (`fontChoices`) in sections (`fontSections` in
+`editor/fontSearch.js`, pure, `tests/fontSearch.test.mjs`): while typing,
+the best matches first (`fontScore`: exact, start of the name, start of a
+word, every typed word, anywhere, letters in order), then the favourites
+(★ on a row), the last 6 fonts used, then all fonts. A first row, "The
+style's font", takes the font mark off. Enter or a click puts the font on
+the whole selection (`setMark`), even the font shown, so a line in several
+fonts becomes one; Esc or a click away changes nothing. With two or more
+fonts selected (`fontsInSelection` in `editor/commands.js`: the font marks,
+else the paragraph style's font) the box is blank, saying "Several fonts".
+The bundled and library fonts are loaded when the list first opens, so
+they show in their own faces; Google fonts show in theirs only once used.
+Favourites and recent fonts are kept in `localStorage`
+(`polaris-write-font-favourites`, `polaris-write-font-recent`). Screenshot:
+`writeShots.mjs --only fontpicker`.
+
 ### Symbols
 
 The toolbar's Ω opens the Symbols panel (`components/write/SymbolsPanel.vue`):

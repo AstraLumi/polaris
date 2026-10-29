@@ -10,7 +10,7 @@
 // Tab through the cells, a table pasted from Word) and in the page view
 // (rows breaking across pages, the header row repeated).
 //
-//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes|wrap|import|speaker|painter|pages|fonts|symbols]
+//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes|wrap|import|speaker|painter|pages|fonts|symbols|fontpicker]
 //
 // --only spell: just the spellchecker (underlines, the menu on a word, Add
 // to dictionary, Ignore, typing, the spelling panel, dark paper, off).
@@ -515,6 +515,10 @@ async function shoot() {
   }
   if (option('only', '') === 'fonts') {
     await fontShots(page, snap, checks)
+    return { saved, errors, checks }
+  }
+  if (option('only', '') === 'fontpicker') {
+    await fontPickerShots(page, snap, checks)
     return { saved, errors, checks }
   }
   if (option('only', '') === 'symbols') {
@@ -1069,6 +1073,68 @@ async function fontShots(page, snap, checks) {
   await page.waitForFunction(() => document.querySelectorAll('[data-sym-row]').length === 1)
   assert.deepEqual(db.swaps.at(-1), { family: 'Mystery Face', to, what: 'chars', chars: '★', label: 'Before changing the font Mystery Face' })
   checks.push(`fonts list: spaces to the body font, ★ to ${to} (other fonts with the star: ${alts.length})`)
+}
+
+// The toolbar's font picker (--only fontpicker): a line in two fonts made
+// one; typing pulls the best match up without hiding the rest; favourites.
+async function fontPickerShots(page, snap, checks) {
+  const font = (family) => ({ type: 'font', attrs: { family } })
+  db.texts[12] = { doc: { type: 'doc', content: [para(null, txt('Obsidian Spark, ', font('Turret Road')), txt('Lv.58', font('Orbitron')), txt(' — Technomancer'))] }, version: 2, updated_at: now() }
+  await page.goto(`${BASE}/write/1?chapter=12`)
+  await page.waitForSelector('.write-doc p')
+  await page.locator('.write-doc p').first().click()
+  await page.keyboard.press('Home')
+  await page.keyboard.press('Shift+End')
+  await settle(page, 300)
+  const box = page.locator('[data-font-picker]')
+  assert.equal(await box.inputValue(), '', 'a line in several fonts: the box is blank')
+  assert.equal(await box.getAttribute('placeholder'), 'Several fonts')
+  await box.click()
+  const list = page.locator('[data-font-list]')
+  await list.waitFor()
+  const all = await list.locator('[data-font-option]').count()
+  await page.keyboard.type('tur')
+  const first = await list.locator('[data-font-option]').first().getAttribute('data-font-option')
+  assert.equal(first, 'Turret Road', 'the best match on top')
+  assert.equal(await list.locator('[data-font-option]').count(), all, 'every font still listed')
+  await page.keyboard.press('Enter')
+  await settle(page, 300)
+  const fonts = () => page.evaluate(() => [...document.querySelectorAll('.write-doc p [data-font]')].map((e) => e.dataset.font))
+  assert.deepEqual([...new Set(await fonts())], ['Turret Road'], 'the whole line in one font')
+  assert.equal(await box.inputValue(), 'Turret Road')
+
+  // The font shown, picked again from the list, still goes on the whole selection.
+  await page.locator('.write-doc p').first().click()
+  await page.keyboard.press('End')
+  for (let i = 0; i < 13; i++) await page.keyboard.press('Shift+ArrowLeft')
+  await box.click()
+  await page.keyboard.type('orbitron')
+  await page.keyboard.press('Enter')
+  await settle(page, 300)
+  assert.deepEqual([...new Set(await fonts())], ['Turret Road', 'Orbitron'])
+  await page.locator('.write-doc p').first().click()
+  await page.keyboard.press('End')
+  await page.keyboard.press('Shift+Home')
+  await settle(page, 300)
+  assert.equal(await box.inputValue(), '')
+  await box.click()
+  await list.locator('[data-font-option="Turret Road"] button[role=option]').first().click()
+  await settle(page, 300)
+  assert.deepEqual([...new Set(await fonts())], ['Turret Road'], 'picking the same font again applies it')
+
+  // Favourites and recent fonts near the top.
+  await box.click()
+  await list.locator('[data-font-option="Orbitron"]').last().hover()
+  await list.locator('[data-font-option="Orbitron"] [data-font-star]').last().click()
+  const heads = await list.locator('.fp-head').allInnerTexts()
+  assert.deepEqual(heads.map((h) => h.trim().toLowerCase()), ['favourites', 'recently used', 'all fonts'])
+  assert.equal(await list.locator('[data-font-option]').first().getAttribute('data-font-option'), 'Orbitron')
+  await page.keyboard.type('noto sym')
+  await snap('18_font_picker.png')
+  const top = await list.locator('[data-font-option]').first().getAttribute('data-font-option')
+  assert.equal(top, 'Noto Sans Symbols')
+  await page.keyboard.press('Escape')
+  checks.push(`font picker: a two-font line made Turret Road (typed and picked again); ${all} fonts listed while typing; "noto sym" → ${top}; Orbitron starred`)
 }
 
 // The Symbols panel (--only symbols): a font's symbols by kind, inserted at the cursor.
