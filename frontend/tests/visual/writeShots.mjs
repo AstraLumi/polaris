@@ -467,6 +467,8 @@ async function newPage(browser, viewport, errors) {
   await context.route('**/api/**', fakeApi)
   await context.route('**/uploads/**', (route) => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="220" height="160"><rect width="220" height="160" fill="#d9a441"/><circle cx="110" cy="80" r="50" fill="#3366cc"/></svg>' }))
   const page = await context.newPage()
+  page.fontRequests = []
+  page.on('request', (r) => /fonts\.(googleapis|gstatic)\.com|\/fonts\//.test(r.url()) && page.fontRequests.push(r.url()))
   page.on('pageerror', (e) => errors.push(e.message))
   page.on('console', (m) => m.type() === 'error' && !/404|Failed to load resource/.test(m.text()) && errors.push(m.text()))
   return page
@@ -546,6 +548,19 @@ async function shoot() {
   await page.waitForSelector('.write-doc h1')
   await page.waitForFunction(() => document.fonts.check('8pt Merriweather') && document.fonts.check('9pt "Turret Road"'), null, { timeout: 15000 }).catch(() => checks.push('fonts did not load (offline?)'))
   await settle(page, 800)
+  // Bundled fonts come from /fonts/, never from Google.
+  const jp = await page.evaluate(async () => {
+    const { loadFont } = await import('/src/editor/fonts.js')
+    await loadFont('Noto Serif JP')
+    await document.fonts.load('16px "Noto Serif JP"', '日本語')
+    return document.fonts.check('16px "Noto Serif JP"', '日本語')
+  })
+  const reqs = page.fontRequests
+  // (the interface's own Fraunces and Manrope still come from Google, index.html)
+  const google = reqs.filter((u) => /googleapis|gstatic/.test(u) && !/fraunces|manrope/i.test(u))
+  const local = (n) => reqs.some((u) => u.includes('/fonts/' + n + '/') && u.endsWith('.woff2'))
+  if (google.length || !jp || !local('merriweather') || !local('turret-road') || !local('noto-serif-jp')) checks.push('bundled fonts: NOT served locally ' + JSON.stringify({ jp, google, n: reqs.length }))
+  else checks.push('bundled fonts: Merriweather, Turret Road and Noto Serif JP load from /fonts/, none from Google (' + reqs.length + ' requests)')
   await snap('02_a6_book.png')
 
   // Clicking a word puts the cursor in that word, at this zoom.

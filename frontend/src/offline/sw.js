@@ -129,6 +129,7 @@ self.addEventListener('fetch', (event) => {
     if (path.startsWith('/uploads/')) return event.respondWith(network(req, () => caches.match(req)))
     if (req.mode === 'navigate') return event.respondWith(appPage(req))
     if (path.startsWith('/assets/')) return event.respondWith(keptFirst(req, APP))
+    if (path.startsWith('/fonts/')) return event.respondWith(keptFirst(req, FONTS, req.url)) // bundled fonts
     if (path.startsWith('/dict/')) return event.respondWith(keptFirst(req, DICT, req.url))
     return event.respondWith(network(req, async () => (await (await caches.open(APP)).match(req)) || null))
   }

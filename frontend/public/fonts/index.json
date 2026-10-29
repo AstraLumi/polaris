@@ -1,0 +1,132 @@
+[
+  {
+    "family": "Merriweather",
+    "slug": "merriweather",
+    "group": "Book and headings"
+  },
+  {
+    "family": "Literata",
+    "slug": "literata",
+    "group": "Book and headings"
+  },
+  {
+    "family": "Crimson Pro",
+    "slug": "crimson-pro",
+    "group": "Book and headings"
+  },
+  {
+    "family": "Cinzel",
+    "slug": "cinzel",
+    "group": "Book and headings"
+  },
+  {
+    "family": "Cormorant Garamond",
+    "slug": "cormorant-garamond",
+    "group": "Book and headings"
+  },
+  {
+    "family": "Playfair Display",
+    "slug": "playfair-display",
+    "group": "Book and headings"
+  },
+  {
+    "family": "Orbitron",
+    "slug": "orbitron",
+    "group": "System windows"
+  },
+  {
+    "family": "Turret Road",
+    "slug": "turret-road",
+    "group": "System windows"
+  },
+  {
+    "family": "Exo 2",
+    "slug": "exo-2",
+    "group": "System windows"
+  },
+  {
+    "family": "Rajdhani",
+    "slug": "rajdhani",
+    "group": "System windows"
+  },
+  {
+    "family": "Share Tech Mono",
+    "slug": "share-tech-mono",
+    "group": "System windows"
+  },
+  {
+    "family": "VT323",
+    "slug": "vt323",
+    "group": "System windows"
+  },
+  {
+    "family": "Press Start 2P",
+    "slug": "press-start-2p",
+    "group": "System windows"
+  },
+  {
+    "family": "Caveat",
+    "slug": "caveat",
+    "group": "Handwriting and sound effects"
+  },
+  {
+    "family": "Patrick Hand",
+    "slug": "patrick-hand",
+    "group": "Handwriting and sound effects"
+  },
+  {
+    "family": "Kalam",
+    "slug": "kalam",
+    "group": "Handwriting and sound effects"
+  },
+  {
+    "family": "Bangers",
+    "slug": "bangers",
+    "group": "Handwriting and sound effects"
+  },
+  {
+    "family": "Permanent Marker",
+    "slug": "permanent-marker",
+    "group": "Handwriting and sound effects"
+  },
+  {
+    "family": "Noto Serif JP",
+    "slug": "noto-serif-jp",
+    "group": "Japanese"
+  },
+  {
+    "family": "Noto Sans JP",
+    "slug": "noto-sans-jp",
+    "group": "Japanese"
+  },
+  {
+    "family": "Zen Old Mincho",
+    "slug": "zen-old-mincho",
+    "group": "Japanese"
+  },
+  {
+    "family": "Shippori Mincho",
+    "slug": "shippori-mincho",
+    "group": "Japanese"
+  },
+  {
+    "family": "Noto Sans Symbols",
+    "slug": "noto-sans-symbols",
+    "group": "Symbols"
+  },
+  {
+    "family": "Noto Sans Symbols 2",
+    "slug": "noto-sans-symbols-2",
+    "group": "Symbols"
+  },
+  {
+    "family": "Noto Sans Math",
+    "slug": "noto-sans-math",
+    "group": "Symbols"
+  },
+  {
+    "family": "Noto Emoji",
+    "slug": "noto-emoji",
+    "group": "Symbols"
+  }
+]

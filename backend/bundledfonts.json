@@ -1,0 +1,288 @@
+{
+  "bangers": {
+    "family": "Bangers",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2010 The Bangers Project Authors (https://github.com/googlefonts/bangers)",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Vernon Adams",
+    "metrics": {
+      "win": 1.757,
+      "hhea": 1.064
+    }
+  },
+  "caveat": {
+    "family": "Caveat",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2014 The Caveat Project Authors (https://github.com/googlefonts/caveat)",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Impallari Type",
+    "metrics": {
+      "win": 1.289,
+      "hhea": 1.26
+    }
+  },
+  "cinzel": {
+    "family": "Cinzel",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2020 The Cinzel Project Authors (https://github.com/NDISCOVER/Cinzel)",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Natanael Gama",
+    "metrics": {
+      "win": 1.348,
+      "hhea": 1.348
+    }
+  },
+  "cormorant garamond": {
+    "family": "Cormorant Garamond",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2015 The Cormorant Project Authors (github.com/CatharsisFonts/Cormorant)",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Christian Thalmann",
+    "metrics": {
+      "win": 1.38,
+      "hhea": 1.211
+    }
+  },
+  "crimson pro": {
+    "family": "Crimson Pro",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2018 The Crimson Pro Project Authors (https://github.com/Fonthausen/CrimsonPro)",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Jacques Le Bailly",
+    "metrics": {
+      "win": 1.271,
+      "hhea": 1.111
+    }
+  },
+  "exo 2": {
+    "family": "Exo 2",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2013 The Exo 2 Project Authors (https://github.com/googlefonts/Exo-2.0)",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Natanael Gama",
+    "metrics": {
+      "win": 1.469,
+      "hhea": 1.2
+    }
+  },
+  "kalam": {
+    "family": "Kalam",
+    "license": "OFL-1.1",
+    "copyright": "Copyright (c) 2014 Indian Type Foundry (info@indiantypefoundry.com)",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Indian Type Foundry",
+    "metrics": {
+      "win": 1.594,
+      "hhea": 1.594
+    }
+  },
+  "literata": {
+    "family": "Literata",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2017 The Literata Project Authors (https://github.com/googlefonts/literata)",
+    "license_url": "https://openfontlicense.org",
+    "designer": "TypeTogether",
+    "metrics": {
+      "win": 1.485,
+      "hhea": 1.485
+    }
+  },
+  "merriweather": {
+    "family": "Merriweather",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2024 The Merriweather Project Authors (https://github.com/EbenSorkin/Merriweather4) with Reserved Font Name \\",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Sorkin Type",
+    "metrics": {
+      "win": 1.732,
+      "hhea": 1.257
+    }
+  },
+  "noto emoji": {
+    "family": "Noto Emoji",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2013, 2022 Google Inc. All Rights Reserved.",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Google",
+    "metrics": {
+      "win": 1.172,
+      "hhea": 1.172
+    }
+  },
+  "noto sans jp": {
+    "family": "Noto Sans JP",
+    "license": "OFL-1.1",
+    "copyright": "(c) 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'.",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Google",
+    "metrics": {
+      "win": 1.448,
+      "hhea": 1.448
+    }
+  },
+  "noto sans math": {
+    "family": "Noto Sans Math",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2022 Google LLC. All Rights Reserved.",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Google",
+    "metrics": {
+      "win": 5.655,
+      "hhea": 1.492
+    }
+  },
+  "noto sans symbols 2": {
+    "family": "Noto Sans Symbols 2",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2022 The Noto Project Authors (https://github.com/notofonts/symbols)",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Google",
+    "metrics": {
+      "win": 1.699,
+      "hhea": 1.699
+    }
+  },
+  "noto sans symbols": {
+    "family": "Noto Sans Symbols",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2022 The Noto Project Authors (https://github.com/notofonts/symbols)",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Google",
+    "metrics": {
+      "win": 2.05,
+      "hhea": 2.05
+    }
+  },
+  "noto serif jp": {
+    "family": "Noto Serif JP",
+    "license": "OFL-1.1",
+    "copyright": "(c) 2017-2024 Adobe (http://www.adobe.com/).",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Google",
+    "metrics": {
+      "win": 1.437,
+      "hhea": 1.437
+    }
+  },
+  "orbitron": {
+    "family": "Orbitron",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2018 The Orbitron Project Authors (https://github.com/theleagueof/orbitron)",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Matt McInerney",
+    "metrics": {
+      "win": 1.254,
+      "hhea": 1.254
+    }
+  },
+  "patrick hand": {
+    "family": "Patrick Hand",
+    "license": "OFL-1.1",
+    "copyright": "Copyright (c) 2010-2012 Patrick Wagesreiter (mail@patrickwagesreiter.at)",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Patrick Wagesreiter",
+    "metrics": {
+      "win": 1.354,
+      "hhea": 1.354
+    }
+  },
+  "permanent marker": {
+    "family": "Permanent Marker",
+    "license": "Apache-2.0",
+    "copyright": "Copyright (c) 2010 by Font Diner, Inc. All rights reserved.",
+    "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
+    "designer": "Font Diner",
+    "metrics": {
+      "win": 1.457,
+      "hhea": 1.457
+    }
+  },
+  "playfair display": {
+    "family": "Playfair Display",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2017 The Playfair Display Project Authors (https://github.com/clauseggers/Playfair-Display), with Reserved Font Name \\",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Claus Eggers Sørensen",
+    "metrics": {
+      "win": 1.41,
+      "hhea": 1.333
+    }
+  },
+  "press start 2p": {
+    "family": "Press Start 2P",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2012 The Press Start 2P Project Authors (cody@zone38.net), with Reserved Font Name \\",
+    "license_url": "https://openfontlicense.org",
+    "designer": "CodeMan38",
+    "metrics": {
+      "win": 1.374,
+      "hhea": 1
+    }
+  },
+  "rajdhani": {
+    "family": "Rajdhani",
+    "license": "OFL-1.1",
+    "copyright": "Copyright (c) 2014 Indian Type Foundry (info@indiantypefoundry.com)",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Indian Type Foundry",
+    "metrics": {
+      "win": 1.276,
+      "hhea": 1.276
+    }
+  },
+  "share tech mono": {
+    "family": "Share Tech Mono",
+    "license": "OFL-1.1",
+    "copyright": "Copyright (c) 2012, Carrois Type Design, Ralph du Carrois (www.carrois.com post@carrois.com), with Reserved Font Name \\'Share\\'",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Carrois Apostrophe",
+    "metrics": {
+      "win": 1.127,
+      "hhea": 1.127
+    }
+  },
+  "shippori mincho": {
+    "family": "Shippori Mincho",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2021 The Shippori Mincho Project Authors (https://github.com/fontdasu/ShipporiMincho)",
+    "license_url": "https://openfontlicense.org",
+    "designer": "FONTDASU",
+    "metrics": {
+      "win": 1.448,
+      "hhea": 1.448
+    }
+  },
+  "turret road": {
+    "family": "Turret Road",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2018 The Turret Road Project Authors (https://github.com/noponies/turret-road)",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Dale Sattler",
+    "metrics": {
+      "win": 1.177,
+      "hhea": 1.093
+    }
+  },
+  "vt323": {
+    "family": "VT323",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2011, The VT323 Project Authors (peter.hull@oikoi.com)",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Peter Hull",
+    "metrics": {
+      "win": 1.28,
+      "hhea": 1
+    }
+  },
+  "zen old mincho": {
+    "family": "Zen Old Mincho",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2021 The Zen Old Mincho Project Authors (https://github.com/googlefonts/zen-oldmincho)",
+    "license_url": "https://openfontlicense.org",
+    "designer": "Yoshimichi Ohira",
+    "metrics": {
+      "win": 1.448,
+      "hhea": 1.448
+    }
+  }
+}

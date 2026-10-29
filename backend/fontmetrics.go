@@ -103,6 +103,9 @@ func (l *fontLibrary) metricsFor(family string) (lineMetrics, bool) {
 	if m, ok := l.fileMetrics(key); ok {
 		return m, true
 	}
+	if b, ok := bundledFonts[key]; ok && b.Metrics != nil {
+		return *b.Metrics, true // bundled fonts need no Google
+	}
 	c := &l.metrics
 	c.mu.Lock()
 	defer c.mu.Unlock()

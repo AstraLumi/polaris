@@ -871,6 +871,20 @@ Not verified: the page in a real browser (only the build and the node and
 Go tests), and readers opening the embedded fonts (the obfuscation
 round-trip is tested).
 
+### Bundled fonts
+
+The app ships 26 Google Fonts families (OFL-1.1 or Apache-2.0 only: book and
+heading serifs, system-window and handwriting display faces, Japanese, symbols)
+in `frontend/public/fonts/<slug>/` (woff2 split by unicode-range, one
+`<slug>.css`, the license text), served at `/fonts/`. `scripts/fetch-fonts.mjs`
+downloads and regenerates all of it, plus `backend/bundledfonts.json` (license,
+copyright, designer, line metrics read from the TTF, so `/api/fonts/line-metrics`
+needs no Google for them), `src/editor/bundledFonts.js` (the family list) and
+`public/fonts/README.md`. `loadFont` adds the family's local stylesheet (the page
+view and PDF use the same document fonts); the service worker keeps `/fonts/`
+for offline writing. A library family of the same name wins. The EPUB export
+does not embed bundled fonts (only library fonts); readers use their own.
+
 ### Fonts and licenses
 
 The Book and page panel's "Fonts and licenses" section tells a writer every
@@ -883,8 +897,9 @@ the fonts a .docx import brought count too) plus:
 - `source`, in this order: `library` (the fonts library: `license_kind`,
   `source`, `allowed` = the family's print/ebook/web/commercial flags, and
   copyright, license and designer from its files), `bundled` (the app's own
-  fonts: `bundledFonts` in `backend/bundledfonts.go`, family in lower case →
-  license, copyright, license URL, designer), `system` (the proprietary fonts
+  fonts: `bundledFonts` in `backend/bundledfonts.go`, read from the generated
+  `bundledfonts.json`, family in lower case → license, copyright, license URL,
+  designer, line metrics), `system` (the proprietary fonts
   most computers have: `systemFonts`, mirrored from `SYSTEM_FONTS` in
   `frontend/src/editor/fonts.js`; never asked of Google), `google` (read
   from the family's TTF, name IDs 0, 13 and 14, through the same fetch as the

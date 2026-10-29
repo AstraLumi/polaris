@@ -1,0 +1,8 @@
+/* all */
+@font-face {
+  font-family: 'Noto Sans Math';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/fonts/noto-sans-math/400-all.woff2) format('woff2');
+}
