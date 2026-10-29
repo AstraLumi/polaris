@@ -1,24 +1,31 @@
 <template>
   <!-- In <body>, at the click (like SpellMenu). First a small menu, then the
-       character picker; the keyboard shortcut opens the picker at once. -->
+       character or spell picker; the keyboard shortcut opens the character
+       picker at once. -->
   <Teleport to="body">
-    <ul v-if="step === 'menu'" ref="root" class="row-menu-list speaker-tag-menu" role="menu" :aria-label="$t('Tag character')" :style="style" @keydown="onMenuKey">
+    <ul v-if="step === 'menu'" ref="root" class="row-menu-list speaker-tag-menu" role="menu" :aria-label="$t('Tags')" :style="style" @keydown="onMenuKey">
       <li role="none">
         <button type="button" role="menuitem" class="menu-item" @mousedown.prevent @click="step = 'pick'">{{ hasTag ? $t('Change character…') : $t('Tag character…') }}</button>
       </li>
+      <li role="none">
+        <button type="button" role="menuitem" class="menu-item" @mousedown.prevent @click="step = 'spell'">{{ hasSpell ? $t('Change spell…') : $t('Tag spell…') }}</button>
+      </li>
       <li v-if="hasTag" role="none">
-        <button type="button" role="menuitem" class="menu-item" @mousedown.prevent @click="$emit('remove')">{{ $t('Remove tag') }}</button>
+        <button type="button" role="menuitem" class="menu-item" @mousedown.prevent @click="$emit('remove')">{{ $t('Remove character tag') }}</button>
+      </li>
+      <li v-if="hasSpell" role="none">
+        <button type="button" role="menuitem" class="menu-item" @mousedown.prevent @click="$emit('remove-spell')">{{ $t('Remove spell tag') }}</button>
       </li>
     </ul>
-    <div v-else ref="root" class="row-menu-list speaker-tag-pick" role="dialog" :aria-label="$t('Who said this?')" :style="style" @mousedown.stop>
-      <input ref="inputEl" v-model="typed" type="text" maxlength="200" class="speaker-tag-input" :placeholder="$t('Character…')" :aria-label="$t('Who said this?')" @keydown="onPickKey" />
+    <div v-else ref="root" class="row-menu-list speaker-tag-pick" role="dialog" :aria-label="isSpell ? $t('Which spell?') : $t('Who said this?')" :style="style" @mousedown.stop>
+      <input ref="inputEl" v-model="typed" type="text" maxlength="200" class="speaker-tag-input" :placeholder="isSpell ? $t('Spell…') : $t('Character…')" :aria-label="isSpell ? $t('Which spell?') : $t('Who said this?')" @keydown="onPickKey" />
       <ul class="speaker-tag-list" role="listbox">
         <li v-for="(c, i) in shown" :key="c.id" role="none">
-          <button type="button" role="option" :aria-selected="i === at" class="menu-item" :class="{ 'is-on': i === at }" @mousedown.prevent @click="$emit('pick', { id: c.id, name: c.name })">{{ c.name }}</button>
+          <button type="button" role="option" :aria-selected="i === at" class="menu-item" :class="{ 'is-on': i === at }" @mousedown.prevent @click="choose(c)">{{ c.name }}</button>
         </li>
-        <li v-if="!shown.length && !typed.trim()" class="spell-note" role="none">{{ $t('No characters yet') }}</li>
+        <li v-if="!shown.length && !typed.trim()" class="spell-note" role="none">{{ isSpell ? $t('No spells yet') : $t('No characters yet') }}</li>
       </ul>
-      <button v-if="typed.trim() && !exact" type="button" class="menu-item speaker-tag-other" @mousedown.prevent @click="$emit('pick', { id: null, name: typed.trim() })">{{ $t('Use “{name}” (not a character)', { name: typed.trim() }) }}</button>
+      <button v-if="!isSpell && typed.trim() && !exact" type="button" class="menu-item speaker-tag-other" @mousedown.prevent @click="$emit('pick', { id: null, name: typed.trim() })">{{ $t('Use “{name}” (not a character)', { name: typed.trim() }) }}</button>
     </div>
   </Teleport>
 </template>
@@ -34,11 +41,13 @@ const props = defineProps({
   x: { type: Number, required: true },
   y: { type: Number, required: true },
   characters: { type: Array, default: () => [] }, // [{ id, name }]
+  spells: { type: Array, default: () => [] }, // [{ id, name, level }]
   hasTag: { type: Boolean, default: false },
+  hasSpell: { type: Boolean, default: false },
   direct: { type: Boolean, default: false }, // open the picker at once
   current: { type: String, default: '' },
 })
-const emit = defineEmits(['pick', 'remove', 'close'])
+const emit = defineEmits(['pick', 'pick-spell', 'remove', 'remove-spell', 'close'])
 
 const step = ref(props.direct ? 'pick' : 'menu')
 const root = ref(null)
@@ -47,9 +56,11 @@ const typed = ref('')
 const at = ref(0)
 
 const fold = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+const isSpell = computed(() => step.value === 'spell')
+const options = computed(() => (isSpell.value ? props.spells : props.characters))
 const shown = computed(() => {
   const q = fold(typed.value.trim())
-  const list = q ? props.characters.filter((c) => fold(c.name).includes(q)) : props.characters
+  const list = q ? options.value.filter((c) => fold(c.name).includes(q)) : options.value
   return [...list].sort((a, b) => (fold(a.name).startsWith(q) ? 0 : 1) - (fold(b.name).startsWith(q) ? 0 : 1)).slice(0, 40)
 })
 const exact = computed(() => props.characters.some((c) => fold(c.name) === fold(typed.value.trim())))
@@ -58,7 +69,7 @@ const style = computed(() => {
   const vw = window.innerWidth
   const vh = window.innerHeight
   const w = 240
-  const h = step.value === 'pick' ? 280 : 90
+  const h = step.value === 'menu' ? 140 : 280
   const left = Math.max(8, Math.min(props.x, vw - w - 8))
   const top = props.y + h + 8 > vh ? Math.max(8, props.y - h - 4) : props.y + 4
   return { left: `${left}px`, top: `${top}px` }
@@ -66,7 +77,7 @@ const style = computed(() => {
 
 function focusFirst() {
   nextTick(() => {
-    if (step.value === 'pick') inputEl.value?.focus()
+    if (step.value !== 'menu') inputEl.value?.focus()
     else root.value?.querySelector('.menu-item')?.focus()
   })
 }
@@ -78,6 +89,10 @@ function onMenuKey(e) {
   else return
   e.preventDefault()
 }
+function choose(c) {
+  if (isSpell.value) emit('pick-spell', { id: c.id, name: c.name })
+  else emit('pick', { id: c.id, name: c.name })
+}
 function onPickKey(e) {
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
     e.preventDefault()
@@ -86,8 +101,8 @@ function onPickKey(e) {
   } else if (e.key === 'Enter') {
     e.preventDefault()
     const c = shown.value[at.value]
-    if (c) emit('pick', { id: c.id, name: c.name })
-    else if (typed.value.trim()) emit('pick', { id: null, name: typed.value.trim() })
+    if (c) choose(c)
+    else if (!isSpell.value && typed.value.trim()) emit('pick', { id: null, name: typed.value.trim() })
   }
 }
 const onDown = (e) => {

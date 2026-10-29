@@ -1,5 +1,5 @@
 <template>
-  <div class="write-page" :class="{ 'is-focus': focusMode, 'is-dark-paper': darkPaper }" :style="pageVars">
+  <div class="write-page" :class="{ 'is-focus': focusMode, 'is-dark-paper': darkPaper, 'hide-tags': !showTags }" :style="pageVars">
     <div v-if="!focusMode" class="write-head">
       <Breadcrumbs :crumbs="crumbs">
         <RouterLink v-if="chapterId" :to="`/chapters/${chapterId}`" class="notes-link">{{ $t('Chapter notes') }}</RouterLink>
@@ -30,6 +30,8 @@
       :reading="readInfo.status !== 'idle'"
       @read="reader.toggle()"
       :spell-on="spell.enabled.value"
+      :show-tags="showTags"
+      @tags="showTags = !showTags"
       @spell="spell.enabled.value = !spell.enabled.value"
       @picture="pickPicture"
       @find="openFind(false)"
@@ -191,12 +193,17 @@
       :x="speakerTag.x"
       :y="speakerTag.y"
       :characters="names.characters.value"
+      :spells="spellChoices(spellList)"
       :has-tag="!!speakerTag.tag"
+      :has-spell="!!speakerTag.spell"
       :direct="!!speakerTag.direct"
       @pick="pickSpeakerTag"
+      @pick-spell="pickSpellTag"
       @remove="removeSpeakerTag"
+      @remove-spell="removeSpellTag"
       @close="closeSpeakerTag"
     />
+    <TagCard :enabled="showTags" :load-spells="loadSpells" />
     <SpellMenu
       v-if="spellMenu"
       :word="spellMenu.word"
@@ -245,7 +252,7 @@ import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { EditorState, NodeSelection, TextSelection } from 'prosemirror-state'
 import { EditorView } from 'prosemirror-view'
 import { t, tr, locale } from '../i18n'
-import { chaptersApi } from '../api'
+import { chaptersApi, spellsApi } from '../api'
 import { activeStoryId } from '../stories'
 import { chapterIndex, loadChapters } from '../chapters'
 import { pageTitle } from '../navigation'
@@ -293,7 +300,9 @@ import { useSpellcheck } from '../editor/useSpellcheck.js'
 import { DICTIONARY_LANG } from '../editor/spellWords.js'
 import SpellMenu from '../components/write/SpellMenu.vue'
 import SpeakerTag from '../components/write/SpeakerTag.vue'
-import { speakerPlugin, tagSpeaker, removeSpeaker } from '../editor/speaker.js'
+import TagCard from '../components/write/TagCard.vue'
+import { speakerPlugin, tagSpeaker, removeSpeaker, tagSpell, removeSpell } from '../editor/speaker.js'
+import { spellChoices } from '../editor/spellTag.js'
 import SpellPanel from '../components/write/SpellPanel.vue'
 import OfflinePanel from '../components/write/OfflinePanel.vue'
 import { useOfflineBook } from '../editor/useOfflineBook.js'
@@ -406,6 +415,9 @@ const store = (k, v) => {
     /* remembered for this visit only */
   }
 }
+const TAGS_KEY = 'polaris-write-tags'
+const showTags = ref(stored(TAGS_KEY, 'on') !== 'off')
+watch(showTags, (on) => store(TAGS_KEY, on ? 'on' : 'off'))
 const darkPaper = ref(stored(PAPER_KEY, '') === 'dark')
 watch(darkPaper, (d) => store(PAPER_KEY, d ? 'dark' : 'light'))
 const zoomChoice = ref(stored(ZOOM_KEY, 'auto'))
@@ -651,7 +663,7 @@ const plugins = [
   findPlugin(),
   readAloudPlugin({ onInterrupt: () => reader.stop() }),
   commentPlugin({ known: () => new Set(comments.value.filter((c) => !c.parent_id).map((c) => c.id)) }),
-  speakerPlugin({ onMenu: openSpeakerTag, label: (name) => t('Said by {name}', { name }) }),
+  speakerPlugin({ onMenu: openSpeakerTag }),
   spellPlugin({ getSpell: () => spell.forPlugin(), onMenu: openSpellMenu }),
 ]
 const makeState = (json) => EditorState.create({ schema, doc: docFromJSON(json), plugins })
@@ -757,11 +769,37 @@ const spellOwn = computed(() => spell.enabled.value && !!spell.language.value.co
 watch(spellOwn, () => view?.setProps({}))
 watch([spell.gen, spell.status], () => refreshSpell(view, !!spell.forPlugin()))
 // "Tag character": the right-click menu / Ctrl+Alt+K picker.
-const speakerTag = ref(null) // { x, y, range, tag, direct, n }
+// "Tag spell" shares the menu. The story's spells are fetched once per page
+// (the picker and the hover card read the same list).
+const spellList = shallowRef([])
+let spellsLoad = null
+function loadSpells() {
+  spellsLoad ||= Promise.resolve()
+    .then(() => offline.cached('spells', () => spellsApi.list()))
+    .then((list) => (spellList.value = Array.isArray(list) ? list : []))
+    .catch(() => {
+      spellsLoad = null // try again next time
+      return spellList.value
+    })
+  return spellsLoad
+}
+const speakerTag = ref(null) // { x, y, range, tag, spell, direct, n }
 let speakerTagN = 0
 function openSpeakerTag(info) {
   if (readOnly.value) return
+  loadSpells()
   speakerTag.value = { ...info, n: ++speakerTagN }
+}
+function pickSpellTag(spell) {
+  const s = speakerTag.value
+  speakerTag.value = null
+  const range = s?.range || (s?.spell && { from: s.spell.from, to: s.spell.to })
+  if (view && range) exec(tagSpell(spell, range))
+}
+function removeSpellTag() {
+  const s = speakerTag.value
+  speakerTag.value = null
+  if (s?.spell && view) exec(removeSpell({ from: s.spell.from, to: s.spell.to }))
 }
 function closeSpeakerTag() {
   speakerTag.value = null

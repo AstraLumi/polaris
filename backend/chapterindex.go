@@ -240,7 +240,7 @@ func docLinkCounts(doc *pmNode) []pmLinkCount {
 				}
 			}
 		}
-		var prev *pmStoryLink
+		var prev, prevSpell *pmStoryLink
 		for _, c := range n.Content {
 			if c != nil && c.Type == "footnote" {
 				continue // a note's number doesn't split a mention; its own text is walked on its own
@@ -250,9 +250,31 @@ func docLinkCounts(doc *pmNode) []pmLinkCount {
 				add(*l)
 			}
 			prev = l
+			// A tagged spell counts as the spell appearing (once per run).
+			sp := spellMarkOf(c)
+			if sp != nil && (prevSpell == nil || *prevSpell != *sp) {
+				add(*sp)
+			}
+			prevSpell = sp
 		}
 	})
 	return out
+}
+
+// spellMarkOf is the spell a text node is tagged with ("Tag spell"), as a
+// story item.
+func spellMarkOf(n *pmNode) *pmStoryLink {
+	if n == nil || n.Type != "text" {
+		return nil
+	}
+	for _, m := range n.Marks {
+		if m.Type == "spell" {
+			if id, ok := pmInt(m.Attrs["spell"]); ok && id > 0 {
+				return &pmStoryLink{"spell", id}
+			}
+		}
+	}
+	return nil
 }
 
 func storyLinkOf(n *pmNode) *pmStoryLink {

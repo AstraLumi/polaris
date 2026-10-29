@@ -243,6 +243,10 @@ const db = {
     { type: 'faction', id: 3, name: 'The Grey Order' },
   ],
   spelling: ['Turret'],
+  spells: [
+    { id: 4, name: 'Frostbite', level: 3, icon_path: '', source_type: 'class', source_id: 1, source_name: 'Mage', mp_cost: 12, hp_cost: 5, origin_id: null, origin: '', description: 'Ice.' },
+    { id: 5, name: 'Mend', level: 1, icon_path: '', source_type: '', source_id: 0, source_name: '', mp_cost: null, hp_cost: null, origin_id: null, origin: '', description: '' },
+  ],
   puts: [],
 }
 let nextVersionId = 100
@@ -376,6 +380,13 @@ async function fakeApi(route) {
   }
   if (path === '/stat-system') return json({ defs: [], settings: {} })
   if (path === '/wiki') return json(db.wiki)
+  if (path === '/spells') return json(db.spells)
+  const article = /^\/wiki\/character\/(\d+)$/.exec(path)
+  if (article) {
+    const c = db.wiki.find((w) => w.type === 'character' && w.id === +article[1])
+    if (!c) return route.fulfill({ status: 404, contentType: 'text/plain', body: 'not found' })
+    return json({ type: 'character', id: c.id, name: c.name, picture: '/uploads/pic.png', facts: [{ key: 'race', kind: 'text', value: 'Elf' }], summary: 'A quiet scout who knows the Grey Road.', link_names: {} })
+  }
   if (path === '/spelling/words') {
     if (method === 'POST') {
       const b = body()
@@ -939,10 +950,78 @@ async function speakerShots(page, snap, checks) {
   })
   assert.ok(tagged, 'the tagged text is drawn')
   assert.equal(tagged.text, '“We’re late,”', 'trimmed of the space')
-  assert.match(tagged.title, /Oren/, 'hover title names the character')
+  assert.equal(tagged.title, undefined, 'no plain title any more: the hover card replaces it')
   assert.match(tagged.mark, /"character":2/)
-  checks.push('picking a character tags the trimmed quote (title: ' + tagged.title + ')')
+  checks.push('picking a character tags the trimmed quote')
   await page.mouse.click(5, 5)
+  // Hover card of the character tag.
+  await page.hover('.write-doc .pm-said')
+  await page.waitForSelector('.tag-card', { timeout: 5000 })
+  await page.waitForFunction(() => /quiet scout/.test(document.querySelector('.tag-card')?.textContent || ''))
+  const who = await page.locator('.tag-card').innerText()
+  assert.match(who, /Oren/)
+  assert.match(who, /Elf/)
+  assert.ok(await page.locator('.tag-card img, .tag-card svg').count(), 'the card has a picture')
+  checks.push('character card: ' + who.replace(/\s+/g, ' '))
+  await snap('13c_speaker_card.png')
+  await page.mouse.move(5, 5)
+  await page.waitForSelector('.tag-card', { state: 'detached' })
+  checks.push('the card goes away when the mouse leaves')
+  // Tag a spell on other words: "reins".
+  const spellRect = await page.evaluate(() => {
+    const w = document.createTreeWalker(document.querySelector('.write-doc'), NodeFilter.SHOW_TEXT)
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      const i = n.data.indexOf('reins')
+      if (i < 0 || n.parentElement.closest('.pm-said')) continue
+      const r = document.createRange()
+      r.setStart(n, i)
+      r.setEnd(n, i + 5)
+      const sel = getSelection()
+      sel.removeAllRanges()
+      sel.addRange(r)
+      const b = r.getBoundingClientRect()
+      return { x: b.left + b.width / 2, y: b.top + b.height / 2 }
+    }
+    return null
+  })
+  if (spellRect) {
+    await settle(page, 300)
+    await page.mouse.click(spellRect.x, spellRect.y, { button: 'right' })
+    await page.waitForSelector('.speaker-tag-menu')
+    await page.getByRole('menuitem', { name: /Tag spell/ }).click()
+    await page.waitForSelector('.speaker-tag-input')
+    await page.keyboard.type('frost')
+    await snap('13e_spell_picker.png')
+    await page.keyboard.press('Enter')
+    await settle(page, 400)
+    assert.equal(await page.locator('.write-doc .pm-spell').first().textContent(), 'reins', 'the spell tag is drawn')
+    assert.match(await page.evaluate(() => JSON.stringify(window.__writeView.state.doc.toJSON())), /"type":"spell","attrs":{"spell":4,"name":"Frostbite"/)
+    await page.mouse.click(5, 5)
+    await page.hover('.write-doc .pm-spell')
+    await page.waitForSelector('.tag-card', { timeout: 5000 })
+    await page.waitForFunction(() => /12 MP/.test(document.querySelector('.tag-card')?.textContent || ''))
+    const sp = await page.locator('.tag-card').innerText()
+    for (const want of ['Frostbite', '12 MP · 5 HP', 'Class: Mage', 'Level 3']) assert.ok(sp.includes(want), 'spell card has ' + want + ': ' + sp)
+    checks.push('spell card: ' + sp.replace(/\s+/g, ' '))
+    await snap('13f_spell_card.png')
+    await page.mouse.move(5, 5)
+    await page.waitForSelector('.tag-card', { state: 'detached' })
+  } else {
+    checks.push('SKIPPED spell tagging: no suitable words found')
+  }
+  // Show tags off: no underline, no card.
+  const underlined = () => page.evaluate(() => [...document.querySelectorAll('.write-doc .pm-said, .write-doc .pm-spell')].map((e) => getComputedStyle(e).textDecorationLine))
+  assert.ok((await underlined()).every((u) => u.includes('underline')), 'tags are underlined while shown')
+  await page.locator('.write-toolbar button[aria-label="Show tags"], button.tb-btn[aria-label="Show tags"]').first().click()
+  assert.ok((await underlined()).every((u) => u === 'none'), 'no underline with the tags hidden')
+  await page.hover('.write-doc .pm-said')
+  await settle(page, 900)
+  assert.equal(await page.locator('.tag-card').count(), 0, 'no card with the tags hidden')
+  assert.equal(await page.evaluate(() => localStorage.getItem('polaris-write-tags')), 'off')
+  checks.push('Hide tags: no underline, no card, remembered')
+  await snap('13g_tags_hidden.png')
+  await page.locator('.write-toolbar button[aria-label="Show tags"], button.tb-btn[aria-label="Show tags"]').first().click()
+  await page.mouse.move(5, 5)
   await snap('13c_speaker_tagged.png')
   // Dark paper.
   const dark = await page.$('.write-page')

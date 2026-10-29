@@ -183,6 +183,7 @@
       <button v-bind="btn(scriptMode ? t('Script Mode: on (this chapter)') : t('Script Mode: type “Name:” at a line’s start for dialogue'), scriptMode)" class="foldable" @click="exec(setScriptMode(!scriptMode))"><TbIcon name="script" /></button>
       <button v-bind="btn(readTitle, reading)" class="foldable" :disabled="!canRead" @click="$emit('read')"><TbIcon name="speaker" /></button>
       <button v-bind="btn(spellOn ? t('Check spelling: on') : t('Check spelling: off'), spellOn)" class="foldable" @click="$emit('spell')"><TbIcon name="spell" /></button>
+      <button v-bind="btn(t('Show tags'), showTags)" class="foldable" @click="$emit('tags')"><TbIcon name="tag" /></button>
       <button v-bind="btn(t('Focus mode'), focusMode)" @click="$emit('focus')"><TbIcon name="focus" /></button>
       <button type="button" class="tb-btn more-btn" :aria-expanded="more" :title="$t('More tools')" :aria-label="$t('More tools')" @click="more = !more">{{ more ? '▴' : '⋯' }}</button>
     </div>
@@ -228,8 +229,9 @@ const props = defineProps({
   canRead: { type: Boolean, default: false }, // the browser can read aloud
   reading: { type: Boolean, default: false }, // the chapter is being read
   spellOn: { type: Boolean, default: false }, // the spellchecker (useSpellcheck)
+  showTags: { type: Boolean, default: true }, // the underlines of tagged characters and spells
 })
-defineEmits(['find', 'panel', 'focus', 'picture', 'read', 'comment', 'spell'])
+defineEmits(['find', 'panel', 'focus', 'picture', 'read', 'comment', 'spell', 'tags'])
 const readTitle = computed(() =>
   props.canRead ? t('Read aloud') + ' (Ctrl+Alt+Space)' : t('Your browser cannot read aloud'),
 )
@@ -361,6 +363,7 @@ const ICONS = {
   focus: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
   speaker: 'M11 5 6 9H3v6h3l5 4zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13',
   script: 'M4 5h16v11H10l-4 3v-3H4zM8 9h8M8 12h5',
+  tag: 'M3 12V4h8l9 9-8 8zM7.5 8.5h.01',
   comment: 'M4 4h16v12H9l-5 4zM12 7v6M9 10h6',
   comments: 'M3 4h12v8H8l-3 3v-3H3zM18 8h3v9h-2v3l-3-3h-5v-2',
   spell: 'M3 14 6.5 5l3.5 9M4.3 11h4.4M12 5v9h2.5a2.2 2.2 0 0 0 0-4.5H12M13 18l3 3 6-7',

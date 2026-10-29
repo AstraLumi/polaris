@@ -153,6 +153,11 @@ Marks:
   kept so a deleted character still reads). At most one per text, not
   inclusive. Paragraphs and headings may carry it (the editor tags
   paragraphs). It never shows outside the writing page.
+- `spell` {`spell`, `name`} (stage 5, "Tag spell"): a spell cast in the
+  text. `spell` is a spell id (positive integer, required), `name` the
+  spell's name as shown (up to 200 characters, kept so a deleted spell
+  still reads). At most one per text, not inclusive, and it can sit on the
+  same words as a `speaker`. It never shows outside the writing page.
 
 The doc root may carry attrs: `mode`: `prose` (default) or `script`
 (stage 4: the chapter is written in Script Mode). The editor writes
@@ -1214,8 +1219,12 @@ tagged text offers "Change character…" and "Remove tag". A selection's
 menu wins over the spelling menu; a misspelled word with nothing selected
 keeps the spelling menu. (Deviation: the menus are not merged into one.)
 
-Tagged text is underlined with a thin dotted accent line and a hover title
-"Said by {name}", in the writing page only. The chapter index
+Tagged text is underlined with a thin dotted accent line, in the writing
+page only. Hovering it (after about a third of a second) shows a small
+card (`components/write/TagCard.vue`, never takes the focus or the mouse):
+the character's wiki card (picture, name, a few facts, the start of its
+text: the same `ArticleCard` the wiki's link hover uses), or just the name
+for a speaker who isn't a character or whose article can't be loaded. The chapter index
 (`indexChapterText`) records each tagged run as a `chapter_lines` row like a
 Script Mode dialogue (consecutive text nodes with the same tag are one
 line, in reading order among the chapter's dialogues), and the character
@@ -1225,6 +1234,26 @@ aloud, find, spellcheck and word count see plain text: exports and the .docx
 emitter look marks up by name and ignore this one; a Word import never makes
 it. Code: `editor/speaker.js`, `components/write/SpeakerTag.vue`,
 `markedLines` in `backend/chapterindex.go`.
+
+**Tag spell.** The same menu (right-click on selected text, or inside an
+existing tag) also offers "Tag spell…" / "Change spell…" and "Remove spell
+tag": pick one of the story's spells (type to filter) and the text gets the
+`spell` mark (`tagSpell`, `spellAt`, `removeSpell` in `editor/speaker.js`;
+one contextmenu handler serves both tags, and `onMenu` gets `tag` and
+`spell`). Drawn with a thin dashed teal underline, so it reads apart from
+the speaker's dots. Its hover card shows the spell's name and icon, its
+cost ("12 MP", "5 HP", both, or "Free"), its class ("Class: Mage", also
+subclass or specialization) and its level (`editor/spellTag.js`, from
+`GET /api/spells`, fetched once per page and, for an offline book, kept
+with it). The index counts each run of a spell mark as one mention of that
+spell (`docLinkCounts`), so the spell's "Appears in" lists the chapter. Exports,
+read aloud, find and word count see plain text; a Word import never makes
+the mark.
+
+**Show tags.** A toolbar button (tag icon, "Show tags") hides or shows the
+underlines of both kinds of tag; hidden, there is no hover card either. The
+tags themselves stay in the text and the right-click menu still works. The
+choice is remembered per browser (`localStorage` key `polaris-write-tags`).
 
 ### Pictures with text wrapping (stage 5)
 

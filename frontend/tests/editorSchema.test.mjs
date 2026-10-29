@@ -20,7 +20,7 @@ import {
 assert.deepEqual(Object.keys(schema.nodes).sort(), ['bullet_list', 'doc', 'hard_break', 'heading', 'image', 'list_item', 'ordered_list', 'page_break', 'paragraph', 'scene_break', 'tab', 'text', 'toc', 'dialogue', 'table', 'table_row', 'table_cell', 'table_header', 'footnote'].sort())
 assert.deepEqual(
   Object.keys(schema.marks).sort(),
-  ['bold', 'char_style', 'color', 'comment', 'font', 'highlight', 'italic', 'link', 'size', 'smallcaps', 'speaker', 'story_link', 'strike', 'subscript', 'superscript', 'underline'],
+  ['bold', 'char_style', 'color', 'comment', 'font', 'highlight', 'italic', 'link', 'size', 'smallcaps', 'speaker', 'spell', 'story_link', 'strike', 'subscript', 'superscript', 'underline'],
 )
 const paraAttrs = Object.keys(schema.nodes.paragraph.attrs).filter((k) => k !== 'extra').sort()
 assert.deepEqual(paraAttrs, ['align', 'boxColor', 'boxWidth', 'dropCap', 'indentFirst', 'indentLeft', 'indentRight', 'keepNext', 'lineHeight', 'shade', 'spaceAfter', 'spaceBefore', 'style'])

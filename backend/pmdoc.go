@@ -250,7 +250,7 @@ var (
 	pmBlockTypes  = map[string]bool{"paragraph": true, "heading": true, "scene_break": true, "page_break": true, "image": true, "bullet_list": true, "ordered_list": true, "toc": true, "dialogue": true}
 	pmInlineTypes = map[string]bool{"text": true, "hard_break": true, "tab": true}
 	pmAtomTypes   = map[string]bool{"scene_break": true, "page_break": true, "image": true, "toc": true, "hard_break": true, "tab": true}
-	pmMarkTypes   = map[string]bool{"bold": true, "italic": true, "underline": true, "strike": true, "superscript": true, "subscript": true, "smallcaps": true, "font": true, "size": true, "color": true, "highlight": true, "link": true, "story_link": true, "char_style": true, "speaker": true}
+	pmMarkTypes   = map[string]bool{"bold": true, "italic": true, "underline": true, "strike": true, "superscript": true, "subscript": true, "smallcaps": true, "font": true, "size": true, "color": true, "highlight": true, "link": true, "story_link": true, "char_style": true, "speaker": true, "spell": true}
 	// Marks a text may carry more than once, with different ids (stage 5's
 	// overlapping comments; comments.go).
 	pmRepeatMarks = map[string]bool{"comment": true}
@@ -683,6 +683,13 @@ func checkMarkAttrs(m pmMark) error {
 			}
 		}
 		if _, err := optString(a, "speaker", 200); err != nil {
+			return wrap(err)
+		}
+	case "spell": // a spell cast in the text (the editor's "Tag spell")
+		if id, ok := pmInt(a["spell"]); !ok || id < 1 {
+			return wrap(errors.New("attr spell: expected a spell id"))
+		}
+		if _, err := optString(a, "name", 200); err != nil {
 			return wrap(err)
 		}
 	case "story_link":

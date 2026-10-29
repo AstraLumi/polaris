@@ -527,6 +527,19 @@ export const schema = new Schema({
       parseDOM: [{ tag: 'span[data-said]', getAttrs: (el) => ({ character: +el.getAttribute('data-said') > 0 ? +el.getAttribute('data-said') : null, speaker: el.getAttribute('data-said-name') || '' }) }],
       toDOM: (mark) => ['span', { class: 'pm-said', 'data-said': String(mark.attrs.character ?? ''), 'data-said-name': mark.attrs.speaker || '' }, 0],
     },
+
+    // A spell cast in a stretch of text ("Tag spell", docs/EDITOR.md): the
+    // spell's id and its name as shown (kept so a deleted spell still
+    // reads). It counts as that spell appearing in the chapter; the writing
+    // page draws it faintly with a hover card, everything else shows plain
+    // text.
+    spell: {
+      attrs: keep({ spell: { default: null }, name: { default: '' } }),
+      inclusive: false,
+      excludes: 'spell',
+      parseDOM: [{ tag: 'span[data-spell]', getAttrs: (el) => ({ spell: +el.getAttribute('data-spell') > 0 ? +el.getAttribute('data-spell') : null, name: el.getAttribute('data-spell-name') || '' }) }],
+      toDOM: (mark) => ['span', { class: 'pm-spell', 'data-spell': String(mark.attrs.spell ?? ''), 'data-spell-name': mark.attrs.name || '' }, 0],
+    },
   },
 })
 

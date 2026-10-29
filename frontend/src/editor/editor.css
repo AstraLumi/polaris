@@ -45,6 +45,18 @@
   text-underline-offset: 3px;
 }
 
+/* Tagged spell ("Tag spell"): a thin dashed line in a cooler colour, so it
+   reads apart from a speaker's dots. "Show tags" off hides both. */
+.write-doc .pm-spell {
+  text-decoration: underline dashed 1px;
+  text-decoration-color: color-mix(in srgb, #3a9bb5 80%, var(--ink));
+  text-underline-offset: 5px;
+}
+.write-page.hide-tags .write-doc .pm-said,
+.write-page.hide-tags .write-doc .pm-spell {
+  text-decoration: none;
+}
+
 /* A comment being made (its row is on its way). The others are coloured by
    the writing page (highlightCSS in comments.js), by id. */
 .write-doc .pm-comment.is-pending {
