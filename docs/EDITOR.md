@@ -817,7 +817,9 @@ Routes (global, beside `/api/stories`):
 - `GET /uploads/fonts/{name}`: the file, its font type,
   `Cache-Control: immutable` (the name is the content), `nosniff`.
 - Under each story: `GET /api/books/{volume}/fonts`, the same per-book
-  list for one book (`[{ volume, book, family, styles, bands, chapters }]`).
+  list for one book (`[{ volume, book, family, styles, bands, chapters }]`),
+  each row also carrying its source, license and verdict (see "Fonts and
+  licenses").
 
 EPUB: the export handler gets the library from the request's context (the
 story manager adds it) and embeds the files of the families the e-book's
@@ -855,6 +857,42 @@ problem when a book's styles use the family.
 Not verified: the page in a real browser (only the build and the node and
 Go tests), and readers opening the embedded fonts (the obfuscation
 round-trip is tested).
+
+### Fonts and licenses
+
+The Book and page panel's "Fonts and licenses" section tells a writer every
+font their book uses and whether they may publish with it. It reads
+`GET /api/books/{volume}/fonts` (volume 0 = chapters without a volume;
+`backend/fontlicense.go`). One row per family: the use counts above (`styles`
+by name, header/footer `bands`, `chapters` whose text has a `font` mark, so
+the fonts a .docx import brought count too) plus:
+
+- `source`, in this order: `library` (the fonts library: `license_kind`,
+  `source`, `allowed` = the family's print/ebook/web/commercial flags, and
+  copyright, license and designer from its files), `bundled` (the app's own
+  fonts: `bundledFonts` in `backend/bundledfonts.go`, family in lower case →
+  license, copyright, license URL, designer), `system` (the proprietary fonts
+  most computers have: `systemFonts`, mirrored from `SYSTEM_FONTS` in
+  `frontend/src/editor/fonts.js`; never asked of Google), `google` (read
+  from the family's TTF, name IDs 0, 13 and 14, through the same fetch as the
+  line metrics, `googleTTF`; kept in `<data dir>/font-licenses.json`), else
+  `unknown` (Google has no such family).
+- `license_id` (`OFL-1.1`, `Apache-2.0`, `UFL-1.0` or empty), `license` (the
+  words), `license_url` (http(s) only), `copyright`, `designer`, `source_url`.
+- `verdict` with a `reason`: `ok` (open license, or a library font allowed for
+  print and e-book; reasons `open`, `uses`), `check` (a library font with some
+  uses not allowed, or whose file forbids embedding, or a license that is
+  unknown or couldn't be read; reasons `uses`, `embedding`, `unknown`), `warn`
+  (a system font: it may not be embedded in an e-book or PDF without a license
+  from its owner; reason `proprietary`). Offline, a Google family comes back
+  with source `google` and verdict `check`.
+
+"Copy credits" copies one plain-text line for the copyright page, built by
+`frontend/src/editor/fontCredits.js` (pure, `tests/fontCredits.test.mjs`):
+"Set in Merriweather (Copyright 2016 The Merriweather Project Authors; SIL
+Open Font License 1.1) and Turret Road (…)." System fonts are left out.
+Text that comes from font files is shown as plain text, never as HTML.
+Screenshot: `writeShots.mjs --only fonts`.
 
 ### Comments (stage 5)
 

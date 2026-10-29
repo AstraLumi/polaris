@@ -23,6 +23,7 @@ func newTestServer(t *testing.T) (*storyManager, http.Handler) {
 		t.Fatal(err)
 	}
 	t.Cleanup(mgr.Close)
+	mgr.fonts.googleBase = "http://127.0.0.1:1/css" // no real network in tests
 	static := fstest.MapFS{"index.html": {Data: []byte("<html>spa</html>")}}
 	return mgr, newRouter(mgr, static)
 }

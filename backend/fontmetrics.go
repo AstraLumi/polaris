@@ -167,7 +167,12 @@ func (l *fontLibrary) fileMetrics(key string) (lineMetrics, bool) {
 
 var googleFileRE = regexp.MustCompile(`url\((https?://[^)\s'"]+)\)`)
 
-func (l *fontLibrary) googleMetrics(family string) (lineMetrics, error) {
+// errNotGoogle: Google's CSS has no such family (as opposed to being
+// unreachable).
+var errNotGoogle = errors.New("not a Google font")
+
+// googleTTF fetches a Google family's regular TTF.
+func (l *fontLibrary) googleTTF(family string) ([]byte, error) {
 	base := l.googleBase
 	if base == "" {
 		base = googleFontsCSS
@@ -179,6 +184,9 @@ func (l *fontLibrary) googleMetrics(family string) (lineMetrics, error) {
 			return nil, err
 		}
 		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusNotFound {
+			return nil, errNotGoogle
+		}
 		if resp.StatusCode != http.StatusOK {
 			return nil, errNoMetrics
 		}
@@ -186,13 +194,17 @@ func (l *fontLibrary) googleMetrics(family string) (lineMetrics, error) {
 	}
 	css, err := get(base+"?family="+url.QueryEscape(family), 1<<20)
 	if err != nil {
-		return lineMetrics{}, err
+		return nil, err
 	}
 	m := googleFileRE.FindSubmatch(css)
 	if m == nil {
-		return lineMetrics{}, errNoMetrics
+		return nil, errNoMetrics
 	}
-	data, err := get(string(m[1]), maxMetricsFontSize)
+	return get(string(m[1]), maxMetricsFontSize)
+}
+
+func (l *fontLibrary) googleMetrics(family string) (lineMetrics, error) {
+	data, err := l.googleTTF(family)
 	if err != nil {
 		return lineMetrics{}, err
 	}

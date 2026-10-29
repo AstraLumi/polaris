@@ -10,7 +10,7 @@
 // Tab through the cells, a table pasted from Word) and in the page view
 // (rows breaking across pages, the header row repeated).
 //
-//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes|wrap|import|speaker|painter|pages]
+//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes|wrap|import|speaker|painter|pages|fonts]
 //
 // --only spell: just the spellchecker (underlines, the menu on a word, Add
 // to dictionary, Ignore, typing, the spelling panel, dark paper, off).
@@ -300,6 +300,17 @@ async function fakeApi(route) {
     db.chapters.push(c)
     return json(c)
   }
+  if (/^\/books\/\d+\/fonts$/.test(path)) {
+    const base = { bands: 0, chapters: 0, styles: [], source_url: '', license_id: '', license: '', license_url: '', copyright: '', designer: '' }
+    const ofl = { license_id: 'OFL-1.1', license: 'SIL Open Font License 1.1', license_url: 'https://openfontlicense.org', verdict: 'ok', reason: 'open', source: 'google' }
+    return json([
+      { ...base, ...ofl, family: 'Merriweather', styles: ['Normal', 'Heading 1'], chapters: 3, copyright: 'Copyright 2016 The Merriweather Project Authors' },
+      { ...base, ...ofl, family: 'Turret Road', styles: ['Quote'], copyright: 'Copyright 2012 The Turret Road Authors' },
+      { ...base, family: 'Shop Script', source: 'library', source_url: 'https://shop.example/script', license: 'Shop licence 4', allowed: { print: true, ebook: false, web: false, commercial: true }, verdict: 'check', reason: 'uses', bands: 1 },
+      { ...base, family: 'Georgia', source: 'system', verdict: 'warn', reason: 'proprietary', styles: ['Caption'] },
+      { ...base, family: 'Mystery Face', source: 'unknown', verdict: 'check', reason: 'unknown', chapters: 1 },
+    ])
+  }
   if ((m = /^\/books\/(\d+)\/import-docx$/.exec(path))) {
     // As the server does: the text before the first Heading 1 is front
     // matter, marked in the book's chapter options too.
@@ -488,6 +499,10 @@ async function shoot() {
   }
   if (option('only', '') === 'import') {
     await importShots(page, snap, checks)
+    return { saved, errors, checks }
+  }
+  if (option('only', '') === 'fonts') {
+    await fontShots(page, snap, checks)
     return { saved, errors, checks }
   }
   if (option('only', '') === 'pages') {
@@ -951,6 +966,38 @@ async function footnoteShots(page, snap, checks) {
 // the editor of a page-based book, the rules (widows and orphans, a hard
 // break), no oscillation, the switch, Online Post, and the first words of
 // each page against the page view's.
+// The "Fonts and licenses" list of the Book and page panel (--only fonts).
+async function fontShots(page, snap, checks) {
+  await page.goto(`${BASE}/write/1`)
+  await page.waitForSelector('.write-doc p')
+  await page.evaluate(() => {
+    window.__copied = null
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (s) => void (window.__copied = s) } })
+  })
+  await page.getByRole('button', { name: 'Book and page', exact: true }).click()
+  await page.getByText('Fonts and licenses', { exact: true }).click()
+  await page.waitForSelector('[data-font-row]')
+  await settle(page, 400)
+  const rows = await page.$$eval('[data-font-row]', (els) => els.map((e) => ({ name: e.querySelector('.font-name').textContent, verdict: e.dataset.verdict, text: e.innerText })))
+  assert.deepEqual(rows.map((r) => r.name), ['Merriweather', 'Turret Road', 'Shop Script', 'Georgia', 'Mystery Face'])
+  assert.deepEqual(rows.map((r) => r.verdict), ['ok', 'ok', 'check', 'warn', 'check'])
+  assert.ok(rows[0].text.includes('Normal, Heading 1 · 3 chapters'), rows[0].text)
+  assert.ok(rows[0].text.includes('Google Fonts') && rows[0].text.includes('SIL Open Font License 1.1'), rows[0].text)
+  assert.ok(rows[2].text.includes('Fonts library') && rows[2].text.includes('E-book'), rows[2].text)
+  assert.equal(await page.locator('[data-font-row]:nth-child(3) .tag.off').count(), 2, 'Shop Script is barred from e-book and web')
+  assert.ok(rows[3].text.includes('Proprietary'), rows[3].text)
+  assert.equal(await page.locator('[data-font-row] a[href="https://openfontlicense.org"]').count(), 2)
+  await page.getByRole('button', { name: 'Copy credits' }).click()
+  const copied = await page.evaluate(() => window.__copied)
+  assert.equal(
+    copied,
+    'Set in Merriweather (Copyright 2016 The Merriweather Project Authors; SIL Open Font License 1.1), Turret Road (Copyright 2012 The Turret Road Authors; SIL Open Font License 1.1), Shop Script (Shop licence 4) and Mystery Face.',
+  )
+  checks.push(`fonts list: ${rows.length} rows (${rows.map((r) => r.verdict).join(', ')}); credits: ${copied}`)
+  await page.locator('.section[open]').scrollIntoViewIfNeeded()
+  await snap('16_fonts_and_licenses.png')
+}
+
 async function pagesShots(page, snap, checks) {
   const gaps = () =>
     page.evaluate(async () => {
