@@ -22,6 +22,9 @@ type testFont struct {
 	noOS2               bool
 	macStyle            uint16
 	magic               string // "\x00\x01\x00\x00" (default) or "OTTO"
+	// line metrics (fontmetrics.go); upm 0 leaves hhea out
+	upm                                    uint16
+	hheaAsc, hheaDesc, hheaGap, winA, winD int16
 }
 
 func nameRecords(f testFont) []byte {
@@ -74,6 +77,10 @@ func buildSfnt(f testFont) []byte {
 		binary.BigEndian.PutUint16(os2[6:], 5)
 		binary.BigEndian.PutUint16(os2[8:], f.fsType)
 		binary.BigEndian.PutUint16(os2[62:], f.fsSelection)
+		binary.BigEndian.PutUint16(os2[74:], uint16(f.winA))
+		binary.BigEndian.PutUint16(os2[76:], uint16(f.winD))
+		binary.BigEndian.PutUint16(os2[74:], uint16(f.winA))
+		binary.BigEndian.PutUint16(os2[76:], uint16(f.winD))
 		tables["OS/2"] = os2
 	}
 	head := make([]byte, 54)
@@ -81,6 +88,15 @@ func buildSfnt(f testFont) []byte {
 	binary.BigEndian.PutUint16(head[44:], f.macStyle)
 	tables["head"] = head
 	tags := []string{"OS/2", "head", "name"}
+	if f.upm != 0 {
+		binary.BigEndian.PutUint16(head[18:], f.upm)
+		hhea := make([]byte, 36)
+		binary.BigEndian.PutUint16(hhea[4:], uint16(f.hheaAsc))
+		binary.BigEndian.PutUint16(hhea[6:], uint16(f.hheaDesc))
+		binary.BigEndian.PutUint16(hhea[8:], uint16(f.hheaGap))
+		tables["hhea"] = hhea
+		tags = []string{"OS/2", "head", "hhea", "name"}
+	}
 	magic := f.magic
 	if magic == "" {
 		magic = "\x00\x01\x00\x00"

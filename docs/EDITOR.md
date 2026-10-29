@@ -314,10 +314,18 @@ The words in table cells count like any other.
 - Stored JSON leaves out attrs that are `null` or `false`; any reader takes a
   missing attr as its empty value. Other defaults (`glyph`, `level`,
   `start`…) are always written.
-- A line height of 1 is the font's own line spacing, as in Word: the
-  browser measures each family's natural line height once (`fontMetrics.js`,
-  a span at 100 px with `line-height: normal`; Merriweather is about 1.25)
-  and the stylesheet puts it in `--lh` next to the font's `font-family`;
+- A line height of 1 ("single") is the font's Windows line metrics, as Word
+  on Windows computes them: (usWinAscent + usWinDescent + external leading) /
+  unitsPerEm, the leading being max(0, hhea.lineGap - ((winAscent +
+  winDescent) - (hheaAscender - hheaDescender))); Merriweather's is 1.338,
+  its hhea 1.257. The server reads them from the font file (`GET
+  /api/fonts/line-metrics?family=X` → `{family, win, hhea}`, 404 when
+  unknown; a library family from its stored file, a Google family from its
+  TTF, kept in memory and in `font-line-metrics.json` in the data dir;
+  `backend/fontmetrics.go`). The client (`fontMetrics.js`) asks it, keeps
+  the answer per family (also in localStorage, for offline books), and
+  falls back to the browser's `line-height: normal` measured on a hidden
+  span. The stylesheet puts the ratio in `--lh` next to the font's `font-family`;
   a paragraph's `line-height` is `calc(multiple * var(--lh, 1.2))`, 1.2
   (`LINE_FACTOR`) while a font is unmeasured. The styles are drawn again
   when a measurement arrives (the editor) or before the layout (the page

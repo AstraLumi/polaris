@@ -117,6 +117,9 @@ type fontLibrary struct {
 	db  *sql.DB // the registry
 	dir string  // <UPLOADS_DIR>/_fonts
 	mgr *storyManager
+
+	metrics    fontMetricsCache // line spacing per Google family (fontmetrics.go)
+	googleBase string           // Google's CSS address; "" for the real one (tests set it)
 }
 
 func newFontLibrary(reg *sql.DB, uploadsRoot string, mgr *storyManager) (*fontLibrary, error) {
@@ -1083,6 +1086,7 @@ func (l *fontLibrary) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/fonts", l.listHandler)
 	mux.HandleFunc("POST /api/fonts", l.uploadHandler)
 	mux.HandleFunc("GET /api/fonts/used", l.usedHandler)
+	mux.HandleFunc("GET /api/fonts/line-metrics", l.lineMetricsHandler)
 	mux.HandleFunc("PUT /api/fonts/{id}", l.updateHandler)
 	mux.HandleFunc("DELETE /api/fonts/{id}", l.deleteHandler)
 	mux.HandleFunc("POST /api/fonts/{id}/license-file", l.licenseUploadHandler)
