@@ -55,6 +55,7 @@ frontend. One SQLite database and one uploads folder per story. See
     node frontend/tests/spellcheck.test.mjs
     node frontend/tests/editorSpell.test.mjs
     node frontend/tests/editorTables.test.mjs
+    node frontend/tests/pageBreaks.test.mjs
     node frontend/tests/editorSpellTag.test.mjs
     node frontend/tests/editorFormatPainter.test.mjs
     node frontend/tests/editorSpeaker.test.mjs
@@ -278,7 +279,10 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   ProseMirror is imported only there and by the lazily loaded page, never
   by the main bundle. The built-in styles and page defaults exist twice,
   `styles.js`/`pageTypes.js` and `backend/editor.go` (the server's win when
-  it sends them): change both. Screenshots without a server:
+  it sends them): change both. Page gaps while writing are decorations
+  (`pagination.js` measures, `pageBreaks.js` decides; the doc is never
+  changed): see "Page breaks while writing" in `docs/EDITOR.md`
+  (`writeShots.mjs --only pages`). Screenshots without a server:
   `node frontend/tests/visual/writeShots.mjs` (fakes the API in memory).
   Exports (.docx, EPUB, HTML/Markdown/text) are `backend/export*.go`; the
   .docx export mirrors the import (`docx*.go`): change both, and keep

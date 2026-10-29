@@ -21,6 +21,11 @@
 
     <template v-if="!online">
       <p class="hint">{{ $t('Text block: {w} mm wide.', { w: textWidth }) }}</p>
+      <label class="check">
+        <input type="checkbox" :checked="showPages" @change="$emit('show-pages', $event.target.checked)" />
+        {{ $t('Show pages while writing') }}
+      </label>
+      <p class="hint">{{ $t('Draws the gap between pages as you write, where each page ends in the page view. Only on this browser.') }}</p>
       <div v-if="settings.page_type === 'custom'" class="grid">
         <label class="field">
           <span>{{ $t('Width (mm)') }}</span>
@@ -245,8 +250,9 @@ const props = defineProps({
   chapters: { type: Array, default: () => [] },
   bookTitle: { type: String, default: '' },
   focusChapter: { type: Number, default: null },
+  showPages: { type: Boolean, default: true },
 })
-const emit = defineEmits(['update', 'change-type', 'close'])
+const emit = defineEmits(['update', 'change-type', 'show-pages', 'close'])
 const route = useRoute()
 const router = useRouter()
 // The writing page's book and open chapter (from its address).

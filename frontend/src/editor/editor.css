@@ -7,6 +7,7 @@
   --ink: #1f1c17;
   --ink-faint: rgba(31, 28, 23, 0.45);
   --paper-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 12px 40px rgba(0, 0, 0, 0.35);
+  --page-gap: #b4b8c2;
   --find: rgba(255, 196, 0, 0.38);
   --find-current: rgba(255, 140, 0, 0.62);
   --read: rgba(60, 130, 230, 0.26);
@@ -22,6 +23,7 @@
 
 .write-page.is-dark-paper {
   --paper: #1f1e24;
+  --page-gap: #0d0d11;
   --ink: #e6e1d6;
   --ink-faint: rgba(230, 225, 214, 0.45);
   --find: rgba(255, 196, 0, 0.3);
@@ -635,4 +637,76 @@
   [data-dropcap="2"]::first-letter { font-size: 2.3em; }
   [data-dropcap="3"]::first-letter { font-size: 3.4em; }
   [data-dropcap="4"]::first-letter { font-size: 4.5em; }
+}
+
+/* Page breaks while writing (pagination.js): the gap between two pages is a
+   float inside a paragraph, or a block before a picture; as wide as the
+   sheet (a negative left margin), clicks pass through it. */
+.write-doc .pg-gap {
+  box-sizing: border-box;
+  position: relative;
+  clear: both;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding: 0;
+  text-indent: 0;
+  text-align: left;
+  white-space: normal;
+  user-select: none;
+  pointer-events: none;
+  font: 500 7pt/1 'Manrope', sans-serif;
+  letter-spacing: 0;
+  color: var(--ink-faint);
+}
+.write-doc .pg-gap.is-float {
+  float: left;
+}
+.write-doc .pg-gap.is-block {
+  display: block;
+}
+.write-doc .pg-gap.is-tail {
+  display: block;
+  height: 0;
+}
+.write-doc .pg-gap > div {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+}
+.write-doc .pg-gap.is-float > div {
+  width: calc(100% - 1px);
+}
+.write-doc .pg-fill {
+  background: var(--paper);
+}
+.write-doc .pg-space {
+  background: var(--page-gap);
+  box-shadow: inset 0 7px 6px -6px rgba(0, 0, 0, 0.45), inset 0 -7px 6px -6px rgba(0, 0, 0, 0.45);
+}
+.write-doc .pg-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--paper);
+  overflow: hidden;
+}
+.write-doc .pg-band span {
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+.write-doc .pg-band span:first-child {
+  text-align: left;
+}
+.write-doc .pg-band span:last-child {
+  text-align: right;
+}
+.write-doc .pg-band.is-tail-foot {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  background: transparent;
 }

@@ -10,7 +10,7 @@
 // Tab through the cells, a table pasted from Word) and in the page view
 // (rows breaking across pages, the header row repeated).
 //
-//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes|wrap|import|speaker|painter]
+//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes|wrap|import|speaker|painter|pages]
 //
 // --only spell: just the spellchecker (underlines, the menu on a word, Add
 // to dictionary, Ignore, typing, the spelling panel, dark paper, off).
@@ -249,6 +249,27 @@ const db = {
   ],
   puts: [],
 }
+// A long chapter for the page breaks (--only pages): numbered paragraphs of
+// different lengths, headings, a hard page break, a picture and a scene break.
+{
+  const SENT = ['The lantern swung over the wet planks.', 'Nobody answered the old ferryman.', 'Rain drummed on the canvas and the horses stamped.', 'She counted the coins twice and found them short.', 'A bell rang somewhere beyond the reeds.']
+  const longPara = (n) => {
+    const k = 1 + ((n * 5) % 7)
+    let s = `P${String(n).padStart(2, '0')} `
+    for (let i = 0; i < k; i++) s += SENT[(n + i) % SENT.length] + ' '
+    return para(null, txt(s.trim()))
+  }
+  const content = [{ type: 'heading', attrs: { level: 1 }, content: [txt('The Long Road')] }]
+  for (let n = 1; n <= 44; n++) {
+    if (n === 8 || n === 30) content.push({ type: 'heading', attrs: { level: 2 }, content: [txt(`Part ${n}`)] })
+    if (n === 16) content.push({ type: 'page_break' })
+    if (n % 7 === 5) content.push({ type: 'image', attrs: { src: '/uploads/editor/wrap.svg', alt: 'A picture', width: 180, align: 'center' } })
+    if (n === 36) content.push({ type: 'scene_break' })
+    content.push(longPara(n))
+  }
+  db.chapters.push({ id: 19, title: 'The Long Road', volume_id: 1 })
+  db.texts[19] = { doc: { type: 'doc', content }, version: 1, updated_at: now() }
+}
 let nextVersionId = 100
 let nextCommentId = 600
 const words = (doc) => countDocJSON(doc)
@@ -467,6 +488,10 @@ async function shoot() {
   }
   if (option('only', '') === 'import') {
     await importShots(page, snap, checks)
+    return { saved, errors, checks }
+  }
+  if (option('only', '') === 'pages') {
+    await pagesShots(page, snap, checks)
     return { saved, errors, checks }
   }
   if (option('only', '') === 'painter') {
@@ -920,6 +945,229 @@ async function footnoteShots(page, snap, checks) {
   if (/merriweather/i.test(lh.font)) assert.ok(lh.lh >= 1.24 * 1.0, 'Merriweather line height is at least 1.24 x its size, got ' + lh.lh)
   checks.push('page view: line height ' + lh.lh.toFixed(3) + ' x size (font ratio ' + lh.lhVar + '), kerning off, widows 2')
   await snap('11b_footnote_page_view.png')
+}
+
+// Page breaks while writing (editor/pagination.js): gaps between pages in
+// the editor of a page-based book, the rules (widows and orphans, a hard
+// break), no oscillation, the switch, Online Post, and the first words of
+// each page against the page view's.
+async function pagesShots(page, snap, checks) {
+  const gaps = () =>
+    page.evaluate(async () => {
+      const m = await import('/src/editor/pagination.js')
+      return m.gapsOf(window.__writeView.state).map((g) => ({ fill: Math.round(g.fill), pos: g.pos, hw: Math.round(g.hw * 10) / 10, unit: g.unit, hard: g.hard, tail: g.tail }))
+    })
+  const pageGaps = async () => (await gaps()).filter((g) => !g.tail)
+  const same = (a, b) => a.length === b.length && a.every((g, i) => g.pos === b[i].pos && Math.abs(g.hw - b[i].hw) < 1.5 && g.unit === b[i].unit)
+  const settled = async () => {
+    let prev = null
+    for (let i = 0; i < 40; i++) {
+      await page.waitForTimeout(250)
+      const now = await pageGaps()
+      if (prev && same(prev, now) && now.length) return now
+      prev = now
+    }
+    throw new Error('the page breaks never settled')
+  }
+  page.on('pageerror', (e) => console.log('PAGEERROR', e.message))
+  const scrollToGap = (sel) => page.evaluate((s) => document.querySelector(s)?.scrollIntoView({ block: 'center' }), sel)
+  await page.goto(`${BASE}/write/1?chapter=19`)
+  await page.waitForSelector('.write-doc p')
+  await settle(page, 600)
+  const first = await settled()
+  assert.ok(first.length >= 2, `a long A6 chapter shows at least two gaps (got ${first.length})`)
+  checks.push(`a long A6 chapter is drawn as ${first.length + 1} pages`)
+  await scrollToGap('.write-doc .pg-gap')
+  await settle(page, 300)
+  await snap('15a_pages_gap.png')
+
+  // The gap spans the sheet.
+  const geo = await page.evaluate(() => {
+    const sheet = document.querySelector('.sheet').getBoundingClientRect()
+    const g = document.querySelector('.write-doc .pg-gap').getBoundingClientRect()
+    return { sheetL: sheet.left, sheetW: sheet.width, gL: g.left, gW: g.width }
+  })
+  assert.ok(Math.abs(geo.gL - geo.sheetL) < 2 && Math.abs(geo.gW - geo.sheetW) < 3, 'the gap is as wide as the sheet: ' + JSON.stringify(geo))
+  checks.push('the gap spans the whole sheet (margins included)')
+
+  // Every page is as tall as the page type says: from one page's start (the end of the
+  // gap above it) to the foot of the gap below it, a page's content height, whichever
+  // way the gap is drawn (a float in a paragraph, a block before a picture).
+  const pitch = await page.evaluate(() => {
+    const z = parseFloat(getComputedStyle(document.querySelector('.sheet')).zoom) || 1
+    const gs = [...document.querySelectorAll('.write-doc .pg-gap:not(.is-tail)')]
+    return {
+      z,
+      kinds: gs.map((g) => (g.classList.contains('is-block') ? 'block' : 'float')),
+      pitches: gs.slice(1).map((g, i) => ({ hard: gs[i].dataset.hard === '1', px: (g.getBoundingClientRect().top + g.querySelector('.pg-fill').getBoundingClientRect().height - (gs[i].classList.contains('is-block') ? gs[i].nextElementSibling.getBoundingClientRect().top : gs[i].getBoundingClientRect().bottom)) / z, at: i + 1 })),
+    }
+  })
+  const wantH = (148 - 12 - 12) * (96 / 25.4)
+  for (const p of pitch.pitches) if (!p.hard) assert.ok(Math.abs(p.px - wantH) < 2.5, `a page is ${wantH.toFixed(1)} px tall, measured ${p.px.toFixed(1)} for page ${p.at} (${pitch.kinds})`)
+  assert.ok(pitch.kinds.includes('block'), 'a gap before a picture was drawn: ' + pitch.kinds)
+  checks.push(`every page is the page type's height (${pitch.pitches.length} measured, gaps: ${pitch.kinds.join(', ')})`)
+
+  // No oscillation: measuring again, and typing a character and deleting it, give the same breaks.
+  await page.evaluate(async () => (await import('/src/editor/pagination.js')).refreshPages(window.__writeView))
+  await page.waitForTimeout(900)
+  assert.ok(same(first, await pageGaps()), 'a second repagination gives the same breaks')
+  checks.push('a second repagination gives identical breaks')
+  await page.evaluate(() => {
+    const v = window.__writeView
+    v.dispatch(v.state.tr.insertText('x', 2))
+  })
+  await page.waitForTimeout(900)
+  await page.evaluate(() => {
+    const v = window.__writeView
+    v.dispatch(v.state.tr.delete(2, 3))
+  })
+  const again = await settled()
+  assert.ok(same(first, again), 'typing a character at the start and deleting it gives the same breaks: ' + JSON.stringify([first.map((g) => g.pos), again.map((g) => g.pos)]))
+  checks.push('typing a character at the start and deleting it gives identical breaks')
+
+  // The hard page break starts a page.
+  const hard = await page.evaluate(() => {
+    let at = -1
+    window.__writeView.state.doc.descendants((n, pos) => {
+      if (n.type.name === 'page_break') at = pos
+    })
+    return at
+  })
+  const withHard = (await pageGaps()).filter((g) => g.hard)
+  assert.equal(withHard.length, 1, 'one gap for the hard break')
+  assert.ok(withHard[0].pos > hard && withHard[0].pos <= hard + 4, `the gap is right after the page_break node (${withHard[0].pos} after ${hard})`)
+  checks.push('a page_break node starts a new page right after it')
+
+  // Widows and orphans: where a gap falls inside a paragraph, two lines at least on each side.
+  const wo = await page.evaluate(() => {
+    const out = []
+    for (const g of document.querySelectorAll('.write-doc .pg-gap.is-float')) {
+      const p = g.parentElement
+      const range = document.createRange()
+      const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT)
+      const gr = g.getBoundingClientRect()
+      let before = 0
+      let after = 0
+      const seen = []
+      for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+        if (g.contains(t)) continue
+        range.selectNodeContents(t)
+        for (const r of range.getClientRects()) {
+          if (r.height < 1) continue
+          const k = Math.round(r.top)
+          if (seen.includes(k)) continue
+          seen.push(k)
+          if (r.bottom <= gr.top + 1) before++
+          else after++
+        }
+      }
+      out.push({ text: p.textContent.slice(0, 12), before, after })
+    }
+    return out
+  })
+  for (const w of wo) assert.ok(w.before === 0 || (w.before >= 2 && w.after >= 2), 'widow/orphan control: ' + JSON.stringify(w))
+  checks.push(`widow/orphan: ${wo.filter((w) => w.before > 0).length} paragraphs split with at least 2 lines on each side, ${wo.filter((w) => w.before === 0).length} gaps at a paragraph's start`)
+
+  // Dark paper.
+  await page.evaluate(() => localStorage.setItem('polaris-write-paper', 'dark'))
+  await page.reload()
+  await page.waitForSelector('.write-doc .pg-gap')
+  await settle(page, 600)
+  await scrollToGap('.write-doc .pg-gap')
+  await settle(page, 300)
+  await snap('15b_pages_gap_dark.png')
+  await page.evaluate(() => localStorage.setItem('polaris-write-paper', 'light'))
+  await page.reload()
+  await page.waitForSelector('.write-doc .pg-gap')
+  await settled()
+  // A gap before a picture (a unit).
+  await scrollToGap('.write-doc .pg-gap.is-block:not(.is-tail)')
+  await settle(page, 300)
+  await snap('15c_pages_block_gap.png')
+
+  // The first words of each page, against the page view's.
+  const editorPages = await page.evaluate(() => {
+    const words = (node) => {
+      const w = document.createTreeWalker(document.querySelector('.write-doc'), NodeFilter.SHOW_TEXT)
+      w.currentNode = node
+      let s = ''
+      for (let t = w.nextNode(); t && s.length < 60; t = w.nextNode()) {
+        if (t.parentElement.closest('.pg-gap')) continue
+        s += t.data + ' '
+      }
+      return s.trim().split(/\s+/).slice(0, 4).join(' ')
+    }
+    const gs = [...document.querySelectorAll('.write-doc .pg-gap:not(.is-tail)')]
+    return [words(document.querySelector('.write-doc h1').firstChild), ...gs.map((g) => words(g))]
+  })
+  await page.goto(`${BASE}/write/1/pages`)
+  await page.waitForSelector('.pv-pages:not(.is-hidden) .pagedjs_page', { timeout: 60000 })
+  await settle(page, 800)
+  const viewPages = await page.evaluate(() => {
+    const out = []
+    let on = false
+    for (const p of document.querySelectorAll('.pagedjs_page')) {
+      const c = p.querySelector('.pagedjs_page_content')
+      const txt = (c?.textContent || '').trim()
+      if (/The Long Road/.test(txt) && /P01/.test(txt)) on = true
+      else if (on && !/P\d\d|Part \d+/.test(txt) && txt) break
+      if (on && c) {
+        const w = document.createTreeWalker(c, NodeFilter.SHOW_TEXT)
+        let s = ''
+        for (let t = w.nextNode(); t && s.length < 60; t = w.nextNode()) s += t.data + ' '
+        out.push(s.trim().split(/\s+/).slice(0, 4).join(' '))
+      }
+    }
+    return out
+  })
+  console.log('editor pages:', JSON.stringify(editorPages))
+  console.log('page view   :', JSON.stringify(viewPages))
+  const n = Math.min(editorPages.length, viewPages.length)
+  let equal = 0
+  for (let i = 0; i < n; i++) if (editorPages[i] === viewPages[i]) equal++
+  checks.push(`first words per page, editor vs page view: ${equal}/${n} equal (${editorPages.length} pages in the editor, ${viewPages.length} in the page view)`)
+  await snap('15d_pages_page_view.png')
+
+  // A big chapter (about 11,000 words) is measured in one pass, quickly.
+  await page.goto(`${BASE}/write/1?chapter=19`)
+  await page.waitForSelector('.write-doc .pg-gap')
+  await settled()
+  await page.evaluate(() => {
+    const v = window.__writeView
+    const nodes = []
+    for (let i = 0; i < 8; i++) v.state.doc.forEach((n) => nodes.push(n))
+    v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, nodes))
+  })
+  const bigGaps = await settled()
+  const perf = await page.evaluate(async () => {
+    const m = await import('/src/editor/pagination.js')
+    return { ms: Math.round(m.stats.ms), words: window.__writeView.state.doc.textContent.split(/\s+/).length }
+  })
+  assert.ok(bigGaps.length > 60, `a big chapter is paginated (${bigGaps.length} gaps)`)
+  assert.ok(perf.ms < 1500, `one pass over ${perf.words} words took ${perf.ms} ms`)
+  checks.push(`a ${perf.words}-word chapter: ${bigGaps.length + 1} pages, the last pass took ${perf.ms} ms`)
+
+  // The switch.
+  await page.goto(`${BASE}/write/1?chapter=19`)
+  await page.waitForSelector('.write-doc .pg-gap')
+  await page.click('button[title="Book and page"]')
+  const box = page.getByLabel('Show pages while writing')
+  assert.equal(await box.isChecked(), true)
+  await box.uncheck()
+  await page.waitForTimeout(900)
+  assert.equal(await page.locator('.write-doc .pg-gap').count(), 0, 'switching it off removes the gaps')
+  await snap('15e_pages_off.png')
+  await box.check()
+  await page.waitForTimeout(1500)
+  await settled()
+  checks.push('the switch removes and brings back the gaps')
+
+  // Online Post has none.
+  await page.goto(`${BASE}/write/3`)
+  await page.waitForSelector('.write-doc p')
+  await settle(page, 1200)
+  assert.equal(await page.locator('.write-doc .pg-gap').count(), 0, 'Online Post shows no pages')
+  checks.push('Online Post shows no page gaps')
 }
 
 // Boxes and drop caps (stage 5): a two-paragraph system window and a drop

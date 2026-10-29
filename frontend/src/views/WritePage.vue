@@ -156,6 +156,8 @@
         :chapters="chapters"
         :book-title="bookTitle"
         :focus-chapter="panelChapter"
+        :show-pages="showPages"
+        @show-pages="(v) => (showPages = v)"
         @update="updateSettings"
         @change-type="typeDialog = 'switch'"
         @close="panel = ''"
@@ -286,7 +288,8 @@ import ConflictView from '../components/write/ConflictView.vue'
 import ImportReport from '../components/write/ImportReport.vue'
 import RowMenu from '../components/RowMenu.vue'
 import { tocNodeView } from '../editor/tocView.js'
-import { chapterOption, setChapterOption, normaliseLayout } from '../editor/bookLayout.js'
+import { chapterOption, setChapterOption, normaliseLayout, bookPlan, bandText, formatNumber as formatPageNumber } from '../editor/bookLayout.js'
+import { pagesPlugin, refreshPages } from '../editor/pagination.js'
 import SpeakerOptions from '../components/write/SpeakerOptions.vue'
 import TableOptions from '../components/write/TableOptions.vue'
 import { tablePlugins, tableInfo } from '../editor/tables.js'
@@ -474,6 +477,37 @@ const sheetStyle = computed(() => {
   if (!g) return {}
   return { width: g.width, padding: g.padding, minHeight: g.minHeight, zoom: zoom.value }
 })
+// ---- Page breaks while writing (editor/pagination.js) --------------------------------------
+// On by default for a page-based type; a per-browser switch in the Book and page panel.
+const PAGES_KEY = 'polaris-write-pages'
+const showPages = ref(stored(PAGES_KEY, 'on') !== 'off')
+watch(showPages, (on) => store(PAGES_KEY, on ? 'on' : 'off'))
+// The header and footer of page k (0-based) of this chapter: [left, centre, right] texts.
+// Pages are counted in this chapter (the page view numbers the whole book).
+function pageBands(k) {
+  const s = settings.value
+  const c = chapter.value
+  const layout = normaliseLayout(s?.layout)
+  const plan = bookPlan(s, chapters.value).find((p) => p.id === c?.id) || { header: true, format: layout.numbering.format, restart: 1, number: '' }
+  const n = (plan.restart ?? 1) + k
+  const slot = k === 0 && layout.different_first ? 'first' : layout.different_odd_even && n % 2 === 0 ? 'even' : 'odd'
+  const values = { page: formatPageNumber(n, plan.format), chapter: c?.title || '', chapter_number: plan.number, book: s?.meta?.title || bookTitle.value, author: s?.meta?.author || '' }
+  const row = (b) => (b ? [bandText(b.left, values), bandText(b.center, values), bandText(b.right, values)] : null)
+  return { head: plan.header && !(plan.front) ? row(layout.header[slot]) : null, foot: row(layout.footer[slot]) }
+}
+const pagesOptions = () => {
+  const s = settings.value
+  const g = geometry.value
+  if (!showPages.value || !s || online.value || !g) return null
+  const p = s.page || {}
+  if (!(+p.height_mm > 0)) return null
+  return { widthPx: g.widthPx, heightMm: +p.height_mm, topMm: +p.margin_top_mm || 0, bottomMm: +p.margin_bottom_mm || 0, bands: pageBands }
+}
+const pagesSig = computed(() => {
+  const o = pagesOptions()
+  return o ? JSON.stringify([o.widthPx, o.heightMm, o.topMm, o.bottomMm, zoom.value, settings.value.layout, chapter.value?.title, settings.value.chapter_options, settings.value.meta, styles.value]) : 'off'
+})
+
 const pageVars = computed(() => ({ '--page-break-label': JSON.stringify(t('Page break')) }))
 
 // ---- Styles and fonts ----------------------------------------------------------------------
@@ -677,6 +711,7 @@ const plugins = [
   commentPlugin({ known: () => new Set(comments.value.filter((c) => !c.parent_id).map((c) => c.id)) }),
   speakerPlugin({ onMenu: openSpeakerTag }),
   spellPlugin({ getSpell: () => spell.forPlugin(), onMenu: openSpellMenu }),
+  pagesPlugin({ getOptions: pagesOptions, getStyles: () => styles.value }),
 ]
 const makeState = (json) => EditorState.create({ schema, doc: docFromJSON(json), plugins })
 
@@ -802,6 +837,7 @@ function createView() {
   if (import.meta.env.DEV) window.__writeView = view
 }
 watch([readOnly, online], () => view?.setProps({}))
+watch(pagesSig, () => nextTick(() => refreshPages(view)), { flush: 'post' })
 
 // ---- Spelling ------------------------------------------------------------------------------
 // While our checker is on (and has a dictionary), the browser's is off.
