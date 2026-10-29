@@ -77,7 +77,7 @@ function paraToDOM(tag, node) {
   if (a.style != null) dom['data-style'] = a.style
   const own = ownPara(a)
   if (Object.keys(own).length || a.extra) dom['data-para'] = JSON.stringify(a.extra ? { ...own, extra: a.extra } : own)
-  const css = paraDeclarations(own).join('; ')
+  const css = paraDeclarations(a.extra?.lineExact > 0 ? { ...own, lineExact: a.extra.lineExact } : own).join('; ')
   if (css) dom.style = css
   if (own.boxWidth > 0 || own.shade) dom['data-box'] = ''
   if (own.dropCap) dom['data-dropcap'] = String(own.dropCap)

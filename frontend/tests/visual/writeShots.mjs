@@ -885,6 +885,40 @@ async function footnoteShots(page, snap, checks) {
   const foot = await page.evaluate((i) => document.querySelectorAll('.pagedjs_page')[i].textContent.includes('Marked at one and a half'), idx)
   assert.ok(foot, 'the footnote text is on the page that holds its mark')
   checks.push('page view: footnote at the page foot')
+  // Line height from the font's own spacing, no kerning or ligatures on print pages, widows and orphans.
+  const lh = await page.evaluate(() => {
+    const p = document.querySelector('.pagedjs_page .pv-doc p:not([data-style="scene"])')
+    const cs = getComputedStyle(p)
+    const sheet = [...document.querySelectorAll('style')].map((s) => s.textContent).join('\n')
+    return {
+      font: cs.fontFamily,
+      lh: parseFloat(cs.lineHeight) / parseFloat(cs.fontSize),
+      lhVar: parseFloat(cs.getPropertyValue('--lh')),
+      kerning: cs.fontKerning,
+      ligatures: cs.fontVariantLigatures,
+      widows: cs.widows,
+      orphans: cs.orphans,
+      sheetHas: /widows: 2; orphans: 2/.test(sheet),
+    }
+  })
+  console.log('line height check', JSON.stringify(lh))
+  const mw = await page.evaluate(async () => {
+    await document.fonts.load('16px "Merriweather"').catch(() => {})
+    const s = document.createElement('span')
+    s.textContent = 'Hxgy'
+    s.style.cssText = 'position:absolute;visibility:hidden;font-size:100px;line-height:normal;font-family:"Merriweather",serif'
+    document.body.appendChild(s)
+    const r = s.getBoundingClientRect().height / 100
+    s.remove()
+    return { ratio: r, loaded: document.fonts.check('16px "Merriweather"') }
+  })
+  console.log('Merriweather natural line height', JSON.stringify(mw))
+  assert.equal(lh.kerning, 'none', 'kerning is off on a print page type')
+  assert.equal(lh.ligatures, 'none', 'ligatures are off on a print page type')
+  assert.ok(lh.sheetHas && lh.widows === '2' && lh.orphans === '2', 'widows and orphans in the page view')
+  assert.ok(lh.lhVar > 1, 'the font has a measured line spacing')
+  if (/merriweather/i.test(lh.font)) assert.ok(lh.lh >= 1.24 * 1.0, 'Merriweather line height is at least 1.24 x its size, got ' + lh.lh)
+  checks.push('page view: line height ' + lh.lh.toFixed(3) + ' x size (font ratio ' + lh.lhVar + '), kerning off, widows 2')
   await snap('11b_footnote_page_view.png')
 }
 

@@ -314,8 +314,19 @@ The words in table cells count like any other.
 - Stored JSON leaves out attrs that are `null` or `false`; any reader takes a
   missing attr as its empty value. Other defaults (`glyph`, `level`,
   `start`…) are always written.
-- A line height of 1 is drawn as CSS `line-height: 1.2` (Word's single
-  spacing follows the font's line gap); every multiple is scaled the same.
+- A line height of 1 is the font's own line spacing, as in Word: the
+  browser measures each family's natural line height once (`fontMetrics.js`,
+  a span at 100 px with `line-height: normal`; Merriweather is about 1.25)
+  and the stylesheet puts it in `--lh` next to the font's `font-family`;
+  a paragraph's `line-height` is `calc(multiple * var(--lh, 1.2))`, 1.2
+  (`LINE_FACTOR`) while a font is unmeasured. The styles are drawn again
+  when a measurement arrives (the editor) or before the layout (the page
+  view). `lineExact` (kept in the paragraph's `extra`) is drawn as an exact
+  `line-height: Npt`. The exports' own CSS (EPUB, HTML) keeps 1.2.
+- Paragraphs get `widows: 2; orphans: 2` (Word's Normal). The page types made
+  of pages (all but Online Post) set `font-kerning: none` and
+  `font-variant-ligatures: none`, as Word does by default, so lines wrap the
+  same. Not read from the .docx: `w:widowControl` off, run-level `w:kern`.
 - The page is drawn at the page type's text width in real units (mm, pt)
   and zoomed as a whole (CSS `zoom`, "Fit" by default: the body text near
   16 px as far as the sheet fits). Online Post is 34 em of the body text.

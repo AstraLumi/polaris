@@ -142,7 +142,10 @@ export function styleSheet(styles, scope = '.write-doc') {
   const rules = [
     `${scope} { ${textDeclarations(normal.text).join('; ')} }`,
     // Paragraphs without a style, or with one that no longer exists.
-    `${scope} :where(p, h1, h2, h3, h4, h5, h6) { ${decls('normal')} }`,
+    // widows and orphans: Word's Normal keeps two lines at a page's foot and head.
+    `${scope} :where(p, h1, h2, h3, h4, h5, h6) { ${decls('normal')}; widows: 2; orphans: 2 }`,
+    // Word sets text without kerning or ligatures; so do the page types made of pages.
+    `${scope}:not(.is-online) { font-kerning: none; font-variant-ligatures: none }`,
     `${scope} :where(li) > p:not([data-style]) { text-indent: 0 }`,
     // Table cells (stage 5): no first-line indent and no paragraph spacing
     // unless a paragraph sets its own (docs/EDITOR.md, "Tables").

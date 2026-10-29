@@ -268,6 +268,7 @@ import { styleSheet, styleFonts, resolveStyle, styleById } from '../editor/style
 import { normaliseSettings, defaultSettings, switchPageType, textBlockMm, pageTypeName } from '../editor/pageTypes.js'
 import { countNode, countDocJSON } from '../editor/wordCount.js'
 import { loadFonts, docFonts, fontChoices } from '../editor/fonts.js'
+import { measureRatios } from '../editor/fontMetrics.js'
 import { createSaver } from '../editor/autosave.js'
 import { keepCopy, readCopy, dropCopy } from '../editor/localCopy.js'
 import { booksApi, textApi } from '../editor/api.js'
@@ -478,8 +479,16 @@ const pageVars = computed(() => ({ '--page-break-label': JSON.stringify(t('Page 
 // ---- Styles and fonts ----------------------------------------------------------------------
 const styleEl = document.createElement('style')
 styleEl.dataset.write = ''
-watch(styles, (s) => (styleEl.textContent = styleSheet(s, '.write-doc')), { immediate: true, deep: true })
-watch(styles, (s) => loadFonts(styleFonts(s)), { immediate: true })
+const ratioTick = ref(0) // a font's line height was measured: draw the styles again
+watch([styles, ratioTick], ([s]) => (styleEl.textContent = styleSheet(s, '.write-doc')), { immediate: true, deep: true })
+watch(
+  styles,
+  async (s) => {
+    await loadFonts(styleFonts(s))
+    if (await measureRatios(styleFonts(s))) ratioTick.value++
+  },
+  { immediate: true },
+)
 const docFontList = ref([])
 const fontList = computed(() => fontChoices([...styleFonts(styles.value), ...docFontList.value]))
 let fontTimer = null

@@ -134,7 +134,25 @@ assert.deepEqual(
 assert.deepEqual(paraFromCSS({ textAlign: 'start' }), { align: 'left' })
 assert.deepEqual(paraFromCSS({ textAlign: 'inherit' }), {})
 
-assert.deepEqual(paraDeclarations({ align: 'center', indentFirst: -10, lineHeight: 1, keepNext: false }), ['text-align: center', 'text-indent: -10pt', 'line-height: 1.2'])
+assert.deepEqual(paraDeclarations({ align: 'center', indentFirst: -10, lineHeight: 1, keepNext: false }), ['text-align: center', 'text-indent: -10pt', 'line-height: calc(1 * var(--lh, 1.2))'])
+
+// Line height follows the font's own spacing (--lh next to the font); exact spacing is exact.
+{
+  const css = await import('../src/editor/css.js')
+  assert.equal(css.textDeclarations({ font: 'Merriweather' }).some((d) => d.startsWith('--lh')), false, 'unknown font: no ratio')
+  assert.equal(css.setLineRatio('Merriweather', 1.2576), true)
+  assert.equal(css.setLineRatio('merriweather', 1.2576), false, 'same ratio again: unchanged')
+  assert.equal(css.setLineRatio('Bad', 9), false)
+  assert.ok(css.textDeclarations({ font: 'Merriweather', size: 12 }).includes('--lh: 1.258'))
+  assert.deepEqual(css.paraDeclarations({ lineHeight: 1.5 }), ['line-height: calc(1.5 * var(--lh, 1.2))'])
+  assert.deepEqual(css.paraDeclarations({ lineHeight: 1.5, lineExact: 14 }), ['line-height: 14pt'])
+  css.clearLineRatios()
+  assert.equal(css.lineRatio('Merriweather'), null)
+  const { styleSheet, builtinStyles } = await import('../src/editor/styles.js')
+  const sheet = styleSheet(builtinStyles(), '.pv-doc')
+  assert.match(sheet, /widows: 2; orphans: 2/)
+  assert.match(sheet, /\.pv-doc:not\(\.is-online\) \{ font-kerning: none; font-variant-ligatures: none \}/)
+}
 assert.deepEqual(textDeclarations({ font: 'Turret Road', size: 8, color: null, bold: false, italic: null }), ['font-family: "Turret Road", serif', 'font-size: 8pt', 'font-weight: 400'])
 
 console.log('editorSchema: ok')

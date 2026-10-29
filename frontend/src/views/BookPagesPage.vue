@@ -50,6 +50,7 @@ import { booksApi } from '../editor/api.js'
 import { normaliseSettings } from '../editor/pageTypes.js'
 import { styleSheet, styleFonts, resolveStyle } from '../editor/styles.js'
 import { loadFonts } from '../editor/fonts.js'
+import { measureRatios } from '../editor/fontMetrics.js'
 import { pagedCSS, normaliseLayout, normaliseMeta, BAND_SLOTS } from '../editor/bookLayout.js'
 import { buildBook, layOutBook } from '../editor/pageView.js'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
@@ -148,10 +149,12 @@ async function render() {
   done.value = false
   pages.value = 0
   progress.value = 0
-  styleEl.textContent = styleSheet(s.styles, '.pv-doc')
   restartsEl.textContent = ''
-  await loadFonts(bookFonts(s, docs))
+  const fonts = bookFonts(s, docs)
+  await loadFonts(fonts)
   await document.fonts?.ready
+  await measureRatios(fonts) // line heights follow each font's own spacing
+  styleEl.textContent = styleSheet(s.styles, '.pv-doc')
   const { fragment, plan, blocks } = buildBook(docs, s, { paged: !online.value })
   if (online.value) {
     readingEl.value.textContent = ''

@@ -8,10 +8,31 @@ const PER_UNIT = { pt: 1, px: 0.75, in: 72, cm: 72 / 2.54, mm: 72 / 25.4, pc: 12
 
 const round2 = (n) => Math.round(n * 100) / 100
 
-// A line height of 1 ("single", as in Word) is drawn this many times the
-// font size: Word's single spacing follows the font's own line gap, which
-// for book fonts is about this.
+// A line height of 1 ("single", as in Word) is the font's own line spacing
+// (ascent + descent + line gap), a ratio to its size that differs per font
+// (Merriweather is about 1.26). The ratios are measured in the browser
+// (fontMetrics.js) and kept here; a font not measured yet is drawn at
+// LINE_FACTOR. The stylesheet puts a font's ratio in the custom property
+// --lh next to its font-family, and a paragraph's line-height is its
+// multiple times --lh, so the ratio follows whatever font the paragraph has.
 export const LINE_FACTOR = 1.2
+
+const ratios = new Map() // lower-case family → ratio
+const famKey = (f) => String(f || '').trim().toLowerCase()
+
+// The measured ratio of a family, or null when unknown.
+export const lineRatio = (family) => ratios.get(famKey(family)) ?? null
+
+// Records a measured ratio (ignored when out of reason); true when it changed.
+export function setLineRatio(family, ratio) {
+  const k = famKey(family)
+  const r = Math.round(+ratio * 1000) / 1000
+  if (!k || !(r >= 0.8 && r <= 3) || ratios.get(k) === r) return false
+  ratios.set(k, r)
+  return true
+}
+
+export const clearLineRatios = () => ratios.clear()
 
 // "12pt", "16px", "1.5cm", "0" → points; anything relative (em, %, auto) → null.
 export function cssLengthToPt(value) {
@@ -125,7 +146,9 @@ export function paraDeclarations(p) {
   if (p.indentRight != null) out.push(`margin-right: ${num(p.indentRight)}pt`)
   if (p.spaceBefore != null) out.push(`margin-top: ${num(p.spaceBefore)}pt`)
   if (p.spaceAfter != null) out.push(`margin-bottom: ${num(p.spaceAfter)}pt`)
-  if (p.lineHeight != null) out.push(`line-height: ${num(p.lineHeight * LINE_FACTOR)}`)
+  // Word's "exactly N pt" is drawn exactly; a multiple follows the font's own spacing.
+  if (p.lineExact > 0) out.push(`line-height: ${num(p.lineExact)}pt`)
+  else if (p.lineHeight != null) out.push(`line-height: calc(${num(p.lineHeight)} * var(--lh, ${LINE_FACTOR}))`)
   if (p.keepNext) out.push('break-after: avoid')
   if (p.boxWidth > 0) out.push(`border: ${num(p.boxWidth)}pt solid ${p.boxColor || '#000000'}`)
   if (p.shade) out.push(`background-color: ${p.shade}`)
@@ -137,7 +160,11 @@ export function paraDeclarations(p) {
 export function textDeclarations(t) {
   const out = []
   if (!t) return out
-  if (t.font) out.push(`font-family: ${familyCSS(t.font)}`)
+  if (t.font) {
+    out.push(`font-family: ${familyCSS(t.font)}`)
+    const r = lineRatio(t.font)
+    if (r != null) out.push(`--lh: ${r}`)
+  }
   if (t.size != null) out.push(`font-size: ${num(t.size)}pt`)
   if (t.color) out.push(`color: ${t.color}`)
   if (t.bold != null) out.push(`font-weight: ${t.bold ? 700 : 400}`)

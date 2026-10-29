@@ -87,7 +87,7 @@ export function buildBook(chapters, settings, { paged = true, doc = document } =
     const node = docFromJSON(ch.doc)
     const h1 = (ch.doc?.content || []).find((n) => n?.type === 'heading' && (+n.attrs?.level || 1) === 1)
     const section = doc.createElement('section')
-    section.className = `pv-chapter pv-doc write-doc${paged ? ` pv-${pageName(pl)}` : ''}`
+    section.className = `pv-chapter pv-doc write-doc${paged ? ` pv-${pageName(pl)}` : ' is-online'}`
     section.id = `pv-ch-${ch.id}`
     section.dataset.title = (h1 ? textOf(h1).replace(/\s+/g, ' ').trim() : '') || ch.title || ''
     section.dataset.number = pl.number
