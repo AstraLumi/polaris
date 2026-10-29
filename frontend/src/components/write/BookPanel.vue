@@ -222,6 +222,34 @@
       </details>
     </template>
 
+    <!-- Every font the book uses, and whether it may be published with. -->
+    <details class="section" :open="openSection === 'fonts'" @toggle="onToggle('fonts', $event)">
+      <summary>{{ $t('Fonts and licenses') }}</summary>
+      <p v-if="fontsError" class="hint">{{ fontsError }}</p>
+      <p v-else-if="fontsLoading && !fontRows.length" class="hint">{{ $t('Loading…') }}</p>
+      <p v-else-if="!fontRows.length" class="hint">{{ $t('This book names no fonts yet.') }}</p>
+      <ul v-else class="font-rows">
+        <li v-for="r in fontRows" :key="r.family" class="font-row" data-font-row :data-verdict="r.verdict">
+          <div class="font-head">
+            <span class="verdict" :class="'v-' + r.verdict" :title="verdictText(r)" role="img" :aria-label="verdictText(r)">{{ VERDICT_ICON[r.verdict] || '?' }}</span>
+            <span class="font-name" :style="{ fontFamily: `'${r.family}', serif` }">{{ r.family }}</span>
+          </div>
+          <div class="font-where">{{ whereUsed(r) }}</div>
+          <div class="font-meta">
+            <span>{{ sourceName(r.source) }}</span>
+            <template v-if="licenseLabel(r)"> · <a v-if="r.license_url" :href="r.license_url" target="_blank" rel="noopener noreferrer">{{ licenseLabel(r) }}</a><span v-else>{{ licenseLabel(r) }}</span></template>
+            <template v-if="r.source_url"> · <a v-if="/^https?:/.test(r.source_url)" :href="r.source_url" target="_blank" rel="noopener noreferrer">{{ $t('Source') }}</a><span v-else>{{ r.source_url }}</span></template>
+          </div>
+          <div v-if="r.allowed" class="font-tags">
+            <span v-for="u in USES" :key="u.key" class="tag" :class="{ off: !r.allowed[u.key] }">{{ u.label }}</span>
+          </div>
+          <div v-if="r.copyright" class="font-copy">{{ r.copyright }}</div>
+          <div class="font-verdict" :class="'v-' + r.verdict">{{ verdictText(r) }}</div>
+        </li>
+      </ul>
+      <button v-if="creditsLine" type="button" class="seg-btn copy-credits" @click="copyCredits">{{ creditsCopied ? $t('Copied') : $t('Copy credits') }}</button>
+    </details>
+
     <!-- Exports: the book or the open chapter. -->
     <details class="section" :open="openSection === 'export'" @toggle="onToggle('export', $event)">
       <summary>{{ $t('Export') }}</summary>
@@ -238,12 +266,15 @@
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ExportMenu from './ExportMenu.vue'
-import { t } from '../../i18n'
+import { t, tn } from '../../i18n'
 import { textBlockMm, pageTypeName } from '../../editor/pageTypes.js'
 import { resolveStyle } from '../../editor/styles.js'
 import { normaliseLayout, normaliseMeta, chapterOption, setChapterOption, bandText, formatNumber } from '../../editor/bookLayout.js'
 import { fontLibrary, fontWarningText } from '../../fontLibrary.js'
 import { styleWarnings } from '../../fontRules.js'
+import { fetchBookFonts } from '../../fontLibrary.js'
+import { loadFonts } from '../../editor/fonts.js'
+import { licenseLabel, creditsText } from '../../editor/fontCredits.js'
 
 const props = defineProps({
   settings: { type: Object, required: true },
@@ -299,6 +330,77 @@ const onToggle = (name, e) => {
   if (e.target.open) openSection.value = name
   else if (openSection.value === name) openSection.value = ''
 }
+
+// ---- Fonts and licenses -------------------------------------------------------------
+const fontRows = ref([])
+const fontsLoading = ref(false)
+const fontsError = ref('')
+const creditsCopied = ref(false)
+const VERDICT_ICON = { ok: '✓', check: '?', warn: '!' }
+const USES = computed(() => [
+  { key: 'print', label: t('Print') },
+  { key: 'ebook', label: t('E-book') },
+  { key: 'web', label: t('Web') },
+  { key: 'commercial', label: t('Commercial') },
+])
+const SOURCES = computed(() => ({
+  library: t('Fonts library'),
+  bundled: t('Comes with Polaris'),
+  google: t('Google Fonts'),
+  system: t('System font'),
+  unknown: t('Unknown source'),
+}))
+const sourceName = (s) => SOURCES.value[s] || SOURCES.value.unknown
+const REASONS = computed(() => ({
+  open: t('Open license: fine to embed and publish.'),
+  uses: t('Check the allowed uses of this font in your library.'),
+  unknown: t('The license could not be found. Check it before publishing.'),
+  embedding: t('The font file forbids embedding. Check before exporting.'),
+  proprietary: t('Proprietary: needs a license from its owner to embed in an e-book or PDF.'),
+}))
+const verdictText = (r) => REASONS.value[r.reason] || ''
+function whereUsed(r) {
+  const parts = [...(r.styles || [])]
+  if (r.bands) parts.push(r.bands === 1 ? t('Header or footer') : t('{n} headers and footers', { n: r.bands }))
+  const out = parts.join(', ')
+  const ch = r.chapters ? tn('{n} chapter', '{n} chapters', r.chapters) : ''
+  return [out, ch].filter(Boolean).join(' · ')
+}
+const creditsLine = computed(() => creditsText(fontRows.value))
+async function copyCredits() {
+  try {
+    await navigator.clipboard.writeText(creditsLine.value)
+    creditsCopied.value = true
+    setTimeout(() => (creditsCopied.value = false), 2000)
+  } catch {
+    fontsError.value = t('Copying failed.')
+  }
+}
+let fontsSeq = 0
+async function loadBookFonts() {
+  const seq = ++fontsSeq
+  fontsLoading.value = true
+  try {
+    const rows = await fetchBookFonts(volume.value)
+    if (seq !== fontsSeq) return
+    fontRows.value = rows
+    fontsError.value = ''
+    loadFonts(rows.map((r) => r.family)).catch(() => {})
+  } catch (e) {
+    if (seq === fontsSeq) fontsError.value = e.message || t('Failed to load the fonts')
+  } finally {
+    if (seq === fontsSeq) fontsLoading.value = false
+  }
+}
+let fontsTimer = null
+watch(
+  () => [openSection.value, volume.value, props.settings.styles, props.settings.layout],
+  () => {
+    clearTimeout(fontsTimer)
+    if (openSection.value === 'fonts') fontsTimer = setTimeout(loadBookFonts, 600)
+  },
+  { deep: true },
+)
 
 function setPage(key, raw, min = 0, max = 100) {
   let v = raw
@@ -630,4 +732,57 @@ textarea {
   height: 1.6rem;
   padding: 0.05rem 0.35rem;
 }
+
+.font-rows {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.font-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid var(--glass-border);
+  font-size: 0.82rem;
+}
+.font-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.font-name {
+  font-size: 1.05rem;
+}
+.verdict {
+  display: inline-grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #fff;
+  flex: none;
+}
+.verdict.v-ok { background: #3f8f5a; }
+.verdict.v-check { background: #b58a1f; }
+.verdict.v-warn { background: #c4503f; }
+.font-where, .font-meta, .font-copy { opacity: 0.8; overflow-wrap: anywhere; }
+.font-copy { font-size: 0.76rem; }
+.font-tags { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.15rem 0; }
+.font-tags .tag {
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  font-size: 0.72rem;
+}
+.font-tags .tag.off { opacity: 0.45; text-decoration: line-through; }
+.font-verdict.v-ok { color: #3f8f5a; }
+.font-verdict.v-check { color: #b58a1f; }
+.font-verdict.v-warn { color: #c4503f; }
+.copy-credits { flex: none; width: 100%; }
 </style>

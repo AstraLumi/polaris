@@ -119,6 +119,7 @@ type fontLibrary struct {
 	mgr *storyManager
 
 	metrics    fontMetricsCache // line spacing per Google family (fontmetrics.go)
+	licenses   fontLicenseCache // Google fonts' license strings (fontlicense.go)
 	googleBase string           // Google's CSS address; "" for the real one (tests set it)
 }
 
@@ -998,7 +999,7 @@ func bookFontsHandler(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "failed to load the book", http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, uses)
+		writeJSON(w, fontLibraryFrom(r.Context()).describeFonts(uses))
 	}
 }
 
