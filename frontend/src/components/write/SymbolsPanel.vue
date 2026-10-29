@@ -23,7 +23,10 @@
     <label class="field">
       <span>{{ $t('Kind') }}</span>
       <select v-model="blockKey" data-symbols-block>
-        <option v-for="b in SYMBOL_BLOCKS" :key="b.key" :value="b.key">{{ blockLabel(b.key) }}</option>
+        <option value="">{{ done ? $t('Everything in this font ({n})', { n: total }) : $t('Everything in this font') }}</option>
+        <option v-for="b in SYMBOL_BLOCKS" :key="b.key" :value="b.key" :disabled="done && !found[b.key]?.length">
+          {{ found[b.key] ? $t('{kind} ({n})', { kind: blockLabel(b.key), n: found[b.key].length }) : blockLabel(b.key) }}
+        </option>
       </select>
     </label>
 
@@ -46,15 +49,20 @@
       </div>
     </template>
 
-    <div class="preview" :style="{ fontFamily: css((hover ? hover.f : family) || bodyFont) }" aria-hidden="true">
-      <span class="big">{{ hover?.c || '' }}</span>
-      <span class="code">{{ hover ? codeOf(hover.c) : '' }}</span>
+    <div class="preview" aria-hidden="true" data-symbols-preview>
+      <template v-if="hover">
+        <span class="big" :style="{ fontFamily: css(hover.f || bodyFont) }">{{ hover.c }}</span>
+        <span class="code">{{ codeOf(hover.c) }}<br />{{ hover.f || bodyFont }}</span>
+      </template>
+      <span v-else class="code">{{ $t('Point at a symbol to see it larger.') }}</span>
     </div>
 
     <p class="hint" data-symbols-status>{{ status }}</p>
-    <div class="glyph-grid" role="list" data-symbols-grid>
+    <div v-for="sec in shown" :key="drawn + sec.key" class="glyph-section">
+      <h3 v-if="shown.length > 1 || !blockKey">{{ blockLabel(sec.key) }}</h3>
+      <div class="glyph-grid" role="list" data-symbols-grid>
       <button
-        v-for="c in glyphs"
+        v-for="c in sec.chars"
         :key="c"
         type="button"
         role="listitem"
@@ -68,20 +76,22 @@
       >
         {{ c }}
       </button>
+      </div>
     </div>
   </aside>
 </template>
 
 <script setup>
-// The Symbols panel (docs/EDITOR.md, "Symbols"): a font's symbols by kind,
-// only those the font itself draws (glyphs.js), inserted at the cursor in
-// that font, or in the body font (no font mark). The last ones used are
-// kept on this computer.
+// The Symbols panel (docs/EDITOR.md, "Symbols"): everything a font draws
+// (glyphs.js), by kind, or one kind; a kind the font has nothing of shows
+// everything instead. A click inserts it at the cursor in that font, or in
+// the body font (no font mark). The last ones used are kept on this
+// computer.
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { t, tn, tr } from '../../i18n'
-import { SYMBOL_BLOCKS, blockChars, codeOf, glyphsOf, quoted } from '../../editor/glyphs.js'
+import { SYMBOL_BLOCKS, blockChars, codeOf, glyphsOf, quoted, parseUnicodeRange } from '../../editor/glyphs.js'
 import { BUNDLED_FONTS } from '../../editor/bundledFonts.js'
-import { loadFont } from '../../editor/fonts.js'
+import { loadFont, bundledSheet } from '../../editor/fonts.js'
 import { fontLibrary, loadFontLibrary } from '../../fontLibrary.js'
 
 const props = defineProps({
@@ -106,8 +116,10 @@ const BLOCKS = {
   games: tr('Cards, dominoes and chess'),
   alchemy: tr('Alchemy'),
   runes: tr('Runes'),
-  greek: tr('Greek'),
+  basic: tr('Letters, digits and signs'),
   latin: tr('Accented letters'),
+  greek: tr('Greek'),
+  cyrillic: tr('Cyrillic'),
   braille: tr('Braille'),
   cjk: tr('Japanese punctuation and kana'),
   emoji: tr('Emoji'),
@@ -132,9 +144,11 @@ const saved = (() => {
   }
 })()
 const family = ref(typeof saved.family === 'string' ? saved.family : '')
-const blockKey = ref(SYMBOL_BLOCKS.some((b) => b.key === saved.block) ? saved.block : 'misc')
+const blockKey = ref(SYMBOL_BLOCKS.some((b) => b.key === saved.block) ? saved.block : '') // '' = everything
 const recent = ref(Array.isArray(saved.recent) ? saved.recent.filter((r) => r && typeof r.c === 'string').slice(0, 24) : [])
 const hover = ref(null)
+// A new font or kind: nothing pointed at any more.
+watch([family, blockKey], () => (hover.value = null))
 watch([family, blockKey, recent], () => {
   try {
     localStorage.setItem(KEY, JSON.stringify({ family: family.value, block: blockKey.value, recent: recent.value }))
@@ -156,28 +170,61 @@ const libraryFonts = computed(() => {
   return fontLibrary.value.map((f) => f.name).filter((n) => !listed.has(n.toLowerCase()))
 })
 
-// The block's characters the chosen font draws.
+// Everything the chosen font draws, kind by kind (shown as each is found),
+// kept per font for this visit. A bundled font's unicode-range tells which
+// characters it has faces for, so the rest aren't drawn at all.
 const drawn = computed(() => family.value || props.bodyFont)
-const glyphs = ref([])
-const busy = ref(false)
+const found = ref({}) // kind → characters
+const done = ref(false)
+const scans = new Map() // font (lower case) → found, once complete
 let seq = 0
-async function look() {
-  const mine = ++seq
-  busy.value = true
-  glyphs.value = []
-  const block = SYMBOL_BLOCKS.find((b) => b.key === blockKey.value)
-  const found = await glyphsOf(drawn.value, blockChars(block), { load: loadFont, stop: () => mine !== seq })
-  if (mine !== seq) return
-  glyphs.value = found
-  busy.value = false
+async function rangesOf(name) {
+  const own = BUNDLED_FONTS.find((b) => b.family.toLowerCase() === name.toLowerCase())
+  if (!own) return null
+  try {
+    const ranges = parseUnicodeRange(await (await fetch(bundledSheet(own))).text())
+    return ranges.length ? ranges : null
+  } catch {
+    return null
+  }
 }
-watch([drawn, blockKey], look, { immediate: true })
+async function scan() {
+  const mine = ++seq
+  const name = drawn.value
+  const kept = scans.get(name.toLowerCase())
+  found.value = kept || {}
+  done.value = !!kept
+  if (kept) return
+  const ranges = await rangesOf(name)
+  for (const block of SYMBOL_BLOCKS) {
+    if (mine !== seq) return
+    const chars = await glyphsOf(name, blockChars(block), { load: loadFont, ranges, stop: () => mine !== seq })
+    if (mine !== seq) return
+    found.value = { ...found.value, [block.key]: chars }
+  }
+  done.value = true
+  scans.set(name.toLowerCase(), found.value)
+}
+watch(drawn, scan, { immediate: true })
 onBeforeUnmount(() => seq++)
 
+const total = computed(() => Object.values(found.value).reduce((n, list) => n + list.length, 0))
+// The kind chosen, when the font has some of it; else everything it has.
+const emptyKind = computed(() => !!blockKey.value && !!found.value[blockKey.value] && !found.value[blockKey.value].length)
+const shown = computed(() => {
+  if (blockKey.value && !emptyKind.value) return [{ key: blockKey.value, chars: found.value[blockKey.value] || [] }]
+  return SYMBOL_BLOCKS.filter((b) => found.value[b.key]?.length).map((b) => ({ key: b.key, chars: found.value[b.key] }))
+})
+
 const status = computed(() => {
-  if (busy.value) return t('Looking through the font…')
-  if (!glyphs.value.length) return t('This font has none of these. Try another font or kind.')
-  return tn('{n} symbol in {font}', '{n} symbols in {font}', glyphs.value.length, { font: drawn.value })
+  const font = drawn.value
+  // Everything is shown (all, or a kind it has none of) while the rest is still being found.
+  const looking = !done.value && (!blockKey.value || emptyKind.value || !found.value[blockKey.value])
+  if (looking) return t('Looking through {font}… {n} found so far', { font, n: total.value })
+  if (!total.value) return t('{font} draws none of these characters here. Is it on this computer?', { font })
+  if (emptyKind.value) return t('{font} has none of these, so here is everything it has.', { font })
+  const n = shown.value.reduce((m, sec) => m + sec.chars.length, 0)
+  return tn('{n} character in {font}', '{n} characters in {font}', n, { font })
 })
 
 function insert(c, f) {

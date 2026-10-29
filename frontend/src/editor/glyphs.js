@@ -23,8 +23,10 @@ export const SYMBOL_BLOCKS = [
   { key: 'games', ranges: [[0x1f000, 0x1f0ff], [0x1fa00, 0x1fa6f]] },
   { key: 'alchemy', ranges: [[0x1f700, 0x1f77f]] },
   { key: 'runes', ranges: [[0x16a0, 0x16f8]] },
+  { key: 'basic', ranges: [[0x0021, 0x007e]] },
+  { key: 'latin', ranges: [[0x00c0, 0x024f], [0x1e00, 0x1eff]] },
   { key: 'greek', ranges: [[0x0370, 0x03ff]] },
-  { key: 'latin', ranges: [[0x00c0, 0x024f]] },
+  { key: 'cyrillic', ranges: [[0x0400, 0x04ff]] },
   { key: 'braille', ranges: [[0x2800, 0x28ff]] },
   { key: 'cjk', ranges: [[0x3000, 0x303f], [0x3040, 0x30ff], [0xff01, 0xff60]] },
   { key: 'emoji', ranges: [[0x1f300, 0x1f64f], [0x1f680, 0x1f6ff], [0x1f900, 0x1f9ff], [0x1fa70, 0x1faff]] },
@@ -118,9 +120,11 @@ export function drawsGlyph(family, ch) {
 }
 
 // The characters of chars that family draws, once its faces for them are
-// loaded (load: loadFont from fonts.js). Works in slices so a long block
-// doesn't freeze the page; stop() makes it give up.
-export async function glyphsOf(family, chars, { load, stop = () => false } = {}) {
+// loaded (load: loadFont from fonts.js). ranges, when known (a bundled
+// font's unicode-range), skips what the font has no face for. Works in
+// slices so a long block doesn't freeze the page; stop() makes it give up.
+export async function glyphsOf(family, chars, { load, ranges = null, stop = () => false } = {}) {
+  if (ranges) chars = chars.filter((ch) => inRanges(ranges, ch))
   if (typeof document === 'undefined' || !family || !chars.length) return []
   if (load) await load(family)
   try {

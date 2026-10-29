@@ -977,16 +977,22 @@ Favourites and recent fonts are kept in `localStorage`
 The toolbar's Ω opens the Symbols panel (`components/write/SymbolsPanel.vue`):
 a font (the body font, the book's style fonts, the bundled fonts by group,
 the fonts library) and a kind (`SYMBOL_BLOCKS` in `editor/glyphs.js`:
-miscellaneous symbols, dingbats, arrows, shapes, math, runes, alchemy,
-emoji, private use…). The grid shows only the characters the font itself
-draws: the browser can't list a font's characters, so `drawsGlyph` draws
-each on a canvas in `"Font", <generic>` and in `<generic>` alone, on the
-alphabetic baseline, and the same pixels mean a fallback drew it. A click
-inserts it at the cursor (`insertSymbol` in `editor/commands.js`) with a
-`font` mark for that font, or none for the body font. The font, the kind
-and the last 24 symbols used are kept in `localStorage`
-(`polaris-write-symbol-panel`). Tests: `tests/glyphs.test.mjs`;
-screenshot: `writeShots.mjs --only symbols`.
+symbols, dingbats, arrows, shapes, math, runes, alchemy, letters, Greek,
+Cyrillic, emoji, private use…), or "Everything in this font", the default.
+The panel goes through every kind once per font (kept for the visit),
+showing what it finds as it goes, each kind under its heading, with its
+count in the kind list; a kind the font has nothing of shows everything
+the font has instead. Only the characters the font itself draws are shown:
+the browser can't list a font's characters, so `drawsGlyph` draws each on
+a canvas in `"Font", <generic>` and in `<generic>` alone, on the alphabetic
+baseline, and the same pixels mean a fallback drew it. A bundled font's
+`unicode-range` (its stylesheet) skips what it has no face for. A click
+inserts the character at the cursor (`insertSymbol` in `editor/commands.js`)
+with a `font` mark for that font, or none for the body font. The preview
+shows the character pointed at, in its font, and is cleared when the font or
+kind changes. The font, the kind and the last 24 characters used are kept
+in `localStorage` (`polaris-write-symbol-panel`). Tests:
+`tests/glyphs.test.mjs`; screenshot: `writeShots.mjs --only symbols`.
 
 ### Comments (stage 5)
 
