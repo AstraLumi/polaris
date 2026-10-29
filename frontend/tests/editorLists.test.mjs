@@ -141,7 +141,7 @@ assert.deepEqual(
   [null, true, 'A map'],
 )
 // Stored without the empty ones.
-assert.deepEqual(docToJSON(opt.doc).content[1], { type: 'image', attrs: { src: '/uploads/editor/a.png', alt: 'A map', align: 'right', fullPage: true } })
+assert.deepEqual(docToJSON(opt.doc).content[1], { type: 'image', attrs: { src: '/uploads/editor/a.png', alt: 'A map', align: 'right', fullPage: true, wrap: 'inline' } })
 // Only on a selected picture.
 assert.equal(setImageAttrs({ width: 5 })(at(base, 'before'), null), false)
 assert.equal(removeImage(at(base, 'before'), null), false)
