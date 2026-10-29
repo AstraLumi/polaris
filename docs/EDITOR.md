@@ -600,13 +600,12 @@ left-hand pages, by where they lie in the book, not by their number.
 
 ## Where things stand, and stage 5
 
-Status (2026-10-28): stages 1–4 are built and pushed (`126fdc3` the MVP,
+Status (2026-10-29): stages 1–4 are built and pushed (`126fdc3` the MVP,
 `12df0da` stages 3–4; schemas 42–45). Stage 5 items 1 (fonts library),
 2 (spellchecker), 3 (comments, schema 46), 4 (footnotes and endnotes),
-5 (tables), 6 (boxes and drop caps), 8 (read aloud) and 9 (offline
-writing) are built and pushed; item 7 (pictures with text wrapping) is
-built on the stage 5 branch, not pushed yet. With it, all of stage 5's
-items are built.
+5 (tables), 6 (boxes and drop caps), 7 (pictures with text wrapping),
+8 (read aloud) and 9 (offline writing) are built and pushed: all of
+stage 5's items are built.
 The writer's decisions behind this plan: parity with Word in what matters
 to novelists, nothing else (no cloud, macros, track changes, equations);
 page types A4, A5, A6, custom and Online Post, one per book; EPUB yes;
