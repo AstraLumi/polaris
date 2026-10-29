@@ -8,7 +8,7 @@
         <li v-for="r in rows" :key="r.chapter_id">
           <RouterLink :to="writeLink(r)" :title="$t('Open this chapter in the editor')">
             <span v-if="r.volume_title" class="vol">{{ r.volume_title }} ·</span>
-            {{ r.number }}. {{ r.title }}
+            {{ r.number ? `${r.number}. ` : '' }}{{ r.title }}
           </RouterLink>
           <span class="count" :title="$tn('{n} time', '{n} times', r.count, { n: r.count })">×{{ r.count }}</span>
         </li>

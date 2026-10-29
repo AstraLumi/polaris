@@ -252,9 +252,11 @@ const textOf = (id) => {
   const t = db.texts[id] || { doc: { type: 'doc', content: [{ type: 'paragraph' }] }, version: 0, updated_at: null }
   return { doc: t.doc, version: t.version, words: words(t.doc), updated_at: t.updated_at }
 }
+// As the server: front matter (the book's chapter options) isn't numbered.
+const isFront = (c) => !!db.books[c.volume_id ?? 0]?.settings?.chapter_options?.[c.id]?.front_matter
 const chapterIndex = () => ({
   volumes: db.volumes,
-  chapters: db.chapters.map((c, i) => ({ ...c, number: db.chapters.filter((x) => x.volume_id === c.volume_id).indexOf(c) + 1, position: i, event_count: 0, version_count: 0 })),
+  chapters: db.chapters.map((c, i) => ({ ...c, front_matter: isFront(c), number: isFront(c) ? 0 : db.chapters.filter((x) => x.volume_id === c.volume_id && !isFront(x)).indexOf(c) + 1, position: i, event_count: 0, version_count: 0 })),
 })
 
 async function fakeApi(route) {
@@ -912,6 +914,14 @@ async function importShots(page, snap, checks) {
   assert.deepEqual(nums.slice(-3), ['·', '9', '10'], 'front matter is not counted in the chapter numbers')
   checks.push('chapter list: front matter not counted')
   await snap('14b_import_chapter_list.png')
+  // The story's Chapters page numbers them the same way.
+  await page.goto(`${BASE}/chapters`)
+  await page.waitForSelector('.num')
+  await settle(page, 300)
+  const listed = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('.chapter-title')].map((e) => [e.textContent.trim(), e.parentElement.querySelector('.num')?.textContent])))
+  assert.deepEqual([listed['Front matter'], listed['1. RECODED'], listed['2. WARM CHAINS']], ['·', '9', '10'], 'the Chapters page does not number front matter')
+  checks.push('Chapters page: front matter not numbered')
+  await snap('14c_chapters_page.png')
 }
 
 async function wrapShots(page, snap, checks) {

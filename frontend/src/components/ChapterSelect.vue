@@ -5,10 +5,10 @@
       <option value="">{{ $t('No chapter') }}</option>
       <template v-for="g in chapterGroups" :key="g.id ?? 'none'">
         <optgroup v-if="g.title" :label="g.title">
-          <option v-for="c in g.chapters" :key="c.id" :value="c.id">{{ $t('Ch. {n}', { n: c.number }) }}: {{ c.title }}</option>
+          <option v-for="c in g.chapters" :key="c.id" :value="c.id">{{ c.front_matter ? c.title : $t('Ch. {n}', { n: c.number }) + ': ' + c.title }}</option>
         </optgroup>
         <template v-else>
-          <option v-for="c in g.chapters" :key="c.id" :value="c.id">{{ $t('Ch. {n}', { n: c.number }) }}: {{ c.title }}</option>
+          <option v-for="c in g.chapters" :key="c.id" :value="c.id">{{ c.front_matter ? c.title : $t('Ch. {n}', { n: c.number }) + ': ' + c.title }}</option>
         </template>
       </template>
     </select>

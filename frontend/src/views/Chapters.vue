@@ -4,7 +4,7 @@
       <div>
         <h1>{{ $t('Chapters') }}</h1>
         <p class="page-sub">
-          {{ $tn('{n} chapter', '{n} chapters', idx.chapters.length) }}
+          {{ $tn('{n} chapter', '{n} chapters', idx.chapters.filter((c) => !c.front_matter).length) }}
           <template v-if="idx.volumes.length"> · {{ $tn('{n} volume', '{n} volumes', idx.volumes.length) }}</template>
         </p>
       </div>
@@ -94,7 +94,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import { t, tn } from '../i18n'
 import { chaptersApi } from '../api'
 import { useQuickAdd } from '../quickAdd'
-import { chapterIndex as idx, loadChapters } from '../chapters'
+import { chapterIndex as idx, loadChapters, chapterNumber } from '../chapters'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import RowMenu from '../components/RowMenu.vue'
 
@@ -173,7 +173,7 @@ const ChapterRows = {
               },
               '⠿',
             ),
-            h('span', { class: 'num' }, String(c.number)),
+            h('span', { class: 'num', title: c.front_matter ? t('Front matter') : undefined }, chapterNumber(c)),
             h(RouterLink, { to: `/chapters/${c.id}`, class: 'chapter-title' }, () => c.title),
             h('span', { class: 'counts' }, [
               c.event_count ? tn('{n} event', '{n} events', c.event_count) : '',

@@ -520,7 +520,10 @@ left-hand pages, by where they lie in the book, not by their number.
   Each chapter in the chapter list has a "…" menu: front matter, no
   running header, and "Page numbers and layout…" (the book panel at that
   chapter); a front-matter chapter's number shows as "·", and the others
-  are numbered among the chapters that aren't front matter.
+  are numbered among the chapters that aren't front matter, there and
+  wherever the story shows a chapter's number (`GET /api/chapters` gives
+  front matter `number` 0 and `front_matter: true`, from the book's
+  chapter options).
 - Export menu: .docx, EPUB, PDF (page view's print), and for Online Post
   "Copy as formatted text" (clipboard HTML of the chapter), HTML, Markdown
   and text.

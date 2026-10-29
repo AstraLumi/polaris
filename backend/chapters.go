@@ -51,7 +51,8 @@ type chapterSummary struct {
 	VolumeID     *int64 `json:"volume_id"`
 	Title        string `json:"title"`
 	Position     int    `json:"position"`
-	Number       int    `json:"number"` // 1-based, within its volume (or among those without one)
+	Number       int    `json:"number"` // 1-based, within its volume (or among those without one); 0 for front matter
+	FrontMatter  bool   `json:"front_matter,omitempty"` // marked so in its book (the writing editor's chapter options)
 	EventCount   int    `json:"event_count"`
 	VersionCount int    `json:"version_count"`
 	Words        int    `json:"words"` // in its text (chaptertext.go)
@@ -111,13 +112,53 @@ func loadChapterIndex(db *sql.DB) (chapterIndex, error) {
 		return order[*c.VolumeID]
 	}
 	sortChapters(idx.Chapters, group)
+	front, err := frontMatterChapters(db)
+	if err != nil {
+		return idx, err
+	}
 	counts := map[int]int{}
 	for i := range idx.Chapters {
-		g := group(idx.Chapters[i])
+		c := &idx.Chapters[i]
+		book := int64(0)
+		if c.VolumeID != nil {
+			book = *c.VolumeID
+		}
+		if front[book][c.ID] {
+			c.FrontMatter = true
+			continue
+		}
+		g := group(*c)
 		counts[g]++
-		idx.Chapters[i].Number = counts[g]
+		c.Number = counts[g]
 	}
 	return idx, nil
+}
+
+// frontMatterChapters gives, per book (0: the chapters without a volume),
+// the chapters its settings mark as front matter: they aren't numbered.
+func frontMatterChapters(db *sql.DB) (map[int64]map[int64]bool, error) {
+	rows, err := db.Query(`SELECT volume_id, settings FROM book_settings`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]map[int64]bool{}
+	for rows.Next() {
+		var vol int64
+		var settings string
+		if err := rows.Scan(&vol, &settings); err != nil {
+			return nil, err
+		}
+		for id, o := range bookLayoutOf(json.RawMessage(settings)).ChapterOptions {
+			if o.FrontMatter {
+				if out[vol] == nil {
+					out[vol] = map[int64]bool{}
+				}
+				out[vol][id] = true
+			}
+		}
+	}
+	return out, rows.Err()
 }
 
 func sortChapters(list []chapterSummary, group func(chapterSummary) int) {

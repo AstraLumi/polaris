@@ -64,7 +64,7 @@ watch(
   { immediate: true },
 )
 
-const chapterName = (c) => (c.volume_title ? `${c.volume_title} · ` : '') + `${c.number}. ${c.title}`
+const chapterName = (c) => (c.volume_title ? `${c.volume_title} · ` : '') + (c.number ? `${c.number}. ` : '') + c.title
 
 // The chapters they speak in, with how many lines.
 const chapters = computed(() => {

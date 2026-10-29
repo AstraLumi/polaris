@@ -158,7 +158,7 @@ const itemsLoaded = wikiApi
 
 const kicker = computed(() => {
   const c = chapter.value
-  const num = t('Chapter {n}', { n: c.number })
+  const num = c.front_matter ? t('Front matter') : t('Chapter {n}', { n: c.number })
   return c.volume_title ? `${c.volume_title} · ${num}` : num
 })
 
@@ -166,7 +166,7 @@ const kicker = computed(() => {
 function pagerLink(id) {
   if (!id) return null
   const c = idx.value.chapters.find((x) => x.id === id)
-  return { to: `/chapters/${id}`, name: c ? `${t('Chapter {n}', { n: c.number })} · ${c.title}` : '' }
+  return { to: `/chapters/${id}`, name: c ? (c.front_matter ? c.title : `${t('Chapter {n}', { n: c.number })} · ${c.title}`) : '' }
 }
 
 const draftState = () => JSON.stringify(draft)

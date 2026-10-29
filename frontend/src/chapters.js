@@ -20,14 +20,19 @@ export function loadChapters(force = false) {
 
 const volumeTitle = (id) => chapterIndex.value.volumes.find((v) => v.id === id)?.title || ''
 
-// "Book One · Ch. 3: Ashes", or "Ch. 3: Ashes" without a volume.
+// "Book One · Ch. 3: Ashes", or "Ch. 3: Ashes" without a volume. Front
+// matter has no number: "Book One · Front matter".
 export function chapterLabel(id, { short = false } = {}) {
   const c = chapterIndex.value.chapters.find((x) => x.id === id)
   if (!c) return ''
-  const num = t('Ch. {n}', { n: c.number })
-  const head = c.volume_id ? `${volumeTitle(c.volume_id)} · ${num}` : num
+  const vol = c.volume_id ? `${volumeTitle(c.volume_id)} · ` : ''
+  if (c.front_matter) return vol + c.title
+  const head = vol + t('Ch. {n}', { n: c.number })
   return short ? head : `${head}: ${c.title}`
 }
+
+// A chapter's number for lists ("3"), or "·" for front matter.
+export const chapterNumber = (c) => (c.front_matter || !c.number ? '·' : String(c.number))
 
 // For a <select>: chapters grouped by volume, in reading order.
 export const chapterGroups = computed(() => {

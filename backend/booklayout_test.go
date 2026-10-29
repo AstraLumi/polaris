@@ -217,4 +217,17 @@ func TestImportMarksFrontMatter(t *testing.T) {
 	if book.IsSetUp {
 		t.Error("the import set the book up")
 	}
+	// The story's chapter list doesn't number it: the next chapter goes on
+	// from the chapters before it, as if it weren't there.
+	rec = do(t, h, "GET", base+"/chapters", nil, "")
+	var idx chapterIndex
+	json.Unmarshal(rec.Body.Bytes(), &idx)
+	num := map[int64]chapterSummary{}
+	for _, c := range idx.Chapters {
+		num[c.ID] = c
+	}
+	fm, first, second := num[out.Chapters[0].ID], num[out.Chapters[1].ID], num[out.Chapters[2].ID]
+	if !fm.FrontMatter || fm.Number != 0 || first.FrontMatter || first.Number < 1 || second.Number != first.Number+1 {
+		t.Errorf("numbers: front matter %+v, then %+v, %+v", fm, first, second)
+	}
 }
