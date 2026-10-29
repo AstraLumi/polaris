@@ -157,11 +157,13 @@
         :book-title="bookTitle"
         :focus-chapter="panelChapter"
         :show-pages="showPages"
+        :swap-font="swapFont"
         @show-pages="(v) => (showPages = v)"
         @update="updateSettings"
         @change-type="typeDialog = 'switch'"
         @close="panel = ''"
       />
+      <SymbolsPanel v-if="panel === 'symbols' && !focusMode && settings" :body-font="bodyFont" :book-fonts="bookFonts" @insert="onSymbol" @close="panel = ''" />
       <SpellPanel v-if="panel === 'spelling' && !focusMode" :spell="spell" @language="setBookLanguage" @close="panel = ''" />
       <OfflinePanel v-if="panel === 'offline' && !focusMode" :offline="offline" :chapters="chapters" :volume="volumeKey" @toggle="toggleOffline" @open="goChapter" @sync="sendKept" @close="panel = ''" />
     </div>
@@ -265,8 +267,8 @@ import { schema, docFromJSON, docToJSON, emptyDocJSON } from '../editor/schema.j
 import { editorPlugins } from '../editor/keymap.js'
 import { findPlugin } from '../editor/findPlugin.js'
 import { readAloudPlugin, createReader } from '../editor/readAloudPlugin.js'
-import { selectionFormat, setStyle, setCharStyle, pasteIntoEmpty, insertBlock, setImageAttrs, removeImage } from '../editor/commands.js'
-import { styleSheet, styleFonts, resolveStyle, styleById } from '../editor/styles.js'
+import { selectionFormat, setStyle, setCharStyle, pasteIntoEmpty, insertBlock, setImageAttrs, removeImage, insertSymbol } from '../editor/commands.js'
+import { styleSheet, styleFonts, resolveStyle, styleById, DEFAULT_FONT } from '../editor/styles.js'
 import { normaliseSettings, defaultSettings, switchPageType, textBlockMm, pageTypeName } from '../editor/pageTypes.js'
 import { countNode, countDocJSON } from '../editor/wordCount.js'
 import { loadFonts, docFonts, fontChoices } from '../editor/fonts.js'
@@ -310,6 +312,8 @@ import SpeakerTag from '../components/write/SpeakerTag.vue'
 import TagCard from '../components/write/TagCard.vue'
 import { speakerPlugin, tagSpeaker, removeSpeaker, tagSpell, removeSpell } from '../editor/speaker.js'
 import { fontRuns } from '../editor/fontPlaces.js'
+import SymbolsPanel from '../components/write/SymbolsPanel.vue'
+import { swapBookFont } from '../fontLibrary.js'
 import { spellChoices } from '../editor/spellTag.js'
 import SpellPanel from '../components/write/SpellPanel.vue'
 import OfflinePanel from '../components/write/OfflinePanel.vue'
@@ -1443,6 +1447,31 @@ watch(editorState, (st) => {
   const inside = $from.depth >= 1 && $from.before($from.depth) === s.pos
   if (!speakerNode.value || !inside) speaker.value = null
 })
+
+// Fonts and licenses: a font changed in the book's text (backend
+// fontswap.go). What was typed is saved first; the open chapter is read
+// again after.
+async function swapFont(body) {
+  if (!(await flushText())) throw new Error(t('The last changes are not saved yet. Try again in a moment.'))
+  const res = await swapBookFont(volumeKey.value, body)
+  if (res.chapters && chapterId.value != null) await openChapter(chapterId.value)
+  return res
+}
+
+// The Symbols panel: the body font (Normal's) and the fonts the book's
+// styles name; a symbol goes in at the cursor.
+const bodyFont = computed(() => resolveStyle(styles.value, 'normal').text?.font || DEFAULT_FONT)
+const bookFonts = computed(() => {
+  const seen = new Map()
+  for (const s of styles.value || []) {
+    const f = String(s.text?.font || '').trim()
+    if (f && f.toLowerCase() !== bodyFont.value.toLowerCase() && !seen.has(f.toLowerCase())) seen.set(f.toLowerCase(), f)
+  }
+  return [...seen.values()]
+})
+function onSymbol({ char, family }) {
+  exec(insertSymbol(char, family))
+}
 
 // From the Fonts and licenses list (?font=Family&run=N): the chapter's run N
 // of text in that font selected, in sight.

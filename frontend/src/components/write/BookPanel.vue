@@ -225,6 +225,7 @@
     <!-- Every font the book uses, and whether it may be published with. -->
     <details class="section" :open="openSection === 'fonts'" @toggle="onToggle('fonts', $event)">
       <summary>{{ $t('Fonts and licenses') }}</summary>
+      <p v-if="swapNote" class="hint swap-note" data-swap-note role="status">{{ swapNote }}</p>
       <p v-if="fontsError" class="hint">{{ fontsError }}</p>
       <p v-else-if="fontsLoading && !fontRows.length" class="hint">{{ $t('Loading…') }}</p>
       <p v-else-if="!fontRows.length" class="hint">{{ $t('This book names no fonts yet.') }}</p>
@@ -252,6 +253,39 @@
             <button type="button" class="seg-btn step" :title="$t('Next')" :aria-label="$t('Next')" @click="stepFont(r, 1)">›</button>
             <span class="font-step">{{ fontStep[r.family] != null ? $t('{n} of {total}', { n: fontStep[r.family] + 1, total: placeCount(r.places) }) : $tn('{n} place', '{n} places', placeCount(r.places)) }}</span>
           </div>
+          <!-- …and change it in the text: its spaces, its symbols, or all of it. -->
+          <div v-if="r.verdict !== 'ok' && swapFont && placeCount(r.places)" class="font-swap" data-font-swap>
+            <button v-if="r.spaces" type="button" class="seg-btn" :disabled="swapping" data-swap-spaces @click="swap(r, { what: 'spaces' })">
+              {{ $tn('Its {n} space to the body font', 'Its {n} spaces to the body font', r.spaces) }}
+            </button>
+            <template v-if="r.symbols?.length">
+              <div class="sym-head">{{ $t('Its symbols, and the fonts here that have them:') }}</div>
+              <div v-for="s in r.symbols" :key="s.char" class="sym-row" data-sym-row>
+                <span class="sym-now" :style="{ fontFamily: fontCss(r.family) }" :title="codeOf(s.char)">{{ s.char }}</span>
+                <span class="sym-count">×{{ s.count }}</span>
+                <span v-if="!symbolFonts[r.family]" class="sym-none">…</span>
+                <template v-else>
+                  <button
+                    v-for="f in symbolFonts[r.family][s.char] || []"
+                    :key="f"
+                    type="button"
+                    class="sym-alt"
+                    :disabled="swapping"
+                    :title="swapTitle(f)"
+                    :aria-label="swapTitle(f)"
+                    @click="swap(r, { what: 'chars', chars: s.char, to: f === bodyFont ? '' : f })"
+                  >
+                    <span :style="{ fontFamily: fontCss(f) }">{{ s.char }}</span>
+                    <small>{{ f === bodyFont ? $t('Body') : f }}</small>
+                  </button>
+                  <span v-if="!(symbolFonts[r.family][s.char] || []).length" class="sym-none">{{ $t('No other font here has it.') }}</span>
+                </template>
+              </div>
+            </template>
+            <button type="button" class="seg-btn" :class="{ armed: confirmAll === r.family }" :disabled="swapping" @click="swapAll(r)">
+              {{ confirmAll === r.family ? $t('Click again to put all of it in the body font') : $t('All of its text to the body font') }}
+            </button>
+          </div>
         </li>
       </ul>
       <button v-if="creditsLine" type="button" class="seg-btn copy-credits" @click="copyCredits">{{ creditsCopied ? $t('Copied') : $t('Copy credits') }}</button>
@@ -275,12 +309,14 @@ import { useRoute, useRouter } from 'vue-router'
 import ExportMenu from './ExportMenu.vue'
 import { t, tn } from '../../i18n'
 import { textBlockMm, pageTypeName } from '../../editor/pageTypes.js'
-import { resolveStyle } from '../../editor/styles.js'
+import { resolveStyle, DEFAULT_FONT } from '../../editor/styles.js'
 import { normaliseLayout, normaliseMeta, chapterOption, setChapterOption, bandText, formatNumber } from '../../editor/bookLayout.js'
 import { fontLibrary, fontWarningText } from '../../fontLibrary.js'
 import { styleWarnings } from '../../fontRules.js'
 import { fetchBookFonts } from '../../fontLibrary.js'
-import { loadFonts } from '../../editor/fonts.js'
+import { loadFonts, loadFont } from '../../editor/fonts.js'
+import { codeOf, drawsGlyph, quoted } from '../../editor/glyphs.js'
+import { BUNDLED_FONTS } from '../../editor/bundledFonts.js'
 import { licenseLabel, creditsText } from '../../editor/fontCredits.js'
 import { placeAt, placeCount } from '../../editor/fontPlaces.js'
 
@@ -290,6 +326,9 @@ const props = defineProps({
   bookTitle: { type: String, default: '' },
   focusChapter: { type: Number, default: null },
   showPages: { type: Boolean, default: true },
+  // Changes a font in the book's text (WritePage: saves first, reads the
+  // open chapter again after); null where it can't.
+  swapFont: { type: Function, default: null },
 })
 const emit = defineEmits(['update', 'change-type', 'show-pages', 'close'])
 const route = useRoute()
@@ -375,6 +414,62 @@ function whereUsed(r) {
   return [out, ch].filter(Boolean).join(' · ')
 }
 const creditsLine = computed(() => creditsText(fontRows.value))
+// ---- A flagged font changed in the text ----------------------------------------------
+const bodyFont = computed(() => normal.value?.font || DEFAULT_FONT)
+const fontCss = (f) => `${quoted(f)}, serif`
+const SYMBOL_FONTS = BUNDLED_FONTS.filter((b) => b.group === 'Symbols').map((b) => b.family)
+// Flagged family → symbol → the fonts here that draw it: the body font,
+// the book's fonts with an open license, then the bundled symbol fonts.
+const symbolFonts = ref({})
+let symbolsSeq = 0
+async function findSymbolFonts(rows) {
+  const seq = ++symbolsSeq
+  const flagged = rows.filter((r) => r.verdict !== 'ok' && r.symbols?.length)
+  if (!flagged.length || typeof document === 'undefined') {
+    symbolFonts.value = {}
+    return
+  }
+  const text = [...new Set(flagged.flatMap((r) => r.symbols.map((s) => s.char)))].join('')
+  const fonts = [...new Set([bodyFont.value, ...rows.filter((r) => r.verdict === 'ok').map((r) => r.family), ...SYMBOL_FONTS])]
+  await Promise.all(fonts.map((f) => loadFont(f).then(() => document.fonts?.load(`24px ${quoted(f)}`, text)).catch(() => null)))
+  if (seq !== symbolsSeq) return
+  const out = {}
+  for (const r of flagged) {
+    const own = r.family.toLowerCase()
+    out[r.family] = Object.fromEntries(r.symbols.map((s) => [s.char, fonts.filter((f) => f.toLowerCase() !== own && drawsGlyph(f, s.char)).slice(0, 6)]))
+  }
+  symbolFonts.value = out
+}
+const swapTitle = (f) => (f === bodyFont.value ? t('Put it in the body font ({font})', { font: f }) : t('Put it in {font}', { font: f }))
+
+const swapping = ref(false)
+const swapNote = ref('')
+const confirmAll = ref('')
+async function swap(r, body) {
+  if (!props.swapFont || swapping.value) return
+  swapping.value = true
+  swapNote.value = ''
+  try {
+    const res = await props.swapFont({ family: r.family, to: '', ...body, label: t('Before changing the font {family}', { family: r.family }) })
+    swapNote.value = res.chapters
+      ? tn('{family}: changed in {n} chapter, saved as a version first.', '{family}: changed in {n} chapters, each saved as a version first.', res.chapters, { family: r.family })
+      : t('Nothing needed changing.')
+    const { [r.family]: _gone, ...steps } = fontStep.value
+    fontStep.value = steps
+    await loadBookFonts()
+  } catch (e) {
+    swapNote.value = e.message || t('failed to change the font')
+  } finally {
+    swapping.value = false
+    confirmAll.value = ''
+  }
+}
+// All of a font's text: a second click does it.
+function swapAll(r) {
+  if (confirmAll.value !== r.family) confirmAll.value = r.family
+  else swap(r, { what: 'all' })
+}
+
 // Where each flagged font was last shown (family → its place, 0-based). The
 // writing page opens the chapter and selects the run (?font=&run=).
 const fontStep = ref({})
@@ -405,6 +500,7 @@ async function loadBookFonts() {
     if (seq !== fontsSeq) return
     fontRows.value = rows
     fontsError.value = ''
+    findSymbolFonts(rows)
     loadFonts(rows.map((r) => r.family)).catch(() => {})
   } catch (e) {
     if (seq === fontsSeq) fontsError.value = e.message || t('Failed to load the fonts')
@@ -811,6 +907,82 @@ textarea {
   flex-wrap: wrap;
   gap: 0.3rem;
   margin-top: 0.35rem;
+}
+
+.font-swap {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+  justify-items: start;
+}
+
+.font-swap .seg-btn {
+  flex: 0 0 auto;
+  white-space: normal;
+  text-align: left;
+}
+
+.font-swap .seg-btn.armed {
+  border-color: #c4503f;
+  color: #c4503f;
+}
+
+.sym-head {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.sym-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.sym-now {
+  min-width: 1.8rem;
+  font-size: 1.3rem;
+  text-align: center;
+}
+
+.sym-count,
+.sym-none {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
+.sym-alt {
+  display: inline-grid;
+  justify-items: center;
+  max-width: 8.5rem;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: var(--glass);
+  color: inherit;
+  cursor: pointer;
+}
+
+.sym-alt span {
+  font-size: 1.2rem;
+  line-height: 1.2;
+}
+
+.sym-alt small {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sym-alt:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.swap-note {
+  color: var(--text-muted);
 }
 
 .font-find .seg-btn {

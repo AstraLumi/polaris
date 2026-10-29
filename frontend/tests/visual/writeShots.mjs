@@ -10,7 +10,7 @@
 // Tab through the cells, a table pasted from Word) and in the page view
 // (rows breaking across pages, the header row repeated).
 //
-//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes|wrap|import|speaker|painter|pages|fonts]
+//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes|wrap|import|speaker|painter|pages|fonts|symbols]
 //
 // --only spell: just the spellchecker (underlines, the menu on a word, Add
 // to dictionary, Ignore, typing, the spelling panel, dark paper, off).
@@ -300,7 +300,16 @@ async function fakeApi(route) {
     db.chapters.push(c)
     return json(c)
   }
+  if (/^\/books\/\d+\/fonts\/swap$/.test(path) && method === 'POST') {
+    // As the server does, roughly: noted, and the font's spaces and the
+    // symbol asked for are gone from the list after.
+    const b = body()
+    ;(db.swaps ||= []).push(b)
+    return json({ chapters: 1, pieces: 2 })
+  }
   if (/^\/books\/\d+\/fonts$/.test(path)) {
+    const swaps = db.swaps || []
+    const swapped = (what, ch) => swaps.some((b) => b.family === 'Mystery Face' && (b.what === what || b.what === 'all') && (!ch || (b.chars || '').includes(ch)))
     const base = { bands: 0, chapters: 0, styles: [], source_url: '', license_id: '', license: '', license_url: '', copyright: '', designer: '' }
     const ofl = { license_id: 'OFL-1.1', license: 'SIL Open Font License 1.1', license_url: 'https://openfontlicense.org', verdict: 'ok', reason: 'open', source: 'google' }
     return json([
@@ -308,7 +317,8 @@ async function fakeApi(route) {
       { ...base, ...ofl, family: 'Turret Road', styles: ['Quote'], copyright: 'Copyright 2012 The Turret Road Authors' },
       { ...base, family: 'Shop Script', source: 'library', source_url: 'https://shop.example/script', license: 'Shop licence 4', allowed: { print: true, ebook: false, web: false, commercial: true }, verdict: 'check', reason: 'uses', bands: 1 },
       { ...base, family: 'Georgia', source: 'system', verdict: 'warn', reason: 'proprietary', styles: ['Caption'] },
-      { ...base, family: 'Mystery Face', source: 'unknown', verdict: 'check', reason: 'unknown', chapters: 2, places: [{ chapter: 12, runs: 2 }, { chapter: 11, runs: 0 }, { chapter: 13, runs: 1 }] },
+      { ...base, family: 'Mystery Face', source: 'unknown', verdict: 'check', reason: 'unknown', chapters: 2, places: [{ chapter: 12, runs: 2 }, { chapter: 11, runs: 0 }, { chapter: 13, runs: 1 }],
+        spaces: swapped('spaces') ? 0 : 3, symbols: [{ char: '★', count: 2 }, { char: '∞', count: 1 }].filter((x) => !swapped('chars', x.char)) },
     ])
   }
   if ((m = /^\/books\/(\d+)\/import-docx$/.exec(path))) {
@@ -505,6 +515,10 @@ async function shoot() {
   }
   if (option('only', '') === 'fonts') {
     await fontShots(page, snap, checks)
+    return { saved, errors, checks }
+  }
+  if (option('only', '') === 'symbols') {
+    await symbolShots(page, snap, checks)
     return { saved, errors, checks }
   }
   if (option('only', '') === 'pages') {
@@ -1036,6 +1050,58 @@ async function fontShots(page, snap, checks) {
   await find.getByRole('button', { name: 'Previous' }).click()
   assert.deepEqual(await selected(), { chapter: '13', text: 'lantern' }, 'and back')
   checks.push('fonts list: a flagged font steps through its 3 places in 2 chapters, each selected')
+
+  // Its spaces and symbols, changed in the text.
+  const row = page.locator('[data-font-row][data-verdict="check"]').last()
+  await row.locator('[data-sym-row] .sym-alt').first().waitFor({ timeout: 15000 })
+  const alts = await row.locator('[data-sym-row]').first().locator('.sym-alt').evaluateAll((els) => els.map((e) => e.title))
+  assert.ok(alts.some((a) => a.includes('Noto Sans Symbols')), 'a bundled symbol font has the star: ' + alts.join(' | '))
+  await row.locator('[data-font-row] .font-swap, .font-swap').first().scrollIntoViewIfNeeded()
+  await snap('16c_font_symbols.png')
+  await row.locator('[data-swap-spaces]').click()
+  await page.waitForSelector('[data-swap-note]')
+  assert.deepEqual(db.swaps.at(-1), { family: 'Mystery Face', to: '', what: 'spaces', label: 'Before changing the font Mystery Face' })
+  assert.match(await page.locator('[data-swap-note]').innerText(), /changed in 1 chapter/)
+  await page.waitForFunction(() => !document.querySelector('[data-swap-spaces]'))
+  const pick = row.locator('[data-sym-row]').first().locator('.sym-alt', { hasText: 'Noto Sans Symbols' }).first()
+  const to = (await pick.locator('small').innerText()).trim()
+  await pick.click()
+  await page.waitForFunction(() => document.querySelectorAll('[data-sym-row]').length === 1)
+  assert.deepEqual(db.swaps.at(-1), { family: 'Mystery Face', to, what: 'chars', chars: '★', label: 'Before changing the font Mystery Face' })
+  checks.push(`fonts list: spaces to the body font, ★ to ${to} (other fonts with the star: ${alts.length})`)
+}
+
+// The Symbols panel (--only symbols): a font's symbols by kind, inserted at the cursor.
+async function symbolShots(page, snap, checks) {
+  await page.goto(`${BASE}/write/1?chapter=12`)
+  await page.waitForSelector('.write-doc p')
+  await page.locator('.write-doc p').first().click()
+  await page.keyboard.press('End')
+  await page.getByRole('button', { name: 'Symbols', exact: true }).click()
+  const panel = page.locator('[data-symbols-panel]')
+  await panel.locator('[data-symbols-font]').selectOption('Noto Sans Symbols 2')
+  await panel.locator('[data-symbols-block]').selectOption('misc')
+  await page.waitForFunction(() => document.querySelectorAll('[data-symbols-grid] .glyph').length > 50, null, { timeout: 20000 })
+  const n = await panel.locator('[data-symbols-grid] .glyph').count()
+  await panel.locator('[data-symbols-grid] .glyph[title="U+2605"]').click()
+  const inserted = await page.evaluate(() => {
+    const span = [...document.querySelectorAll('.write-doc [data-font]')].find((e) => e.textContent.includes('★'))
+    return span ? { font: span.dataset.font, text: span.textContent } : null
+  })
+  assert.deepEqual(inserted, { font: 'Noto Sans Symbols 2', text: '★' })
+  assert.equal(await panel.locator('.recent .glyph').count(), 1, 'it is in Recently used')
+  await panel.locator('[data-symbols-block]').selectOption('emoji')
+  await page.waitForFunction(() => /symbols? in/.test(document.querySelector('[data-symbols-status]').textContent) || /none of these/.test(document.querySelector('[data-symbols-status]').textContent), null, { timeout: 30000 })
+  const emoji = await panel.locator('[data-symbols-grid] .glyph').count()
+  await panel.locator('[data-symbols-font]').selectOption('')
+  await panel.locator('[data-symbols-block]').selectOption('arrows')
+  await page.waitForFunction(() => /symbols? in Merriweather|none of these/.test(document.querySelector('[data-symbols-status]').textContent), null, { timeout: 20000 })
+  const body = await panel.locator('[data-symbols-grid] .glyph').count()
+  await panel.locator('[data-symbols-font]').selectOption('Noto Sans Math')
+  await page.waitForFunction(() => /symbols? in Noto Sans Math/.test(document.querySelector('[data-symbols-status]').textContent), null, { timeout: 20000 })
+  await panel.locator('[data-symbols-grid] .glyph').first().hover()
+  await snap('17_symbols_panel.png')
+  checks.push(`symbols: Noto Sans Symbols 2 has ${n} miscellaneous symbols (★ inserted in it), ${emoji} emoji; Merriweather has ${body} arrows`)
 }
 
 async function pagesShots(page, snap, checks) {

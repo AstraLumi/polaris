@@ -823,6 +823,10 @@ type bookFontUse struct {
 	// Places are the chapters whose text uses it, in book order, each with
 	// its runs of text (fontRuns in frontend/src/editor/fontPlaces.js).
 	Places []fontPlace `json:"places,omitempty"`
+	// Spaces and Symbols: its text that is whitespace, and its symbols with
+	// their counts, most used first (fontswap.go).
+	Spaces  int          `json:"spaces,omitempty"`
+	Symbols []fontSymbol `json:"symbols,omitempty"`
 }
 
 type fontPlace struct {
@@ -952,13 +956,18 @@ func bookFontUses(db editorDB, vol int64) ([]bookFontUse, error) {
 			u.Chapters++
 			u.Places = append(u.Places, fontPlace{id, n})
 		}
+		for f, c := range docFontChars(&d) {
+			addFontChars(use(v, f), c)
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	out := make([]bookFontUse, 0, len(order))
 	for _, k := range order {
-		out = append(out, *uses[k])
+		u := *uses[k]
+		u.Symbols = sortFontSymbols(u.Symbols)
+		out = append(out, u)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Volume != out[j].Volume {

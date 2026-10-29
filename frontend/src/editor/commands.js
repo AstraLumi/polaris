@@ -258,6 +258,22 @@ export const insertHardBreak = (state, dispatch) => {
   return true
 }
 
+// A symbol at the cursor (the Symbols panel): in family, or with no font
+// mark (the body font) when family is empty; its other marks are what
+// typing there would give.
+export const insertSymbol = (text, family) => (state, dispatch) => {
+  if (!text || !state.selection.$from.parent.inlineContent) return false
+  if (dispatch) {
+    const from = state.selection.from
+    const tr = state.tr.replaceSelectionWith(schema.text(text), true)
+    const to = from + text.length
+    tr.removeMark(from, to, marks.font)
+    if (family) tr.addMark(from, to, marks.font.create({ family }))
+    dispatch(tr.setSelection(TextSelection.create(tr.doc, to)).scrollIntoView())
+  }
+  return true
+}
+
 // Enter, as in Word: the new paragraph keeps the paragraph's formatting and
 // the text formatting; after a heading, title or subtitle comes Normal.
 export const splitParagraph = (state, dispatch) => {

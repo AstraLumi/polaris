@@ -22,6 +22,7 @@ void [
   tr('unknown license kind'), tr('that text is too long'), tr('the purchase date is not valid'), tr('a weight is one of 100, 200 … 900'),
   tr("that file is not one of this font's"), tr('that file is too large (over 20 MB)'),
   tr('a license or receipt must be a PDF, a picture or a text file'),
+  tr('failed to change the font'), tr('that is the same font'),
 ]
 
 export const fontLibrary = ref([])
@@ -126,6 +127,12 @@ export const fetchFontsUsed = () => call('/api/fonts/used', undefined, 'failed t
 
 // The families one book of the open story names (styles, bands, text).
 export const fetchBookFonts = (volume) => call(`${STORY_API}/books/${volume}/fonts`, undefined, 'failed to load the book')
+
+// Changes a font in the book's text (backend fontswap.go): { family, what:
+// 'spaces' | 'chars' | 'all', chars, to ('' = the body font), label } →
+// { chapters, pieces }. Each chapter changed keeps a version first.
+export const swapBookFont = (volume, body) =>
+  call(`${STORY_API}/books/${volume}/fonts/swap`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, 'failed to change the font')
 
 // The words for a warning from fontRules.js.
 export function fontWarningText(w) {

@@ -924,12 +924,48 @@ the fonts a .docx import brought count too) plus:
   which counts the same way; `tests/fontPlaces.test.mjs` and
   `TestDocFontRuns` share one doc).
 
+- `spaces` and `symbols`: how much of the family's text is whitespace
+  (`isFontSpace`), and its symbols (`isFontSymbol`: Unicode symbols and
+  private-use characters, which old Symbol/Wingdings text uses) as
+  `[{char, count}]`, most used first, at most 40.
+
+A flagged row with places can also change the font in the text:
+"Its N spaces to the body font", each symbol shown in the fonts here that
+draw it (the body font, the book's fonts with an open license, the bundled
+symbol fonts; `drawsGlyph` in `frontend/src/editor/glyphs.js`), a click
+moving that symbol to that font, and "All of its text to the body font"
+(a second click confirms). They call
+`POST /api/books/{volume}/fonts/swap` with `{family, what, chars, to,
+label}` (`backend/fontswap.go`): `what` is `spaces`, `chars` or `all`;
+`to` empty removes the font mark (the paragraph's style decides, the body
+font for Normal text), else names a family. Every chapter it changes keeps
+its text first as a version named `label` ("Before changing the font
+Cambria Math"), gets a new text version and is re-indexed; the answer is
+`{chapters, pieces}`. The writing page saves what was typed first and reads
+the open chapter again after.
+
 "Copy credits" copies one plain-text line for the copyright page, built by
 `frontend/src/editor/fontCredits.js` (pure, `tests/fontCredits.test.mjs`):
 "Set in Merriweather (Copyright 2016 The Merriweather Project Authors; SIL
 Open Font License 1.1) and Turret Road (…)." System fonts are left out.
 Text that comes from font files is shown as plain text, never as HTML.
 Screenshot: `writeShots.mjs --only fonts`.
+
+### Symbols
+
+The toolbar's Ω opens the Symbols panel (`components/write/SymbolsPanel.vue`):
+a font (the body font, the book's style fonts, the bundled fonts by group,
+the fonts library) and a kind (`SYMBOL_BLOCKS` in `editor/glyphs.js`:
+miscellaneous symbols, dingbats, arrows, shapes, math, runes, alchemy,
+emoji, private use…). The grid shows only the characters the font itself
+draws: the browser can't list a font's characters, so `drawsGlyph` draws
+each on a canvas in `"Font", <generic>` and in `<generic>` alone, on the
+alphabetic baseline, and the same pixels mean a fallback drew it. A click
+inserts it at the cursor (`insertSymbol` in `editor/commands.js`) with a
+`font` mark for that font, or none for the body font. The font, the kind
+and the last 24 symbols used are kept in `localStorage`
+(`polaris-write-symbol-panel`). Tests: `tests/glyphs.test.mjs`;
+screenshot: `writeShots.mjs --only symbols`.
 
 ### Comments (stage 5)
 

@@ -135,6 +135,7 @@
       <button v-bind="btn(t('Bulleted list'), fmt.list === 'bullet_list')" @click="exec(toggleList('bullet_list'))"><TbIcon name="list-bullet" /></button>
       <button v-bind="btn(t('Numbered list'), fmt.list === 'ordered_list')" @click="exec(toggleList('ordered_list'))"><TbIcon name="list-number" /></button>
       <button v-bind="btn(t('Scene break'))" @click="exec(insertBlock('scene_break'))"><span class="glyph">⁂</span></button>
+      <button v-bind="btn(t('Symbols'), panel === 'symbols')" @click="$emit('panel', 'symbols')"><span class="glyph">Ω</span></button>
       <button v-bind="btn(t('Page break') + ' (Ctrl+Enter)')" :disabled="online" @click="exec(insertBlock('page_break'))"><TbIcon name="page-break" /></button>
       <button v-bind="btn(t('Table of contents'))" class="foldable" :disabled="online" @click="exec(insertBlock('toc', { title: t('Contents') }))"><TbIcon name="toc" /></button>
       <button v-bind="btn(t('Insert picture'), fmt.atom === 'image')" :disabled="uploading" @click="$emit('picture')"><TbIcon name="picture" /></button>

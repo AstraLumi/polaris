@@ -272,6 +272,7 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	mux.HandleFunc("GET /api/books/{volume}/docs", getBookDocsHandler(db))
 	// The families a book names, for the export warnings (fontlib.go).
 	mux.HandleFunc("GET /api/books/{volume}/fonts", bookFontsHandler(db))
+	mux.HandleFunc("POST /api/books/{volume}/fonts/swap", swapBookFontHandler(db)) // fontswap.go
 	for _, f := range []string{"docx", "epub", "html", "md", "txt"} {
 		mux.HandleFunc("GET /api/books/{volume}/export."+f, exportBookHandler(db, uploadsDir, f)) // export.go
 	}
