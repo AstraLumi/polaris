@@ -245,6 +245,13 @@
           </div>
           <div v-if="r.copyright" class="font-copy">{{ r.copyright }}</div>
           <div class="font-verdict" :class="'v-' + r.verdict">{{ verdictText(r) }}</div>
+          <!-- A flagged font used in the text: step through those places. -->
+          <div v-if="r.verdict !== 'ok' && placeCount(r.places)" class="font-find" data-font-find>
+            <button type="button" class="seg-btn step" :title="$t('Previous')" :aria-label="$t('Previous')" @click="stepFont(r, -1)">‹</button>
+            <button type="button" class="seg-btn" @click="stepFont(r, 1)">{{ $t('Show in the text') }}</button>
+            <button type="button" class="seg-btn step" :title="$t('Next')" :aria-label="$t('Next')" @click="stepFont(r, 1)">›</button>
+            <span class="font-step">{{ fontStep[r.family] != null ? $t('{n} of {total}', { n: fontStep[r.family] + 1, total: placeCount(r.places) }) : $tn('{n} place', '{n} places', placeCount(r.places)) }}</span>
+          </div>
         </li>
       </ul>
       <button v-if="creditsLine" type="button" class="seg-btn copy-credits" @click="copyCredits">{{ creditsCopied ? $t('Copied') : $t('Copy credits') }}</button>
@@ -275,6 +282,7 @@ import { styleWarnings } from '../../fontRules.js'
 import { fetchBookFonts } from '../../fontLibrary.js'
 import { loadFonts } from '../../editor/fonts.js'
 import { licenseLabel, creditsText } from '../../editor/fontCredits.js'
+import { placeAt, placeCount } from '../../editor/fontPlaces.js'
 
 const props = defineProps({
   settings: { type: Object, required: true },
@@ -367,6 +375,18 @@ function whereUsed(r) {
   return [out, ch].filter(Boolean).join(' · ')
 }
 const creditsLine = computed(() => creditsText(fontRows.value))
+// Where each flagged font was last shown (family → its place, 0-based). The
+// writing page opens the chapter and selects the run (?font=&run=).
+const fontStep = ref({})
+function stepFont(r, by) {
+  const cur = fontStep.value[r.family]
+  const k = cur == null ? (by > 0 ? 0 : -1) : cur + by
+  const total = placeCount(r.places)
+  const place = placeAt(r.places, k)
+  if (!place) return
+  fontStep.value = { ...fontStep.value, [r.family]: ((k % total) + total) % total }
+  router.replace({ query: { ...route.query, chapter: String(place.chapter), font: r.family, run: String(place.run) } })
+}
 async function copyCredits() {
   try {
     await navigator.clipboard.writeText(creditsLine.value)
@@ -784,5 +804,27 @@ textarea {
 .font-verdict.v-ok { color: #3f8f5a; }
 .font-verdict.v-check { color: #b58a1f; }
 .font-verdict.v-warn { color: #c4503f; }
+
+.font-find {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+}
+
+.font-find .seg-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.font-find .step {
+  min-width: 1.8rem;
+}
+
+.font-step {
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
 .copy-credits { flex: none; width: 100%; }
 </style>

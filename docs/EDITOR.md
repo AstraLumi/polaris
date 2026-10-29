@@ -915,6 +915,15 @@ the fonts a .docx import brought count too) plus:
   from its owner; reason `proprietary`). Offline, a Google family comes back
   with source `google` and verdict `check`.
 
+- `places`: the chapters whose text has the family's `font` mark, in book
+  order, each as `{chapter, runs}` (`docFontRuns`; a run is neighbouring
+  inline nodes in that family, any case). A flagged row (verdict not `ok`)
+  with places shows "Show in the text" with ‹ › to step through them: the
+  writing page gets `?chapter=…&font=<family>&run=<n>`, opens that chapter
+  and selects its run n (`fontRuns` in `frontend/src/editor/fontPlaces.js`,
+  which counts the same way; `tests/fontPlaces.test.mjs` and
+  `TestDocFontRuns` share one doc).
+
 "Copy credits" copies one plain-text line for the copyright page, built by
 `frontend/src/editor/fontCredits.js` (pure, `tests/fontCredits.test.mjs`):
 "Set in Merriweather (Copyright 2016 The Merriweather Project Authors; SIL

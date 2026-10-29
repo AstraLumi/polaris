@@ -2605,4 +2605,8 @@ export default {
   "Copied": "Copiado",
   "Copying failed.": "No se pudo copiar.",
   "Failed to load the fonts": "No se pudieron cargar las fuentes",
+  "Show in the text": "Mostrar en el texto",
+  "{n} of {total}": "{n} de {total}",
+  "{n} place": "{n} lugar",
+  "{n} places": "{n} lugares",
 }

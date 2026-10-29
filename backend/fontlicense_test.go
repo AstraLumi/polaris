@@ -93,7 +93,7 @@ func TestBookFontsLicenses(t *testing.T) {
 	if o.Source != "google" || o.Verdict != "ok" || o.LicenseID != "OFL-1.1" || o.Bands != 1 || !strings.Contains(o.Copyright, "2016") || o.LicenseURL != "https://openfontlicense.org" {
 		t.Errorf("band face: %+v", o)
 	}
-	if o := by["mark face"]; o.Source != "unknown" || o.Verdict != "check" || o.Chapters != 1 {
+	if o := by["mark face"]; o.Source != "unknown" || o.Verdict != "check" || o.Chapters != 1 || len(o.Places) != 1 || o.Places[0].Runs != 1 {
 		t.Errorf("mark face (only in the text): %+v", o)
 	}
 	if o := by["far face"]; o.Source != "google" || o.Verdict != "check" || o.LicenseID != "" {

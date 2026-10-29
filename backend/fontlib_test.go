@@ -399,3 +399,27 @@ func TestEPUBEmbedsAllowedFonts(t *testing.T) {
 		t.Error("fonts embedded without a library")
 	}
 }
+
+// fontRunsDoc is also in frontend/tests/fontPlaces.test.mjs: both count it
+// the same way.
+const fontRunsDoc = `{"type":"doc","content":[
+	{"type":"paragraph","content":[
+		{"type":"text","marks":[{"type":"font","attrs":{"family":"Cambria"}}],"text":"a"},
+		{"type":"text","marks":[{"type":"bold"},{"type":"font","attrs":{"family":"Cambria"}}],"text":"b"},
+		{"type":"text","text":"c"},
+		{"type":"text","marks":[{"type":"font","attrs":{"family":"cambria"}}],"text":"d"},
+		{"type":"hard_break","marks":[{"type":"font","attrs":{"family":"Cambria"}}]},
+		{"type":"text","marks":[{"type":"font","attrs":{"family":"Other"}}],"text":"e"}]},
+	{"type":"paragraph","content":[
+		{"type":"text","marks":[{"type":"font","attrs":{"family":"Cambria"}}],"text":"f"}]}]}`
+
+func TestDocFontRuns(t *testing.T) {
+	var d pmNode
+	if err := json.Unmarshal([]byte(fontRunsDoc), &d); err != nil {
+		t.Fatal(err)
+	}
+	got := docFontRuns(&d)
+	if len(got) != 2 || got["Cambria"] != 3 || got["Other"] != 1 {
+		t.Errorf("runs: %v", got)
+	}
+}

@@ -308,7 +308,7 @@ async function fakeApi(route) {
       { ...base, ...ofl, family: 'Turret Road', styles: ['Quote'], copyright: 'Copyright 2012 The Turret Road Authors' },
       { ...base, family: 'Shop Script', source: 'library', source_url: 'https://shop.example/script', license: 'Shop licence 4', allowed: { print: true, ebook: false, web: false, commercial: true }, verdict: 'check', reason: 'uses', bands: 1 },
       { ...base, family: 'Georgia', source: 'system', verdict: 'warn', reason: 'proprietary', styles: ['Caption'] },
-      { ...base, family: 'Mystery Face', source: 'unknown', verdict: 'check', reason: 'unknown', chapters: 1 },
+      { ...base, family: 'Mystery Face', source: 'unknown', verdict: 'check', reason: 'unknown', chapters: 2, places: [{ chapter: 12, runs: 2 }, { chapter: 11, runs: 0 }, { chapter: 13, runs: 1 }] },
     ])
   }
   if ((m = /^\/books\/(\d+)\/import-docx$/.exec(path))) {
@@ -1011,6 +1011,31 @@ async function fontShots(page, snap, checks) {
   checks.push(`fonts list: ${rows.length} rows (${rows.map((r) => r.verdict).join(', ')}); credits: ${copied}`)
   await page.locator('.section[open]').scrollIntoViewIfNeeded()
   await snap('16_fonts_and_licenses.png')
+
+  // A flagged font's places: each step opens its chapter with the run selected.
+  const mystery = (text) => txt(text, { type: 'font', attrs: { family: 'Mystery Face' } })
+  db.texts[12] = { doc: { type: 'doc', content: [para(null, txt('Hollowmere was '), mystery('smaller'), txt(' than its name.')), para(null, mystery('The ford'), txt(' was dry.'))] }, version: 2, updated_at: now() }
+  db.texts[13] = { doc: { type: 'doc', content: [para(null, txt('By dawn the '), mystery('lantern'), txt(' had gone out.'))] }, version: 2, updated_at: now() }
+  assert.equal(await page.locator('[data-font-find]').count(), 1, 'only the flagged font used in the text can be shown')
+  const find = page.locator('[data-font-find]')
+  const selected = async () => {
+    await page.waitForFunction(() => !/[?&]font=/.test(location.search))
+    await settle(page, 300)
+    return page.evaluate(() => ({ chapter: new URLSearchParams(location.search).get('chapter'), text: String(getSelection()) }))
+  }
+  await find.getByRole('button', { name: 'Show in the text' }).click()
+  assert.deepEqual(await selected(), { chapter: '12', text: 'smaller' })
+  assert.ok((await find.innerText()).includes('1 of 3'), await find.innerText())
+  await find.getByRole('button', { name: 'Next' }).click()
+  assert.deepEqual(await selected(), { chapter: '12', text: 'The ford' }, 'the next run in the same chapter')
+  await find.getByRole('button', { name: 'Next' }).click()
+  assert.deepEqual(await selected(), { chapter: '13', text: 'lantern' }, 'then the next chapter')
+  await snap('16b_font_in_the_text.png')
+  await find.getByRole('button', { name: 'Next' }).click()
+  assert.deepEqual(await selected(), { chapter: '12', text: 'smaller' }, 'past the last back to the first')
+  await find.getByRole('button', { name: 'Previous' }).click()
+  assert.deepEqual(await selected(), { chapter: '13', text: 'lantern' }, 'and back')
+  checks.push('fonts list: a flagged font steps through its 3 places in 2 chapters, each selected')
 }
 
 async function pagesShots(page, snap, checks) {

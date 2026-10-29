@@ -820,6 +820,14 @@ type bookFontUse struct {
 	Styles   []string `json:"styles"`
 	Bands    int      `json:"bands"`
 	Chapters int      `json:"chapters"`
+	// Places are the chapters whose text uses it, in book order, each with
+	// its runs of text (fontRuns in frontend/src/editor/fontPlaces.js).
+	Places []fontPlace `json:"places,omitempty"`
+}
+
+type fontPlace struct {
+	Chapter int64 `json:"chapter"`
+	Runs    int   `json:"runs"`
 }
 
 // bookFontUses lists the families every book of a story names (only the
@@ -917,29 +925,32 @@ func bookFontUses(db editorDB, vol int64) ([]bookFontUse, error) {
 		}
 	}
 	// The text's own font marks: only docs that name a font are read.
-	q := `SELECT COALESCE(c.volume_id, 0), t.doc FROM chapter_texts t JOIN chapters c ON c.id = t.chapter_id WHERE t.doc LIKE '%"font"%'`
+	q := `SELECT COALESCE(c.volume_id, 0), c.id, t.doc FROM chapter_texts t JOIN chapters c ON c.id = t.chapter_id WHERE t.doc LIKE '%"font"%'`
 	args := []any{}
 	if vol >= 0 {
 		q += ` AND c.volume_id IS ?`
 		args = append(args, volumeNull(vol))
 	}
+	q += ` ORDER BY c.position, c.id`
 	rows, err = db.Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var v int64
+		var v, id int64
 		var doc string
-		if err := rows.Scan(&v, &doc); err != nil {
+		if err := rows.Scan(&v, &id, &doc); err != nil {
 			return nil, err
 		}
 		var d pmNode
 		if json.Unmarshal([]byte(doc), &d) != nil {
 			continue
 		}
-		for f := range docFontFamilies(&d) {
-			use(v, f).Chapters++
+		for f, n := range docFontRuns(&d) {
+			u := use(v, f)
+			u.Chapters++
+			u.Places = append(u.Places, fontPlace{id, n})
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -974,6 +985,38 @@ func docFontFamilies(d *pmNode) map[string]bool {
 			}
 		}
 	})
+	return out
+}
+
+// docFontRuns counts a doc's runs of text in each font mark's family (as
+// first written): neighbouring inline nodes in one family are one run.
+// fontRuns in frontend/src/editor/fontPlaces.js counts the same way.
+func docFontRuns(d *pmNode) map[string]int {
+	names := map[string]string{}
+	runs := map[string]int{}
+	pmWalk(d, func(n *pmNode) {
+		prev := ""
+		for _, c := range n.Content {
+			fam := ""
+			for _, m := range c.Marks {
+				if f, ok := m.Attrs["family"].(string); ok && m.Type == "font" {
+					fam = strings.TrimSpace(f)
+				}
+			}
+			key := strings.ToLower(fam)
+			if key != "" && key != prev {
+				if names[key] == "" {
+					names[key] = fam
+				}
+				runs[key]++
+			}
+			prev = key
+		}
+	})
+	out := make(map[string]int, len(runs))
+	for k, n := range runs {
+		out[names[k]] = n
+	}
 	return out
 }
 

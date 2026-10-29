@@ -42,6 +42,9 @@ func init() {
 		"Palatino", "Palatino Linotype", "Verdana", "Tahoma", "Trebuchet MS", "Courier New", "Courier", "Segoe UI",
 		"Aptos", "Constantia", "Candara", "Consolas", "Century", "Century Schoolbook", "Baskerville", "Didot",
 		"Hoefler Text", "Optima", "Gill Sans", "Symbol", "Wingdings", "Comic Sans MS", "Impact",
+		"Cambria Math", "Segoe UI Symbol", "Segoe UI Emoji", "Segoe Print", "Segoe Script", "Arial Black",
+		"Arial Narrow", "Franklin Gothic", "Lucida Console", "Lucida Sans", "MS Mincho", "MS Gothic",
+		"Yu Mincho", "Yu Gothic", "Meiryo",
 	} {
 		systemFonts[strings.ToLower(f)] = true
 	}

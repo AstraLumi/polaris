@@ -309,6 +309,7 @@ import SpellMenu from '../components/write/SpellMenu.vue'
 import SpeakerTag from '../components/write/SpeakerTag.vue'
 import TagCard from '../components/write/TagCard.vue'
 import { speakerPlugin, tagSpeaker, removeSpeaker, tagSpell, removeSpell } from '../editor/speaker.js'
+import { fontRuns } from '../editor/fontPlaces.js'
 import { spellChoices } from '../editor/spellTag.js'
 import SpellPanel from '../components/write/SpellPanel.vue'
 import OfflinePanel from '../components/write/OfflinePanel.vue'
@@ -1443,8 +1444,30 @@ watch(editorState, (st) => {
   if (!speakerNode.value || !inside) speaker.value = null
 })
 
+// From the Fonts and licenses list (?font=Family&run=N): the chapter's run N
+// of text in that font selected, in sight.
+function goToFont() {
+  const { font, run, ...rest } = route.query
+  router.replace({ query: rest })
+  const r = fontRuns(view.state.doc, String(font))[+run || 0]
+  if (!r) return
+  view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, r.from, r.to)).scrollIntoView())
+  view.focus()
+  const dom = view.domAtPos(r.from)?.node
+  const el = dom?.nodeType === 1 ? dom : dom?.parentElement
+  el?.scrollIntoView?.({ block: 'center' })
+}
+// In the chapter already open, at once; another opens first (goToBlock).
+watch(
+  () => [route.query.font, route.query.run],
+  () => {
+    if (route.query.font != null && view && !loadingText.value && Number(route.query.chapter) === chapterId.value) goToFont()
+  },
+)
+
 // From the page view (?at=N): the cursor at the chapter's block N, in sight.
 function goToBlock() {
+  if (route.query.font != null && view) return goToFont()
   if (route.query.line != null && view) return goToLine()
   const at = route.query.at
   if (at == null || !view) return
