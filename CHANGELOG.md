@@ -4,6 +4,57 @@ What changed in each version of Polaris. The same notes are on the
 [Releases](https://github.com/AstraLumi/polaris/releases) page. Versions are
 Major.Minor.Bugfix: new features raise Minor, fixes raise Bugfix.
 
+## 3.0.0 (2026-10-30)
+
+**Upgrade:** stories are upgraded to database schema 46 the first time they are opened. This can't be undone, so export your stories first. Polaris now also saves an export of each story in its `backups` folder before upgrading it.
+
+Polaris 3.0 adds three big parts: a writing editor for the manuscript itself, a 3D planet with a climate worked out from your map, and a solar system with its sky.
+
+### Added
+
+**Writing**
+
+- **A writing editor** for each book (Chapters → Write): styles, fonts, find and replace, undo, lists, tables, pictures with text wrapping, drop caps, boxes and shading (consecutive boxes form one LitRPG "system window"), a Format Painter, and a Symbols panel to browse a font's characters.
+- **Page types**: A4, A5, A6, a custom trim size, or an online post. Page-based books show real pages while you write, breaking like Word (widows and orphans, keep with next, page breaks), with line spacing that follows each font.
+- **A page view** with headers, footers, page numbers (roman for front matter, restarts), a table of contents with page numbers, footnotes at the foot of the page, and print to PDF.
+- **Word files in and out.** Upload a `.docx` and it becomes chapters, keeping formatting, pictures, tables, comments, footnotes, headers, footers and page setup; the text before the first Heading 1 becomes front matter. Export the book or a chapter as `.docx`, EPUB, HTML, Markdown or plain text.
+- **Comments** with replies, **footnotes and endnotes**, and **read aloud** with the sentence highlighted.
+- **A spellchecker that knows your story's names** (English US and UK, Portuguese, Spanish), with a dictionary for each story.
+- **Tag who speaks** a line of dialogue (Script Mode, or Ctrl+Alt+K on prose) and **tag spells** being cast. Hovering a tag shows a card. Characters get a Lines tab, and every wiki article lists the chapters it appears in.
+- **Saving you can trust**: autosave, a copy kept in the browser, a warning when the same chapter was changed in another tab, versions every 30 minutes and on demand, and **offline writing**: Polaris installs as an app, and books marked "Available offline" can be written with no connection. Changes upload when you reconnect, and edits to different paragraphs merge on their own.
+- **Fonts**: 26 open-licensed fonts come with the app and work offline (book serifs, "system window" faces, handwriting and sound effects, Japanese, Noto symbols), and Merriweather is the new default. A **fonts library** takes your own font files, with a record of each one's license and allowed uses. Each book lists its fonts and their licenses, flags fonts you can't embed in an e-book, can move a flagged font's spaces or symbols to a font you can use, and copies the credits for your copyright page. The toolbar's font picker has favourites and recent fonts.
+- Adding a volume offers to copy the previous volume's book settings.
+
+**World**
+
+- **A 3D planet.** In Settings → Map, choose a 3D planet instead of a flat map: a globe of hexes you paint like the 2D map, plus flat views (equirectangular, Mercator, Mollweide, Robinson). An existing 2D map can be carried onto it. A bucket tool fills empty areas, and names sit on the land and the water.
+- **Map layers** on the planet: tectonic plates, continents with a biome per hex (23 biomes), terrain (hills, plateaus, mountains, with a height), and ocean depths.
+- **A climate worked out from your map**, never typed in: winds, ocean currents, temperature, rain, clouds and climate types, for each month or the whole year. High ground steers the winds, lee slopes warm and dry, and volcanoes give off heat. Region articles show a climate table, and Settings → Calendar has seasons.
+- **The solar system** (World → Solar system): stars of real classes (from brown dwarfs to black holes, with "Reality Following" sizes and temperatures), planets and moons with elliptical and tilted orbits, rings, axial tilt and day length. It shows in 3D with a clock, live n-body gravity, eclipses and shadows, a habitable zone and gravity limits. A star can sit in a Dyson sphere, the whole system can sit inside a shell, and moons can shine on their own. Other planets get their own painted maps, and every body has a wiki article.
+- **The sky from any hex**: the true sky at any date and hour, with the sun, moons (with phases and eclipses), planets and the stars of your sky picture, at their real sizes and brightness, seen from the hex's ground height. You can upload your own sky picture.
+- **Height chart**: characters side by side to scale, in cm or ft/in, with outlines by sex, age and build.
+- **Characters**: an Earth birthdate and Earth name, blood types with their Japanese meanings, and birth date, blood type and place of birth kept on the character rather than on each version.
+- **Calendar**: month names, era names for the years before year 1, and a calendar button on every date box.
+
+**Everywhere**
+
+- **Navigation**: breadcrumbs, the same links bar on every item page, previous and next, a "not found" page, and Ctrl+K actions with recently opened items (also on Home).
+- Unsaved-changes warnings on forms, Save bars that stay in reach, drag and drop for pictures, chapters reordered by dragging, and rare actions in "…" menus.
+- Phone layouts for the calendar, map, character sheet, graph (with pinch zoom), timeline and lists.
+
+### Changed
+
+- **The license is now the AGPL-3.0** (it was MIT), with the additional terms in `NOTICE.md`: keep the credit, and give a changed version its own name. See the README.
+- **Wiki links are stored by id**, so renaming a character or place updates every link to it. Typing `[[Name]]` still works.
+- Dates read one way everywhere ("15/03/1054", "15 Frostfall 1054", "1054 Q2").
+- Pages use the whole width of the window.
+- The README has new screenshots and describes all of the above.
+
+### Fixed
+
+- A story saved by a newer Polaris is now refused instead of being reset, and importing a newer export says so.
+- Uploading a picture no longer replaces another file that has the same name.
+
 ## 2.1.0 (2026-10-11)
 
 **Upgrade:** stories are upgraded to database schema 25 the first time they are opened. This can't be undone, so export your stories first.

@@ -1,61 +1,134 @@
-# Polaris
+<p align="center">
+  <img src="frontend/public/logo.svg" alt="" width="96" />
+</p>
 
-Polaris is a self-hosted organizer for writing stories. It keeps everything
-about a story in one place that you own: characters and how they change over
-the chapters, who they are to each other, the map, the calendar and history
-of the world, and a wiki that writes itself from all of it. It grew out of
-writing LitRPG, so characters also have levels, stats, gear and spells.
+<h1 align="center">Polaris</h1>
 
-Polaris is a single Go program with the web interface built in. Each story
-has its own SQLite database, so it runs comfortably on a small home server.
+<p align="center">
+  <b>Write the book and build the world it happens in, in one app you host yourself.</b><br />
+  Characters, maps, planets, calendars, a wiki that writes itself, and a manuscript editor that speaks Word.
+</p>
+
+<p align="center">
+  <a href="https://github.com/AstraLumi/polaris/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/AstraLumi/polaris?color=dfc47e&labelColor=13204a" /></a>
+  <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-dfc47e?labelColor=13204a" /></a>
+  <a href="#quick-start-docker"><img alt="Docker: amd64 and arm64" src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-dfc47e?labelColor=13204a" /></a>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/writing.png" alt="The writing editor: a chapter on an A6 page, with a hover card for the character who speaks" width="49%" />
+  <img src="docs/screenshots/planet.png" alt="The world as a 3D planet of hexes, with the prevailing winds worked out from its geography" width="49%" />
+</p>
+
+Polaris keeps everything about a story in one place that you own: the
+characters and how they change from chapter to chapter, who they are to each
+other, the map and the planet it sits on, the calendar and history of the
+world, and the manuscript itself. Everything links to everything, so the wiki
+fills itself in as you go.
+
+It grew out of writing LitRPG, so characters can also have levels, stats,
+classes, gear and spells, with formulas you define. If your story has none of
+that, leave those pages empty.
+
+Polaris is one Go program with the web interface built in, and every story is
+its own SQLite file. It runs happily on a Raspberry Pi or a small home server,
+and on your phone it installs like an app.
 
 > **Provided as is.** Polaris was built for personal use and is shared in case
 > it is useful to others. There is no support and no commitment to future
 > updates. It is licensed under the AGPL-3.0 with a few additional terms; see
 > [License](#license).
 
-## Features
+## What it does
 
-- **Characters** change over the story in versions (renames, new classes,
-  a new status), which you can compare side by side. Each has tags, computed
-  stats, a gear paper-doll, a spell list and a printable sheet.
-- **Relations and families**: parents, partners, mentors and rivals, each
-  holding from one chapter or date to another, so every version shows the
-  relations of its own time. Family trees are drawn from them. Factions have
-  ranks and can nest, and every kingdom on the map is a faction too.
-- **World**: a paintable hex map of kingdoms, regions, cities and capitals,
-  and Character Assets (classes, races, gear, spells…) that grant stat
-  bonuses. Races and specializations can be native to a kingdom.
-- **Bestiary**: the monsters, animals and constructs of your world, each
-  with a level range, the place it's native to, a description, a picture and
-  related creatures. A creature's territory follows its place's area, or you
-  paint it hex by hex, and its wiki article shows it as a picture of the map.
-- **Stats your way**: which stats characters have and how each is
-  calculated is up to each story, edited in Settings with formulas built
-  from blocks (see [Stats](#stats)).
-- **Time**: your own calendar (months and days), events tied to places,
-  people and chapters, a timeline drawn to scale, a month-by-month calendar
-  view, and chapters grouped into volumes.
-- **Wiki**: every character, place, faction, event and asset already has an
-  article, built live from the story. You add the lore in Markdown with a
-  formatting toolbar, link articles with `[[…]]` (a picker finds them for
-  you) and see a preview when hovering a link. Free-form articles cover
-  gods, history or magic; galleries hold pictures; a character's article
-  has a tab per version; and a graph shows how everything connects.
-- **Everyday**: Ctrl+K search, any number of separate stories with `.zip`
-  export and import, English, Português (BR) and Español (ES and Latin
-  America), five colour themes, and a layout that works on phones.
+### ✍️ Write the book
+
+- **A manuscript editor that works like Word**: styles, fonts, find and
+  replace, comments, footnotes and endnotes, tables, pictures with text
+  wrapping, drop caps, a Format Painter, a symbol browser, and system-window
+  boxes for the LitRPG crowd.
+- **Real pages while you write.** Pick A4, A5, A6, a custom trim size or an
+  online post. Pages break where Word would break them, and a page view adds
+  headers, footers, page numbers and a table of contents, ready to print to
+  PDF.
+- **Word in, Word out.** Upload a `.docx` and it becomes chapters, keeping its
+  formatting, pictures, comments and page setup. Export `.docx`, EPUB, HTML,
+  Markdown or plain text.
+- **It knows your story.** The spellchecker accepts your characters' names.
+  Tag a line of dialogue with who says it, and each character gets a list of
+  their lines. Each wiki article lists the chapters that mention it.
+- **Never lose a word.** It saves as you type, keeps versions every 30
+  minutes, warns about edits from another tab, and works offline: changes
+  upload when you're back online.
+- **Fonts you can publish with.** 26 open-licensed fonts come built in,
+  including book serifs, sci-fi "system window" faces, handwriting and
+  Japanese. You can upload your own. Each book lists its fonts with their
+  licenses and flags any you can't legally embed in an e-book.
+
+### 🌍 Build the world
+
+<p align="center">
+  <img src="docs/screenshots/solar.png" alt="The solar system in 3D: a star, its habitable zone, a ringed giant and elliptical orbits" width="49%" />
+  <img src="docs/screenshots/sky.png" alt="The night sky seen from one hex of the planet, with the galaxy and stars" width="49%" />
+</p>
+
+- **A map that becomes a planet.** Paint kingdoms, regions, oceans and cities
+  on a flat hex map, or on a whole 3D globe of hexes with flat projections
+  (Mercator, Robinson, Mollweide…).
+- **A climate worked out from your geography.** Paint continents, biomes,
+  mountains and ocean depths, and Polaris derives the winds, ocean currents,
+  temperature, rain, clouds and climate zones for any month. Mountains steer
+  the winds and dry the air behind them.
+- **A solar system with real physics.** Real star classes, from brown dwarfs
+  and red giants to neutron stars and black holes. Planets and moons follow elliptical, tilted orbits, or live
+  n-body gravity if you dare. There are rings, eclipses, habitable zones, and
+  even Dyson spheres.
+- **The true sky from any hex, on any date and hour**: the sun, the moons
+  with their phases, the planets, and the stars, all to scale.
+- **A bestiary** of your creatures, with territories drawn on the map, and
+  **Character Assets** (classes, races, gear, spells) that feed the stats.
+
+### 🧑‍🤝‍🧑 Keep track of characters
+
+- **Characters change over the story.** Each change (a rename, a new class,
+  a death) is a version tied to a chapter. Compare versions side by side.
+- **Relations that hold for a time**: parents, partners, mentors and rivals,
+  from one chapter or date to another. Family trees draw themselves, and
+  factions have ranks and nest.
+- **Stats your way.** Each story defines its own stats and formulas, built
+  from blocks (see [Stats](#stats)), shown on a printable character sheet
+  with a gear paper-doll and a spell list.
+- **A height chart** lines the cast up to scale.
+
+### 📚 A wiki that writes itself
+
+- **Every character, place, faction, event, creature and planet already has
+  an article**, built live from the story. You add the lore in Markdown.
+- **Links survive renames.** Link with `[[…]]` and a picker finds the page;
+  links are stored by id, so renaming a character fixes every mention.
+  Hovering a link shows a preview.
+- **See it all**: a graph of how everything connects, a timeline drawn to
+  scale, and a calendar with your own months, eras and seasons.
+
+### 🏠 Yours
+
+- Self-hosted, with no account and no telemetry. Each story exports to a `.zip`.
+- Any number of separate stories, Ctrl+K search everywhere, five colour
+  themes, a layout that works on phones.
+- In English, Português (BR) and Español (ES and Latin America).
 
 ## Screenshots
 
-Made with a demo story of invented data.
+Made with demo stories of invented data.
 
 | | |
 |---|---|
 | ![A character's wiki article](docs/screenshots/wiki.png) **Wiki**: an article built from the story, with your text, version tabs and a grouped infobox. | ![The graph of the wiki](docs/screenshots/graph.png) **Graph**: every article and connection; hovering a dot lights up its neighbours. |
+| ![The climate on the globe](docs/screenshots/planet.png) **Planet**: the prevailing winds, worked out from the continents and mountains. | ![The solar system](docs/screenshots/solar.png) **Solar system**: orbits, a habitable zone and a ringed giant, in 3D. |
 | ![A family tree](docs/screenshots/family.png) **Family tree**: born to one couple, adopted by another. | ![The timeline](docs/screenshots/timeline.png) **Timeline**: one character's life, long gaps coiled up. |
 | ![The hex map](docs/screenshots/map.png) **Map**: kingdoms, regions, cities and capitals. | ![A character sheet](docs/screenshots/character.png) **Character sheet**: stats computed from class, race and gear. |
 | ![A creature's wiki article](docs/screenshots/bestiary.png) **Bestiary**: a creature's article, with its territory drawn on the map's hexes. | ![The stats settings](docs/screenshots/stats.png) **Stats**: every stat's formula, built from blocks. |
+| ![The writing editor](docs/screenshots/writing.png) **Writing**: an A6 page, a tagged line of dialogue and its speaker's card. | ![The sky from a hex](docs/screenshots/sky.png) **Sky**: midnight from a desert hex, stars found in the sky picture. |
 
 ## Security
 
@@ -102,7 +175,7 @@ automatically, and git ignores it, so your settings are kept across updates.
 |-------------|-------------|-------------------------------------------------------------------|
 | `BIND_ADDR` | `127.0.0.1` | Host address to listen on. `0.0.0.0` exposes it to your network.  |
 | `HOST_PORT` | `8091`      | Port on the host.                                                 |
-| `POLARIS_VERSION` | `latest` | Release to run, such as `2.0.0`, to stay on it until you change it. |
+| `POLARIS_VERSION` | `latest` | Release to run, such as `3.0.0`, to stay on it until you change it. |
 
 The application itself reads the following variables. `docker-compose.yml`
 already sets them, so you only need them when
@@ -218,8 +291,17 @@ first). Copying another story's Character Assets copies its stats too.
 
 ## Privacy
 
-The interface loads its fonts from Google Fonts, so your browser contacts
-Google to fetch them. Polaris makes no other external requests.
+Polaris sends nothing about you or your stories anywhere. It reaches out in
+only these cases:
+
+- The interface's own fonts load from Google Fonts, so your browser contacts
+  Google for them.
+- In the writing editor, a book font that is neither built in nor in your
+  fonts library is fetched from Google Fonts. The server also asks Google
+  Fonts for that font's line spacing and license, and keeps the answers.
+
+The 26 built-in book fonts and the spelling dictionaries are served by Polaris
+itself.
 
 ## Development
 
