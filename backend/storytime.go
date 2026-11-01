@@ -16,14 +16,46 @@ type storyPoint struct {
 	Date       string // canonical story date, or ""
 }
 
-// chapterRanks is every chapter's place in the story's order.
+// chapterRanks is every chapter's place in the story's order, sorted as
+// loadChapterIndex sorts them but without its counts: the wiki and the graph
+// ask for it once per character.
 func chapterRanks(db *sql.DB) map[int64]int {
 	out := map[int64]int{}
-	idx, err := loadChapterIndex(db)
+	order := map[int64]int{}
+	rows, err := db.Query(`SELECT id FROM volumes ORDER BY position, id`)
 	if err != nil {
 		return out
 	}
-	for i, c := range idx.Chapters {
+	for rows.Next() {
+		var id int64
+		if rows.Scan(&id) == nil {
+			order[id] = len(order)
+		}
+	}
+	rows.Close()
+	rows, err = db.Query(`SELECT id, volume_id, position FROM chapters`)
+	if err != nil {
+		return out
+	}
+	var list []chapterSummary
+	for rows.Next() {
+		var c chapterSummary
+		var vol sql.NullInt64
+		if rows.Scan(&c.ID, &vol, &c.Position) == nil {
+			if vol.Valid {
+				c.VolumeID = &vol.Int64
+			}
+			list = append(list, c)
+		}
+	}
+	rows.Close()
+	sortChapters(list, func(c chapterSummary) int {
+		if c.VolumeID == nil {
+			return -1
+		}
+		return order[*c.VolumeID]
+	})
+	for i, c := range list {
 		out[c.ID] = i
 	}
 	return out

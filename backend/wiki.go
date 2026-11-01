@@ -284,6 +284,7 @@ type wikiArticle struct {
 
 	version      int64 // which character version the facts are for; 0 = current
 	allRelations bool  // every relation, not only those holding at that version (the graph)
+	areas        *mapAreas // the map, read once for all articles (the graph); nil reads it
 }
 
 type wikiVersion struct {
@@ -374,11 +375,20 @@ func listWikiItems(db wikiQuerier) ([]wikiListItem, error) {
 
 // characterAliases is every character's names from versions other than the
 // current one (once each, leaving out the current name).
-func characterAliases(db wikiQuerier) map[int64][]string {
+func characterAliases(db wikiQuerier) map[int64][]string { return readAliases(db, "") }
+
+// aliasesOf is one character's, without reading everyone's.
+func aliasesOf(db wikiQuerier, id int64) []string {
+	return readAliases(db, ` AND v.character_id = ?`, id)[id]
+}
+
+// readAliases reads the aliases of the characters that filter (an SQL
+// condition on v, starting with AND) keeps.
+func readAliases(db wikiQuerier, filter string, args ...any) map[int64][]string {
 	out := map[int64][]string{}
 	rows, err := db.Query(`SELECT v.character_id, v.name FROM character_versions v
 		JOIN character_versions c ON c.character_id = v.character_id AND c.is_current = 1
-		WHERE v.is_current = 0 AND lower(trim(v.name)) <> lower(trim(c.name)) ORDER BY v.id`)
+		WHERE v.is_current = 0 AND lower(trim(v.name)) <> lower(trim(c.name))`+filter+` ORDER BY v.id`, args...)
 	if err != nil {
 		return out
 	}
@@ -549,7 +559,7 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 		point := pointOf(vchapter, vdate, ranks)
 		a.addFact("nickname", nick, "", nil)
 		var others []string
-		for _, n := range append(characterAliases(db)[id], currentName(db, id)) {
+		for _, n := range append(aliasesOf(db, id), currentName(db, id)) {
 			if n != "" && normalizeWikiKey(n) != normalizeWikiKey(vname) && !containsKey(others, n) {
 				others = append(others, n)
 			}

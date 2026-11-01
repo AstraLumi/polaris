@@ -78,20 +78,42 @@ func (s mapSpace) neighbors(g planetGrid, sp spot) []spot {
 // coloured major locations next to its hexes, and the unnamed ocean where
 // it meets hexes nothing is on.
 func (a *wikiArticle) addBorders(db *sql.DB, id int64) {
-	s := spaceOf(db)
-	g := loadMapSettings(db).Planet.grid()
-	// Who rules each spot, and which spots have anything at all on them.
-	owners := s.read(db,
-		`SELECT h.location_id, h.q, h.r FROM location_hexes h JOIN locations l ON l.id = h.location_id
-			WHERE l.kind = 'major' AND l.color IS NOT NULL`,
-		`SELECT h.location_id, h.cell FROM planet_cells h JOIN locations l ON l.id = h.location_id
-			WHERE l.kind = 'major' AND l.color IS NOT NULL`)
-	land := s.read(db,
-		`SELECT location_id, q, r FROM location_hexes UNION ALL
-			SELECT id, q, r FROM locations WHERE kind = 'minor' AND q IS NOT NULL AND r IS NOT NULL`,
-		`SELECT location_id, cell FROM planet_cells UNION ALL
-			SELECT id, cell FROM locations WHERE kind = 'minor' AND cell IS NOT NULL`)
+	m := a.areas
+	if m == nil {
+		m = readMapAreas(db)
+	}
+	a.addGroup("borders", m.borders(db, id))
+}
 
+// mapAreas is the map as addBorders reads it. The graph reads it once for
+// every kingdom's article.
+type mapAreas struct {
+	space mapSpace
+	grid  planetGrid
+	// Who rules each spot, and which spots have anything at all on them.
+	owners, land map[spot][]int64
+}
+
+func readMapAreas(db *sql.DB) *mapAreas {
+	s := spaceOf(db)
+	return &mapAreas{
+		space: s,
+		grid:  loadMapSettings(db).Planet.grid(),
+		owners: s.read(db,
+			`SELECT h.location_id, h.q, h.r FROM location_hexes h JOIN locations l ON l.id = h.location_id
+			WHERE l.kind = 'major' AND l.color IS NOT NULL`,
+			`SELECT h.location_id, h.cell FROM planet_cells h JOIN locations l ON l.id = h.location_id
+			WHERE l.kind = 'major' AND l.color IS NOT NULL`),
+		land: s.read(db,
+			`SELECT location_id, q, r FROM location_hexes UNION ALL
+			SELECT id, q, r FROM locations WHERE kind = 'minor' AND q IS NOT NULL AND r IS NOT NULL`,
+			`SELECT location_id, cell FROM planet_cells UNION ALL
+			SELECT id, cell FROM locations WHERE kind = 'minor' AND cell IS NOT NULL`),
+	}
+}
+
+func (m *mapAreas) borders(db *sql.DB, id int64) []wikiRef {
+	s, g, owners, land := m.space, m.grid, m.owners, m.land
 	next := map[int64]bool{}
 	ocean := false
 	for sp, ids := range owners {
@@ -132,7 +154,7 @@ func (a *wikiArticle) addBorders(db *sql.DB, id int64) {
 	if ocean {
 		refs = append(refs, wikiRef{Name: "Unnamed ocean"})
 	}
-	a.addGroup("borders", refs)
+	return refs
 }
 
 // planetLatitudes are the latitudes (degrees) of a location's cells on the

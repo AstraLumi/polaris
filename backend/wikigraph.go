@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"runtime"
 	"sort"
 	"strconv"
+	"sync"
 )
 
 // The wiki's graph view: every article as a node and every connection
@@ -146,20 +148,43 @@ func buildWikiGraph(db *sql.DB) (*graphPayload, error) {
 		}
 	}
 
-	// What the story connects.
-	for _, it := range items {
-		a := &wikiArticle{Type: it.Type, ID: it.ID, allRelations: true}
-		loadSourceFacts(db, a)
+	// What the story connects: each article's facts, as its page shows them.
+	// That is a few queries per article, so several workers read them at
+	// once (only reads; the edges are added afterwards, in order).
+	areas := readMapAreas(db)
+	linked := make([][]string, len(items))
+	next := make(chan int)
+	var wg sync.WaitGroup
+	for range min(8, runtime.NumCPU()) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range next {
+				it := items[i]
+				a := &wikiArticle{Type: it.Type, ID: it.ID, allRelations: true, areas: areas}
+				loadSourceFacts(db, a)
+				for _, f := range a.Facts {
+					if f.Link != nil {
+						linked[i] = append(linked[i], refKey(f.Link.Type, f.Link.ID))
+					}
+				}
+				for _, g := range a.Groups {
+					for _, r := range g.Items {
+						linked[i] = append(linked[i], refKey(r.Type, r.ID))
+					}
+				}
+			}
+		}()
+	}
+	for i := range items {
+		next <- i
+	}
+	close(next)
+	wg.Wait()
+	for i, it := range items {
 		from := refKey(it.Type, it.ID)
-		for _, f := range a.Facts {
-			if f.Link != nil {
-				add(from, refKey(f.Link.Type, f.Link.ID), true)
-			}
-		}
-		for _, g := range a.Groups {
-			for _, r := range g.Items {
-				add(from, refKey(r.Type, r.ID), true)
-			}
+		for _, to := range linked[i] {
+			add(from, to, true)
 		}
 	}
 

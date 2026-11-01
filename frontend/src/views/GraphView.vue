@@ -187,6 +187,7 @@ const placed = new Map() // key -> node object, so positions survive a rebuild
 
 function rebuild() {
   if (!data.value) return
+  refit = null
   const edgeOn = (e) => (e.story && showStory.value) || (e.link && showLinks.value)
   let list = data.value.nodes.filter((n) => !hiddenTypes.value.has(n.type))
   const keys = new Set(list.map(keyOf))
@@ -292,6 +293,7 @@ function goTo(wx, wy, k, animate) {
 }
 
 function zoomAt(sx, sy, factor) {
+  refit = null
   const k = Math.min(K_MAX, Math.max(K_MIN, view.k * factor))
   const wx = (sx - view.x) / view.k
   const wy = (sy - view.y) / view.k
@@ -311,20 +313,29 @@ function onWheel(e) {
 
 // ---- running the layout ---------------------------------------------------------
 
+// One tick a frame, or as many as fit in `budget` ms (the first settling).
 let frame = 0
-function run() {
+// The first picture was placed before the layout settled: place it again
+// once it has (a function that does), unless the view was moved meanwhile.
+let refit = null
+function run(budget = 0) {
   cancelAnimationFrame(frame)
   const loop = () => {
-    sim.tick()
+    const until = performance.now() + budget
+    do sim.tick()
+    while (!sim.cool && performance.now() < until)
     draw()
     if (!sim.cool) frame = requestAnimationFrame(loop)
+    else if (refit) {
+      const again = refit
+      refit = null
+      again()
+    }
   }
   frame = requestAnimationFrame(loop)
 }
 
 // ---- drawing --------------------------------------------------------------------
-
-const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim()
 
 function draw() {
   const canvas = canvasEl.value
@@ -342,8 +353,12 @@ function draw() {
 
   // Lines: story connections solid, text links dashed. With a focus, only
   // its own lines stay bright.
+  const style = getComputedStyle(document.documentElement)
+  const css = (name) => style.getPropertyValue(name).trim()
   const text = css('--text-primary') || '#fff'
   const accent = css('--accent') || '#e8c46a'
+  const surface = css('--surface') || '#0a1636'
+  const radius = degree.map(nodeRadius)
   ctx.lineWidth = 1 / view.k
   for (const pass of ['dim', 'bright']) {
     for (const e of edges) {
@@ -365,7 +380,7 @@ function draw() {
 
   // Dots: an article nobody has written in is hollow.
   nodes.forEach((n, i) => {
-    const r = nodeRadius(degree[i])
+    const r = radius[i]
     ctx.globalAlpha = lit(i) ? 1 : 0.15
     ctx.beginPath()
     ctx.arc(n.x, n.y, r, 0, Math.PI * 2)
@@ -374,7 +389,7 @@ function draw() {
       ctx.fillStyle = color
       ctx.fill()
     } else {
-      ctx.fillStyle = css('--surface') || '#0a1636'
+      ctx.fillStyle = surface
       ctx.fill()
       ctx.lineWidth = 2 / view.k
       ctx.strokeStyle = color
@@ -392,13 +407,21 @@ function draw() {
   // Names: all of them once zoomed in, otherwise the focus and its
   // neighbours and the best-connected articles. Most important first, and a
   // name that would overlap one already drawn, or another article's dot, is
-  // left out.
+  // left out. Only what is on screen (and a margin round it) is looked at.
   ctx.font = `600 ${12 / view.k}px Manrope, sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
   ctx.lineJoin = 'round'
-  const wanted = nodes
-    .map((n, i) => i)
+  const margin = 200 / view.k
+  const sx0 = -view.x / view.k - margin
+  const sx1 = (size.w - view.x) / view.k + margin
+  const sy0 = -view.y / view.k - margin
+  const sy1 = (size.h - view.y) / view.k + margin
+  const onScreen = []
+  nodes.forEach((n, i) => {
+    if (n.x >= sx0 && n.x <= sx1 && n.y >= sy0 && n.y <= sy1) onScreen.push(i)
+  })
+  const wanted = onScreen
     .filter((i) => (fi >= 0 ? lit(i) : view.k > 1.25 || degree[i] >= labelCut))
     .sort((a, b) => (b === fi) - (a === fi) || degree[b] - degree[a])
   const taken = []
@@ -406,15 +429,16 @@ function draw() {
   const bg = css('--bg') || '#050b1f'
   for (const i of wanted) {
     const n = nodes[i]
-    const y = n.y + nodeRadius(degree[i]) + 3 / view.k
+    const y = n.y + radius[i] + 3 / view.k
     const w = ctx.measureText(n.name).width + 6 / view.k
     const pad = 2 / view.k
     const box = { x0: n.x - w / 2 - pad, x1: n.x + w / 2 + pad, y0: y - pad, y1: y + lineH + pad }
     const hits = (b) => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0
-    const onDot = nodes.some((m, j) => {
+    const onDot = onScreen.some((j) => {
       if (j === i || (fi >= 0 && !lit(j))) return false // faded dots don't count
-      const r = nodeRadius(degree[j])
-      return hits({ x0: m.x - r, x1: m.x + r, y0: m.y - r, y1: m.y + r })
+      const m = nodes[j]
+      const r = radius[j]
+      return box.x0 < m.x + r && box.x1 > m.x - r && box.y0 < m.y + r && box.y1 > m.y - r
     })
     if (i !== fi && (onDot || taken.some(hits))) continue
     taken.push(box)
@@ -489,6 +513,7 @@ function onDown(e) {
   }
   const p = worldAt(e)
   const n = nodeAt(p)
+  refit = null
   canvasEl.value.setPointerCapture(e.pointerId)
   drag = { node: n, sx: p.sx, sy: p.sy, vx: view.x, vy: view.y, moved: false }
   dragging.value = true
@@ -619,6 +644,7 @@ function placeCard(e) {
 // ---- finding an article -------------------------------------------------------------
 
 function focusNode(n) {
+  refit = null
   selected.value = n
   if (depth.value > 0) {
     rebuild()
@@ -669,12 +695,16 @@ onMounted(async () => {
   // "Show in graph" on a kingdom's faction finds the kingdom it is drawn as.
   pendingFocus = data.value.merged?.[pendingFocus] || pendingFocus
   rebuild()
-  // Settle most of the layout before the first picture, so it doesn't jump.
-  for (let i = 0; i < 400 && !sim.cool; i++) sim.tick()
+  // Settle most of the layout before the first picture, so it doesn't jump;
+  // a big wiki gets a quarter of a second and settles the rest on screen.
+  const until = performance.now() + 250
+  for (let i = 0; i < 400 && !sim.cool && performance.now() < until; i++) sim.tick()
+  if (!sim.cool) run(12)
   const focus = pendingFocus ? nodes.find((n) => n.key === pendingFocus) : null
   if (focus) selected.value = focus
   if (focus && !depth.value) goTo(focus.x, focus.y, 1.4, false)
   else fit()
+  if (!sim.cool) refit = focus && !depth.value ? () => goTo(focus.x, focus.y, view.k, true) : () => fit(true)
 })
 
 onBeforeUnmount(() => {
