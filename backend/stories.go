@@ -67,6 +67,7 @@ type storyApp struct {
 	dbPath     string
 	uploadsDir string
 	handler    http.Handler
+	graph      *graphCache // the wiki graph, kept ready (graphcache.go)
 }
 
 // storyInfo is what the picker shows.
@@ -120,6 +121,7 @@ func (m *storyManager) Close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, a := range m.apps {
+		a.graph.stop()
 		a.db.Close()
 	}
 	m.reg.Close()
@@ -184,7 +186,8 @@ func (m *storyManager) openLocked(id string) (*storyApp, error) {
 		}
 		return nil, err
 	}
-	a := &storyApp{id: id, db: db, dbPath: dbPath, uploadsDir: uploads, handler: storyRoutes(db, uploads)}
+	graph := newGraphCache(db, dbPath)
+	a := &storyApp{id: id, db: db, dbPath: dbPath, uploadsDir: uploads, handler: storyRoutes(db, uploads, graph), graph: graph}
 	m.apps[id] = a
 	return a, nil
 }
@@ -395,6 +398,7 @@ func (m *storyManager) removeStory(id string) {
 	}
 	m.mu.Lock()
 	if a, ok := m.apps[id]; ok {
+		a.graph.stop()
 		a.db.Close()
 		delete(m.apps, id)
 	}
@@ -541,6 +545,9 @@ func (m *storyManager) storyHandler(w http.ResponseWriter, r *http.Request) {
 	rw := &uploadsRewriter{w: w, replacement: []byte(`"/uploads/s/` + id + `/`)}
 	app.handler.ServeHTTP(rw, r2)
 	rw.finish()
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		app.graph.changed(r.PathValue("rest"))
+	}
 }
 
 // The story's handlers write picture URLs as "/uploads/<file>". Here, where

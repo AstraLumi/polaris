@@ -3,8 +3,6 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
-	"log"
-	"net/http"
 	"runtime"
 	"sort"
 	"strconv"
@@ -161,7 +159,7 @@ func buildWikiGraph(db *sql.DB) (*graphPayload, error) {
 			defer wg.Done()
 			for i := range next {
 				it := items[i]
-				a := &wikiArticle{Type: it.Type, ID: it.ID, allRelations: true, areas: areas}
+				a := &wikiArticle{Type: it.Type, ID: it.ID, allRelations: true, areas: areas, linksOnly: true}
 				loadSourceFacts(db, a)
 				for _, f := range a.Facts {
 					if f.Link != nil {
@@ -212,16 +210,4 @@ func buildWikiGraph(db *sql.DB) (*graphPayload, error) {
 		return out.Edges[i].B < out.Edges[j].B
 	})
 	return out, nil
-}
-
-func wikiGraphHandler(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		g, err := buildWikiGraph(db)
-		if err != nil {
-			http.Error(w, "failed to load the graph", http.StatusInternalServerError)
-			log.Printf("wiki graph: %v", err)
-			return
-		}
-		writeJSON(w, g)
-	}
 }

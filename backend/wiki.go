@@ -282,9 +282,10 @@ type wikiArticle struct {
 	HasClimate bool         `json:"has_climate"`
 	Climate    []climateRow `json:"climate"`
 
-	version      int64 // which character version the facts are for; 0 = current
-	allRelations bool  // every relation, not only those holding at that version (the graph)
+	version      int64     // which character version the facts are for; 0 = current
+	allRelations bool      // every relation, not only those holding at that version (the graph)
 	areas        *mapAreas // the map, read once for all articles (the graph); nil reads it
+	linksOnly    bool      // the graph: leave out the costly facts that link nothing
 }
 
 type wikiVersion struct {
@@ -665,7 +666,9 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 		a.addPlanetFacts(db, kind, id)
 		if kind == "major" {
 			a.HasClimate = true
-			a.Climate = loadClimate(db, id)
+			if !a.linksOnly {
+				a.Climate = loadClimate(db, id)
+			}
 			var capID sql.NullInt64
 			var capName sql.NullString
 			db.QueryRow(`SELECT c.id, c.name FROM locations c WHERE c.is_capital = 1 AND c.kind = 'minor' AND (c.belongs_to_id = ?1

@@ -97,6 +97,9 @@ func formatLatitude(lat float64) string {
 // for a region) and climate zones: on the planet in 3D, or from the 2D
 // equator once it has been placed.
 func (a *wikiArticle) addPlanetFacts(db *sql.DB, kind string, id int64) {
+	if a.linksOnly {
+		return
+	}
 	var lats []float64
 	var e mapEquator
 	if mapMode(db) == "3d" {

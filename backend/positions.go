@@ -65,7 +65,7 @@ func (s mapSpace) read(db *sql.DB, q2d, q3d string, args ...any) map[spot][]int6
 func (s mapSpace) neighbors(g planetGrid, sp spot) []spot {
 	if s.mode == "3d" {
 		var out []spot
-		for _, c := range g.neighbors(int(sp[0])) {
+		for _, c := range g.adjacent(int(sp[0])) {
 			out = append(out, spot{int64(c), 0})
 		}
 		return out
@@ -92,11 +92,12 @@ type mapAreas struct {
 	grid  planetGrid
 	// Who rules each spot, and which spots have anything at all on them.
 	owners, land map[spot][]int64
+	ruled        map[int64][]spot // each ruler's spots
 }
 
 func readMapAreas(db *sql.DB) *mapAreas {
 	s := spaceOf(db)
-	return &mapAreas{
+	m := &mapAreas{
 		space: s,
 		grid:  loadMapSettings(db).Planet.grid(),
 		owners: s.read(db,
@@ -109,21 +110,21 @@ func readMapAreas(db *sql.DB) *mapAreas {
 			SELECT id, q, r FROM locations WHERE kind = 'minor' AND q IS NOT NULL AND r IS NOT NULL`,
 			`SELECT location_id, cell FROM planet_cells UNION ALL
 			SELECT id, cell FROM locations WHERE kind = 'minor' AND cell IS NOT NULL`),
+		ruled: map[int64][]spot{},
 	}
+	for sp, ids := range m.owners {
+		for _, id := range ids {
+			m.ruled[id] = append(m.ruled[id], sp)
+		}
+	}
+	return m
 }
 
 func (m *mapAreas) borders(db *sql.DB, id int64) []wikiRef {
 	s, g, owners, land := m.space, m.grid, m.owners, m.land
 	next := map[int64]bool{}
 	ocean := false
-	for sp, ids := range owners {
-		mine := false
-		for _, x := range ids {
-			mine = mine || x == id
-		}
-		if !mine {
-			continue
-		}
+	for _, sp := range m.ruled[id] {
 		for _, nb := range s.neighbors(g, sp) {
 			if len(land[nb]) == 0 {
 				ocean = true

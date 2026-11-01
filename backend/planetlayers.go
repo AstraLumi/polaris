@@ -607,16 +607,18 @@ func featureFacts(db *sql.DB, a *wikiArticle) {
 			a.addFact("area", "≈ "+formatKm2(float64(n)*hexAreaKm2(loadMapSettings(db)))+" km²", "", nil)
 		}
 	}
+	// Both read this feature's cells once (a cell's other features are found
+	// by layer and cell, the key), not every cell for every land.
 	a.addGroup("lands_on", queryRefs(db, "location", `SELECT l.id, l.name FROM locations l
 		WHERE l.kind = 'major' AND l.color IS NOT NULL AND l.realm IN ('kingdom', 'region')
-		AND EXISTS (SELECT 1 FROM planet_cells pc JOIN feature_cells fc ON fc.cell = pc.cell
-			WHERE pc.location_id = l.id AND fc.feature_id = ?)
+		AND l.id IN (SELECT pc.location_id FROM feature_cells fc JOIN planet_cells pc ON pc.cell = fc.cell
+			WHERE fc.feature_id = ?)
 		ORDER BY l.name COLLATE NOCASE`, a.ID))
 	if layer == "plates" {
-		a.addGroup("continents_on", queryRefs(db, "map_feature", `SELECT DISTINCT f.id, f.name FROM map_features f
-			JOIN feature_cells m ON m.feature_id = f.id
-			JOIN feature_cells p ON p.cell = m.cell AND p.layer = 'plates'
-			WHERE f.layer = 'continents' AND p.feature_id = ? ORDER BY f.name COLLATE NOCASE`, a.ID))
+		a.addGroup("continents_on", queryRefs(db, "map_feature", `SELECT DISTINCT f.id, f.name FROM feature_cells p
+			JOIN feature_cells m ON m.layer = 'continents' AND m.cell = p.cell
+			JOIN map_features f ON f.id = m.feature_id AND f.layer = 'continents'
+			WHERE p.layer = 'plates' AND p.feature_id = ? ORDER BY f.name COLLATE NOCASE`, a.ID))
 	}
 	if layer == "continents" {
 		addCellShareFacts(db, a, cellsOf, a.ID)
@@ -657,6 +659,9 @@ func locationLayerFacts(db *sql.DB, a *wikiArticle, kind string) {
 // addCellShareFacts adds the "biomes" and "terrain" facts of the cells that
 // cellsOf selects (its one argument is ?1).
 func addCellShareFacts(db *sql.DB, a *wikiArticle, cellsOf string, arg any) {
+	if a.linksOnly {
+		return
+	}
 	addSharesFact(db, a, cellsOf, arg, biomeKinds, "biomes")
 	addSharesFact(db, a, cellsOf, arg, reliefKinds, "terrain")
 }

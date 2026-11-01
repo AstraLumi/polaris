@@ -66,7 +66,7 @@ func newRouter(mgr *storyManager, staticFS fs.FS) http.Handler {
 // database and uploads folder, so a story can't see another's data. Paths
 // here are the plain /api/... ones; the manager strips /api/s/{id} before
 // dispatching (see stories.go).
-func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
+func storyRoutes(db *sql.DB, uploadsDir string, graph *graphCache) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/health", healthHandler(db))
@@ -174,7 +174,7 @@ func storyRoutes(db *sql.DB, uploadsDir string) *http.ServeMux {
 	// Wiki: an article for everything in the story, with the user's own
 	// text layered on top (see wiki.go).
 	mux.HandleFunc("GET /api/wiki", listWikiHandler(db))
-	mux.HandleFunc("GET /api/wiki/graph", wikiGraphHandler(db))
+	mux.HandleFunc("GET /api/wiki/graph", wikiGraphHandler(graph)) // graphcache.go
 	mux.HandleFunc("GET /api/wiki/{type}/{id}", getWikiHandler(db))
 	mux.HandleFunc("PUT /api/wiki/{type}/{id}", saveWikiHandler(db))
 	mux.HandleFunc("POST /api/wiki/{type}/{id}/gallery", addGalleryHandler(db, uploadsDir))

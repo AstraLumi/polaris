@@ -4,6 +4,13 @@ What changed in each version of Polaris. The same notes are on the
 [Releases](https://github.com/AstraLumi/polaris/releases) page. Versions are
 Major.Minor.Bugfix: new features raise Minor, fixes raise Bugfix.
 
+## 3.0.1 (2026-11-01)
+
+### Changed
+
+- **The wiki's graph opens much faster.** Working out the connections took over 11 seconds on a small server for a story with about a hundred articles on a planet map; it now takes under a second, and usually none at all: the graph is kept ready in the background and rebuilt a few seconds after you change something, as long as you've opened it in the last half hour. It is kept compressed and forgotten after half an hour without a look, so it costs almost no memory.
+- Big graphs (a thousand articles and more) lay themselves out several times faster in the browser and show within a quarter of a second, then finish settling on screen.
+
 ## 3.0.0 (2026-10-30)
 
 **Upgrade:** stories are upgraded to database schema 46 the first time they are opened. This can't be undone, so export your stories first. Polaris now also saves an export of each story in its `backups` folder before upgrading it.

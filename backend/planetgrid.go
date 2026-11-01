@@ -247,6 +247,26 @@ func axialRound(a, b float64) (int, int) {
 // neighbors are the cells around a cell, in order round it (6 for a
 // hexagon, 5 for a pentagon).
 func (g planetGrid) neighbors(cell int) []int {
+	out := g.adjacent(cell)
+	// In order round the centre.
+	c := g.center(cell)
+	e1 := vec3{0, 0, 1}.cross(c)
+	if e1.dot(e1) < 1e-12 {
+		e1 = vec3{1, 0, 0}
+	}
+	e1 = e1.norm()
+	e2 := c.cross(e1)
+	angle := func(x int) float64 {
+		v := g.center(x).sub(c)
+		return math.Atan2(v.dot(e2), v.dot(e1))
+	}
+	sort.Slice(out, func(a, b int) bool { return angle(out[a]) < angle(out[b]) })
+	return out
+}
+
+// adjacent are the same cells in no particular order, which is much
+// cheaper (the map's borders only ask which cells touch).
+func (g planetGrid) adjacent(cell int) []int {
 	n := g.n
 	seen := map[int]bool{cell: true}
 	var out []int
@@ -278,19 +298,6 @@ func (g planetGrid) neighbors(cell int) []int {
 			}
 		}
 	}
-	// In order round the centre.
-	c := g.center(cell)
-	e1 := vec3{0, 0, 1}.cross(c)
-	if e1.dot(e1) < 1e-12 {
-		e1 = vec3{1, 0, 0}
-	}
-	e1 = e1.norm()
-	e2 := c.cross(e1)
-	angle := func(x int) float64 {
-		v := g.center(x).sub(c)
-		return math.Atan2(v.dot(e2), v.dot(e1))
-	}
-	sort.Slice(out, func(a, b int) bool { return angle(out[a]) < angle(out[b]) })
 	return out
 }
 
