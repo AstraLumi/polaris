@@ -324,6 +324,18 @@ type pmValidator struct {
 	inNote bool // inside a footnote's paragraphs: no notes there
 }
 
+// optParaFlags: each is true or false, or absent or null (as the style says).
+func optParaFlags(a map[string]any) error {
+	for _, k := range []string{"keepNext", "keepLines", "pageBreakBefore"} {
+		if v, ok := a[k]; ok && v != nil {
+			if _, isBool := v.(bool); !isBool {
+				return fmt.Errorf("attr %s: expected true, false or null", k)
+			}
+		}
+	}
+	return nil
+}
+
 func validatePMDoc(doc *pmNode) error {
 	if doc == nil || doc.Type != "doc" {
 		return errors.New("the document must have a doc root")
@@ -561,10 +573,8 @@ func checkBlockAttrs(n *pmNode) error {
 		if err := optNum(a, "lineHeight", 0.1, 20); err != nil {
 			return wrap(err)
 		}
-		if kn, ok := a["keepNext"]; ok && kn != nil {
-			if _, isBool := kn.(bool); !isBool {
-				return wrap(errors.New("attr keepNext: expected true or false"))
-			}
+		if err := optParaFlags(a); err != nil {
+			return wrap(err)
 		}
 		if err := optNum(a, "boxWidth", 0, 20); err != nil {
 			return wrap(err)
@@ -620,6 +630,9 @@ func checkBlockAttrs(n *pmNode) error {
 			if _, err := optString(a, k, 200); err != nil {
 				return wrap(err)
 			}
+		}
+		if err := optParaFlags(a); err != nil {
+			return wrap(err)
 		}
 	case "toc": // a generated table of contents (stage 3)
 		if lv, ok := a["levels"]; ok && lv != nil {

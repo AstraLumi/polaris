@@ -380,7 +380,15 @@ func charRunXML(m map[string]any) string {
 	return runPropsXML(want, have, false, "")
 }
 
-// paraPropsXML writes the spacing, ind, jc and keepNext of `want` that
+// wFlag is an on/off paragraph property.
+func wFlag(name string, on bool) string {
+	if on {
+		return `<w:` + name + `/>`
+	}
+	return `<w:` + name + ` w:val="0"/>`
+}
+
+// paraPropsXML writes the spacing, ind, jc, keepNext and keepLines of `want` that
 // differ from `have` (all of them when full). Ordered as Word wants:
 // keepNext comes before, spacing, ind and jc after the elements the
 // caller writes in between (returned apart).
@@ -391,6 +399,12 @@ func paraPropsXML(want, have exPara, full bool) (keep, rest string) {
 		} else {
 			keep = `<w:keepNext w:val="0"/>`
 		}
+	}
+	if want.KeepLines != have.KeepLines || full && want.KeepLines {
+		keep += wFlag("keepLines", want.KeepLines)
+	}
+	if want.PageBreakBefore != have.PageBreakBefore || full && want.PageBreakBefore {
+		keep += wFlag("pageBreakBefore", want.PageBreakBefore)
 	}
 	var b strings.Builder
 	var sp []string
@@ -769,6 +783,13 @@ func (d *docxOut) para() *docxPara {
 	return d.pending
 }
 
+// breakBeforePara: breakBefore, or the paragraph's own Page break before
+// (none at a chapter's start, which is a new page anyway).
+func (d *docxOut) breakBeforePara(n *pmNode) bool {
+	own := attrBool(n, "pageBreakBefore") && d.started && !d.b.online()
+	return d.breakBefore() || own
+}
+
 // breakBefore says whether this paragraph starts a page, and clears it.
 func (d *docxOut) breakBefore() bool {
 	br := d.breakNext && d.started
@@ -829,11 +850,15 @@ func (d *docxOut) textParaPPr(p *docxPara, n *pmNode, lc *docxList) {
 	if styleID != "normal" {
 		fmt.Fprintf(&p.ppr, `<w:pStyle w:val="%s"/>`, xe(d.sm.id[styleID]))
 	}
-	if attrBool(n, "keepNext") {
-		p.ppr.WriteString(`<w:keepNext/>`)
+	for _, k := range []string{"keepNext", "keepLines"} {
+		if v, ok := n.Attrs[k].(bool); ok {
+			p.ppr.WriteString(wFlag(k, v))
+		}
 	}
-	if d.breakBefore() {
+	if d.breakBeforePara(n) {
 		p.ppr.WriteString(`<w:pageBreakBefore/>`)
+	} else if v, ok := n.Attrs["pageBreakBefore"].(bool); ok && !v && !d.b.online() {
+		p.ppr.WriteString(wFlag("pageBreakBefore", false))
 	}
 	if lc != nil && lc.first {
 		fmt.Fprintf(&p.ppr, `<w:numPr><w:ilvl w:val="%d"/><w:numId w:val="%d"/></w:numPr>`, lc.ilvl, lc.numID)
@@ -933,7 +958,7 @@ func (d *docxOut) textPara(n *pmNode, lc *docxList) {
 	if dc, ok := pmInt(n.Attrs["dropCap"]); ok && dc >= 2 && dc <= 4 && lc == nil && len(n.Content) > 0 && n.Content[0].Type == "text" && n.Content[0].Text != "" {
 		r := []rune(n.Content[0].Text)
 		fp := d.para()
-		if d.breakBefore() {
+		if d.breakBeforePara(n) {
 			fp.ppr.WriteString(`<w:pageBreakBefore/>`)
 		}
 		fmt.Fprintf(&fp.ppr, `<w:framePr w:dropCap="drop" w:lines="%d" w:wrap="around" w:vAnchor="text" w:hAnchor="text"/><w:spacing w:before="0" w:after="0" w:line="%d" w:lineRule="exact"/>`, dc, dc*240)
@@ -946,6 +971,13 @@ func (d *docxOut) textPara(n *pmNode, lc *docxList) {
 			cp.Content = cp.Content[1:]
 		} else {
 			cp.Content[0] = &first
+		}
+		// The page break went on the drop cap's own paragraph.
+		cp.Attrs = map[string]any{}
+		for k, v := range n.Attrs {
+			if k != "pageBreakBefore" {
+				cp.Attrs[k] = v
+			}
 		}
 		n = &cp
 	}

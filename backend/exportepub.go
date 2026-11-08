@@ -562,6 +562,12 @@ func (e *epubOut) textBlock(ctx *epubCtx, n *pmNode) {
 		if attrBool(n, "keepNext") {
 			decl = append(decl, "page-break-after: avoid")
 		}
+		if attrBool(n, "keepLines") {
+			decl = append(decl, "page-break-inside: avoid")
+		}
+		if attrBool(n, "pageBreakBefore") {
+			decl = append(decl, "page-break-before: always")
+		}
 		if b := boxCSS(n); b != "" {
 			decl = append(decl, b)
 		}

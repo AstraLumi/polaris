@@ -15,7 +15,7 @@ export const BUILTIN_NAMES = {
   quote: 'Quote',
 }
 
-export const PARA_KEYS = ['align', 'indentFirst', 'indentLeft', 'indentRight', 'spaceBefore', 'spaceAfter', 'lineHeight', 'keepNext']
+export const PARA_KEYS = ['align', 'indentFirst', 'indentLeft', 'indentRight', 'spaceBefore', 'spaceAfter', 'lineHeight', 'keepNext', 'keepLines', 'pageBreakBefore']
 export const TEXT_KEYS = ['font', 'size', 'color', 'bold', 'italic']
 // What a character style can set (docs/EDITOR.md, `char_style`): text formatting only.
 export const CHAR_KEYS = [...TEXT_KEYS, 'underline', 'strike', 'smallcaps', 'superscript', 'subscript', 'highlight']
@@ -109,7 +109,7 @@ export function blockStyleId(typeName, attrs, styles) {
 // over the paragraph's style.
 export function resolveBlock(styles, typeName, attrs, marks = []) {
   const { para, text } = resolveStyle(styles, blockStyleId(typeName, attrs, styles))
-  for (const k of PARA_KEYS) if (attrs?.[k] != null && !(k === 'keepNext' && attrs[k] === false)) para[k] = attrs[k]
+  for (const k of PARA_KEYS) if (attrs?.[k] != null) para[k] = attrs[k]
   const cs = marks.find((m) => (m.type?.name ?? m.type) === 'char_style')
   if (cs) {
     const own = resolveCharStyle(styles, cs.attrs.id)
@@ -151,6 +151,8 @@ export function styleSheet(styles, scope = '.write-doc') {
     // unless a paragraph sets its own (docs/EDITOR.md, "Tables").
     `${scope} :where(td, th) > p:not([data-style]) { text-indent: 0; margin-top: 0; margin-bottom: 0 }`,
   ]
+  // A script line follows Normal; its name stays with it (the name is outside the <p>).
+  if (normal.para.keepLines) rules.push(`${scope} .pm-dialogue { break-inside: avoid }`)
   for (const s of styles || []) {
     if (s.kind === 'character') {
       // A run of text in the style (a mark's class); the text's own marks are inside it.

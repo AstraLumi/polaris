@@ -26,12 +26,12 @@ type wLine struct {
 }
 
 type wPara struct {
-	align                       *string // left center right justify
-	indFirst, indLeft, indRight *float64
-	before, after               *float64
-	line                        *wLine
-	keepNext, pageBreakBefore   *bool
-	numID, ilvl, outline        *int
+	align                                *string // left center right justify
+	indFirst, indLeft, indRight          *float64
+	before, after                        *float64
+	line                                 *wLine
+	keepNext, keepLines, pageBreakBefore *bool
+	numID, ilvl, outline                 *int
 	// Direct only (a style's box is not imported): a border (width in pt,
 	// colour "" = black), the fill, and a drop cap's number of lines.
 	boxW            float64
@@ -77,6 +77,9 @@ func (p *wPara) over(t wPara) {
 	}
 	if t.keepNext != nil {
 		p.keepNext = t.keepNext
+	}
+	if t.keepLines != nil {
+		p.keepLines = t.keepLines
 	}
 	if t.pageBreakBefore != nil {
 		p.pageBreakBefore = t.pageBreakBefore
@@ -201,6 +204,8 @@ func parsePPr(e *xEl) wPara {
 			}
 		case "keepNext":
 			p.keepNext = ptrB(wOn(k))
+		case "keepLines":
+			p.keepLines = ptrB(wOn(k))
 		case "pageBreakBefore":
 			p.pageBreakBefore = ptrB(wOn(k))
 		case "numPr":
@@ -531,7 +536,7 @@ type pFmt struct {
 	before, after               float64
 	lineRule                    string
 	line                        float64
-	keepNext                    bool
+	keepNext, keepLines         bool
 }
 
 // rFmt is a run's formatting with every value known.
@@ -563,6 +568,9 @@ func concretePara(p wPara) pFmt {
 	}
 	if p.keepNext != nil {
 		f.keepNext = *p.keepNext
+	}
+	if p.keepLines != nil {
+		f.keepLines = *p.keepLines
 	}
 	return f
 }

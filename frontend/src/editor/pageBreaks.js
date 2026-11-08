@@ -5,7 +5,7 @@
 //
 // An item is one line of text, or one block that cannot be split (a
 // picture, a table, a scene break, a hard page break):
-//   { pos, top, bottom, block, first, last, keepNext, hard, unit, spaceBefore }
+//   { pos, top, bottom, block, first, last, keepNext, keepLines, breakBefore, hard, unit, spaceBefore }
 // pos: the document position a gap goes at (a line's first character, a
 // unit's position); top, bottom: the line's box, in px as if there were no
 // gaps; block: an id shared by the lines of one paragraph; first, last:
@@ -21,6 +21,10 @@
 //  - a line fits when its bottom is within the page's content height;
 //  - widow/orphan control: a paragraph is never split leaving one line at
 //    a page's foot or head; a paragraph of 2-3 lines moves whole;
+//  - keepLines moves a block whole to the next page (unless it already
+//    starts a page: one taller than a page has to split);
+//  - breakBefore (on a block's first line) starts a new page there, unless
+//    that line already starts a page;
 //  - keepNext keeps a block with the first lines of the next one (unless
 //    that would leave the page empty);
 //  - a hard break starts a new page with the item after it.
@@ -43,6 +47,13 @@ export function paginate(items, contentHeight, opts = {}) {
         pageTop = items[start].top - (items[start].spaceBefore || 0)
         breaks.push({ index: start, pos: items[start].pos, hard: true })
       }
+      i++
+      continue
+    }
+    if (it.breakBefore && i > start) {
+      start = i
+      pageTop = it.top - (it.spaceBefore || 0)
+      breaks.push({ index: i, pos: it.pos, hard: true })
       i++
       continue
     }
@@ -84,7 +95,8 @@ function adjust(items, raw, start) {
       const total = e - s + 1
       const head = c - s
       const tail = e - c + 1
-      if (begins) {
+      if (it.keepLines && begins && s > start) next = s
+      else if (begins) {
         if (total <= 3) next = s > start ? s : c
         else if (head < 2) next = s > start ? s : c
         else if (tail < 2) next = c - 1 - s >= 2 ? c - 1 : s > start ? s : c
@@ -111,6 +123,24 @@ function adjust(items, raw, start) {
 export function gapHeight({ w, pageTop, contentHeight, extra, keep = 0 }) {
   const base = Math.max(pageTop + contentHeight, w)
   return base - w + extra + keep
+}
+
+// Which page (0-based) fills most of the screen between `top` and `bottom`.
+// spaces: where the space between each two sheets is on screen, in order;
+// the first page runs up from the first space, the last down from the last.
+export function mostVisiblePage(spaces, top, bottom) {
+  let best = 0
+  let bestSeen = -Infinity
+  for (let k = 0; k <= spaces.length; k++) {
+    const start = k ? spaces[k - 1].bottom : -Infinity
+    const end = k < spaces.length ? spaces[k].top : Infinity
+    const seen = Math.min(end, bottom) - Math.max(start, top)
+    if (seen > bestSeen) {
+      best = k
+      bestSeen = seen
+    }
+  }
+  return best
 }
 
 // The top of each page (as if there were no gaps) for the breaks of

@@ -20,7 +20,7 @@ assert.equal(back.content[3].attrs, undefined, 'a plain paragraph stays plain')
 
 
 // ownPara carries them; the CSS draws border, shading and padding.
-assert.deepEqual(ownPara({ ...box, dropCap: null, style: null, keepNext: false }), box)
+assert.deepEqual(ownPara({ ...box, dropCap: null, style: null, keepNext: null }), box)
 const css = paraDeclarations(box).join('; ')
 assert.match(css, /border: 1\.5pt solid #3366cc/)
 assert.match(css, /background-color: #e8f0ff/)

@@ -10,7 +10,7 @@
 // Tab through the cells, a table pasted from Word) and in the page view
 // (rows breaking across pages, the header row repeated).
 //
-//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes|wrap|import|speaker|painter|pages|fonts|symbols|fontpicker]
+//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes|wrap|import|speaker|painter|pages|fonts|symbols|fontpicker|copy]
 //
 // --only spell: just the spellchecker (underlines, the menu on a word, Add
 // to dictionary, Ignore, typing, the spelling panel, dark paper, off).
@@ -451,6 +451,179 @@ async function startFrontend() {
   cleanups.push(() => server.close())
 }
 
+// A phone copying a chapter with a dialogue: the toolbar's button, the same
+// without the async clipboard (plain http), and a keyboard's "select all".
+async function copyShots(page, snap, checks) {
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE })
+  await page.goto(`${BASE}/write/1?chapter=14`)
+  await page.waitForSelector('.pm-dialogue')
+  await settle(page, 800)
+  const clip = () => page.evaluate(() => navigator.clipboard.readText())
+  const clear = () => page.evaluate(() => navigator.clipboard.writeText('-'))
+  const named = /Mira, quitely: We shuold turn back\./
+  const button = page.getByRole('button', { name: 'Copy the whole chapter' })
+
+  await button.click()
+  await settle(page, 200)
+  await snap('copy_phone.png')
+  assert.match(await clip(), named)
+  checks.push('copy button: the speaker is in the text')
+
+  await clear()
+  await settle(page, 2200) // the button's tick goes away
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true }))
+  await button.click()
+  await settle(page, 200)
+  await page.evaluate(() => delete navigator.clipboard)
+  assert.match(await clip(), named)
+  checks.push('copy button without the async clipboard: the speaker is in the text')
+
+  await clear()
+  await page.evaluate(() => {
+    window.__writeView.focus()
+    document.execCommand('selectAll')
+  })
+  await settle(page, 200)
+  await page.evaluate(() => document.execCommand('copy'))
+  assert.match(await clip(), named)
+  checks.push('native select all and copy: the speaker is in the text')
+
+  // Many pages: "Copy this page" gives the lines drawn on the page in view.
+  await page.evaluate(() => {
+    const view = window.__writeView
+    const { dialogue } = view.state.schema.nodes
+    const lines = Array.from({ length: 150 }, (_, i) => dialogue.create({ speaker: 'Mira' }, view.state.schema.text(`Line ${i + 1}.`)))
+    view.dispatch(view.state.tr.insert(view.state.doc.content.size, lines))
+  })
+  await settle(page, 1200)
+  await page.evaluate(() => document.querySelectorAll('.pg-space')[1].scrollIntoView({ block: 'start' }))
+  await settle(page, 300)
+  const drawn = await page.evaluate(() => {
+    const [above, below] = [...document.querySelectorAll('.pg-space')].slice(1, 3).map((s) => s.getBoundingClientRect())
+    return [...document.querySelectorAll('.write-doc .pm-dialogue .pm-line')]
+      .filter((l) => {
+        // The words, not the line's box: a page's first line holds the gap.
+        const words = document.createRange()
+        words.selectNodeContents([...l.childNodes].find((c) => c.nodeType === Node.TEXT_NODE))
+        const r = words.getBoundingClientRect()
+        return r.top > above.bottom && r.bottom < below.top
+      })
+      .map((l) => `Mira: ${[...l.childNodes].find((c) => c.nodeType === Node.TEXT_NODE).data}`)
+  })
+  assert.ok(drawn.length > 3, `lines on the page: ${drawn.length}`)
+  await page.getByRole('button', { name: 'Copy text' }).click()
+  await settle(page, 200)
+  await snap('copy_phone_menu.png')
+  await clear()
+  await page.getByRole('button', { name: 'Copy this page' }).click()
+  await settle(page, 200)
+  assert.equal((await clip()).replace(/\r\n/g, '\n'), drawn.join('\n\n'))
+  checks.push(`copy this page: exactly the ${drawn.length} lines drawn on the third page`)
+
+  await settle(page, 2200)
+  await page.getByRole('button', { name: 'Copy text' }).click()
+  await page.getByRole('button', { name: 'Copy the whole chapter' }).click()
+  await settle(page, 200)
+  assert.match(await clip(), /Mira: Line 1\.[\s\S]*Mira: Line 150\./)
+  checks.push('copy the whole chapter: every page')
+
+  // Keep lines together: without it a name can stay at a page's foot while
+  // its line starts the next page; with it they move together.
+  const split = () =>
+    page.evaluate(() => {
+      const spaces = [...document.querySelectorAll('.pg-space')].map((s) => s.getBoundingClientRect())
+      return [...document.querySelectorAll('.write-doc .pm-dialogue')].filter((d) => {
+        const who = d.querySelector('.pm-who').getBoundingClientRect()
+        const words = document.createRange()
+        words.selectNodeContents([...d.querySelector('.pm-line').childNodes].find((c) => c.nodeType === Node.TEXT_NODE))
+        const line = words.getBoundingClientRect()
+        return spaces.some((s) => who.bottom <= s.top + 1 && line.top >= s.bottom - 1)
+      }).length
+    })
+  const gapsNow = () => page.evaluate(() => [...document.querySelectorAll('.pg-gap')].map((g) => g.style.height))
+  const off = await split()
+  assert.ok(off > 0, 'a name left behind without the option')
+  await page.getByRole('button', { name: 'More tools' }).click()
+  await page.evaluate(() => {
+    const view = window.__writeView
+    let at = 0
+    view.state.doc.forEach((n, pos) => {
+      if (!at && n.type.name === 'dialogue') at = pos + 1
+    })
+    view.dispatch(view.state.tr.setSelection(view.state.selection.constructor.create(view.state.doc, at)))
+    view.focus()
+  })
+  await page.getByRole('button', { name: 'Keep lines together' }).click()
+  const toggled = await page.evaluate(() => window.__writeView.state.selection.$from.parent.attrs.keepLines)
+  assert.equal(toggled, true, 'the toolbar button sets it on the script line')
+  await page.getByRole('button', { name: 'More tools' }).click()
+  await page.evaluate(() => {
+    const view = window.__writeView
+    const tr = view.state.tr
+    view.state.doc.forEach((n, pos) => {
+      if (n.type.name === 'dialogue') tr.setNodeMarkup(pos, null, { ...n.attrs, keepLines: true })
+    })
+    view.dispatch(tr)
+  })
+  await settle(page, 1200)
+  assert.equal(await split(), 0, 'no name left behind with the option')
+  const once = await gapsNow()
+  await page.evaluate(() => document.querySelectorAll('.pg-space')[1].scrollIntoView({ block: 'center' }))
+  await settle(page, 600)
+  await snap('keep_lines_break.png')
+  assert.deepEqual(await gapsNow(), once, 'the pages settle')
+  checks.push(`keep lines together: ${off} names left behind without it, none with it`)
+
+  // Page break before, on a script line, while writing.
+  await page.evaluate(() => {
+    const view = window.__writeView
+    let done = 0
+    view.state.doc.forEach((n, pos) => {
+      if (done || n.textContent !== 'Line 5.') return
+      done = 1
+      view.dispatch(view.state.tr.setNodeMarkup(pos, null, { ...n.attrs, pageBreakBefore: true }))
+    })
+  })
+  await settle(page, 1200)
+  const nameAfterBreak = await page.evaluate(() => {
+    const line = [...document.querySelectorAll('.write-doc .pm-dialogue')].find((d) => d.querySelector('.pm-line').textContent.includes('Line 5.'))
+    const who = line.querySelector('.pm-who').getBoundingClientRect()
+    const before = line.previousElementSibling
+    return { gap: !!before?.matches('.pg-gap'), below: who.top >= before.getBoundingClientRect().bottom - 1 }
+  })
+  assert.ok(nameAfterBreak.gap && nameAfterBreak.below, 'the name starts the new page')
+  checks.push('page break before: a script line and its name start the new page')
+
+  // The page view: a paragraph's own settings reach paged.js.
+  const dlg = (word, attrs) => ({ type: 'dialogue', attrs: { speaker: word, ...attrs }, content: [txt(`${word} `.repeat(90))] })
+  db.texts[12] = {
+    doc: {
+      type: 'doc',
+      content: [
+        ...Array.from({ length: 30 }, () => dlg('Held', { keepLines: true })),
+        para({ pageBreakBefore: true }, txt('BREAK-HERE starts its page.')),
+        ...Array.from({ length: 30 }, () => dlg('Free', {})),
+      ],
+    },
+    version: 1,
+    updated_at: now(),
+  }
+  await page.goto(`${BASE}/write/1/pages`)
+  await page.waitForSelector('.pv-pages:not(.is-hidden) .pagedjs_page', { timeout: 60000 })
+  await settle(page, 2500)
+  const paged = await page.evaluate(() => {
+    const split = [...document.querySelectorAll('.pagedjs_page .pm-dialogue[data-split-from]')]
+    const of = (w) => split.filter((d) => d.textContent.includes(w)).length
+    const marked = [...document.querySelectorAll('.pagedjs_page .pv-doc p')].find((p) => p.textContent.includes('BREAK-HERE'))
+    const first = marked?.closest('.pagedjs_page').querySelector('.pv-doc p, .pv-doc .pm-dialogue')
+    return { held: of('Held'), free: of('Free'), first: !!marked && first === marked }
+  })
+  assert.equal(paged.held, 0, 'kept script lines are not split in the page view')
+  assert.ok(paged.free > 0, 'lines without the option do split')
+  assert.ok(paged.first, 'page break before starts a page in the page view')
+  checks.push(`page view: no kept lines split, ${paged.free} free lines split, page break before starts a page`)
+}
+
 async function newPage(browser, viewport, errors) {
   const context = await browser.newContext({ viewport, locale: 'en-US', deviceScaleFactor: 1 })
   cleanups.push(() => context.close())
@@ -531,6 +704,11 @@ async function shoot() {
   }
   if (option('only', '') === 'painter') {
     await painterShots(page, snap, checks)
+    return { saved, errors, checks }
+  }
+  if (option('only', '') === 'copy') {
+    page = await newPage(browser, { width: 390, height: 844 }, errors)
+    await copyShots(page, snap, checks)
     return { saved, errors, checks }
   }
   if (option('only', '') === 'speaker') {

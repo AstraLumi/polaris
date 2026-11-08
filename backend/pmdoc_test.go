@@ -91,6 +91,8 @@ func TestPMDocRejects(t *testing.T) {
 	bad := map[string]string{
 		"not json":         `{"type":`,
 		"root":             `{"type":"paragraph"}`,
+		"keepLines":        `{"type":"doc","content":[{"type":"dialogue","attrs":{"keepLines":"yes"}}]}`,
+		"pageBreakBefore":  `{"type":"doc","content":[{"type":"paragraph","attrs":{"pageBreakBefore":1}}]}`,
 		"empty doc":        `{"type":"doc","content":[]}`,
 		"unknown node":     `{"type":"doc","content":[{"type":"table"}]}`,
 		"inline at top":    `{"type":"doc","content":[{"type":"text","text":"x"}]}`,

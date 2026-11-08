@@ -13,13 +13,15 @@ import {
   cssFontSizeToPt,
   familyCSS,
   num,
-  paraDeclarations,
+  paraDeclarations, breakAttrs,
   paraFromCSS,
 } from './css.js'
 import { tableNodeSpecs, tableAttrsIn, tableAttrsOut } from './tableSchema.js'
 
 // Paragraph formatting, shared by paragraphs and headings.
-export const PARA_ATTRS = ['style', 'align', 'indentFirst', 'indentLeft', 'indentRight', 'spaceBefore', 'spaceAfter', 'lineHeight', 'keepNext', 'boxWidth', 'boxColor', 'shade', 'dropCap']
+export const PARA_ATTRS = ['style', 'align', 'indentFirst', 'indentLeft', 'indentRight', 'spaceBefore', 'spaceAfter', 'lineHeight', 'keepNext', 'keepLines', 'pageBreakBefore', 'boxWidth', 'boxColor', 'shade', 'dropCap']
+// On, off (over a style that has it on), or null: as the style says.
+const PARA_FLAGS = ['keepNext', 'keepLines', 'pageBreakBefore']
 const COLOR_RE = /^#[0-9a-fA-F]{6}$/
 const ALIGN_VALUES = new Set(['left', 'center', 'right', 'justify'])
 
@@ -32,7 +34,9 @@ const paraAttrSpec = () => ({
   spaceBefore: { default: null },
   spaceAfter: { default: null },
   lineHeight: { default: null },
-  keepNext: { default: false },
+  keepNext: { default: null },
+  keepLines: { default: null },
+  pageBreakBefore: { default: null },
   boxWidth: { default: null },
   boxColor: { default: null },
   shade: { default: null },
@@ -45,7 +49,7 @@ export function ownPara(attrs) {
   const out = {}
   for (const k of PARA_ATTRS) {
     if (k === 'style') continue
-    if (k === 'keepNext' ? attrs[k] : attrs[k] != null) out[k] = attrs[k]
+    if (attrs[k] != null) out[k] = attrs[k]
   }
   return out
 }
@@ -59,7 +63,7 @@ function cleanPara(raw) {
     if (k === 'style') out.style = String(v)
     else if (k === 'align') {
       if (ALIGN_VALUES.has(v)) out.align = v
-    } else if (k === 'keepNext') out.keepNext = !!v
+    } else if (PARA_FLAGS.includes(k)) out[k] = !!v
     else if (k === 'boxColor' || k === 'shade') {
       if (COLOR_RE.test(String(v))) out[k] = String(v).toLowerCase()
     } else if (k === 'dropCap') {
@@ -79,6 +83,7 @@ function paraToDOM(tag, node) {
   if (Object.keys(own).length || a.extra) dom['data-para'] = JSON.stringify(a.extra ? { ...own, extra: a.extra } : own)
   const css = paraDeclarations(a.extra?.lineExact > 0 ? { ...own, lineExact: a.extra.lineExact } : own).join('; ')
   if (css) dom.style = css
+  Object.assign(dom, breakAttrs(own))
   if (own.boxWidth > 0 || own.shade) dom['data-box'] = ''
   if (own.dropCap) dom['data-dropcap'] = String(own.dropCap)
   return [tag, dom, 0]
@@ -103,12 +108,28 @@ function paraFromDOM(el) {
 
 const keep = (spec) => ({ ...spec, extra: { default: null } })
 
+const dialogueFlags = (attrs) => Object.fromEntries(PARA_FLAGS.filter((k) => attrs[k] != null).map((k) => [k, attrs[k]]))
+
+function dialogueFlagsFromDOM(el) {
+  try {
+    return dialogueFlags(cleanPara(JSON.parse(el.getAttribute('data-para') || '{}')))
+  } catch (e) {
+    return {}
+  }
+}
+
 // A dialogue as HTML: the speaker (small caps) and manner (italics) above
 // the line, which is the editable part.
 export function dialogueDOM(attrs) {
   const { character, speaker, manner } = attrs
   const dom = { class: 'pm-dialogue', 'data-dialogue': '', 'data-speaker': speaker || '', 'data-manner': manner || '' }
   if (character != null) dom['data-character'] = String(character)
+  const flags = dialogueFlags(attrs)
+  if (Object.keys(flags).length) {
+    dom['data-para'] = JSON.stringify(flags)
+    dom.style = paraDeclarations(flags).join('; ')
+    Object.assign(dom, breakAttrs(flags))
+  }
   const who = ['span', { class: 'pm-speaker' }, speaker || '…']
   const who2 = manner ? [who, ['span', { class: 'pm-manner' }, `, ${manner}`]] : [who]
   return ['div', dom, ['div', { class: 'pm-who', contenteditable: 'false' }, ...who2], ['p', { class: 'pm-line' }, 0]]
@@ -226,14 +247,14 @@ export const schema = new Schema({
       group: 'block',
       content: 'inline*',
       defining: true,
-      attrs: keep({ character: { default: null }, speaker: { default: '' }, manner: { default: '' } }),
+      attrs: keep({ character: { default: null }, speaker: { default: '' }, manner: { default: '' }, keepNext: { default: null }, keepLines: { default: null }, pageBreakBefore: { default: null } }),
       parseDOM: [
         {
           tag: 'div[data-dialogue]',
           contentElement: '.pm-line',
           getAttrs: (el) => {
             const id = parseInt(el.getAttribute('data-character'), 10)
-            return { character: id > 0 ? id : null, speaker: el.getAttribute('data-speaker') || '', manner: el.getAttribute('data-manner') || '' }
+            return { character: id > 0 ? id : null, speaker: el.getAttribute('data-speaker') || '', manner: el.getAttribute('data-manner') || '', ...dialogueFlagsFromDOM(el) }
           },
         },
       ],

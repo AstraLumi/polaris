@@ -99,6 +99,9 @@
           <option v-for="l in LINE_HEIGHTS" :key="l" :value="String(l)">{{ l }}</option>
         </select>
       </label>
+      <button v-bind="btn(t('Keep with next'), !!fmt.keepNext)" :disabled="online" @click="exec(setParaAttrs({ keepNext: !fmt.keepNext }))"><TbIcon name="keep-next" /></button>
+      <button v-bind="btn(t('Keep lines together'), !!fmt.keepLines)" :disabled="online" @click="exec(setParaAttrs({ keepLines: !fmt.keepLines }))"><TbIcon name="keep-lines" /></button>
+      <button v-bind="btn(t('Page break before'), !!fmt.pageBreakBefore)" :disabled="online" @click="exec(setParaAttrs({ pageBreakBefore: !fmt.pageBreakBefore }))"><TbIcon name="break-before" /></button>
       <div class="tb-pop">
         <button v-bind="btn(t('Box, shading and drop cap'), !!(fmt.boxWidth || fmt.shade || fmt.dropCap))" @click="toggle('box')"><span class="glyph">▢</span></button>
         <div v-if="open === 'box'" class="pop glass-panel panel-solid box-pop" @mousedown.stop>
@@ -168,6 +171,13 @@
 
     <div class="tb-group tools">
       <button v-bind="btn(t('Find and replace') + ' (Ctrl+F)')" @click="$emit('find')"><TbIcon name="find" /></button>
+      <div class="tb-pop copy-btn">
+        <button v-bind="btn(copied ? t('Copied') : hasPages ? t('Copy text') : t('Copy the whole chapter'), copied)" @mousedown.stop @click="onCopy"><TbIcon :name="copied ? 'check' : 'copy'" /></button>
+        <div v-if="open === 'copy'" class="pop glass-panel panel-solid copy-pop" @mousedown.stop>
+          <button type="button" class="btn btn-ghost small" @mousedown.prevent @click="copyWhat('page')">{{ $t('Copy this page') }}</button>
+          <button type="button" class="btn btn-ghost small" @mousedown.prevent @click="copyWhat('chapter')">{{ $t('Copy the whole chapter') }}</button>
+        </div>
+      </div>
       <button v-bind="btn(t('Styles'), panel === 'styles')" class="foldable" @click="$emit('panel', 'styles')"><TbIcon name="styles" /></button>
       <button v-bind="btn(t('New comment') + ' (Ctrl+Alt+M)')" @click="$emit('comment')"><TbIcon name="comment" /></button>
       <button v-bind="btn(t('Comments'), panel === 'comments')" class="foldable" @click="$emit('panel', 'comments')"><TbIcon name="comments" /></button>
@@ -212,6 +222,7 @@ import {
 import { setScriptMode } from '../../editor/script.js'
 import { insertTable } from '../../editor/tables.js'
 import { insertNote, canInsertNote } from '../../editor/footnotes.js'
+import { gapsOf } from '../../editor/pagination.js'
 
 const props = defineProps({
   state: { type: Object, required: true },
@@ -227,8 +238,9 @@ const props = defineProps({
   showTags: { type: Boolean, default: true }, // the underlines of tagged characters and spells
   painter: { type: Boolean, default: false }, // the Format Painter is armed
   fonts: { type: Array, default: () => [] }, // the font picker's list
+  copied: { type: Boolean, default: false }, // the chapter was just copied
 })
-const emit = defineEmits(['find', 'panel', 'focus', 'picture', 'read', 'comment', 'spell', 'tags', 'painter'])
+const emit = defineEmits(['find', 'copy', 'panel', 'focus', 'picture', 'read', 'comment', 'spell', 'tags', 'painter'])
 // A double click is two clicks and a dblclick: the second click is left to it.
 const onPainter = (e) => e.detail < 2 && emit('painter')
 const readTitle = computed(() =>
@@ -329,6 +341,15 @@ function addTable(r, c) {
   exec(insertTable(r, c))
 }
 
+// Copy: the page on the screen or the whole chapter; with no pages drawn
+// (or just one) there is nothing to choose.
+const hasPages = computed(() => gapsOf(props.state).some((g) => !g.tail))
+function copyWhat(what) {
+  open.value = ''
+  emit('copy', what)
+}
+const onCopy = () => (hasPages.value ? toggle('copy') : copyWhat('chapter'))
+
 // Footnotes and endnotes (stage 5): after the selection, in text.
 const canNote = computed(() => canInsertNote(props.state))
 
@@ -352,6 +373,9 @@ const ICONS = {
   'space-before': 'M3 12h18M3 16h18M3 20h18M12 2v6M9 5l3-3 3 3',
   'space-after': 'M3 4h18M3 8h18M3 12h18M12 22v-6M9 19l3 3 3-3',
   'line-height': 'M10 6h11M10 12h11M10 18h11M5 4v16M3 6l2-2 2 2M3 18l2 2 2-2',
+  'keep-lines': 'M10 6h11M10 12h11M10 18h11M6 3H3v18h3',
+  'keep-next': 'M4 4h16M4 8h16M4 21h16M12 11v7M9.5 15.5 12 18l2.5-2.5',
+  'break-before': 'M4 4h16M12 6v7M9.5 10.5 12 13l2.5-2.5M6 21v-5h12v5',
   'list-bullet': 'M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01',
   'list-number': 'M10 6h11M10 12h11M10 18h11M4 4v4M3 8h2M3 11h2l-2 3h2M3 16h2v4H3M3 18h2',
   'page-break': 'M6 3v5h12V3M6 21v-5h12v5M2 12h3M8 12h3M13 12h3M19 12h3',
@@ -359,6 +383,8 @@ const ICONS = {
   picture: 'M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15 9h.01',
   link: 'M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1',
   find: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-5-5',
+  copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
+  check: 'M5 13l4 4 10-10',
   styles: 'M4 20h16M7 16 12 4l5 12M9 12h6',
   versions: 'M12 8v4l3 2M3.05 11a9 9 0 1 1 .5 4M3 4v7h7',
   book: 'M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3zM4 17a3 3 0 0 1 3-3h11',
@@ -578,6 +604,12 @@ sub {
   right: auto;
 }
 
+.copy-pop {
+  left: auto;
+  right: 0;
+  white-space: nowrap;
+}
+
 .table-pop {
   min-width: 0;
   gap: 0.35rem;
@@ -611,8 +643,16 @@ sub {
   color: var(--text-muted);
 }
 
-.more-btn {
+.more-btn,
+.copy-btn {
   display: none;
+}
+
+/* Touch screens: no Ctrl+A, and selecting a whole chapter by hand is slow. */
+@media (max-width: 720px), (pointer: coarse) {
+  .copy-btn {
+    display: inline-grid;
+  }
 }
 
 /* Phones: the everyday buttons stay, the rest folds behind "⋯". */

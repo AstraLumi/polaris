@@ -4,8 +4,9 @@
 // start offers it, Tab links it, Esc dismisses. Runs the plugins on a
 // stand-in view (no DOM). node frontend/tests/editorScript.test.mjs
 import assert from 'node:assert/strict'
-import { EditorState, TextSelection } from 'prosemirror-state'
+import { EditorState, TextSelection, AllSelection } from 'prosemirror-state'
 import { schema, docFromJSON, docToJSON } from '../src/editor/schema.js'
+import { docText, pageText, selectionText } from '../src/editor/copyText.js'
 import { buildNameIndex } from '../src/editor/nameMatch.js'
 import { scriptPlugins, setScriptMode, backspaceDialogue, newLineAfterDialogue, setDialogueAttrs, dialogueToParagraph } from '../src/editor/script.js'
 import { nameSuggest, suggestKey, acceptSuggestion } from '../src/editor/nameSuggest.js'
@@ -180,6 +181,68 @@ const active = (view) => suggestKey.getState(view.state).active
   // Further along the line a name links as usual.
   type(view, ' To Tho')
   assert.equal(active(view).speaker, false)
+}
+
+// Copying: the speakers are attrs, the plain text must still carry them.
+{
+  const d = (speaker, manner, text) => ({ type: 'dialogue', attrs: { character: null, speaker, manner }, content: [{ type: 'text', text }] })
+  const doc = docFromJSON({
+    type: 'doc',
+    content: [
+      d('Aria', '', 'Run.'),
+      p(''),
+      { type: 'scene_break', attrs: { glyph: '~ ❦ ~' } },
+      p('She ran.'),
+      d('Bram', 'grimly', 'Go on.'),
+    ],
+  })
+  const whole = 'Aria: Run.\n\n~ ❦ ~\n\nShe ran.\n\nBram, grimly: Go on.'
+  assert.equal(docText(doc), whole)
+
+  const copied = (from, to) => {
+    const sel = TextSelection.create(doc, from, to)
+    return selectionText(sel.content(), sel)
+  }
+  const all = new AllSelection(doc)
+  assert.equal(selectionText(all.content(), all), whole, 'select all')
+  assert.equal(copied(1, doc.content.size - 1), whole, 'a keyboard selecting from the first line to the last')
+  assert.equal(copied(1, 5), 'Aria: Run.', 'exactly one whole line')
+  assert.equal(copied(1, 3), 'Ru', 'a few words of a line')
+  assert.equal(copied(3, 5), 'n.', 'the end of a line')
+
+  // One drawn page: pagination's breaks are a line's first character or
+  // the position before a block.
+  const start = (text) => {
+    let at = -1
+    doc.descendants((n, pos) => {
+      if (n.isTextblock && n.textContent.startsWith(text)) at = pos + 1
+    })
+    return at
+  }
+  const size = doc.content.size
+  assert.equal(pageText(doc, 0, start('Go on')), 'Aria: Run.\n\n~ ❦ ~\n\nShe ran.', 'the next page’s speaker stays off this page')
+  assert.equal(pageText(doc, start('Go on'), size), 'Bram, grimly: Go on.', 'a page starting at a line’s start has its speaker')
+  assert.equal(pageText(doc, start('Go on'), start('Go on') + 3), 'Bram, grimly: Go', 'a line too long for its page keeps the speaker on the first page')
+  assert.equal(pageText(doc, start('Go on') + 3, size), 'on.', 'the rest of it, on the next page, has none')
+}
+
+// Keep lines together on a dialogue: saved, drawn, off by default.
+{
+  const line = (attrs) => ({ type: 'dialogue', attrs: { speaker: 'Aria', ...attrs }, content: [{ type: 'text', text: 'Hi.' }] })
+  const back = (attrs) => docToJSON(docFromJSON({ type: 'doc', content: [line(attrs)] })).content[0].attrs
+  assert.equal(back({ keepLines: true }).keepLines, true)
+  assert.equal(back({ keepLines: false }).keepLines, false, 'off over a style that has it on')
+  assert.equal('keepLines' in back({}), false, 'an untouched line saves the same bytes')
+  const drawn = schema.nodes.dialogue.spec.toDOM(schema.nodes.dialogue.create({ speaker: 'Aria', keepLines: true }))
+  assert.equal(drawn[1].style, 'break-inside: avoid')
+  assert.equal(schema.nodes.dialogue.spec.toDOM(schema.nodes.dialogue.create({ speaker: 'Aria' }))[1].style, undefined)
+  assert.equal(back({ pageBreakBefore: true }).pageBreakBefore, true)
+  assert.equal(back({ keepNext: false }).keepNext, false, 'keep with next can be turned off over a heading style')
+  assert.equal('keepNext' in back({}), false)
+  // paged.js reads a paragraph's own breaks from these attributes.
+  const flags = schema.nodes.dialogue.spec.toDOM(schema.nodes.dialogue.create({ speaker: 'Aria', keepLines: true, pageBreakBefore: true }))[1]
+  assert.equal(flags['data-break-inside'], 'avoid')
+  assert.equal(flags['data-break-before'], 'page')
 }
 
 console.log('editorScript: ok')

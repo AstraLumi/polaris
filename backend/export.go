@@ -472,7 +472,7 @@ type exPara struct {
 	SpaceBefore, SpaceAfter              float64
 	LineHeight                           float64
 	LineExact                            float64 // pt; 0 = not exact
-	KeepNext                             bool
+	KeepNext, KeepLines, PageBreakBefore bool
 }
 
 // exText is a text's formatting with every value known.
@@ -519,6 +519,12 @@ func applyPara(p *exPara, m map[string]any) {
 	}
 	if v, ok := m["keepNext"].(bool); ok {
 		p.KeepNext = v
+	}
+	if v, ok := m["keepLines"].(bool); ok {
+		p.KeepLines = v
+	}
+	if v, ok := m["pageBreakBefore"].(bool); ok {
+		p.PageBreakBefore = v
 	}
 }
 

@@ -378,6 +378,7 @@ func TestDocxParagraphFormatting(t *testing.T) {
 		wp(`<w:spacing w:line="480" w:lineRule="exact"/>`, wr(`<w:sz w:val="20"/>`, "exactly 24")) +
 		wp(`<w:spacing w:line="200" w:lineRule="atLeast"/>`, wr(`<w:sz w:val="20"/>`, "at least 10")) +
 		wp(`<w:keepNext/>`, wr("", "keep with next")) +
+		wp(`<w:keepLines/>`, wr("", "keep lines together")) +
 		wp("", wr("", "before"), wrx("", `<w:br w:type="page"/>`), wr("", "after")) +
 		wp("", wrx("", `<w:br w:type="page"/>`)) +
 		wp("", wr("", "a"), wrx("", `<w:br/>`), wr("", "b"), wrx("", `<w:tab/>`), wr("", "c"), wrx("", `<w:cr/>`), wr("", "d")) +
@@ -385,7 +386,7 @@ func TestDocxParagraphFormatting(t *testing.T) {
 		wp(`<w:pBdr><w:top w:val="single"/></w:pBdr>`, wr("", "boxed"))
 	imp := importDocx(t, docxSpec{body: body})
 	bs := allBlocks(imp)
-	if got := types(bs); got != strings.Repeat("paragraph,", 14)+"page_break,paragraph,page_break,paragraph,paragraph,paragraph" {
+	if got := types(bs); got != strings.Repeat("paragraph,", 15)+"page_break,paragraph,page_break,paragraph,paragraph,paragraph" {
 		t.Fatalf("blocks: %s", got)
 	}
 	byText := map[string]*pmNode{}
@@ -428,6 +429,8 @@ func TestDocxParagraphFormatting(t *testing.T) {
 	check("at least 10", "lineHeight", 1)
 	check("at least 10", "lineExact", nil)
 	check("keep with next", "keepNext", true)
+	check("keep with next", "keepLines", nil)
+	check("keep lines together", "keepLines", true)
 	check("before", "align", nil)
 	if b := byText["a\nb\tc\nd"]; b == nil || types(b.Content) != "text,hard_break,text,tab,text,hard_break,text" {
 		t.Errorf("breaks and tabs: %v", b)

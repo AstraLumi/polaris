@@ -22,7 +22,7 @@
 // where a page's text starts.
 import { Plugin, PluginKey } from 'prosemirror-state'
 import { Decoration, DecorationSet } from 'prosemirror-view'
-import { paginate, gapHeight, pageTops } from './pageBreaks.js'
+import { paginate, gapHeight, pageTops, mostVisiblePage } from './pageBreaks.js'
 import { resolveBlock } from './styles.js'
 
 export const pagesKey = new PluginKey('pages')
@@ -41,7 +41,7 @@ const EMPTY = { deco: DecorationSet.empty, gaps: [] }
 //   widthPx: the text block's width (px, not zoomed); heightMm, topMm,
 //   bottomMm: the page; bands(k): { head, foot } for page k (0-based), each
 //   [left, centre, right] text, or null; sig: changes when any of it does.
-// getStyles(): the book's styles (for keepNext).
+// getStyles(): the book's styles (for what keeps or breaks a block).
 export function pagesPlugin({ getOptions, getStyles = () => [] }) {
   return new Plugin({
     key: pagesKey,
@@ -132,6 +132,20 @@ export function refreshPages(view) {
 // The gaps now drawn, for tests and the status line: [{ pos, page, hw, unit, hard }].
 export const gapsOf = (state) => pagesKey.getState(state)?.gaps || []
 
+// The page filling most of the screen as { from, to } in the doc, or null.
+export function pageOnScreen(view) {
+  const breaks = gapsOf(view.state)
+    .filter((g) => !g.tail)
+    .sort((a, b) => a.pos - b.pos)
+  const spaces = [...view.dom.querySelectorAll('.pg-space')].map((el) => el.getBoundingClientRect())
+  if (spaces.length !== breaks.length) return null
+  // The visual viewport leaves out an open on-screen keyboard.
+  const top = window.visualViewport?.offsetTop ?? 0
+  const height = window.visualViewport?.height ?? window.innerHeight
+  const k = mostVisiblePage(spaces, top, top + height)
+  return { from: k ? breaks[k - 1].pos : 0, to: k < breaks.length ? breaks[k].pos : view.state.doc.content.size }
+}
+
 function sameGaps(a, b) {
   if (a.length !== b.length) return false
   for (let i = 0; i < a.length; i++) {
@@ -198,11 +212,11 @@ function collectItems(view, ctx) {
   const { root, sr, s, y, gapAt, styles } = ctx
   const items = []
   const range = document.createRange()
-  const kn = new Map()
-  const keepNext = (node) => {
-    const key = `${node.type.name}|${node.attrs.style}|${node.attrs.level}|${node.attrs.keepNext}`
-    if (!kn.has(key)) kn.set(key, !!resolveBlock(styles, node.type.name, node.attrs).para.keepNext)
-    return kn.get(key)
+  const kept = new Map()
+  const keepOf = (node) => {
+    const key = `${node.type.name}|${node.attrs.style}|${node.attrs.level}|${node.attrs.keepNext}|${node.attrs.keepLines}|${node.attrs.pageBreakBefore}`
+    if (!kept.has(key)) kept.set(key, resolveBlock(styles, node.type.name, node.attrs).para)
+    return kept.get(key)
   }
   let block = 0
   const left = (rect) => (rect.left - sr.left) / s
@@ -225,13 +239,19 @@ function collectItems(view, ctx) {
       }
       const mt = Math.max(0, num(cs.marginTop))
       const mb = Math.max(0, num(cs.marginBottom))
-      const kNext = keepNext(node)
+      const { keepNext: kNext, keepLines: kLines, pageBreakBefore: kBreak } = keepOf(node)
+      // A kept script line, or one that starts a page: its name is above the
+      // text and goes with it, so the block counts from the name and a
+      // page's gap goes before it.
+      const whole = !!(kLines || kBreak) && content !== el
       const id = block++
       for (let i = 0; i < lines.length; i++) {
         const l = lines[i]
-        const top = i === 0 ? contentTop + hwOf(0) : l.gt - (l.gt - lines[i - 1].gb - hwOf(i)) / 2
+        const top = i === 0 ? (whole ? y(el.getBoundingClientRect().top) : contentTop + hwOf(0)) : l.gt - (l.gt - lines[i - 1].gb - hwOf(i)) / 2
         const bottom = i === lines.length - 1 ? contentBottom : l.gb + (lines[i + 1].gt - l.gb - hwOf(i + 1)) / 2
-        items.push({ pos: l.pos, top, bottom, block: id, first: i === 0, last: i === lines.length - 1, keepNext: kNext, hard: false, unit: false, spaceBefore: mt, mt, mb, offL })
+        const item = { pos: l.pos, top, bottom, block: id, first: i === 0, last: i === lines.length - 1, keepNext: !!kNext, keepLines: !!kLines, breakBefore: !!kBreak && i === 0, hard: false, unit: false, spaceBefore: mt, mt, mb, offL }
+        if (whole && i === 0) Object.assign(item, { gapPos: pos, offL: left(root.getBoundingClientRect()) + num(getComputedStyle(root).paddingLeft) })
+        items.push(item)
       }
       return false
     }
@@ -310,7 +330,7 @@ function measureAndPlan(view, opts, st, styles) {
     const bands = opts.bands?.(i) || null
     const bandsNext = opts.bands?.(i + 1) || null
     let spec
-    if (it.unit) {
+    if (it.unit || it.gapPos != null) {
       const w = prev.bottom + prev.mb
       const fill = Math.max(0, Math.max(pageTop + H, w) - w)
       const head = Math.max(0, topM - (b.hard ? 0 : it.mt))
@@ -322,7 +342,7 @@ function measureAndPlan(view, opts, st, styles) {
       const fill = Math.max(0, Math.max(pageTop + H, it.top) - it.top)
       spec = { unit: false, fill, head: topM + keep, hw, shift: hw }
     }
-    Object.assign(spec, { pos: it.pos, page: i, hard: b.hard, foot: botM, offL: it.offL, width: sheetW, padL, padR, tail: false, foots: bands?.foot || null, heads: bandsNext?.head || null })
+    Object.assign(spec, { pos: it.gapPos ?? it.pos, page: i, hard: b.hard, foot: botM, offL: it.offL, width: sheetW, padL, padR, tail: false, foots: bands?.foot || null, heads: bandsNext?.head || null })
     spec.sig = `${spec.foots?.join('\u0001')}|${spec.heads?.join('\u0001')}|${padL.toFixed(0)}|${padR.toFixed(0)}`
     gaps.push(spec)
   })

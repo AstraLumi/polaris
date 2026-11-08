@@ -1,7 +1,7 @@
 // Where pages break while writing (src/editor/pageBreaks.js): pure rules.
 // node frontend/tests/pageBreaks.test.mjs
 import assert from 'node:assert/strict'
-import { paginate, gapHeight, pageTops } from '../src/editor/pageBreaks.js'
+import { paginate, gapHeight, pageTops, mostVisiblePage } from '../src/editor/pageBreaks.js'
 
 const LH = 10 // a line is 10 px tall, no space between lines
 // blocks: { lines, keepNext, gapBefore } | { unit, height } | { hard } → items
@@ -19,7 +19,7 @@ function build(blocks) {
       return
     }
     for (let l = 0; l < b.lines; l++) {
-      items.push({ pos: pos++, top: y, bottom: y + LH, block: bi, first: l === 0, last: l === b.lines - 1, keepNext: !!b.keepNext, spaceBefore: b.gapBefore || 0 })
+      items.push({ pos: pos++, top: y, bottom: y + LH, block: bi, first: l === 0, last: l === b.lines - 1, keepNext: !!b.keepNext, keepLines: !!b.keepLines, breakBefore: !!b.breakBefore && l === 0, spaceBefore: b.gapBefore || 0 })
       y += LH
     }
     pos += 2
@@ -182,5 +182,41 @@ assert.deepEqual(paginate(build([{ lines: 5 }]), 0), [])
 assert.equal(gapHeight({ w: 80, pageTop: 0, contentHeight: 100, extra: 30 }), 50, 'the rest of the page plus foot, space and head')
 assert.equal(gapHeight({ w: 240, pageTop: 0, contentHeight: 100, extra: 30 }), 30, 'overflowing content: no rest of the page')
 assert.equal(gapHeight({ w: 80, pageTop: 0, contentHeight: 100, extra: 30, keep: 6 }), 56, 'a space before kept after a hard break')
+
+// ---- keepLines -------------------------------------------------------------------
+{
+  const loose = build([{ lines: 8 }, { lines: 4 }, { lines: 3 }])
+  assert.deepEqual(starts(loose, paginate(loose, 100)), [{ block: 1, line: 2 }], 'without it the paragraph splits')
+  const kept = build([{ lines: 8 }, { lines: 4, keepLines: true }, { lines: 3 }])
+  assert.deepEqual(starts(kept, paginate(kept, 100)), [{ block: 1, line: 0 }], 'with it the paragraph moves whole')
+  const fits = build([{ lines: 6 }, { lines: 4, keepLines: true }, { lines: 3 }])
+  assert.deepEqual(starts(fits, paginate(fits, 100)), [{ block: 2, line: 0 }], 'one that fits stays')
+  const tall = build([{ lines: 8 }, { lines: 25, keepLines: true }])
+  assert.deepEqual(starts(tall, paginate(tall, 100)), [{ block: 1, line: 0 }, { block: 1, line: 10 }, { block: 1, line: 20 }], 'taller than a page: starts a page, then has to split')
+}
+
+// ---- breakBefore -----------------------------------------------------------------
+{
+  const items = build([{ lines: 3 }, { lines: 3, breakBefore: true }, { lines: 3 }])
+  const br = paginate(items, 100)
+  assert.deepEqual(starts(items, br), [{ block: 1, line: 0 }], 'starts a page however much room is left')
+  assert.ok(br[0].hard)
+  const first = build([{ lines: 3, breakBefore: true }, { lines: 3 }])
+  assert.deepEqual(paginate(first, 100), [], 'no empty page at the start')
+  const after = build([{ lines: 3 }, { hard: true }, { lines: 3, breakBefore: true }])
+  assert.equal(paginate(after, 100).length, 1, 'after a page break, only one new page')
+  const full = build([{ lines: 10 }, { lines: 3, breakBefore: true }])
+  assert.equal(paginate(full, 100).length, 1, 'when the page is exactly full, only one new page')
+}
+
+// The page on the screen: two spaces, so three pages.
+{
+  const spaces = [{ top: 100, bottom: 120 }, { top: 900, bottom: 920 }]
+  assert.equal(mostVisiblePage([], 0, 800), 0, 'one page')
+  assert.equal(mostVisiblePage(spaces, 0, 800), 1, 'the second page fills most of the screen')
+  assert.equal(mostVisiblePage(spaces, -700, 100), 0, 'scrolled up to the first')
+  assert.equal(mostVisiblePage(spaces, 910, 1700), 2, 'scrolled down to the last')
+  assert.equal(mostVisiblePage(spaces, 700, 1200), 2, 'over a break: the larger part wins')
+}
 
 console.log('pageBreaks: ok')

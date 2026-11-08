@@ -23,7 +23,7 @@ assert.deepEqual(
   ['bold', 'char_style', 'color', 'comment', 'font', 'highlight', 'italic', 'link', 'size', 'smallcaps', 'speaker', 'spell', 'story_link', 'strike', 'subscript', 'superscript', 'underline'],
 )
 const paraAttrs = Object.keys(schema.nodes.paragraph.attrs).filter((k) => k !== 'extra').sort()
-assert.deepEqual(paraAttrs, ['align', 'boxColor', 'boxWidth', 'dropCap', 'indentFirst', 'indentLeft', 'indentRight', 'keepNext', 'lineHeight', 'shade', 'spaceAfter', 'spaceBefore', 'style'])
+assert.deepEqual(paraAttrs, ['align', 'boxColor', 'boxWidth', 'dropCap', 'indentFirst', 'indentLeft', 'indentRight', 'keepLines', 'keepNext', 'lineHeight', 'pageBreakBefore', 'shade', 'spaceAfter', 'spaceBefore', 'style'])
 assert.deepEqual(Object.keys(schema.nodes.heading.attrs).filter((k) => k !== 'extra').sort(), ['level', ...paraAttrs].sort())
 
 // ---- Round trips ------------------------------------------------------------
@@ -89,7 +89,7 @@ assert.deepEqual(odd.content[1], { type: 'paragraph', content: [{ type: 'text', 
 const wrong = docFromJSON({ type: 'doc', content: [{ type: 'bullet_list', content: [{ type: 'list_item', content: [{ type: 'heading', content: [{ type: 'text', text: 'deep' }] }] }] }] })
 assert.equal(wrong.textContent, 'deep')
 
-assert.deepEqual(ownPara({ style: 'x', align: null, indentFirst: 0, keepNext: false }), { indentFirst: 0 })
+assert.deepEqual(ownPara({ style: 'x', align: null, indentFirst: 0, keepNext: null }), { indentFirst: 0 })
 
 // ---- CSS readers -----------------------------------------------------------------
 assert.equal(cssLengthToPt('12pt'), 12)
@@ -134,7 +134,7 @@ assert.deepEqual(
 assert.deepEqual(paraFromCSS({ textAlign: 'start' }), { align: 'left' })
 assert.deepEqual(paraFromCSS({ textAlign: 'inherit' }), {})
 
-assert.deepEqual(paraDeclarations({ align: 'center', indentFirst: -10, lineHeight: 1, keepNext: false }), ['text-align: center', 'text-indent: -10pt', 'line-height: calc(1 * var(--lh, 1.2))'])
+assert.deepEqual(paraDeclarations({ align: 'center', indentFirst: -10, lineHeight: 1, keepNext: null }), ['text-align: center', 'text-indent: -10pt', 'line-height: calc(1 * var(--lh, 1.2))'])
 
 // Line height follows the font's own spacing (--lh next to the font); exact spacing is exact.
 {

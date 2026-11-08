@@ -85,7 +85,9 @@ Blocks:
     indent is a negative `indentFirst`;
   - `spaceBefore`, `spaceAfter`: pt or `null`;
   - `lineHeight`: multiple or `null`;
-  - `keepNext`: bool (`false`);
+  - `keepNext`, `keepLines`, `pageBreakBefore`: bool or `null` (Word's "Keep
+    with next", "Keep lines together", "Page break before": `null` follows
+    the style, `false` turns a style's `true` off);
   - `boxWidth` (pt, 0 to 20), `boxColor` (`#rrggbb`), `shade` (`#rrggbb`),
     `dropCap` (2, 3 or 4 lines): stage 5, see "Boxes and drop caps" below;
   - `lineExact`: pt or absent: Word's "exactly" line spacing, kept by the
@@ -115,7 +117,10 @@ Blocks:
   set, so a deleted character still reads), `manner` (text or `""`);
   content: inline (the spoken line, without quotes). The server checks
   `character` is a positive integer or `null` and `speaker` and `manner`
-  are text of at most 200 characters. A dialogue is a block anywhere a
+  are text of at most 200 characters, and `keepNext`, `keepLines` and
+  `pageBreakBefore` as for a paragraph (a dialogue has no other paragraph
+  formatting; it follows Normal). A
+  dialogue is a block anywhere a
   paragraph can be; the editor only makes them at the top level.
 - `table` (stage 5): only at the doc's top level (not in a list, not in a
   cell); attrs `borders` (`all`, the default and what a missing attr
@@ -606,7 +611,11 @@ left-hand pages, by where they lie in the book, not by their number.
   of a dialogue starts an empty paragraph (not a new dialogue: the next
   line may be action or another speaker); Enter inside one splits it into
   two lines of the same speaker. Backspace at a dialogue's start turns it
-  back into the paragraph "Speaker, manner: line" (in both modes). A
+  back into the paragraph "Speaker, manner: line" (in both modes). The
+  plain text of a copy reads the same way (`editor/copyText.js`), so a
+  phone keyboard's "select all" keeps the speakers; touch screens also
+  get a toolbar button that copies the whole chapter or, when pages are
+  drawn, the page filling most of the screen. A
   click on the speaker opens a small box: the character (a picker), the
   speaker as shown and the manner, and "Back to plain text"; picking a
   character names the speaker after them unless the speaker is already
@@ -1542,6 +1551,16 @@ final word.
   each new page starts at. A line fits when its bottom is within the content
   height. Widow/orphan control is always on: never one line of a paragraph
   alone at a page's foot or head, and a paragraph of 2-3 lines moves whole.
+  The three page settings are toolbar buttons and Styles panel choices;
+  paged.js only sees a paragraph's own through `data-break-*` attributes
+  (`breakAttrs`), and an own `false` doesn't undo a style's `true` in the
+  page view. `pageBreakBefore` starts a new page at the paragraph, except
+  when it already starts one. `keepLines` moves a paragraph whole to the next page, unless it
+  already starts a page (one taller than a page has to split). A kept script
+  line, or one with `pageBreakBefore`, counts from its speaker's name and
+  its gap goes before the whole
+  block, so the name moves with the line; without `keepLines` the gap stays
+  at the line's first character and the name can stay at the page's foot.
   `keepNext` (the paragraph's own or its style's: the headings) keeps a block
   on the page of the next one unless that would empty the page. A
   `page_break` node starts a new page with the next block, and takes no

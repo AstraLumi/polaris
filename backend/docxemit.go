@@ -426,6 +426,9 @@ func paraJSON(f pFmt, size float64, base *pFmt, baseSize float64) map[string]any
 	if base == nil || f.keepNext != base.keepNext {
 		m["keepNext"] = f.keepNext
 	}
+	if f.keepLines != (base != nil && base.keepLines) {
+		m["keepLines"] = f.keepLines
+	}
 	return m
 }
 
@@ -734,8 +737,11 @@ func paraNodeIn(b *irBlock, s *outStyle, set *styleSet, keep map[string]bool) *p
 			attrs["lineExact"] = *exact
 		}
 	}
-	if b.p.keepNext && !s.para.keepNext {
-		attrs["keepNext"] = true
+	if b.p.keepNext != s.para.keepNext {
+		attrs["keepNext"] = b.p.keepNext
+	}
+	if b.p.keepLines != s.para.keepLines {
+		attrs["keepLines"] = b.p.keepLines
 	}
 	if b.boxW > 0 {
 		attrs["boxWidth"] = r2(b.boxW)

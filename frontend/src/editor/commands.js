@@ -100,7 +100,7 @@ export const setParaAttrs = (patch) => (state, dispatch) => {
 
 const cleared = (attrs) => {
   const out = { ...attrs }
-  for (const k of PARA_ATTRS) out[k] = k === 'keepNext' ? false : null
+  for (const k of PARA_ATTRS) out[k] = null
   return out
 }
 

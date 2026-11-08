@@ -38,6 +38,8 @@
       @painter="togglePainter"
       @picture="pickPicture"
       @find="openFind(false)"
+      :copied="copied"
+      @copy="copyFromEditor"
       @comment="newComment"
       @panel="togglePanel"
       @focus="focusMode = !focusMode"
@@ -279,6 +281,7 @@ import { keepCopy, readCopy, dropCopy } from '../editor/localCopy.js'
 import { booksApi, textApi } from '../editor/api.js'
 import { ago } from '../editor/when.js'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
+import { docText, pageText, selectionText, copyToClipboard } from '../editor/copyText.js'
 import WriteToolbar from '../components/write/WriteToolbar.vue'
 import FindPanel from '../components/write/FindPanel.vue'
 import ReadAloudBar from '../components/write/ReadAloudBar.vue'
@@ -292,7 +295,7 @@ import ImportReport from '../components/write/ImportReport.vue'
 import RowMenu from '../components/RowMenu.vue'
 import { tocNodeView } from '../editor/tocView.js'
 import { chapterOption, setChapterOption, normaliseLayout, bookPlan, bandText, formatNumber as formatPageNumber } from '../editor/bookLayout.js'
-import { pagesPlugin, refreshPages } from '../editor/pagination.js'
+import { pagesPlugin, refreshPages, pageOnScreen } from '../editor/pagination.js'
 import SpeakerOptions from '../components/write/SpeakerOptions.vue'
 import TableOptions from '../components/write/TableOptions.vue'
 import { tablePlugins, tableInfo } from '../editor/tables.js'
@@ -767,6 +770,27 @@ function paintNow() {
   view.setProps({})
 }
 
+// The toolbar's copy button (phones), speakers included: the page on the
+// screen ('page') or the whole chapter.
+const copied = ref(false)
+let copiedTimer = 0
+function textToCopy(what) {
+  if (what !== 'page') return docText(view.state.doc)
+  const page = pageOnScreen(view)
+  return page ? pageText(view.state.doc, page.from, page.to) : ''
+}
+async function copyFromEditor(what) {
+  if (!view) return
+  const text = textToCopy(what)
+  if (!text || !(await copyToClipboard(text))) {
+    error.value = t("Couldn't copy")
+    return
+  }
+  copied.value = true
+  clearTimeout(copiedTimer)
+  copiedTimer = setTimeout(() => (copied.value = false), 2000)
+}
+
 // Runs a toolbar command and puts the cursor back in the text.
 function exec(cmd) {
   if (!view || readOnly.value) return
@@ -779,6 +803,7 @@ function createView() {
     state: makeState(emptyDocJSON()),
     nodeViews: nodeViews(),
     editable: () => !readOnly.value,
+    clipboardTextSerializer: (slice, v) => selectionText(slice, v.state.selection),
     attributes: () => ({ class: `write-doc${online.value ? ' is-online' : ''}${painter.value ? ' is-painting' : ''}`, spellcheck: spellOwn.value ? 'false' : 'true' }),
     dispatchTransaction(tr) {
       const st = view.state.apply(tr)

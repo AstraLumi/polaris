@@ -149,10 +149,22 @@ export function paraDeclarations(p) {
   // Word's "exactly N pt" is drawn exactly; a multiple follows the font's own spacing.
   if (p.lineExact > 0) out.push(`line-height: ${num(p.lineExact)}pt`)
   else if (p.lineHeight != null) out.push(`line-height: calc(${num(p.lineHeight)} * var(--lh, ${LINE_FACTOR}))`)
-  if (p.keepNext) out.push('break-after: avoid')
+  if (p.keepNext != null) out.push(`break-after: ${p.keepNext ? 'avoid' : 'auto'}`)
+  if (p.keepLines != null) out.push(`break-inside: ${p.keepLines ? 'avoid' : 'auto'}`)
+  if (p.pageBreakBefore != null) out.push(`break-before: ${p.pageBreakBefore ? 'page' : 'auto'}`)
   if (p.boxWidth > 0) out.push(`border: ${num(p.boxWidth)}pt solid ${p.boxColor || '#000000'}`)
   if (p.shade) out.push(`background-color: ${p.shade}`)
   if (p.boxWidth > 0 || p.shade) out.push('padding: 4pt 6pt')
+  return out
+}
+
+// The same page breaks as attributes: paged.js only reads breaks from
+// stylesheets and from these, so a single paragraph's own need them.
+export function breakAttrs(p) {
+  const out = {}
+  if (p.keepNext) out['data-break-after'] = 'avoid'
+  if (p.keepLines) out['data-break-inside'] = 'avoid'
+  if (p.pageBreakBefore) out['data-break-before'] = 'page'
   return out
 }
 

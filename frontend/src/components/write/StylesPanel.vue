@@ -126,6 +126,14 @@
           <span>{{ $t('Space after (pt)') }}</span>
           <input :value="picked.para?.spaceAfter ?? ''" :placeholder="fmt(inherited.para.spaceAfter)" type="number" step="1" min="0" max="500" @change="setPara('spaceAfter', numOrNull($event.target.value))" />
         </label>
+        <label v-for="f in pageFlow" :key="f.key" class="field span-2">
+          <span>{{ f.label }}</span>
+          <select :value="picked.para?.[f.key] == null ? '' : picked.para[f.key] ? 'yes' : 'no'" @change="setPara(f.key, $event.target.value === '' ? null : $event.target.value === 'yes')">
+            <option value="">{{ inheritLabel(inherited.para[f.key] ? $t('Yes') : $t('No')) }}</option>
+            <option value="yes">{{ $t('Yes') }}</option>
+            <option value="no">{{ $t('No') }}</option>
+          </select>
+        </label>
       </div>
       <p class="hint">{{ $t('An empty box takes the value of the style it is based on (shown faintly).') }}</p>
       </template>
@@ -181,6 +189,11 @@ const inherited = computed(() => {
   if (isChar.value) return { text: resolveCharStyle(props.styles, picked.value.based_on), para: {} }
   return resolveStyle(props.styles, picked.value?.id === 'normal' ? '__none__' : picked.value?.based_on || 'normal')
 })
+const pageFlow = computed(() => [
+  { key: 'keepNext', label: t('Keep with next') },
+  { key: 'keepLines', label: t('Keep lines together') },
+  { key: 'pageBreakBefore', label: t('Page break before') },
+])
 const toggles = computed(() => [
   { key: 'bold', label: t('Bold') },
   { key: 'italic', label: t('Italic') },

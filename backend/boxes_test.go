@@ -24,6 +24,40 @@ func TestValidateBoxAttrs(t *testing.T) {
 }
 
 // A box, shading and a drop cap go to .docx and come back.
+func TestExportDocxRoundTripKeepLines(t *testing.T) {
+	b, up := testBook(t)
+	doc := b.Chapters[1].Doc
+	doc.Content = append(doc.Content, boxPara("Kept whole.", map[string]any{"keepLines": true}), boxPara("Free to split.", nil),
+		boxPara("Starts a page.", map[string]any{"pageBreakBefore": true}), boxPara("Stays with the next.", map[string]any{"keepNext": true}))
+	data, err := exportDocx(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	imp, _ := reimport(t, data, up)
+	found := map[string]*pmNode{}
+	breakBefore := false
+	for _, c := range imp.Chapters {
+		for i, n := range c.Doc.Content {
+			found[docPlain(n)] = n
+			if docPlain(n) == "Starts a page." && i > 0 && c.Doc.Content[i-1].Type == "page_break" {
+				breakBefore = true
+			}
+		}
+	}
+	if !breakBefore {
+		t.Error("Page break before did not come back as a page break")
+	}
+	if n := found["Stays with the next."]; n == nil || n.Attrs["keepNext"] != true {
+		t.Errorf("keep with next came back as %+v", n)
+	}
+	if n := found["Kept whole."]; n == nil || n.Attrs["keepLines"] != true {
+		t.Errorf("kept paragraph came back as %+v", n)
+	}
+	if n := found["Free to split."]; n == nil || n.Attrs["keepLines"] != nil {
+		t.Errorf("plain paragraph came back as %+v", n)
+	}
+}
+
 func TestExportDocxRoundTripBoxes(t *testing.T) {
 	b, up := testBook(t)
 	box := map[string]any{"boxWidth": 1.5, "boxColor": "#3366cc", "shade": "#e8f0ff"}
