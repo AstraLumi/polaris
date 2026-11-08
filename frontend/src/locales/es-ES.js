@@ -2063,6 +2063,7 @@ export default {
   "No pages: one chapter per post, a blank line between paragraphs": "Sin páginas: un capítulo por publicación, una línea en blanco entre párrafos",
   "No versions of this chapter yet.": "Aún no hay versiones de este capítulo.",
   "Normal": "Normal",
+  "Couldn't save: kept in this browser": "No se pudo guardar: hay una copia en este navegador",
   "Not kept after a conflict": "No conservado tras un conflicto",
   "Not saved yet: kept in this browser": "Aún sin guardar: guardado en este navegador",
   "Nothing in the file was left out.": "No se omitió nada del archivo.",

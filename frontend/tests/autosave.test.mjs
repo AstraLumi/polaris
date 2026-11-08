@@ -151,6 +151,32 @@ function setup({ server = { version: 3 }, fail, wait } = {}) {
   assert.equal(t.kept, null)
 }
 
+// The server refuses the text: not the same as waiting for a connection.
+{
+  let refused = true
+  const t = setup({ fail: () => (refused ? Object.assign(new Error('that text is too long'), { status: 413 }) : null) })
+  t.type(1)
+  await t.timers.advance(1600)
+  assert.equal(t.saver.state, 'failed')
+  assert.equal(t.saver.dirty, true)
+  assert.equal(t.saver.error.message, 'that text is too long')
+  assert.ok(t.kept, 'the browser copy stays')
+  t.type(2)
+  assert.equal(t.saver.state, 'failed', 'typing more does not hide the failure')
+  await t.timers.advance(1600)
+  assert.equal(t.saver.state, 'failed')
+  assert.equal(t.log.filter((l) => l[0] === 'save').length, 2)
+  // Still tried again: it goes through once the server takes it.
+  refused = false
+  await t.timers.advance(10000)
+  assert.equal(t.saver.state, 'saved')
+  assert.equal(t.saver.error, null)
+  assert.equal(t.kept, null)
+  // The failure is over: new typing is ordinary unsaved text.
+  t.type(3)
+  assert.equal(t.saver.state, 'local')
+}
+
 // Changed somewhere else: a 409 stops saving and hands over both texts.
 {
   const t = setup()

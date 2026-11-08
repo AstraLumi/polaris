@@ -912,19 +912,46 @@ async function shoot() {
   assert.equal(await page.locator('.read-bar').count(), 0, 'a click in the text stops reading')
   checks.push('read aloud: highlight "' + sentence.slice(0, 40) + '", next, Esc and click stop: ok')
 
+  // A save the server refuses reads differently from one waiting for a
+  // connection, and says why; it goes through once the server takes it.
+  const textUrl = /\/chapters\/11\/text$/
+  const refuse = (r) => (r.request().method() === 'PUT' ? r.fulfill({ status: 413, body: 'that text is too long' }) : r.fallback())
+  await page.route(textUrl, refuse)
+  await clickWord('lantern')
+  await page.keyboard.type('!')
+  await page.waitForSelector('.save-state.is-failed', { timeout: 6000 })
+  assert.equal(await page.locator('.save-state').textContent(), "Couldn't save: kept in this browser")
+  assert.equal(await page.locator('.save-state').getAttribute('title'), 'that text is too long')
+  await snap('05_save_refused.png')
+  await page.unroute(textUrl, refuse)
+  await page.keyboard.press('Backspace')
+  await page.waitForSelector('.save-state.is-saved', { timeout: 6000 })
+  checks.push('a refused save: says so with the reason, then saves: ok')
+
   // 6. A conflict: the next save finds the same paragraph changed elsewhere
-  // (edits to different paragraphs are merged without asking).
+  // (edits to different paragraphs are merged without asking). The writer
+  // goes on typing while that save is on its way: the conflict shows it.
   db.conflictNext = true
   db.texts[11] = { doc: { type: 'doc', content: chapterOne.content.map((blk) => (JSON.stringify(blk).includes('said Oren') ? para(null, txt('(Changed in another tab: Oren never spoke.)', 'italic')) : blk)) }, version: db.texts[11].version + 1, updated_at: now() }
+  const slowSave = async (r) => {
+    if (r.request().method() === 'PUT') await new Promise((done) => setTimeout(done, 800))
+    await r.fallback()
+  }
+  await page.route(textUrl, slowSave)
+  const sent = page.waitForRequest((r) => textUrl.test(r.url()) && r.method() === 'PUT', { timeout: 6000 })
   await clickWord('Oren')
   await page.keyboard.type(' (edited here)')
+  await sent
+  await page.keyboard.type(' and more')
   await page.waitForSelector('.conflict', { timeout: 6000 })
+  await page.unroute(textUrl, slowSave)
+  assert.ok((await page.locator('.conflict .paper').first().innerText()).includes('(edited here) and more'), 'the conflict shows what was typed after the save left')
   await settle(page, 300)
   await snap('06_conflict.png')
   await page.getByRole('button', { name: 'Keep mine' }).click()
   await page.waitForTimeout(2500)
   assert.equal(await page.locator('.save-state').textContent(), 'Saved')
-  checks.push(`conflict kept mine: stored text has "(edited here)": ${JSON.stringify(db.texts[11].doc).includes('(edited here)')}; versions: ${db.versions[11].map((v) => v.label).slice(0, 2).join(' / ')}`)
+  checks.push(`conflict kept mine: stored text has "(edited here) and more": ${JSON.stringify(db.texts[11].doc).includes('(edited here) and more')}; versions: ${db.versions[11].map((v) => v.label).slice(0, 2).join(' / ')}`)
 
   // Dark paper.
   await page.getByRole('button', { name: 'Dark paper' }).click()

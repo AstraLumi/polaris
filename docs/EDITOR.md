@@ -304,7 +304,8 @@ The words in table cells count like any other.
   height, lists, scene break, page break, picture, link, find and replace,
   undo/redo, focus mode). Bottom: words in the chapter, the book, the
   selection; save state ("Saved", "Saving…", "Not saved yet: kept in this
-  browser").
+  browser", or "Couldn't save: kept in this browser" when the server answers
+  and refuses the text, with its reason as the tooltip; still tried again).
 - Word's keyboard shortcuts where they make sense: Ctrl+B/I/U, Ctrl+E/L/R/J
   (alignment), Ctrl+Enter (page break), Ctrl+1/2/5 (line height), Ctrl+F /
   Ctrl+H, Ctrl+Z/Y, Ctrl+Shift+> / < (size), Ctrl+= / Ctrl+Shift+= (sub /
@@ -315,8 +316,9 @@ The words in table cells count like any other.
 - Autosave a second or two after typing stops; every change is first kept
   in IndexedDB (per story and chapter, with its base version) so a closed
   tab or lost connection loses nothing; on opening, a newer local copy is
-  offered back. A 409 shows the two texts and lets the writer keep one
-  (the other is saved as a version).
+  offered back. A 409 shows the two texts (mine is what the editor holds
+  by then, typing since the save left included) and lets the writer keep
+  one (the other is saved as a version).
 - Pasting from Word, Google Docs and web pages keeps the formatting the
   schema knows and drops the rest.
   Black text (how most sources write "automatic") and pictures that aren't

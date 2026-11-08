@@ -176,7 +176,7 @@
       <span v-if="!focusMode" class="stat">{{ $tn('{n} word in the book', '{n} words in the book', bookWords, { n: formatNum(bookWords) }) }}</span>
       <span v-if="selWords" class="stat">{{ $tn('{n} selected', '{n} selected', selWords, { n: formatNum(selWords) }) }}</span>
       <span v-if="uploading" class="stat">{{ $t('Uploading the picture…') }}</span>
-      <span class="save-state" :class="`is-${saveShown}`" :title="saveShown === 'device' ? $t('Sent to the server when it can be reached again.') : saveLabel" aria-live="polite">{{ saveLabel }}</span>
+      <span class="save-state" :class="`is-${saveShown}`" :title="saveTitle" aria-live="polite">{{ saveLabel }}</span>
       <span class="spacer"></span>
       <button v-if="!focusMode" type="button" class="btn btn-ghost small spell-status" :class="`is-${spell.status.value}`" :aria-pressed="panel === 'spelling'" :title="$t('Spelling options')" @click="togglePanel('spelling')">{{ spell.statusLabel.value }}</button>
       <button v-if="!focusMode && settings" type="button" class="btn btn-ghost small" :aria-pressed="panel === 'book'" :title="$t('Book and page')" @click="togglePanel('book')">{{ $t('Page: {type}', { type: typeLabel(settings) }) }}</button>
@@ -366,6 +366,7 @@ const editorState = shallowRef(null)
 let view = null
 let saver = null
 const saveState = ref('saved')
+const saveError = ref('') // why the server refused the last save, while 'failed'
 const loadingText = ref(false)
 const offer = ref(null) // { local, server }: a copy in this browser the server doesn't have
 const conflict = ref(null) // { kind: 'save' | 'local', mine, theirs, version, … }
@@ -408,10 +409,15 @@ const saveLabel = computed(
       saved: t('Saved'),
       saving: t('Saving…'),
       local: t('Not saved yet: kept in this browser'),
+      failed: t("Couldn't save: kept in this browser"),
       conflict: t('Changed somewhere else: choose a text'),
       device: t('Saved on this device'),
     })[saveShown.value],
 )
+const saveTitle = computed(() => {
+  if (saveShown.value === 'device') return t('Sent to the server when it can be reached again.')
+  return (saveShown.value === 'failed' && saveError.value) || saveLabel.value
+})
 const formatNum = (n) => Number(n || 0).toLocaleString(locale.value)
 
 // ---- Paper, zoom and the page's size -------------------------------------------------
@@ -1119,7 +1125,9 @@ function startSaver(id, version) {
     drop: () => dropCopy(activeStoryId, id),
     base: version,
     onState: (s) => {
-      if (chapterId.value === id) saveState.value = s
+      if (chapterId.value !== id) return
+      saveState.value = s
+      if (s === 'failed') saveError.value = saver?.error?.message || ''
     },
     onSaved: (res, doc) => {
       if (chapterId.value === id) {
@@ -1139,7 +1147,9 @@ function startSaver(id, version) {
       if (chapterId.value !== id) return
       conflict.value = {
         kind: 'save',
-        mine,
+        // What the editor holds now, not what was sent: the writer may have
+        // gone on typing while the save was on its way.
+        mine: view ? docToJSON(view.state.doc) : mine,
         theirs,
         version: stored?.version ?? 0,
         theirsWhen: stored?.updated_at ? ago(stored.updated_at) : '',
@@ -2163,6 +2173,10 @@ onBeforeUnmount(() => {
 .save-state.is-conflict,
 .save-state.is-device {
   color: var(--accent);
+}
+
+.save-state.is-failed {
+  color: var(--danger-text);
 }
 
 /* Offline writing (stage 5). */

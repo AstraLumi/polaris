@@ -5,7 +5,8 @@
 // timers come in, so it runs under node tests.
 //
 // States: 'saved', 'local' (not saved yet: kept in this browser), 'saving',
-// 'conflict'.
+// 'failed' (the server answered and refused it: kept in this browser, tried
+// again, and `error` says why), 'conflict'.
 
 export function createSaver({
   getDoc, // () => the document's JSON now
@@ -38,6 +39,9 @@ export function createSaver({
     }
   }
   const clear = (t) => t && timers.clearTimeout(t)
+  // Not on the server yet: waiting for it, or refused by it (status 0 is a
+  // server that couldn't be reached).
+  const unsaved = () => (lastError?.status > 0 ? 'failed' : 'local')
 
   function keepNow() {
     clear(keepTimer)
@@ -80,7 +84,7 @@ export function createSaver({
           setState('conflict')
           onConflict(e.stored, doc)
         } else {
-          setState('local')
+          setState(unsaved())
           schedule(retryDelay)
         }
       } finally {
@@ -111,7 +115,7 @@ export function createSaver({
       if (disposed) return
       dirty = true
       changes++
-      if (!conflict) setState(saving ? 'saving' : 'local')
+      if (!conflict) setState(saving ? 'saving' : unsaved())
       clear(keepTimer)
       keepTimer = timers.setTimeout(keepNow, keepDelay)
       schedule(delay)
