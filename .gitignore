@@ -25,6 +25,7 @@ uploads/
 Thumbs.db
 .idea/
 .vscode/
+.claude/
 *.log
 
 # Screenshots made by frontend/tests/visual/shots.mjs
