@@ -2,7 +2,7 @@
 # compiler targets the image's, so building for ARM needs no emulation.
 
 # --- Stage 1: build the frontend ---
-FROM --platform=$BUILDPLATFORM node:24-alpine AS frontend-build
+FROM --platform=$BUILDPLATFORM node:26-alpine AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
