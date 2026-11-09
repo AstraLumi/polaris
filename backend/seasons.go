@@ -209,6 +209,9 @@ func loadClimate(db *sql.DB, locationID int64) []climateRow {
 		}
 		out = append(out, c)
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("loadClimate: reading rows: %v", err)
+	}
 	return out
 }
 

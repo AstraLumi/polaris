@@ -143,6 +143,10 @@ func listCommentsHandler(db *sql.DB) http.HandlerFunc {
 			}
 			out = append(out, c)
 		}
+		if err := rows.Err(); err != nil {
+			http.Error(w, "failed to load the comments", http.StatusInternalServerError)
+			return
+		}
 		writeJSON(w, out)
 	}
 }

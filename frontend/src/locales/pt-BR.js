@@ -708,6 +708,8 @@ export default {
   "This removes their Story and Build data too. This can't be undone.": "Isso também remove os dados de História e Compleição. Isso não pode ser desfeito.",
   "this story was saved by a newer version of Polaris; update Polaris to open it": "esta história foi salva por uma versão mais nova do Polaris; atualize o Polaris para abri-la",
   "this story was saved by a newer version of Polaris; update Polaris to open it. A backup was saved in the story's backups folder": "esta história foi salva por uma versão mais nova do Polaris; atualize o Polaris para abri-la. Uma cópia de segurança foi salva na pasta backups da história",
+  "this story's database is at a version Polaris can't upgrade from; it was left untouched": "esta história está em uma versão a partir da qual o Polaris não consegue atualizar; ela foi deixada como estava",
+  "this story needs upgrading, but its backup could not be saved first (is the disk full?); it was left untouched": "esta história precisa ser atualizada, mas não foi possível salvar a cópia de segurança antes (o disco está cheio?); ela foi deixada como estava",
   "Thunder": "Trovão",
   "Tied to the kingdom of the same name on the map": "Ligada ao reino de mesmo nome no mapa",
   "Timeline": "Linha do Tempo",

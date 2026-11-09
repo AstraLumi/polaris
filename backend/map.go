@@ -95,6 +95,12 @@ func getMapHandler(db *sql.DB) http.HandlerFunc {
 			}
 			payload.Locations = append(payload.Locations, l)
 		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			http.Error(w, "failed to read locations", http.StatusInternalServerError)
+			log.Printf("map locations scan: %v", err)
+			return
+		}
 		rows.Close()
 
 		hexRows, err := db.Query(`SELECT location_id, q, r FROM location_hexes`)
@@ -111,6 +117,11 @@ func getMapHandler(db *sql.DB) http.HandlerFunc {
 				return
 			}
 			payload.Hexes = append(payload.Hexes, h)
+		}
+		if err := hexRows.Err(); err != nil {
+			hexRows.Close()
+			http.Error(w, "failed to read hexes", http.StatusInternalServerError)
+			return
 		}
 		hexRows.Close()
 
@@ -601,6 +612,10 @@ func listLocationOptionsHandler(db *sql.DB) http.HandlerFunc {
 				return
 			}
 			out = append(out, o)
+		}
+		if err := rows.Err(); err != nil {
+			http.Error(w, "failed to read locations", http.StatusInternalServerError)
+			return
 		}
 		writeJSON(w, out)
 	}

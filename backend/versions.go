@@ -126,6 +126,11 @@ func listVersionsHandler(db *sql.DB) http.HandlerFunc {
 			}
 			results = append(results, v)
 		}
+		if err := rows.Err(); err != nil {
+			http.Error(w, "failed to read versions", http.StatusInternalServerError)
+			log.Printf("listVersions scan: %v", err)
+			return
+		}
 
 		writeJSON(w, results)
 	}
@@ -390,6 +395,9 @@ func characterTags(db *sql.DB, characterID int64) []string {
 			out = append(out, t)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("characterTags: reading rows: %v", err)
+	}
 	return out
 }
 
@@ -505,7 +513,7 @@ func updateVersionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		versionID := r.PathValue("id")
 
-		if err := r.ParseMultipartForm(10 << 20); err != nil {
+		if err := parsePictureForm(w, r); err != nil {
 			http.Error(w, "invalid form data", http.StatusBadRequest)
 			return
 		}

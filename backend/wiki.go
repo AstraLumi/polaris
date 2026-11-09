@@ -343,6 +343,10 @@ func listWikiItems(db wikiQuerier) ([]wikiListItem, error) {
 		}
 		written[typ+":"+strconv.FormatInt(id, 10)] = edited
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
 	rows.Close()
 
 	items := []wikiListItem{}
@@ -360,6 +364,10 @@ func listWikiItems(db wikiQuerier) ([]wikiListItem, error) {
 			it.Picture = pictureURL(it.Picture)
 			it.EditedAt, it.Written = written[t.Key+":"+strconv.FormatInt(it.ID, 10)]
 			items = append(items, it)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, err
 		}
 		rows.Close()
 	}
@@ -407,6 +415,9 @@ func readAliases(db wikiQuerier, filter string, args ...any) map[int64][]string 
 			out[id] = append(out[id], name)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("readAliases: reading rows: %v", err)
+	}
 	return out
 }
 
@@ -433,6 +444,9 @@ func characterNicknames(db wikiQuerier) map[int64][]string {
 			seen[k] = true
 			out[id] = append(out[id], name)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("characterNicknames: reading rows: %v", err)
 	}
 	return out
 }
@@ -462,6 +476,9 @@ func queryRefs(db *sql.DB, typ, q string, args ...any) []wikiRef {
 		if rows.Scan(&ref.ID, &ref.Name) == nil {
 			out = append(out, ref)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("queryRefs: reading rows: %v", err)
 	}
 	return out
 }
@@ -891,6 +908,9 @@ func loadWikiArticle(db *sql.DB, t wikiTypeDef, id int64) (*wikiArticle, error) 
 					a.Sections = append(a.Sections, s)
 				}
 			}
+			if err := rows.Err(); err != nil {
+				log.Printf("loadWikiArticle: reading rows: %v", err)
+			}
 			rows.Close()
 		}
 		if rows, err := db.Query(`SELECT label, value, kind FROM wiki_infobox WHERE entry_id = ? ORDER BY position`, entryID); err == nil {
@@ -899,6 +919,9 @@ func loadWikiArticle(db *sql.DB, t wikiTypeDef, id int64) (*wikiArticle, error) 
 				if rows.Scan(&r.Label, &r.Value, &r.Kind) == nil {
 					a.Infobox = append(a.Infobox, r)
 				}
+			}
+			if err := rows.Err(); err != nil {
+				log.Printf("loadWikiArticle: reading rows: %v", err)
 			}
 			rows.Close()
 		}
@@ -989,6 +1012,9 @@ func characterWikiVersions(db *sql.DB, id int64) []wikiVersion {
 		v.Picture = uploadURL(v.Picture)
 		out = append(out, v)
 		points = append(points, pointOf(ch, v.Date, ranks))
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("characterWikiVersions: reading rows: %v", err)
 	}
 	rows.Close()
 	if len(out) < 2 {

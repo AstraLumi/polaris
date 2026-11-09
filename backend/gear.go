@@ -102,6 +102,10 @@ func queryGear(db *sql.DB, suffix string, args ...any) ([]gearDetail, error) {
 		g.Modifiers = map[string]float64{}
 		list = append(list, g)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
 	rows.Close()
 	for i := range list {
 		byID[list[i].ID] = &list[i]
@@ -122,6 +126,9 @@ func queryGear(db *sql.DB, suffix string, args ...any) ([]gearDetail, error) {
 		if g, ok := byID[id]; ok {
 			g.Modifiers[key] = v
 		}
+	}
+	if err := mods.Err(); err != nil {
+		return nil, err
 	}
 	if list == nil {
 		list = []gearDetail{}
@@ -149,6 +156,10 @@ func loadVersionGear(db *sql.DB, versionID int64) (map[string]gearDetail, error)
 			return nil, err
 		}
 		slots[slot] = id
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
 	}
 	rows.Close()
 	if len(slots) == 0 {
@@ -228,7 +239,7 @@ type gearInput struct {
 
 func parseGearForm(r *http.Request) (gearInput, error) {
 	var in gearInput
-	if err := r.ParseMultipartForm(10 << 20); err != nil {
+	if err := parsePictureForm(nil, r); err != nil {
 		return in, fmt.Errorf("invalid form data")
 	}
 	in.name = strings.TrimSpace(r.FormValue("name"))

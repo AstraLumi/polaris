@@ -345,6 +345,11 @@ func getPlanetHandler(db *sql.DB) http.HandlerFunc {
 			}
 			p.Locations = append(p.Locations, l)
 		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			http.Error(w, "failed to load the planet", http.StatusInternalServerError)
+			return
+		}
 		rows.Close()
 		cells, err := db.Query(`SELECT location_id, cell FROM planet_cells`)
 		if err != nil {
@@ -357,6 +362,9 @@ func getPlanetHandler(db *sql.DB) http.HandlerFunc {
 			if cells.Scan(&c[0], &c[1]) == nil {
 				p.Cells = append(p.Cells, c)
 			}
+		}
+		if err := cells.Err(); err != nil {
+			log.Printf("getPlanetHandler: reading rows: %v", err)
 		}
 		writeJSON(w, p)
 	}

@@ -44,6 +44,10 @@ func dedupeSpecializations(tx *sql.Tx) error {
 			keeper[k] = id
 		}
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
 	rows.Close()
 
 	for _, d := range dups {

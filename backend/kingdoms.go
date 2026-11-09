@@ -85,6 +85,10 @@ func backfillKingdomFactions(db *sql.DB) error {
 			ids = append(ids, id)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
 	rows.Close()
 	for _, id := range ids {
 		syncKingdomFaction(db, id)

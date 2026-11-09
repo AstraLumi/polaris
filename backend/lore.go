@@ -73,7 +73,7 @@ func saveLoreHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 				return
 			}
 		}
-		if err := r.ParseMultipartForm(10 << 20); err != nil {
+		if err := parsePictureForm(w, r); err != nil {
 			http.Error(w, "invalid form data", http.StatusBadRequest)
 			return
 		}

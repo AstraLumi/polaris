@@ -617,6 +617,9 @@ func (l *fontLibrary) deleteHandler(w http.ResponseWriter, r *http.Request) {
 			rows.Scan(&f)
 			files = append(files, f)
 		}
+		if err := rows.Err(); err != nil {
+			log.Printf("deleteHandler: reading rows: %v", err)
+		}
 		rows.Close()
 	}
 	if _, err := l.db.Exec(`DELETE FROM font_files WHERE family_id = ?`, id); err != nil {
@@ -856,6 +859,10 @@ func bookFontUses(db editorDB, vol int64) ([]bookFontUse, error) {
 		}
 		books[id] = title
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
 	rows.Close()
 	counted := map[int64]bool{}
 	rows, err = db.Query(`SELECT volume_id FROM book_settings`)
@@ -867,6 +874,9 @@ func bookFontUses(db editorDB, vol int64) ([]bookFontUse, error) {
 		rows.Scan(&id)
 		counted[id] = true
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("bookFontUses: reading rows: %v", err)
+	}
 	rows.Close()
 	rows, err = db.Query(`SELECT DISTINCT COALESCE(volume_id, 0) FROM chapters`)
 	if err != nil {
@@ -876,6 +886,9 @@ func bookFontUses(db editorDB, vol int64) ([]bookFontUse, error) {
 		var id int64
 		rows.Scan(&id)
 		counted[id] = true
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("bookFontUses: reading rows: %v", err)
 	}
 	rows.Close()
 
@@ -1075,6 +1088,9 @@ func (l *fontLibrary) usedIn() (map[int64][]fontUseOut, error) {
 		rows.Scan(&id, &name)
 		fams[strings.ToLower(name)] = id
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("usedIn: reading rows: %v", err)
+	}
 	rows.Close()
 	out := map[int64][]fontUseOut{}
 	if len(fams) == 0 || l.mgr == nil {
@@ -1090,6 +1106,9 @@ func (l *fontLibrary) usedIn() (map[int64][]fontUseOut, error) {
 		var s story
 		rows.Scan(&s.id, &s.name)
 		stories = append(stories, s)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("usedIn: reading rows: %v", err)
 	}
 	rows.Close()
 	for _, s := range stories {

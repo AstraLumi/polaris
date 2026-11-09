@@ -70,6 +70,8 @@ void [
   tr('that export was made by a newer version of Polaris; update Polaris to import it'),
   tr('this story was saved by a newer version of Polaris; update Polaris to open it'),
   tr("this story was saved by a newer version of Polaris; update Polaris to open it. A backup was saved in the story's backups folder"),
+  tr("this story's database is at a version Polaris can't upgrade from; it was left untouched"),
+  tr('this story needs upgrading, but its backup could not be saved first (is the disk full?); it was left untouched'),
   tr("couldn't read the upload"),
   tr('choose a story .zip to import'),
   tr('import failed'),

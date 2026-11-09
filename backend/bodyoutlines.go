@@ -157,6 +157,9 @@ func characterHeightsHandler(db *sql.DB) http.HandlerFunc {
 			last := &characters[len(characters)-1]
 			last.Versions = append(last.Versions, v)
 		}
+		if err := rows.Err(); err != nil {
+			log.Printf("characterHeightsHandler: reading rows: %v", err)
+		}
 		writeJSON(w, map[string]any{"characters": characters, "body_types": bodyTypes})
 	}
 }

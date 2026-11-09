@@ -102,6 +102,11 @@ func homeHandler(db *sql.DB) http.HandlerFunc {
 			}
 			p.Recent = append(p.Recent, h)
 		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			http.Error(w, "failed to read home", http.StatusInternalServerError)
+			return
+		}
 		rows.Close()
 
 		// Loose ends: kingdoms with no founding date, characters with no
@@ -144,6 +149,9 @@ func homeHandler(db *sql.DB) http.HandlerFunc {
 					n++
 				}
 			}
+			if err := lr.Err(); err != nil {
+				log.Printf("homeHandler: reading rows: %v", err)
+			}
 			lr.Close()
 			if n > looseEach {
 				p.LooseMore += n - looseEach
@@ -162,6 +170,9 @@ func homeHandler(db *sql.DB) http.HandlerFunc {
 			if er.Scan(&e.ID, &e.Name, &e.EventDate, &e.CreatedAt) == nil {
 				p.Events = append(p.Events, e)
 			}
+		}
+		if err := er.Err(); err != nil {
+			log.Printf("homeHandler: reading rows: %v", err)
 		}
 		er.Close()
 

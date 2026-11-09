@@ -174,6 +174,7 @@ automatically, and git ignores it, so your settings are kept across updates.
 | Variable    | Default     | Description                                                       |
 |-------------|-------------|-------------------------------------------------------------------|
 | `BIND_ADDR` | `127.0.0.1` | Host address to listen on. `0.0.0.0` exposes it to your network.  |
+| `ALLOWED_HOSTS` | *(any)* | Names Polaris answers to, separated by commas (`localhost,polaris.example.com`). Stops another website from reading your stories through a name it points at your machine. |
 | `HOST_PORT` | `8091`      | Port on the host.                                                 |
 | `POLARIS_VERSION` | `latest` | Release to run, such as `3.0.0`, to stay on it until you change it. |
 

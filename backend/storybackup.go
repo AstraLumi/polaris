@@ -26,27 +26,26 @@ func storedSchema(db *sql.DB) string {
 }
 
 // backupBeforeOpen writes the backup when db is at another schema version and
-// there isn't one for that version yet. It answers whether one exists now.
-func (m *storyManager) backupBeforeOpen(id string, db *sql.DB, uploadsDir string) bool {
+// there isn't one for that version yet. It answers whether one exists now;
+// the error is why one that was needed could not be made.
+func (m *storyManager) backupBeforeOpen(id string, db *sql.DB, uploadsDir string) (bool, error) {
 	version := storedSchema(db)
 	if version == "" || version == currentSchemaVersion {
-		return false
+		return false, nil
 	}
 	dir := m.backupsDir(id)
 	if found, _ := filepath.Glob(filepath.Join(dir, fmt.Sprintf("*-schema%s-*.zip", version))); len(found) > 0 {
-		return true
+		return true, nil
 	}
 	name, icon := id, ""
 	m.reg.QueryRow(`SELECT name, COALESCE(icon, '') FROM stories WHERE id = ?`, id).Scan(&name, &icon)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		log.Printf("backup %s: %v", id, err)
-		return false
+		return false, err
 	}
 	path := filepath.Join(dir, fmt.Sprintf("polaris-%s-schema%s-%s.zip", slugify(name), version, time.Now().Format("2006-01-02-150405")))
 	f, err := os.Create(path)
 	if err != nil {
-		log.Printf("backup %s: %v", id, err)
-		return false
+		return false, err
 	}
 	err = m.writeStoryZip(f, db, uploadsDir, name, icon, version)
 	if cerr := f.Close(); err == nil {
@@ -54,9 +53,8 @@ func (m *storyManager) backupBeforeOpen(id string, db *sql.DB, uploadsDir string
 	}
 	if err != nil {
 		os.Remove(path)
-		log.Printf("backup %s: %v", id, err)
-		return false
+		return false, err
 	}
 	log.Printf("story %s is at schema %s (this version: %s); backed up to %s", id, version, currentSchemaVersion, path)
-	return true
+	return true, nil
 }

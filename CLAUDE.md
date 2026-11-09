@@ -152,6 +152,14 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
 - **Uploads:** handlers emit `/uploads/<file>`; a rewriter turns that into
   `/uploads/s/<story-id>/<file>`. Uploaded files are served sandboxed with
   `nosniff`. Do not weaken that.
+- **The browser guard** (`backend/security.go`): every request that
+  changes something is refused when it comes from another site
+  (`Sec-Fetch-Site`, else `Origin`), so nothing may change data on a `GET`.
+  The page's Content-Security-Policy (`pagePolicy`) lets scripts come only
+  from Polaris; an inline script in `index.html` is allowed by its hash
+  automatically, but a new outside address (fonts, pictures, a fetch) must
+  be added there. Form uploads are capped before they are parsed
+  (`parsePictureForm`). Do not weaken these.
 - Dates are `DD-MM-YYYY`, there is no year 0. They are typed in one box
   (`components/DateField.vue`): digits are typed and shown left to right
   but read from the right, the last four being the year (`dateDigits.js`);

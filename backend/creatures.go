@@ -132,6 +132,9 @@ func cellsOf(db *sql.DB, c creatureOut) []int64 {
 			out = append(out, x)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("cellsOf: reading rows: %v", err)
+	}
 	return out
 }
 
@@ -162,6 +165,9 @@ func territoryOf(db *sql.DB, c creatureOut) [][2]int64 {
 			out = append(out, h)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("territoryOf: reading rows: %v", err)
+	}
 	return out
 }
 
@@ -181,6 +187,9 @@ func creatureLinks(db *sql.DB) map[int64][]creatureRef {
 			out[a.ID] = append(out[a.ID], b)
 			out[b.ID] = append(out[b.ID], a)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("creatureLinks: reading rows: %v", err)
 	}
 	return out
 }
@@ -207,6 +216,9 @@ func listCreaturesHandler(db *sql.DB) http.HandlerFunc {
 			c.Territory = territoryOf(db, c)
 			c.Cells = cellsOf(db, c)
 			out = append(out, c)
+		}
+		if err := rows.Err(); err != nil {
+			log.Printf("listCreaturesHandler: reading rows: %v", err)
 		}
 		writeJSON(w, out)
 	}
@@ -421,7 +433,7 @@ func saveCreatureHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 				return
 			}
 		}
-		if err := r.ParseMultipartForm(10 << 20); err != nil {
+		if err := parsePictureForm(w, r); err != nil {
 			http.Error(w, "invalid form data", http.StatusBadRequest)
 			return
 		}

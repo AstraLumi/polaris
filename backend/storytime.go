@@ -1,6 +1,9 @@
 package main
 
-import "database/sql"
+import (
+	"database/sql"
+	"log"
+)
 
 // When something holds in the story. A character version sits at a point:
 // its chapter (by the chapters' story order) and its story date. A relation
@@ -32,6 +35,9 @@ func chapterRanks(db *sql.DB) map[int64]int {
 			order[id] = len(order)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("chapterRanks: reading rows: %v", err)
+	}
 	rows.Close()
 	rows, err = db.Query(`SELECT id, volume_id, position FROM chapters`)
 	if err != nil {
@@ -47,6 +53,9 @@ func chapterRanks(db *sql.DB) map[int64]int {
 			}
 			list = append(list, c)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("chapterRanks: reading rows: %v", err)
 	}
 	rows.Close()
 	sortChapters(list, func(c chapterSummary) int {

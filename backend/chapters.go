@@ -87,6 +87,10 @@ func loadChapterIndex(db *sql.DB) (chapterIndex, error) {
 		order[v.ID] = len(idx.Volumes)
 		idx.Volumes = append(idx.Volumes, v)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return idx, err
+	}
 	rows.Close()
 
 	rows, err = db.Query(`
@@ -109,6 +113,9 @@ func loadChapterIndex(db *sql.DB) (chapterIndex, error) {
 			c.VolumeID = &vol.Int64
 		}
 		idx.Chapters = append(idx.Chapters, c)
+	}
+	if err := rows.Err(); err != nil {
+		return idx, err
 	}
 	group := func(c chapterSummary) int {
 		if c.VolumeID == nil {
@@ -257,6 +264,9 @@ func loadChapter(db *sql.DB, id int64) (*chapterDetail, error) {
 				d.Events = append(d.Events, e)
 			}
 		}
+		if err := rows.Err(); err != nil {
+			log.Printf("loadChapter: reading rows: %v", err)
+		}
 		rows.Close()
 	}
 	// In story order, like the Events page.
@@ -276,6 +286,9 @@ func loadChapter(db *sql.DB, id int64) (*chapterDetail, error) {
 				v.PicturePath = uploadURL(v.PicturePath)
 				d.Versions = append(d.Versions, v)
 			}
+		}
+		if err := rows.Err(); err != nil {
+			log.Printf("loadChapter: reading rows: %v", err)
 		}
 		rows.Close()
 	}

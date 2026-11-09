@@ -56,6 +56,9 @@ func loadGallery(db *sql.DB, entryID int64) []galleryItem {
 			out = append(out, g)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("loadGallery: reading rows: %v", err)
+	}
 	return out
 }
 
@@ -107,6 +110,7 @@ func addGalleryHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			http.Error(w, "article not found", http.StatusNotFound)
 			return
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, maxGalleryForm)
 		if err := r.ParseMultipartForm(64 << 20); err != nil {
 			http.Error(w, "invalid form data", http.StatusBadRequest)
 			return

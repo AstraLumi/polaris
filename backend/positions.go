@@ -57,6 +57,9 @@ func (s mapSpace) read(db *sql.DB, q2d, q3d string, args ...any) map[spot][]int6
 			out[sp] = append(out[sp], id)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("read: reading rows: %v", err)
+	}
 	return out
 }
 
@@ -148,6 +151,9 @@ func (m *mapAreas) borders(db *sql.DB, id int64) []wikiRef {
 					refs = append(refs, r)
 				}
 			}
+			if err := rows.Err(); err != nil {
+				log.Printf("borders: reading rows: %v", err)
+			}
 			rows.Close()
 		}
 	}
@@ -179,6 +185,9 @@ func planetLatitudes(db *sql.DB, kind string, id int64) ([]float64, planetSettin
 			lat, _ := latLon(g.center(c))
 			out = append(out, lat*180/math.Pi)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("planetLatitudes: reading rows: %v", err)
 	}
 	return out, p
 }

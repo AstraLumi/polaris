@@ -172,6 +172,9 @@ func loadBodyMap(db *sql.DB, id int64, g planetGrid) (bodyMap, error) {
 		out.Cells = append(out.Cells, [2]any{cell, color})
 		count[color]++
 	}
+	if err := rows.Err(); err != nil {
+		return out, err
+	}
 	for c := range count {
 		out.Colors = append(out.Colors, c)
 	}

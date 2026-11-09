@@ -302,6 +302,11 @@ func swapBookFontHandler(db *sql.DB) http.HandlerFunc {
 			}
 			texts = append(texts, t)
 		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			fail(err)
+			return
+		}
 		rows.Close()
 		now := editorNow()
 		out := struct {

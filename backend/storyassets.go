@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -165,6 +166,10 @@ func copyAssets(dst *sql.DB, src wikiQuerier, srcDBPath, srcUploads, dstUploads 
 			}
 			cols = append(cols, name)
 		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return rollback(err)
+		}
 		rows.Close()
 		if len(cols) == 0 {
 			return rollback(fmt.Errorf("table %s missing", t.name))
@@ -205,6 +210,9 @@ func copyAssets(dst *sql.DB, src wikiQuerier, srcDBPath, srcUploads, dstUploads 
 				if err := fr.Scan(&p); err == nil && !isBuiltinIcon(p) {
 					files = append(files, p)
 				}
+			}
+			if err := fr.Err(); err != nil {
+				log.Printf("copyAssets: reading rows: %v", err)
 			}
 			fr.Close()
 		}

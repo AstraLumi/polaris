@@ -113,6 +113,9 @@ func factionMembers(db *sql.DB, factionID int64) []factionMember {
 			out = append(out, m)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("factionMembers: reading rows: %v", err)
+	}
 	return out
 }
 
@@ -147,6 +150,9 @@ func membershipsOf(db *sql.DB, characterID int64) []membership {
 			out = append(out, m)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("membershipsOf: reading rows: %v", err)
+	}
 	return out
 }
 
@@ -167,6 +173,9 @@ func listFactionsHandler(db *sql.DB) http.HandlerFunc {
 				continue
 			}
 			out = append(out, f)
+		}
+		if err := rows.Err(); err != nil {
+			log.Printf("listFactionsHandler: reading rows: %v", err)
 		}
 		rows.Close()
 		// The members (for the list's faces) and a kingdom's people.
@@ -347,7 +356,7 @@ func saveFactionHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 				return
 			}
 		}
-		if err := r.ParseMultipartForm(10 << 20); err != nil {
+		if err := parsePictureForm(w, r); err != nil {
 			http.Error(w, "invalid form data", http.StatusBadRequest)
 			return
 		}

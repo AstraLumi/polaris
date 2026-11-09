@@ -331,6 +331,10 @@ func listTextVersionsHandler(db *sql.DB) http.HandlerFunc {
 			}
 			out = append(out, v)
 		}
+		if err := rows.Err(); err != nil {
+			http.Error(w, "failed to load the versions", http.StatusInternalServerError)
+			return
+		}
 		writeJSON(w, out)
 	}
 }

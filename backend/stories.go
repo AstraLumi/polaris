@@ -88,7 +88,7 @@ func newStoryManager(dataDir, uploadsRoot string) (*storyManager, error) {
 			return nil, fmt.Errorf("create %s: %w", d, err)
 		}
 	}
-	reg, err := sql.Open("sqlite", filepath.Join(dataDir, "stories.db"))
+	reg, err := sql.Open("sqlite", sqliteDSN(filepath.Join(dataDir, "stories.db")))
 	if err != nil {
 		return nil, fmt.Errorf("open registry: %w", err)
 	}
@@ -103,6 +103,11 @@ func newStoryManager(dataDir, uploadsRoot string) (*storyManager, error) {
 	// Registries made before exports were tracked lack the column.
 	if err := addColumnIfMissing(reg, "stories", "last_exported_at", "TEXT"); err != nil {
 		return nil, fmt.Errorf("upgrade registry: %w", err)
+	}
+	// Half-made exports and imports a stopped server left behind.
+	os.RemoveAll(filepath.Join(dataDir, "tmp"))
+	if err := os.MkdirAll(filepath.Join(dataDir, "tmp"), 0o755); err != nil {
+		return nil, fmt.Errorf("create tmp: %w", err)
 	}
 	m := &storyManager{
 		dataDir:     dataDir,
@@ -131,6 +136,21 @@ func (m *storyManager) storyDir(id string) string   { return filepath.Join(m.dat
 func (m *storyManager) dbPathFor(id string) string  { return filepath.Join(m.storyDir(id), "story.db") }
 func (m *storyManager) uploadsFor(id string) string { return filepath.Join(m.uploadsRoot, id) }
 func (m *storyManager) tmpDir() string              { return filepath.Join(m.dataDir, "tmp") }
+
+// sqliteDSN is how every database is opened. The settings are in the
+// address so each pooled connection gets them (a PRAGMA run once only
+// reaches one):
+//   - foreign keys on, so deletes cascade whichever connection makes them;
+//   - the schema isn't trusted: a story can be imported from a file, and
+//     its triggers and views must not reach SQLite's unsafe functions;
+//   - a busy timeout, so a request that meets another's write waits for it
+//     instead of failing with "database is locked";
+//   - transactions take the write lock when they begin. One that read first
+//     and wrote later could not wait: two of them each hold a read lock the
+//     other's write needs, and SQLite fails one at once whatever the timeout.
+func sqliteDSN(path string) string {
+	return path + "?_pragma=foreign_keys(1)&_pragma=trusted_schema(0)&_pragma=busy_timeout(5000)&_txlock=immediate"
+}
 
 func newStoryID() (string, error) {
 	b := make([]byte, 8)
@@ -173,12 +193,21 @@ func (m *storyManager) openLocked(id string) (*storyApp, error) {
 	// Foreign keys on every pooled connection, not just the first: a PRAGMA
 	// run once only reaches one connection, so deletes elsewhere didn't
 	// cascade and left rows behind.
-	db, err := sql.Open("sqlite", dbPath+"?_pragma=foreign_keys(1)")
+	db, err := sql.Open("sqlite", sqliteDSN(dbPath))
 	if err != nil {
 		return nil, err
 	}
 	// A story at another schema is backed up first (storybackup.go).
-	backedUp := m.backupBeforeOpen(id, db, uploads)
+	backedUp, err := m.backupBeforeOpen(id, db, uploads)
+	if err != nil {
+		log.Printf("backup %s: %v", id, err)
+		// An upgrade can't be undone, so it doesn't start without its
+		// backup. (A story that will be refused anyway goes on to be.)
+		if version := storedSchema(db); !newerSchema(version) && canMigrate(version) {
+			db.Close()
+			return nil, errNoBackup
+		}
+	}
 	if err := ensureSchema(db); err != nil {
 		db.Close()
 		if errors.Is(err, errNewerSchema) && backedUp {
@@ -257,6 +286,10 @@ func (m *storyManager) list() ([]storyInfo, error) {
 			return nil, err
 		}
 		all = append(all, r)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
 	}
 	rows.Close()
 	out := make([]storyInfo, 0, len(all))
@@ -462,9 +495,9 @@ func (m *storyManager) listHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // readStoryForm parses name/icon fields shared by create and update.
-func readStoryForm(r *http.Request) (name *string, up *iconUpload, choice string, closeFn func(), err error) {
+func readStoryForm(w http.ResponseWriter, r *http.Request) (name *string, up *iconUpload, choice string, closeFn func(), err error) {
 	closeFn = func() {}
-	if err = r.ParseMultipartForm(maxFormMemory); err != nil {
+	if err = parsePictureForm(w, r); err != nil {
 		return nil, nil, "", closeFn, errors.New("invalid form data")
 	}
 	if vals, ok := r.MultipartForm.Value["name"]; ok && len(vals) > 0 {
@@ -480,7 +513,7 @@ func readStoryForm(r *http.Request) (name *string, up *iconUpload, choice string
 }
 
 func (m *storyManager) createHandler(w http.ResponseWriter, r *http.Request) {
-	name, up, choice, done, err := readStoryForm(r)
+	name, up, choice, done, err := readStoryForm(w, r)
 	defer done()
 	if err != nil {
 		m.fail(w, err)
@@ -499,7 +532,7 @@ func (m *storyManager) createHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *storyManager) updateHandler(w http.ResponseWriter, r *http.Request) {
-	name, up, choice, done, err := readStoryForm(r)
+	name, up, choice, done, err := readStoryForm(w, r)
 	defer done()
 	if err != nil {
 		m.fail(w, err)
@@ -528,7 +561,11 @@ func (m *storyManager) storyHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, errNoStory) {
 			http.Error(w, "story not found", http.StatusNotFound)
-		} else if errors.Is(err, errNewerSchema) || errors.Is(err, errNewerSchemaBackedUp) {
+		} else if errors.Is(err, errNewerSchema) || errors.Is(err, errNewerSchemaBackedUp) ||
+			errors.Is(err, errUnknownSchema) || errors.Is(err, errNoBackup) {
+			if !errors.Is(err, errNewerSchema) && !errors.Is(err, errNewerSchemaBackedUp) {
+				log.Printf("open story %s: %v", id, err)
+			}
 			http.Error(w, err.Error(), http.StatusConflict)
 		} else {
 			http.Error(w, "failed to open story", http.StatusInternalServerError)
@@ -545,6 +582,11 @@ func (m *storyManager) storyHandler(w http.ResponseWriter, r *http.Request) {
 	rw := &uploadsRewriter{w: w, replacement: []byte(`"/uploads/s/` + id + `/`)}
 	app.handler.ServeHTTP(rw, r2)
 	rw.finish()
+	// The server only clears the temporary files of the request it was
+	// given, and the form was read on the copy.
+	if r2.MultipartForm != nil {
+		r2.MultipartForm.RemoveAll()
+	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		app.graph.changed(r.PathValue("rest"))
 	}
@@ -612,6 +654,9 @@ func addColumnIfMissing(db *sql.DB, table, column, decl string) error {
 		if name == column {
 			return nil
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
 	}
 	rows.Close()
 	_, err = db.Exec(`ALTER TABLE ` + quoteIdent(table) + ` ADD COLUMN ` + quoteIdent(column) + ` ` + decl)

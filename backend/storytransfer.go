@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -69,10 +70,42 @@ func (m *storyManager) exportHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="polaris-%s-%s.zip"`, slugify(si.Name), time.Now().Format("2006-01-02")))
-	if err := m.writeStoryZip(w, app.db, app.uploadsDir, si.Name, icon, currentSchemaVersion); err != nil {
+	// The zip is made whole in a file first: a failure halfway is then an
+	// error the browser shows, never a cut-short download that looks like a
+	// backup.
+	if err := os.MkdirAll(m.tmpDir(), 0o755); err != nil {
 		log.Printf("export %s: %v", id, err)
+		http.Error(w, "export failed", http.StatusInternalServerError)
+		return
+	}
+	tmp, err := os.CreateTemp(m.tmpDir(), "export-*.zip")
+	if err != nil {
+		log.Printf("export %s: %v", id, err)
+		http.Error(w, "export failed", http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(tmp.Name())
+	defer tmp.Close()
+	if err := m.writeStoryZip(tmp, app.db, app.uploadsDir, si.Name, icon, currentSchemaVersion); err != nil {
+		log.Printf("export %s: %v", id, err)
+		http.Error(w, "export failed", http.StatusInternalServerError)
+		return
+	}
+	size, err := tmp.Seek(0, io.SeekEnd)
+	if err == nil {
+		_, err = tmp.Seek(0, io.SeekStart)
+	}
+	if err != nil {
+		log.Printf("export %s: %v", id, err)
+		http.Error(w, "export failed", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="polaris-%s-%s.zip"`, slugify(si.Name), time.Now().Format("2006-01-02")))
+	// Only a download that went out whole counts as an export.
+	if n, err := io.Copy(w, tmp); err != nil || n != size {
+		log.Printf("export %s: sent %d of %d bytes: %v", id, n, size, err)
 		return
 	}
 	if _, err := m.reg.Exec(`UPDATE stories SET last_exported_at = datetime('now') WHERE id = ?`, id); err != nil {
@@ -104,26 +137,42 @@ func (m *storyManager) writeStoryZip(w io.Writer, db *sql.DB, uploadsDir, name, 
 		SchemaVersion: schema, ExportedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 	zw := zip.NewWriter(w)
-	mf, _ := zw.Create("polaris-story.json")
+	mf, err := zw.Create("polaris-story.json")
+	if err != nil {
+		return err
+	}
 	enc := json.NewEncoder(mf)
 	enc.SetIndent("", "  ")
-	enc.Encode(man)
+	if err := enc.Encode(man); err != nil {
+		return err
+	}
 	if err := addFileToZip(zw, "story.db", snapPath); err != nil {
 		return err
 	}
-	filepath.WalkDir(uploadsDir, func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+	// A picture that can't be read fails the export: a zip without it would
+	// pass for a full backup. (One deleted while this runs is just gone.)
+	err = filepath.WalkDir(uploadsDir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
+			return err
+		}
+		if d.IsDir() {
 			return nil
 		}
 		rel, err := filepath.Rel(uploadsDir, p)
 		if err != nil {
-			return nil
+			return err
 		}
-		if err := addFileToZip(zw, "uploads/"+filepath.ToSlash(rel), p); err != nil {
-			log.Printf("export: %v", err)
+		if err := addFileToZip(zw, "uploads/"+filepath.ToSlash(rel), p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("%s: %w", rel, err)
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
 	return zw.Close()
 }
 
@@ -334,11 +383,17 @@ func (m *storyManager) importZip(zipPath string, size int64) (storyInfo, error) 
 // checkImportedDB makes sure an uploaded database is a healthy Polaris
 // database this version can open, before it's allowed anywhere near a story.
 func checkImportedDB(dbPath string) error {
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := sql.Open("sqlite", sqliteDSN(dbPath))
 	if err != nil {
 		return userError("the story database is damaged")
 	}
 	defer db.Close()
+	// Polaris makes no views: one here was put in by hand, to be read in
+	// place of a table.
+	var views int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'view'`).Scan(&views); err != nil || views > 0 {
+		return userError("that file isn't a Polaris story database")
+	}
 	var check string
 	if err := db.QueryRow(`PRAGMA integrity_check`).Scan(&check); err != nil || check != "ok" {
 		return userError("the story database is damaged")

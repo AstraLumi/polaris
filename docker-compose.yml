@@ -16,10 +16,20 @@ services:
     build: .
     container_name: polaris
     restart: unless-stopped
+    # Nothing in the container needs more than its two volumes: its own
+    # files are read-only and it holds no special rights.
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
     environment:
       - PORT=8091
       - DATA_DIR=/data
       - UPLOADS_DIR=/app/uploads
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-}
     volumes:
       - polaris_data:/data
       - polaris_uploads:/app/uploads

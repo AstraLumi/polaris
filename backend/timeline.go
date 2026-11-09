@@ -87,6 +87,12 @@ func timelineHandler(db *sql.DB) http.HandlerFunc {
 				details[er.sourceType+":"+itoa(er.sourceID)] = er
 			}
 		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			http.Error(w, "failed to read timeline", http.StatusInternalServerError)
+			log.Printf("timeline scan: %v", err)
+			return
+		}
 		rows.Close()
 
 		// withDetails copies a details record's content onto a node.
@@ -150,6 +156,9 @@ func timelineHandler(db *sql.DB) http.HandlerFunc {
 			}
 			out.Nodes = append(out.Nodes, n)
 		}
+		if err := crow.Err(); err != nil {
+			log.Printf("timelineHandler: reading rows: %v", err)
+		}
 		crow.Close()
 
 		// Foundings: any location with a founding date, kingdom or not.
@@ -176,6 +185,9 @@ func timelineHandler(db *sql.DB) http.HandlerFunc {
 			}
 			out.Nodes = append(out.Nodes, n)
 		}
+		if err := lrow.Err(); err != nil {
+			log.Printf("timelineHandler: reading rows: %v", err)
+		}
 		lrow.Close()
 
 		// Lore articles: each dated row in their infobox ("Founded", "Fell").
@@ -201,6 +213,9 @@ func timelineHandler(db *sql.DB) http.HandlerFunc {
 			if place(&n, date) {
 				out.Nodes = append(out.Nodes, n)
 			}
+		}
+		if err := drow.Err(); err != nil {
+			log.Printf("timelineHandler: reading rows: %v", err)
 		}
 		drow.Close()
 

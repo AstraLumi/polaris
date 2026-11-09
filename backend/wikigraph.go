@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"runtime"
 	"sort"
 	"strconv"
@@ -66,6 +67,9 @@ func wikiTexts(db *sql.DB) (texts map[int64][]string, owner map[int64]string) {
 			}
 		}
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("wikiTexts: reading rows: %v", err)
+	}
 	rows.Close()
 	for _, q := range []string{
 		`SELECT entry_id, title || char(10) || body FROM wiki_sections`,
@@ -81,6 +85,9 @@ func wikiTexts(db *sql.DB) (texts map[int64][]string, owner map[int64]string) {
 			if rows.Scan(&eid, &s) == nil {
 				texts[eid] = append(texts[eid], s)
 			}
+		}
+		if err := rows.Err(); err != nil {
+			log.Printf("wikiTexts: reading rows: %v", err)
 		}
 		rows.Close()
 	}
@@ -101,6 +108,9 @@ func buildWikiGraph(db *sql.DB) (*graphPayload, error) {
 			if rows.Scan(&f, &k) == nil {
 				out.Merged[refKey("faction", f)] = refKey("location", k)
 			}
+		}
+		if err := rows.Err(); err != nil {
+			log.Printf("buildWikiGraph: reading rows: %v", err)
 		}
 		rows.Close()
 	}

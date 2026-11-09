@@ -528,6 +528,9 @@ func statSystemResponse(db *sql.DB) (statSystemPayload, error) {
 				usage[k] = u
 			}
 		}
+		if err := rows.Err(); err != nil {
+			log.Printf("statSystemResponse: reading rows: %v", err)
+		}
 		rows.Close()
 	}
 	return statSystemPayload{statSystem: s, Usage: usage}, nil

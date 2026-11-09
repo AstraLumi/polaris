@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -38,7 +42,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to start: %v", err)
 	}
-	defer mgr.Close()
+
+	// Uploads too big for memory wait in temporary files. Those go on the
+	// data volume, beside the exports' (cleared at every start), not in the
+	// container's own /tmp: the container can then be read-only, and a large
+	// import doesn't fill it.
+	if os.Getenv("TMPDIR") == "" {
+		os.Setenv("TMPDIR", mgr.tmpDir())
+	}
 
 	staticFS, err := fs.Sub(embeddedFrontend, "static")
 	if err != nil {
@@ -49,8 +60,37 @@ func main() {
 	// it to this machine, and Windows doesn't ask to let it through the
 	// firewall).
 	addr := os.Getenv("LISTEN_HOST") + ":" + getEnv("PORT", "8091")
+	// No limit on a whole request or answer: story imports and exports are
+	// large and may travel slowly. The headers must arrive promptly, though,
+	// and an idle connection isn't kept for ever.
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           newRouter(mgr, staticFS),
+		ReadHeaderTimeout: 15 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+	}
+	failed := make(chan error, 1)
+	go func() { failed <- srv.ListenAndServe() }()
 	log.Printf("Polaris listening on %s (data: %s, uploads: %s)", addr, dataDir, uploadsRoot)
-	log.Fatal(http.ListenAndServe(addr, newRouter(mgr, staticFS)))
+
+	// Asked to stop (Ctrl+C, `docker stop`): take no new requests, let the
+	// ones under way finish, then close every database. Docker waits ten
+	// seconds before it kills the container, so this takes less.
+	stop, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	select {
+	case err := <-failed:
+		mgr.Close()
+		log.Fatalf("server stopped: %v", err)
+	case <-stop.Done():
+	}
+	log.Print("stopping")
+	ctx, done := context.WithTimeout(context.Background(), 8*time.Second)
+	defer done()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("some requests were cut short: %v", err)
+	}
+	mgr.Close()
 }
 
 // newRouter is the whole server: the frontend, the story registry API, and
@@ -59,7 +99,7 @@ func newRouter(mgr *storyManager, staticFS fs.FS) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/", spaHandler(staticFS))
 	mgr.registerRoutes(mux)
-	return mux
+	return guard(mux, allowedHostsFromEnv()) // security.go
 }
 
 // storyRoutes is one story's API. Every handler is bound to that story's
@@ -309,7 +349,10 @@ func storyRoutes(db *sql.DB, uploadsDir string, graph *graphCache) *http.ServeMu
 // never change.
 func spaHandler(staticFS fs.FS) http.Handler {
 	fileServer := http.FileServer(http.FS(staticFS))
+	policy := pagePolicy(staticFS) // security.go
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Security-Policy", policy)
+		w.Header().Set("Referrer-Policy", "same-origin")
 		path := strings.TrimPrefix(r.URL.Path, "/")
 		if path != "" {
 			// Folders count as missing too: /assets is both a page and the

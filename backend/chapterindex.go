@@ -83,6 +83,10 @@ func migrateChapterIndex(tx *sql.Tx) error {
 		}
 		all = append(all, x)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
 	rows.Close()
 	for _, x := range all {
 		// Schema 45's index only: the comments' table comes with schema 46.
@@ -419,6 +423,9 @@ func appearsInHandler(db *sql.DB) http.HandlerFunc {
 				out = append(out, appearsInRow{p, n})
 			}
 		}
+		if err := rows.Err(); err != nil {
+			log.Printf("appearsInHandler: reading rows: %v", err)
+		}
 		sortByOrder(out, func(x appearsInRow) int { return x.order })
 		writeJSON(w, out)
 	}
@@ -464,6 +471,9 @@ func characterLinesHandler(db *sql.DB) http.HandlerFunc {
 				l.chapterPlace = p
 				out = append(out, l)
 			}
+		}
+		if err := rows.Err(); err != nil {
+			log.Printf("characterLinesHandler: reading rows: %v", err)
 		}
 		sortByOrder(out, func(x lineRow) int { return x.order*1_000_000 + x.Position })
 		writeJSON(w, out)
@@ -520,6 +530,9 @@ func chapterSpeakersHandler(db *sql.DB) http.HandlerFunc {
 			}
 			out[i].Lines++
 			out[i].Words += countWords(text)
+		}
+		if err := rows.Err(); err != nil {
+			log.Printf("chapterSpeakersHandler: reading rows: %v", err)
 		}
 		sortByOrder(out, func(x speakerRow) int { return -x.Lines*1_000_000 + x.First })
 		writeJSON(w, out)

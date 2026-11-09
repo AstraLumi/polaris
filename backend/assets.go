@@ -500,6 +500,9 @@ func getSubclassHandler(db *sql.DB) http.HandlerFunc {
 				d.ClassIDs = append(d.ClassIDs, cid)
 			}
 		}
+		if err := rows.Err(); err != nil {
+			log.Printf("getSubclassHandler: reading rows: %v", err)
+		}
 		rows.Close()
 
 		modifiers, err := loadModifiers(db, "subclass", d.ID)
@@ -714,6 +717,10 @@ func assetSummaryHandler(db *sql.DB) http.HandlerFunc {
 				modifiers[kind][id] = map[string]float64{}
 			}
 			modifiers[kind][id][stat] = value
+		}
+		if err := rows.Err(); err != nil {
+			http.Error(w, "failed to read the assets", http.StatusInternalServerError)
+			return
 		}
 		writeJSON(w, map[string]any{"uses": uses, "modifiers": modifiers})
 	}

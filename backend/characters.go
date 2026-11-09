@@ -86,6 +86,12 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 			}
 			raw = append(raw, rr)
 		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			http.Error(w, "failed to read characters", http.StatusInternalServerError)
+			log.Printf("listCharacters scan: %v", err)
+			return
+		}
 		rows.Close()
 
 		// Faction memberships (current and former), for the Characters filter.
@@ -96,6 +102,9 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 				if fr.Scan(&c, &f) == nil {
 					factionsOf[c] = append(factionsOf[c], f)
 				}
+			}
+			if err := fr.Err(); err != nil {
+				log.Printf("listCharactersHandler: reading rows: %v", err)
 			}
 			fr.Close()
 		}
@@ -108,6 +117,9 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 				if tr.Scan(&c, &t) == nil {
 					tagsOf[c] = append(tagsOf[c], t)
 				}
+			}
+			if err := tr.Err(); err != nil {
+				log.Printf("listCharactersHandler: reading rows: %v", err)
 			}
 			tr.Close()
 		}
@@ -156,7 +168,7 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 // the timeline right away.
 func createCharacterHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseMultipartForm(10 << 20); err != nil { // 10 MB cap
+		if err := parsePictureForm(w, r); err != nil { // 10 MB cap
 			http.Error(w, "invalid form data", http.StatusBadRequest)
 			return
 		}
@@ -346,6 +358,9 @@ func deleteCharactersHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 				if rows.Scan(&p) == nil {
 					removePicture(uploadsDir, p)
 				}
+			}
+			if err := rows.Err(); err != nil {
+				log.Printf("deleteCharactersHandler: reading rows: %v", err)
 			}
 			rows.Close()
 		}

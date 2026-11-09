@@ -149,6 +149,9 @@ func loadEventTags(db *sql.DB, eventID int64) []string {
 			tags = append(tags, t)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("loadEventTags: reading rows: %v", err)
+	}
 	return tags
 }
 
@@ -173,6 +176,9 @@ func loadEventPeople(db *sql.DB, eventID int64) []eventPerson {
 			}
 			people = append(people, p)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("loadEventPeople: reading rows: %v", err)
 	}
 	return people
 }
@@ -313,6 +319,12 @@ func listEventsHandler(db *sql.DB) http.HandlerFunc {
 				return
 			}
 			all = append(all, er)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			http.Error(w, "failed to read events", http.StatusInternalServerError)
+			log.Printf("list events scan: %v", err)
+			return
 		}
 		rows.Close()
 
@@ -535,7 +547,7 @@ func saveEventPicture(db *sql.DB, r *http.Request, uploadsDir string, eventID in
 
 func createEventHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseMultipartForm(10 << 20); err != nil {
+		if err := parsePictureForm(w, r); err != nil {
 			http.Error(w, "invalid form data", http.StatusBadRequest)
 			return
 		}
@@ -615,7 +627,7 @@ func updateEventHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 			http.Error(w, "event not found", http.StatusNotFound)
 			return
 		}
-		if err := r.ParseMultipartForm(10 << 20); err != nil {
+		if err := parsePictureForm(w, r); err != nil {
 			http.Error(w, "invalid form data", http.StatusBadRequest)
 			return
 		}
@@ -793,6 +805,9 @@ func listEventTagsHandler(db *sql.DB) http.HandlerFunc {
 				out = append(out, t)
 			}
 		}
+		if err := rows.Err(); err != nil {
+			log.Printf("listEventTagsHandler: reading rows: %v", err)
+		}
 		writeJSON(w, out)
 	}
 }
@@ -827,6 +842,9 @@ func listCharacterOptionsHandler(db *sql.DB) http.HandlerFunc {
 				}
 				out = append(out, o)
 			}
+		}
+		if err := rows.Err(); err != nil {
+			log.Printf("listCharacterOptionsHandler: reading rows: %v", err)
 		}
 		writeJSON(w, out)
 	}

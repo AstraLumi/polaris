@@ -19,6 +19,25 @@ jobs:
         working-directory: backend
         run: go vet ./... && go test -count=1 ./...
 
+  # Known vulnerabilities in what Polaris is built from. Only the code the
+  # backend really calls counts; for the frontend, only what ships.
+  dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27'
+      - name: Go modules
+        working-directory: backend
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: npm packages
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
   frontend:
     runs-on: ubuntu-latest
     steps:

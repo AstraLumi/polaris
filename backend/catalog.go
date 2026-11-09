@@ -39,6 +39,10 @@ func listClassesHandler(db *sql.DB) http.HandlerFunc {
 			o.IconPath = uploadURL(o.IconPath)
 			results = append(results, o)
 		}
+		if err := rows.Err(); err != nil {
+			http.Error(w, "failed to read classes", http.StatusInternalServerError)
+			return
+		}
 		writeJSON(w, results)
 	}
 }
@@ -61,6 +65,10 @@ func listSimpleLookupHandler(db *sql.DB, table string) http.HandlerFunc {
 				return
 			}
 			results = append(results, o)
+		}
+		if err := rows.Err(); err != nil {
+			http.Error(w, "failed to read "+table, http.StatusInternalServerError)
+			return
 		}
 		writeJSON(w, results)
 	}
@@ -95,6 +103,10 @@ func listSubclassesHandler(db *sql.DB) http.HandlerFunc {
 			o.ClassNames = []string{}
 			results = append(results, o)
 		}
+		if err := rows.Err(); err != nil {
+			http.Error(w, "failed to read subclasses", http.StatusInternalServerError)
+			return
+		}
 		rows.Close()
 
 		classRows, err := db.Query(`
@@ -124,6 +136,10 @@ func listSubclassesHandler(db *sql.DB) http.HandlerFunc {
 			if o, ok := byID[subclassID]; ok {
 				o.ClassNames = append(o.ClassNames, className)
 			}
+		}
+		if err := classRows.Err(); err != nil {
+			http.Error(w, "failed to read subclass classes", http.StatusInternalServerError)
+			return
 		}
 
 		writeJSON(w, results)
@@ -160,6 +176,10 @@ func listClassScopedLookupHandler(db *sql.DB, table string) http.HandlerFunc {
 				return
 			}
 			results = append(results, o)
+		}
+		if err := rows.Err(); err != nil {
+			http.Error(w, "failed to read "+table, http.StatusInternalServerError)
+			return
 		}
 		writeJSON(w, results)
 	}

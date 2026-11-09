@@ -178,7 +178,7 @@ func parseCost(s string) sql.NullInt64 {
 // name of an existing Map location.
 func parseSpellForm(db *sql.DB, r *http.Request) (spellInput, error) {
 	var in spellInput
-	if err := r.ParseMultipartForm(10 << 20); err != nil {
+	if err := parsePictureForm(nil, r); err != nil {
 		return in, fmt.Errorf("invalid form data")
 	}
 

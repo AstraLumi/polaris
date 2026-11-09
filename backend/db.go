@@ -10,11 +10,11 @@ import (
 )
 
 // Bump this whenever the schema changes. If there's an entry in
-// `migrations` for the version a database is currently at, initSchema
-// upgrades it in place and keeps the data. Only a database older than the
-// oldest migration (or a brand new one) gets wiped and recreated from
-// freshSchema — so every schema change from here on should ship with a
-// migration instead of relying on that reset.
+// `migrations` for the version a database is currently at, ensureSchema
+// upgrades it in place and keeps the data. A brand new database gets
+// freshSchema; one that holds tables but has no migration path is refused
+// and left untouched (errUnknownSchema), so every schema change must ship
+// with a migration.
 const currentSchemaVersion = "46"
 
 const freshSchema = `
@@ -661,66 +661,6 @@ func applyMigration(db *sql.DB, m migration) error {
 	return tx.Commit()
 }
 
-// tablesInDependencyOrder lists every app-owned table, children before
-// parents, so dropping them in this order never trips a foreign key.
-var tablesInDependencyOrder = []string{
-	"chapter_comments",
-	"chapter_lines",
-	"chapter_links",
-	"chapter_text_versions",
-	"chapter_texts",
-	"book_settings",
-	"cell_relief",
-	"cell_biomes",
-	"feature_cells",
-	"map_features",
-	"body_cells",
-	"solar_systems",
-	"celestial_bodies",
-	"planet_cells",
-	"creature_cells",
-	"location_climate",
-	"creature_hexes",
-	"creature_links",
-	"creatures",
-	"character_tags",
-	"lore_articles",
-	"faction_members",
-	"factions",
-	"character_relations",
-	"chapters",
-	"volumes",
-	"wiki_gallery",
-	"wiki_infobox",
-	"wiki_sections",
-	"wiki_entries",
-	"event_characters",
-	"event_tags",
-	"stat_modifiers",
-	"stat_defs",
-	"stat_settings",
-	"character_gear",
-	"character_spells",
-	"character_special_bases",
-	"character_build",
-	"character_story",
-	"character_versions",
-	"characters",
-	"subclass_classes",
-	"specializations",
-	"subclasses",
-	"classes",
-	"races",
-	"body_types",
-	"spells",
-	"gear",
-	"events",
-	"timeline_events",
-	"location_hexes",
-	"locations",
-	"app_settings",
-}
-
 // initSchema is the startup entry point for a database that must work: any
 // failure is fatal. Story databases are opened through ensureSchema instead,
 // so one broken story can't take the whole server down.
@@ -738,6 +678,14 @@ var errNewerSchema = userError("this story was saved by a newer version of Polar
 // errNewerSchemaBackedUp is errNewerSchema once a backup of the story was
 // saved (storybackup.go).
 var errNewerSchemaBackedUp = userError("this story was saved by a newer version of Polaris; update Polaris to open it. A backup was saved in the story's backups folder")
+
+// errUnknownSchema refuses a database that holds tables but is at no schema
+// this build can upgrade from. Nothing in it is touched.
+var errUnknownSchema = userError("this story's database is at a version Polaris can't upgrade from; it was left untouched")
+
+// errNoBackup stops an upgrade whose backup could not be saved
+// (storybackup.go): the story stays at its old schema until it can.
+var errNoBackup = userError("this story needs upgrading, but its backup could not be saved first (is the disk full?); it was left untouched")
 
 // newerSchema reports whether version is a schema this build doesn't know
 // yet (a later one, not an old one).
@@ -764,8 +712,8 @@ func canMigrate(version string) bool {
 }
 
 // ensureSchema brings db to currentSchemaVersion: migrating in place when it
-// can, creating the fresh schema when the database is empty or too old to
-// migrate.
+// can, creating the fresh schema when the database is empty. It never
+// removes anything: a database it can't upgrade is refused.
 func ensureSchema(db *sql.DB) error {
 	if _, err := db.Exec(
 		`CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
@@ -781,8 +729,7 @@ func ensureSchema(db *sql.DB) error {
 		return fmt.Errorf("read schema version: %w", err)
 	}
 
-	// A story saved by a newer Polaris is left alone: below, a version with
-	// no migration path gets the fresh schema, which would wipe it.
+	// A story saved by a newer Polaris is left alone.
 	if newerSchema(version) {
 		log.Printf("schema %s is newer than this version's %s; not opening", version, currentSchemaVersion)
 		return errNewerSchema
@@ -810,57 +757,58 @@ func ensureSchema(db *sql.DB) error {
 		return nil
 	}
 
-	// No migration path from here (brand new database, or one older than
-	// the oldest migration) — start fresh.
-	log.Printf("no migration path from schema %q to %q — creating fresh tables", version, currentSchemaVersion)
+	// No migration path from here. Only a brand new database gets the fresh
+	// schema: one that already holds tables (older than the oldest migration,
+	// or its version row is lost) is left exactly as it is. It used to be
+	// emptied and made anew, which threw the story away.
+	var tables int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name <> 'schema_meta' AND name NOT LIKE 'sqlite_%'`,
+	).Scan(&tables); err != nil {
+		return fmt.Errorf("read tables: %w", err)
+	}
+	if tables > 0 {
+		log.Printf("no migration path from schema %q to %q and the database holds %d tables; not opening", version, currentSchemaVersion, tables)
+		return errUnknownSchema
+	}
+	log.Printf("new database: creating schema %s", currentSchemaVersion)
 
-	for _, table := range tablesInDependencyOrder {
-		if _, err := db.Exec("DROP TABLE IF EXISTS " + table); err != nil {
-			return fmt.Errorf("drop table %s: %w", table, err)
-		}
-	}
-
-	if _, err := db.Exec(freshSchema); err != nil {
-		return fmt.Errorf("create schema: %w", err)
-	}
-	for _, stmt := range slices.Concat(worldSchemaStatements, loreSchemaStatements, creatureSchemaStatements) {
-		if _, err := db.Exec(stmt); err != nil {
-			return fmt.Errorf("create schema: %w", err)
-		}
-	}
-	later := [][]string{wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements, schema24Statements, {gearDescriptionSQL}, schema26Statements, schema27Statements, schema28Statements, schema29Statements, schema30Statements, schema31Statements, schema32Statements, schema33Statements, schema34Statements, schema35Statements, schema36Statements, schema37Statements, schema38Statements, schema39Statements, schema40Statements, schema41Statements, schema44Statements, schema45Statements, schema46Statements}
-	for _, stmt := range slices.Concat(later...) {
-		if _, err := db.Exec(stmt); err != nil {
-			return fmt.Errorf("create wiki schema: %w", err)
-		}
-	}
-	// Schema 28's loosened realm check, on one connection.
+	// All of it in one transaction: a server stopped halfway leaves an empty
+	// database, not a half-made one the check above would then refuse.
 	tx, err := db.Begin()
 	if err != nil {
 		return fmt.Errorf("create schema: %w", err)
 	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(freshSchema); err != nil {
+		return fmt.Errorf("create schema: %w", err)
+	}
+	later := [][]string{worldSchemaStatements, loreSchemaStatements, creatureSchemaStatements, wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements, schema24Statements, {gearDescriptionSQL}, schema26Statements, schema27Statements, schema28Statements, schema29Statements, schema30Statements, schema31Statements, schema32Statements, schema33Statements, schema34Statements, schema35Statements, schema36Statements, schema37Statements, schema38Statements, schema39Statements, schema40Statements, schema41Statements, schema44Statements, schema45Statements, schema46Statements}
+	for _, stmt := range slices.Concat(later...) {
+		if _, err := tx.Exec(stmt); err != nil {
+			return fmt.Errorf("create schema: %w", err)
+		}
+	}
+	// Schema 28's loosened realm check.
 	if err := widenRealms(tx); err != nil {
-		tx.Rollback()
 		return fmt.Errorf("create schema: %w", err)
 	}
 	// Schema 38's continents layer, the same way.
 	if err := widenFeatureLayers(tx); err != nil {
-		tx.Rollback()
 		return fmt.Errorf("create schema: %w", err)
 	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("create schema: %w", err)
-	}
-
-	if _, err := db.Exec(
+	if _, err := tx.Exec(
 		`INSERT INTO schema_meta (key, value) VALUES ('schema_version', ?)
 		 ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 		currentSchemaVersion,
 	); err != nil {
 		return fmt.Errorf("record schema version: %w", err)
 	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("create schema: %w", err)
+	}
 
-	log.Printf("schema reset complete, now at version %s", currentSchemaVersion)
+	log.Printf("schema created, now at version %s", currentSchemaVersion)
 	return nil
 }
 

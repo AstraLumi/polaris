@@ -189,6 +189,10 @@ func loadLayers(db *sql.DB) (layersPayload, error) {
 		}
 		out.Features = append(out.Features, f)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return out, err
+	}
 	rows.Close()
 	cells, err := db.Query(`SELECT feature_id, cell FROM feature_cells ORDER BY cell`)
 	if err != nil {
@@ -520,6 +524,10 @@ func resampleLayers(tx *sql.Tx, a, b planetGrid) error {
 		}
 		old[cell] = append(old[cell], r)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
 	rows.Close()
 	if _, err := tx.Exec(`DELETE FROM feature_cells`); err != nil {
 		return err
@@ -562,6 +570,10 @@ func resampleCellKinds(tx *sql.Tx, a, b planetGrid, k cellKinds) error {
 			return err
 		}
 		old[cell] = bm
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
 	}
 	rows.Close()
 	if _, err := tx.Exec(`DELETE FROM ` + k.table); err != nil {
@@ -692,6 +704,9 @@ func addSharesFact(db *sql.DB, a *wikiArticle, cellsOf string, arg any, k cellKi
 		if rows.Scan(&s.key, &s.n) == nil && k.keys[s.key] {
 			shares = append(shares, s)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("addSharesFact: reading rows: %v", err)
 	}
 	sort.Slice(shares, func(i, j int) bool {
 		if shares[i].n != shares[j].n {

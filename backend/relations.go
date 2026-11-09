@@ -112,6 +112,9 @@ func scanRelations(rows *sql.Rows) []relationOut {
 		r.ToPicture = uploadURL(r.ToPicture)
 		out = append(out, r)
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("scanRelations: reading rows: %v", err)
+	}
 	return out
 }
 

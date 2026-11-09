@@ -59,6 +59,9 @@ func characterFamily(db *sql.DB, root int64) (*familyPayload, error) {
 		adj[l.To] = append(adj[l.To], len(all))
 		all = append(all, l)
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("characterFamily: reading rows: %v", err)
+	}
 	rows.Close()
 
 	// Everyone connected to the root, nearest first, up to maxFamily.
@@ -97,6 +100,9 @@ func characterFamily(db *sql.DB, root int64) (*familyPayload, error) {
 			p.Born = ""
 		}
 		out.People = append(out.People, p)
+	}
+	if err := prow.Err(); err != nil {
+		log.Printf("characterFamily: reading rows: %v", err)
 	}
 	prow.Close()
 	sort.Slice(out.People, func(i, j int) bool { return out.People[i].ID < out.People[j].ID })
