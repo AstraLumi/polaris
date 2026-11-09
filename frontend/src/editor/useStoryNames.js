@@ -37,6 +37,8 @@ export function useStoryNames({ fetchItems = () => wikiApi.list() } = {}) {
   return {
     index,
     characters,
+    // After adding a name: waits out a load that began before it was added.
+    reload: () => (loading || Promise.resolve()).then(load),
     resolve: (name) => resolveSpeaker(index.value, name),
     typeLabel: (type) => (TYPE_LABELS[type] ? t(TYPE_LABELS[type]) : type),
   }

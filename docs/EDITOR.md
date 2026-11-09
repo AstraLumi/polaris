@@ -621,7 +621,9 @@ left-hand pages, by where they lie in the book, not by their number.
   click on the speaker opens a small box: the character (a picker), the
   speaker as shown and the manner, and "Back to plain text"; picking a
   character names the speaker after them unless the speaker is already
-  one of their names. Characters have no colour, so the speaker is drawn
+  one of their names. "New character" there makes one from a typed name
+  and gives them the line; the speaker stays as written and becomes their
+  nickname unless it's their name or parts of it (`speakerAlias`). Characters have no colour, so the speaker is drawn
   in the accent (darkened toward the ink on the paper). Prose Mode draws
   dialogues the same, so nothing is hidden. The page view draws them
   with the same classes (`.pm-dialogue`, `.pm-who`, `.pm-line`).

@@ -2,7 +2,20 @@
 // names a word being typed could start, the order they are offered in, and
 // "Name, manner:" lines. node frontend/tests/nameMatch.test.mjs
 import assert from 'node:assert/strict'
-import { fold, buildNameIndex, findMatches, resolveSpeaker, parseSpeakerLine, speakerLead } from '../src/editor/nameMatch.js'
+import { fold, buildNameIndex, findMatches, resolveSpeaker, parseSpeakerLine, speakerLead, speakerAlias } from '../src/editor/nameMatch.js'
+
+// A new character's other name: anything but their name or parts of it.
+assert.equal(speakerAlias('Mira Anne Vey', 'Mira Anne Vey'), '')
+assert.equal(speakerAlias('Mira Anne Vey', 'Mira'), '')
+assert.equal(speakerAlias('Mira Anne Vey', 'Anne'), '')
+assert.equal(speakerAlias('Mira Anne Vey', 'Vey'), '')
+assert.equal(speakerAlias('Mira Anne Vey', 'mirá  VEY'), '')
+assert.equal(speakerAlias('Anne-Marie O’Brien', "O'Brien"), '')
+assert.equal(speakerAlias('Mira Anne Vey', ''), '')
+assert.equal(speakerAlias('Mira Anne Vey', 'Vey Mira'), 'Vey Mira')
+assert.equal(speakerAlias('Mira Anne Vey', 'Mir'), 'Mir')
+assert.equal(speakerAlias('Mira Anne Vey', 'Captain Vey'), 'Captain Vey')
+assert.equal(speakerAlias('Mira Vey', ' Tired-Looking-Woman '), 'Tired-Looking-Woman')
 
 const items = [
   { type: 'character', id: 1, name: 'Mira Vey', nicknames: ['Mimi'], aliases: ['Mira Thorne'] },

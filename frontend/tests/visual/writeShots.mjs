@@ -10,7 +10,7 @@
 // Tab through the cells, a table pasted from Word) and in the page view
 // (rows breaking across pages, the header row repeated).
 //
-//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes|wrap|import|speaker|painter|pages|fonts|symbols|fontpicker|copy]
+//   node frontend/tests/visual/writeShots.mjs [--out <dir>] [--size 1400x900] [--only spell|tables|footnotes|boxes|wrap|import|speaker|newspeaker|painter|pages|fonts|symbols|fontpicker|copy]
 //
 // --only spell: just the spellchecker (underlines, the menu on a word, Add
 // to dictionary, Ignore, typing, the spelling panel, dark paper, off).
@@ -421,6 +421,14 @@ async function fakeApi(route) {
     return json(c)
   }
   if (path === '/stat-system') return json({ defs: [], settings: {} })
+  if (path === '/characters' && method === 'POST') {
+    const body = route.request().postData() || ''
+    const field = (k) => new RegExp(`name="${k}"\\r\\n\\r\\n([^\\r]*)`).exec(body)?.[1] || ''
+    const id = 100 + db.wiki.length
+    const nickname = field('nickname')
+    db.wiki.push({ type: 'character', id, name: field('name'), nicknames: nickname ? [nickname] : [], aliases: [] })
+    return json({ id, version_id: id })
+  }
   if (path === '/wiki') return json(db.wiki)
   if (path === '/spells') return json(db.spells)
   const article = /^\/wiki\/character\/(\d+)$/.exec(path)
@@ -713,6 +721,10 @@ async function shoot() {
   }
   if (option('only', '') === 'speaker') {
     await speakerShots(page, snap, checks)
+    return { saved, errors, checks }
+  }
+  if (option('only', '') === 'newspeaker') {
+    await newSpeakerShots(page, snap, checks)
     return { saved, errors, checks }
   }
   if (option('only', '') === 'wrap') {
@@ -1696,6 +1708,83 @@ async function painterShots(page, snap, checks) {
   await settle(page, 200)
   assert.equal(await page.$('.write-doc.is-painting'), null, 'Esc turns it off')
   checks.push('Esc cancels the painter')
+}
+
+// A Script Mode line's box: make a new character for a speaker who isn't one.
+async function newSpeakerShots(page, snap, checks) {
+  await page.goto(`${BASE}/write/1?chapter=14`)
+  await page.waitForSelector('.pm-dialogue .pm-who')
+  await settle(page, 800)
+  const box = '.speaker-options'
+  const attrs = () => page.evaluate(() => {
+    let a = null
+    window.__writeView.state.doc.descendants((n) => { if (n.type.name === 'dialogue') a = n.attrs })
+    return a
+  })
+  const open = async () => {
+    await page.click('.pm-dialogue .pm-who')
+    await page.waitForSelector(box)
+  }
+  const setSpeaker = async (name) => {
+    const input = `${box} .row input >> nth=0`
+    await page.fill(input, name)
+    await page.locator(input).blur()
+  }
+  const startNew = async () => {
+    await page.click(`${box} .pick .btn`)
+    await page.waitForSelector(`${box} form input`)
+  }
+  await open()
+  await page.selectOption(`${box} select`, '')
+  await setSpeaker('Tired-Looking-Woman')
+  await snap('14a_new_speaker_button.png')
+  await startNew()
+  assert.equal(await page.inputValue(`${box} form input`), 'Tired-Looking-Woman', 'starts from the line’s name')
+  await page.fill(`${box} form input`, 'Lena Hart')
+  await page.waitForSelector(`${box} .note`)
+  await snap('14b_new_speaker_alias.png')
+  await page.click(`${box} form button[type=submit]`)
+  await page.waitForSelector(`${box} select`)
+  await settle(page, 300)
+  let a = await attrs()
+  assert.equal(a.speaker, 'Tired-Looking-Woman', 'the speaker stays as written')
+  assert.ok(a.character > 2, 'the line is the new character’s')
+  assert.equal(await page.inputValue(`${box} select`), String(a.character), 'the picker shows them')
+  assert.deepEqual(db.wiki.at(-1).nicknames, ['Tired-Looking-Woman'], 'a different line name is kept as a nickname')
+  checks.push('new character with another name: linked, line name kept as nickname')
+  await snap('14c_new_speaker_done.png')
+
+  await page.selectOption(`${box} select`, '')
+  await setSpeaker('Bram')
+  await startNew()
+  await page.fill(`${box} form input`, 'Bram Oswin Tull')
+  assert.equal(await page.locator(`${box} .note`).count(), 0, 'no nickname note for part of the name')
+  await page.keyboard.press('Enter')
+  await page.waitForSelector(`${box} select`)
+  await settle(page, 300)
+  a = await attrs()
+  assert.equal(db.wiki.at(-1).name, 'Bram Oswin Tull')
+  assert.deepEqual(db.wiki.at(-1).nicknames, [], 'part of the name is no nickname')
+  assert.equal(a.character, db.wiki.at(-1).id)
+  checks.push('new character whose name holds the line name: no nickname')
+
+  const before = db.wiki.length
+  await page.selectOption(`${box} select`, '')
+  await startNew()
+  await page.fill(`${box} form input`, 'Mimi')
+  await page.waitForSelector(`${box} .note`)
+  await page.keyboard.press('Enter')
+  await page.waitForSelector(`${box} select`)
+  await settle(page, 300)
+  a = await attrs()
+  assert.equal(a.character, 1, 'a name already taken goes to that character')
+  assert.equal(db.wiki.length, before, 'and makes no duplicate')
+  checks.push('a name that is already a character links instead of duplicating')
+
+  await startNew()
+  await page.keyboard.press('Escape')
+  await page.waitForSelector(`${box} select`)
+  checks.push('Esc leaves the new character form, the box stays open')
 }
 
 // "Tag character": select a quote in a prose paragraph, right-click, pick a

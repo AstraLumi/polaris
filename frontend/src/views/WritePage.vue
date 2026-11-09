@@ -121,6 +121,7 @@
           :attrs="speakerNode.attrs"
           :characters="names.characters.value"
           :resolve="names.resolve"
+          :create-character="createSpeakerCharacter"
           :top="speaker.top"
           :left="speaker.left"
           @change="(patch) => exec(setDialogueAttrs(speaker.pos, patch))"
@@ -262,7 +263,7 @@ import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { EditorState, NodeSelection, TextSelection } from 'prosemirror-state'
 import { EditorView } from 'prosemirror-view'
 import { t, tr, locale } from '../i18n'
-import { chaptersApi, spellsApi } from '../api'
+import { chaptersApi, spellsApi, createCharacter } from '../api'
 import { activeStoryId } from '../stories'
 import { chapterIndex, loadChapters } from '../chapters'
 import { pageTitle } from '../navigation'
@@ -1452,6 +1453,11 @@ function openSpeaker(pos) {
 function closeSpeaker() {
   speaker.value = null
   view?.focus()
+}
+async function createSpeakerCharacter(name, nickname) {
+  const { id } = await createCharacter({ name, nickname })
+  await names.reload()
+  return id
 }
 function unwrapSpeaker() {
   const pos = speaker.value?.pos

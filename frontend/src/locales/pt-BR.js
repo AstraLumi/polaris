@@ -2678,4 +2678,6 @@ export default {
   "{font} has none of these, so here is everything it has.": "{font} não tem nenhum destes, então aqui está tudo o que ela tem.",
   "{n} character in {font}": "{n} caractere em {font}",
   "{n} characters in {font}": "{n} caracteres em {font}",
+  "“{name}” will be kept as their nickname.": "“{name}” ficará como apelido do personagem.",
+  "Already a character: the line will go to {name}.": "Já é um personagem: a fala irá para {name}.",
 }

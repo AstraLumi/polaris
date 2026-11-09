@@ -114,6 +114,19 @@ export function resolveSpeaker(index, speaker) {
   return { id: hit[0].id, name: hit[0].name }
 }
 
+const nameWords = (s) => fold(s).replace(/’/g, "'").match(/[\p{L}\p{N}]+(?:'[\p{L}\p{N}]+)*/gu) || []
+
+// The other name to keep for a character called `name` who speaks a line as
+// `speaker`, or '' when there is none: the speaker is their name, or just
+// parts of it in order ("Mira" or "Vey" for "Mira Anne Vey").
+export function speakerAlias(name, speaker) {
+  const said = String(speaker ?? '').trim().replace(/\s+/g, ' ')
+  const words = nameWords(said)
+  let found = 0
+  for (const w of nameWords(name)) if (w === words[found]) found++
+  return found === words.length ? '' : said
+}
+
 // A Script Mode line start: "Name:" or "Name, manner:" (what comes before
 // the space that converts it). Gives { speaker, manner } or null. A speaker
 // is up to six words and 60 characters; the manner up to 200.
