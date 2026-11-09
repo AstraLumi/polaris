@@ -9,9 +9,13 @@ export const PUBLIC_FILES = ['/', '/site.webmanifest', '/favicon.svg', '/favicon
 
 // What the service worker keeps at install: the entry's scripts and styles
 // and everything they import, the writing page's chunk and what it imports,
-// and the spellchecker's worker. Other pages' chunks are kept when they
-// first load.
-export function precacheList(bundle, { pages = [/\/views\/WritePage\.vue$/], workers = [/(^|\/)spell\.worker-[^/]*\.js$/] } = {}) {
+// the spellchecker's worker and the interface's languages (i18n.js fetches
+// the one in use: offline it must be there, or the page turns English).
+// Other pages' chunks are kept when they first load.
+export function precacheList(
+  bundle,
+  { pages = [/\/views\/WritePage\.vue$/], workers = [/(^|\/)spell\.worker-[^/]*\.js$/, /(^|\/)(pt-BR|es-ES|es-419)-[^/]*\.js$/] } = {},
+) {
   const files = Object.values(bundle)
   const chunks = new Map(files.filter((f) => f.type === 'chunk').map((c) => [c.fileName, c]))
   const out = new Set()

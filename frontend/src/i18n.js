@@ -9,9 +9,6 @@
 // Plurals pick between two keys: tn('{n} event', '{n} events', n, { n }).
 
 import { ref } from 'vue'
-import ptBR from './locales/pt-BR'
-import esES from './locales/es-ES'
-import es419 from './locales/es-419'
 
 export const LOCALES = [
   { id: 'en-US', name: 'English (US)' },
@@ -22,7 +19,14 @@ export const LOCALES = [
 
 export const DEFAULT_LOCALE = 'en-US'
 const KEY = 'polaris-locale'
-const catalogs = { 'pt-BR': ptBR, 'es-ES': esES, 'es-419': es419 }
+// A language's text is only fetched when it is the one in use: each
+// catalog is a file of its own, as large as a good part of the app.
+const loaders = {
+  'pt-BR': () => import('./locales/pt-BR.js'),
+  'es-ES': () => import('./locales/es-ES.js'),
+  'es-419': () => import('./locales/es-419.js'),
+}
+const catalogs = {}
 
 export const locale = ref(DEFAULT_LOCALE)
 
@@ -42,8 +46,18 @@ export function tn(one, other, n, params) {
 // The translation checker finds these the same way it finds t() calls.
 export const tr = (s) => s
 
-export function applyLocale(id) {
+// Resolves once the language's text is loaded and in use. When it can't be
+// fetched (offline, and never used on this device) the interface stays in
+// English rather than not showing at all.
+export async function applyLocale(id) {
   const next = LOCALES.some((l) => l.id === id) ? id : DEFAULT_LOCALE
+  if (loaders[next] && !catalogs[next]) {
+    try {
+      catalogs[next] = (await loaders[next]()).default
+    } catch (e) {
+      /* English until it can be loaded */
+    }
+  }
   locale.value = next
   document.documentElement.lang = next
   return next
@@ -72,8 +86,8 @@ export function loadSavedLocale() {
   return applyLocale(id || guessLocale())
 }
 
-export function saveLocale(id) {
-  const next = applyLocale(id)
+export async function saveLocale(id) {
+  const next = await applyLocale(id)
   try {
     localStorage.setItem(KEY, next)
   } catch (e) {

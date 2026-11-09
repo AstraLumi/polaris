@@ -99,7 +99,7 @@ func newRouter(mgr *storyManager, staticFS fs.FS) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/", spaHandler(staticFS))
 	mgr.registerRoutes(mux)
-	return guard(mux, allowedHostsFromEnv()) // security.go
+	return guard(compress(mux), allowedHostsFromEnv()) // security.go, compress.go
 }
 
 // storyRoutes is one story's API. Every handler is bound to that story's
@@ -358,6 +358,15 @@ func spaHandler(staticFS fs.FS) http.Handler {
 			// Folders count as missing too: /assets is both a page and the
 			// folder of built scripts, and must load the page.
 			if info, err := fs.Stat(staticFS, path); err != nil || info.IsDir() {
+				// A built script or style that isn't there is missing, not a
+				// page: a tab left open across a release asks for the old
+				// build's files, and must be told so (the app then reloads,
+				// router.js) rather than be handed the page as a script.
+				if err != nil && strings.HasPrefix(path, "assets/") && strings.Contains(path[len("assets/"):], ".") {
+					w.Header().Set("Cache-Control", "no-cache")
+					http.NotFound(w, r)
+					return
+				}
 				w.Header().Set("Cache-Control", "no-cache")
 				r2 := r.Clone(r.Context())
 				r2.URL.Path = "/"

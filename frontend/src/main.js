@@ -8,7 +8,6 @@ import { trackRecent } from './recentTracker'
 import { registerServiceWorker } from './offline/index.js'
 
 loadSavedTheme()
-loadSavedLocale()
 
 // Every dialog closes on a click on its backdrop (.overlay @click.self). A
 // press that starts inside the dialog (selecting text, say) and is released
@@ -27,7 +26,9 @@ document.addEventListener(
 // Remember the items the writer opens (the search and the home page offer them).
 trackRecent(router)
 
-createApp(App).use(router).use(i18nPlugin).mount('#app')
+// The page shows once its language is loaded (i18n.js), so it never
+// appears in English first.
+loadSavedLocale().finally(() => createApp(App).use(router).use(i18nPlugin).mount('#app'))
 
 // Offline writing (docs/EDITOR.md): the app's files kept by a service worker.
 if (import.meta.env.PROD) registerServiceWorker()

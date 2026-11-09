@@ -50,13 +50,18 @@ func TestSPAHandlerCacheHeaders(t *testing.T) {
 		"/assets":            "no-cache",
 		"/sw.js":             "no-cache",
 		"/assets/index-1.js": "public, max-age=31536000, immutable",
-		"/assets/gone-2.js":  "no-cache", // the page, not a script: never kept
+		"/assets/gone-2.js":  "no-cache", // missing (404, below): never kept
 		"/favicon.svg":       "",
 	} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 		if got := rec.Header().Get("Cache-Control"); got != want {
 			t.Errorf("%s: Cache-Control %q, want %q", path, got, want)
+		}
+		// A built file that is gone is missing, not the page served as a
+		// script; every other unknown path is a page of the app.
+		if want := map[bool]int{true: 404, false: 200}[path == "/assets/gone-2.js"]; rec.Code != want {
+			t.Errorf("%s: %d, want %d", path, rec.Code, want)
 		}
 	}
 }

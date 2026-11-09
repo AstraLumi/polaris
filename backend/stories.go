@@ -266,10 +266,32 @@ func iconValue(id, stored string) string {
 func (m *storyManager) info(id, name, icon, created string) storyInfo {
 	si := storyInfo{ID: id, Name: name, Icon: iconValue(id, icon), CreatedAt: created}
 	m.reg.QueryRow(`SELECT COALESCE(last_exported_at, '') FROM stories WHERE id = ?`, id).Scan(&si.LastExportedAt)
-	if a, err := m.open(id); err == nil {
-		a.db.QueryRow(`SELECT COUNT(*) FROM characters`).Scan(&si.Characters)
-	}
+	si.Characters = m.characterCount(id)
 	return si
+}
+
+// characterCount is for the picker. A story that isn't open is only looked
+// into, on a connection of its own that can't write: listing the stories
+// must not open them all (each would be upgraded and backed up there and
+// then, and kept open for good).
+func (m *storyManager) characterCount(id string) (n int) {
+	m.mu.Lock()
+	a := m.apps[id]
+	m.mu.Unlock()
+	if a != nil {
+		a.db.QueryRow(`SELECT COUNT(*) FROM characters`).Scan(&n)
+		return n
+	}
+	if _, err := os.Stat(m.dbPathFor(id)); err != nil {
+		return 0
+	}
+	db, err := sql.Open("sqlite", m.dbPathFor(id)+"?_pragma=query_only(1)&_pragma=trusted_schema(0)&_pragma=busy_timeout(2000)")
+	if err != nil {
+		return 0
+	}
+	defer db.Close()
+	db.QueryRow(`SELECT COUNT(*) FROM characters`).Scan(&n)
+	return n
 }
 
 func (m *storyManager) list() ([]storyInfo, error) {
@@ -595,30 +617,62 @@ func (m *storyManager) storyHandler(w http.ResponseWriter, r *http.Request) {
 // The story's handlers write picture URLs as "/uploads/<file>". Here, where
 // the story is known, they become "/uploads/s/<id>/<file>" so the browser asks
 // for the right story's file. Only JSON string values that start with that
-// prefix are touched.
+// prefix are touched: a JSON answer is held until it is whole, anything else
+// (a book's export, an error's text) goes straight out as it is written.
 type uploadsRewriter struct {
 	w           http.ResponseWriter
 	replacement []byte
 	status      int
+	decided     bool
+	direct      bool // not JSON: written through
 	buf         bytes.Buffer
 }
 
 func (u *uploadsRewriter) Header() http.Header { return u.w.Header() }
-func (u *uploadsRewriter) WriteHeader(code int) {
-	if u.status == 0 {
-		u.status = code
-	}
-}
-func (u *uploadsRewriter) Write(b []byte) (int, error) { return u.buf.Write(b) }
 
-func (u *uploadsRewriter) finish() {
-	body := u.buf.Bytes()
-	if strings.HasPrefix(u.w.Header().Get("Content-Type"), "application/json") {
-		body = bytes.ReplaceAll(body, []byte(`"/uploads/`), u.replacement)
-	}
+func (u *uploadsRewriter) decide() {
+	u.decided = true
 	if u.status == 0 {
 		u.status = http.StatusOK
 	}
+	if !strings.HasPrefix(u.w.Header().Get("Content-Type"), "application/json") {
+		u.direct = true
+		u.w.WriteHeader(u.status)
+	}
+}
+
+func (u *uploadsRewriter) WriteHeader(code int) {
+	if u.decided {
+		return
+	}
+	u.status = code
+	u.decide()
+}
+
+func (u *uploadsRewriter) Write(b []byte) (int, error) {
+	if !u.decided {
+		u.decide()
+	}
+	if u.direct {
+		return u.w.Write(b)
+	}
+	return u.buf.Write(b)
+}
+
+func (u *uploadsRewriter) Flush() {
+	if f, ok := u.w.(http.Flusher); ok && u.direct {
+		f.Flush()
+	}
+}
+
+func (u *uploadsRewriter) finish() {
+	if !u.decided {
+		u.decide()
+	}
+	if u.direct {
+		return
+	}
+	body := bytes.ReplaceAll(u.buf.Bytes(), []byte(`"/uploads/`), u.replacement)
 	u.w.Header().Del("Content-Length")
 	u.w.WriteHeader(u.status)
 	u.w.Write(body)
