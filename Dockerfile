@@ -16,9 +16,7 @@ ARG TARGETARCH
 WORKDIR /app/backend
 COPY backend/ ./
 COPY --from=frontend-build /app/frontend/dist ./static
-# go.sum should be committed; if it isn't yet, generate it here.
-RUN if [ ! -f go.sum ]; then go mod tidy; fi \
-    && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o polaris .
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o polaris .
 
 # --- Stage 3: minimal runtime image ---
 FROM alpine:3.24

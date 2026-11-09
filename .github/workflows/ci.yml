@@ -12,12 +12,23 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.27'
-      - name: Tidy modules if go.sum is missing
-        working-directory: backend
-        run: if [ ! -f go.sum ]; then go mod tidy; fi
       - name: Vet and test
         working-directory: backend
         run: go vet ./... && go test -count=1 ./...
+
+  # The same tests with Go's race detector, which sees two requests touching
+  # the same memory at once (the caches, the story manager). Slower, and a
+  # job of its own so its verdict is read apart from the tests'.
+  race:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27'
+      - name: Tests with the race detector
+        working-directory: backend
+        run: go test -race -count=1 ./...
 
   # Known vulnerabilities in what Polaris is built from. Only the code the
   # backend really calls counts; for the frontend, only what ships.
@@ -48,15 +59,6 @@ jobs:
       - name: Install and build
         working-directory: frontend
         run: npm ci && npm run build
-      - name: Translation coverage and layout tests
+      - name: Tests and translation coverage
         working-directory: frontend
-        run: |
-          node tests/i18n.check.mjs
-          node tests/timelineLayout.test.mjs
-          node tests/markdown.test.mjs
-          node tests/markdownEdit.test.mjs
-          node tests/graphLayout.test.mjs
-          node tests/familyLayout.test.mjs
-          node tests/dateDigits.test.mjs
-          node tests/storyTime.test.mjs
-          node tests/formulaBlocks.test.mjs
+        run: npm test

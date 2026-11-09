@@ -11,8 +11,27 @@ function apiError(message) {
   return new Error(t(String(message).trim()))
 }
 
+// Every call here goes through this one fetch, so they all fail the same
+// way: with no connection (or the server down) the error says so in the
+// reader's language instead of the browser's "Failed to fetch", and a read
+// that gets no answer gives up after a minute rather than leave a page
+// loading for ever. Saves and uploads are never timed: a large picture on a
+// slow line may rightly take longer.
+const READ_TIMEOUT = 60000
+
+async function send(url, options = {}) {
+  const read = !options.method || options.method === 'GET'
+  try {
+    return await fetch(url, read && !options.signal ? { ...options, signal: AbortSignal.timeout(READ_TIMEOUT) } : options)
+  } catch (e) {
+    if (e?.name === 'AbortError') throw e // the caller's own signal
+    const slow = e?.name === 'TimeoutError'
+    throw apiError(slow ? tr('the server took too long to answer') : tr("can't reach the server"))
+  }
+}
+
 export async function fetchCharacters() {
-  const res = await fetch(`${BASE}/characters`)
+  const res = await send(`${BASE}/characters`)
   if (!res.ok) throw apiError('failed to load characters')
   return res.json()
 }
@@ -20,7 +39,7 @@ export async function fetchCharacters() {
 // Every version's height, gender, age and body type, and the body types'
 // outlines, for the height chart.
 export async function fetchCharacterHeights() {
-  const res = await fetch(`${BASE}/characters/heights`)
+  const res = await send(`${BASE}/characters/heights`)
   if (!res.ok) throw apiError('failed to load characters')
   return res.json()
 }
@@ -37,13 +56,13 @@ export async function createCharacter({ name, nickname, level, className, subcla
   formData.append('version_reference', versionReference || '')
   if (picture) formData.append('picture', picture)
 
-  const res = await fetch(`${BASE}/characters`, { method: 'POST', body: formData })
+  const res = await send(`${BASE}/characters`, { method: 'POST', body: formData })
   if (!res.ok) throw apiError('failed to create character')
   return res.json()
 }
 
 export async function deleteCharacters(ids) {
-  const res = await fetch(`${BASE}/characters`, {
+  const res = await send(`${BASE}/characters`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ids }),
@@ -53,19 +72,19 @@ export async function deleteCharacters(ids) {
 }
 
 export async function fetchCurrentVersion(characterId) {
-  const res = await fetch(`${BASE}/characters/${characterId}/current`)
+  const res = await send(`${BASE}/characters/${characterId}/current`)
   if (!res.ok) throw apiError('failed to load current version')
   return res.json()
 }
 
 export async function fetchVersions(characterId) {
-  const res = await fetch(`${BASE}/characters/${characterId}/versions`)
+  const res = await send(`${BASE}/characters/${characterId}/versions`)
   if (!res.ok) throw apiError('failed to load versions')
   return res.json()
 }
 
 export async function createVersion(characterId, { versionDate, versionReference, cloneFromVersionId, chapterId }) {
-  const res = await fetch(`${BASE}/characters/${characterId}/versions`, {
+  const res = await send(`${BASE}/characters/${characterId}/versions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -80,13 +99,13 @@ export async function createVersion(characterId, { versionDate, versionReference
 }
 
 export async function fetchVersion(versionId) {
-  const res = await fetch(`${BASE}/versions/${versionId}`)
+  const res = await send(`${BASE}/versions/${versionId}`)
   if (!res.ok) throw apiError('failed to load version')
   return res.json()
 }
 
 export async function updateVersion(versionId, formData) {
-  const res = await fetch(`${BASE}/versions/${versionId}`, { method: 'PUT', body: formData })
+  const res = await send(`${BASE}/versions/${versionId}`, { method: 'PUT', body: formData })
   if (!res.ok) {
     const message = await res.text()
     throw apiError(message || 'failed to save version')
@@ -95,7 +114,7 @@ export async function updateVersion(versionId, formData) {
 }
 
 export async function deleteVersion(versionId) {
-  const res = await fetch(`${BASE}/versions/${versionId}`, { method: 'DELETE' })
+  const res = await send(`${BASE}/versions/${versionId}`, { method: 'DELETE' })
   if (!res.ok) {
     const message = await res.text()
     throw apiError(message || 'failed to delete version')
@@ -104,7 +123,7 @@ export async function deleteVersion(versionId) {
 }
 
 export async function setCurrentVersion(versionId) {
-  const res = await fetch(`${BASE}/versions/${versionId}/set-current`, { method: 'POST' })
+  const res = await send(`${BASE}/versions/${versionId}/set-current`, { method: 'POST' })
   if (!res.ok) throw apiError('failed to set current version')
   return res.json()
 }
@@ -114,19 +133,19 @@ export async function setCurrentVersion(versionId) {
 export const statSystemApi = {
   // The saved system, with how much each stat is in use.
   async get() {
-    const res = await fetch(`${BASE}/stat-system`)
+    const res = await send(`${BASE}/stat-system`)
     if (!res.ok) throw apiError('failed to load stats')
     return res.json()
   },
   async defaults() {
-    const res = await fetch(`${BASE}/stat-system/defaults`)
+    const res = await send(`${BASE}/stat-system/defaults`)
     if (!res.ok) throw apiError('failed to load stats')
     return res.json()
   },
   // Throws an error carrying .issues (one per problem) when something in it
   // is wrong.
   async save(system) {
-    const res = await fetch(`${BASE}/stat-system`, {
+    const res = await send(`${BASE}/stat-system`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(system),
@@ -142,7 +161,7 @@ export const statSystemApi = {
   // Checks an unsaved system and works it out for a sample character:
   // { issues, points, values }.
   async preview(system, sample) {
-    const res = await fetch(`${BASE}/stat-system/preview`, {
+    const res = await send(`${BASE}/stat-system/preview`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...system, sample }),
@@ -157,13 +176,13 @@ export const statSystemApi = {
 function simpleAssetApi(basePath) {
   return {
     async fetch(id) {
-      const res = await fetch(`${BASE}/${basePath}/${id}`)
+      const res = await send(`${BASE}/${basePath}/${id}`)
       if (!res.ok) throw apiError(`failed to load ${basePath}`)
       return res.json()
     },
     // extra: more fields for the kinds that have them ({ kingdom_id } for races).
     async create(name, modifiers, extra = {}) {
-      const res = await fetch(`${BASE}/${basePath}`, {
+      const res = await send(`${BASE}/${basePath}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, modifiers, ...extra }),
@@ -172,7 +191,7 @@ function simpleAssetApi(basePath) {
       return res.json()
     },
     async update(id, name, modifiers, extra = {}) {
-      const res = await fetch(`${BASE}/${basePath}/${id}`, {
+      const res = await send(`${BASE}/${basePath}/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, modifiers, ...extra }),
@@ -181,7 +200,7 @@ function simpleAssetApi(basePath) {
       return res.json()
     },
     async delete(id) {
-      const res = await fetch(`${BASE}/${basePath}/${id}`, { method: 'DELETE' })
+      const res = await send(`${BASE}/${basePath}/${id}`, { method: 'DELETE' })
       if (!res.ok) throw apiError(`failed to delete ${basePath}`)
       return res.json()
     },
@@ -194,12 +213,12 @@ export const classesApi = {
   async setIcon(id, file) {
     const fd = new FormData()
     fd.append('icon', file)
-    const res = await fetch(`${BASE}/classes/${id}/icon`, { method: 'PUT', body: fd })
+    const res = await send(`${BASE}/classes/${id}/icon`, { method: 'PUT', body: fd })
     if (!res.ok) throw apiError((await res.text()).trim() || 'failed to save the icon')
     return res.json()
   },
   async clearIcon(id) {
-    const res = await fetch(`${BASE}/classes/${id}/icon`, { method: 'DELETE' })
+    const res = await send(`${BASE}/classes/${id}/icon`, { method: 'DELETE' })
     if (!res.ok) throw apiError((await res.text()).trim() || 'failed to remove the icon')
     return res.json()
   },
@@ -209,12 +228,12 @@ export const bodyTypesApi = simpleAssetApi('body-types')
 
 export const specializationsApi = {
   async fetch(id) {
-    const res = await fetch(`${BASE}/specializations/${id}`)
+    const res = await send(`${BASE}/specializations/${id}`)
     if (!res.ok) throw apiError('failed to load specialization')
     return res.json()
   },
   async create(name, classId, modifiers, kingdomId = null) {
-    const res = await fetch(`${BASE}/specializations`, {
+    const res = await send(`${BASE}/specializations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, class_id: classId, modifiers, kingdom_id: kingdomId }),
@@ -223,7 +242,7 @@ export const specializationsApi = {
     return res.json()
   },
   async update(id, name, classId, modifiers, kingdomId = null) {
-    const res = await fetch(`${BASE}/specializations/${id}`, {
+    const res = await send(`${BASE}/specializations/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, class_id: classId, modifiers, kingdom_id: kingdomId }),
@@ -232,7 +251,7 @@ export const specializationsApi = {
     return res.json()
   },
   async delete(id) {
-    const res = await fetch(`${BASE}/specializations/${id}`, { method: 'DELETE' })
+    const res = await send(`${BASE}/specializations/${id}`, { method: 'DELETE' })
     if (!res.ok) throw apiError('failed to delete specialization')
     return res.json()
   },
@@ -240,12 +259,12 @@ export const specializationsApi = {
 
 export const subclassesApi = {
   async fetch(id) {
-    const res = await fetch(`${BASE}/subclasses/${id}`)
+    const res = await send(`${BASE}/subclasses/${id}`)
     if (!res.ok) throw apiError('failed to load subclass')
     return res.json()
   },
   async create(name, classIds, modifiers) {
-    const res = await fetch(`${BASE}/subclasses`, {
+    const res = await send(`${BASE}/subclasses`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, class_ids: classIds, modifiers }),
@@ -254,7 +273,7 @@ export const subclassesApi = {
     return res.json()
   },
   async update(id, name, classIds, modifiers) {
-    const res = await fetch(`${BASE}/subclasses/${id}`, {
+    const res = await send(`${BASE}/subclasses/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, class_ids: classIds, modifiers }),
@@ -263,7 +282,7 @@ export const subclassesApi = {
     return res.json()
   },
   async delete(id) {
-    const res = await fetch(`${BASE}/subclasses/${id}`, { method: 'DELETE' })
+    const res = await send(`${BASE}/subclasses/${id}`, { method: 'DELETE' })
     if (!res.ok) throw apiError('failed to delete subclass')
     return res.json()
   },
@@ -275,7 +294,7 @@ export const subclassesApi = {
 // preview — it calls the real backend formulas (including modifiers)
 // instead of duplicating them in JS.
 export async function fetchComputePreview(payload) {
-  const res = await fetch(`${BASE}/compute-preview`, {
+  const res = await send(`${BASE}/compute-preview`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -285,19 +304,19 @@ export async function fetchComputePreview(payload) {
 }
 // Slim list of every Map location, for the Born in / Nation pickers.
 export async function fetchLocationOptions() {
-  const res = await fetch(`${BASE}/location-options`)
+  const res = await send(`${BASE}/location-options`)
   if (!res.ok) return []
   return res.json()
 }
 
 export async function fetchSettings() {
-  const res = await fetch(`${BASE}/settings`)
+  const res = await send(`${BASE}/settings`)
   if (!res.ok) throw apiError('failed to load settings')
   return res.json()
 }
 
 export async function saveSettings(payload) {
-  const res = await fetch(`${BASE}/settings`, {
+  const res = await send(`${BASE}/settings`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -316,7 +335,7 @@ void [
 
 // The story's blood types: [{ name, note }].
 export async function saveBloodTypes(list) {
-  const res = await fetch(`${BASE}/settings/blood-types`, {
+  const res = await send(`${BASE}/settings/blood-types`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(list),
@@ -326,7 +345,7 @@ export async function saveBloodTypes(list) {
 }
 
 export async function saveSeasons(payload) {
-  const res = await fetch(`${BASE}/settings/seasons`, {
+  const res = await send(`${BASE}/settings/seasons`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -336,7 +355,7 @@ export async function saveSeasons(payload) {
 }
 
 export async function fetchHome() {
-  const res = await fetch(`${BASE}/home`)
+  const res = await send(`${BASE}/home`)
   if (!res.ok) throw apiError('failed to load home')
   return res.json()
 }
@@ -344,41 +363,41 @@ export async function fetchHome() {
 // For every asset, how many characters use it (current versions) and its
 // stat bonuses: { uses: { kind: { id: n } }, modifiers: { kind: { id: { stat: value } } } }.
 export async function fetchAssetSummary() {
-  const res = await fetch(`${BASE}/assets/summary`)
+  const res = await send(`${BASE}/assets/summary`)
   if (!res.ok) throw apiError('failed to load the assets')
   return res.json()
 }
 
 export async function fetchCatalogs() {
   const [classes, subclasses, specializations, races, bodyTypes, locations] = await Promise.all([
-    fetch(`${BASE}/classes`).then((r) => (r.ok ? r.json() : [])),
-    fetch(`${BASE}/subclasses`).then((r) => (r.ok ? r.json() : [])),
-    fetch(`${BASE}/specializations`).then((r) => (r.ok ? r.json() : [])),
-    fetch(`${BASE}/races`).then((r) => (r.ok ? r.json() : [])),
-    fetch(`${BASE}/body-types`).then((r) => (r.ok ? r.json() : [])),
-    fetch(`${BASE}/locations`).then((r) => (r.ok ? r.json() : [])),
+    send(`${BASE}/classes`).then((r) => (r.ok ? r.json() : [])),
+    send(`${BASE}/subclasses`).then((r) => (r.ok ? r.json() : [])),
+    send(`${BASE}/specializations`).then((r) => (r.ok ? r.json() : [])),
+    send(`${BASE}/races`).then((r) => (r.ok ? r.json() : [])),
+    send(`${BASE}/body-types`).then((r) => (r.ok ? r.json() : [])),
+    send(`${BASE}/locations`).then((r) => (r.ok ? r.json() : [])),
   ])
   return { classes, subclasses, specializations, races, bodyTypes, locations }
 }
 
 export const spellsApi = {
   async list() {
-    const res = await fetch(`${BASE}/spells`)
+    const res = await send(`${BASE}/spells`)
     if (!res.ok) throw apiError('failed to load spells')
     return res.json()
   },
   async create(formData) {
-    const res = await fetch(`${BASE}/spells`, { method: 'POST', body: formData })
+    const res = await send(`${BASE}/spells`, { method: 'POST', body: formData })
     if (!res.ok) throw apiError((await res.text()) || 'failed to create spell')
     return res.json()
   },
   async update(id, formData) {
-    const res = await fetch(`${BASE}/spells/${id}`, { method: 'PUT', body: formData })
+    const res = await send(`${BASE}/spells/${id}`, { method: 'PUT', body: formData })
     if (!res.ok) throw apiError((await res.text()) || 'failed to update spell')
     return res.json()
   },
   async delete(id) {
-    const res = await fetch(`${BASE}/spells/${id}`, { method: 'DELETE' })
+    const res = await send(`${BASE}/spells/${id}`, { method: 'DELETE' })
     if (!res.ok) throw apiError('failed to delete spell')
     return res.json()
   },
@@ -404,22 +423,22 @@ export function buildSpellFormData({ name, level, source, mpCost, hpCost, origin
 // Gear: created on Character Assets, equipped from a character's Gear tab.
 export const gearApi = {
   async list() {
-    const res = await fetch(`${BASE}/gear`)
+    const res = await send(`${BASE}/gear`)
     if (!res.ok) throw apiError('failed to load gear')
     return res.json()
   },
   async create(formData) {
-    const res = await fetch(`${BASE}/gear`, { method: 'POST', body: formData })
+    const res = await send(`${BASE}/gear`, { method: 'POST', body: formData })
     if (!res.ok) throw apiError((await res.text()).trim() || 'failed to create gear')
     return res.json()
   },
   async update(id, formData) {
-    const res = await fetch(`${BASE}/gear/${id}`, { method: 'PUT', body: formData })
+    const res = await send(`${BASE}/gear/${id}`, { method: 'PUT', body: formData })
     if (!res.ok) throw apiError((await res.text()).trim() || 'failed to update gear')
     return res.json()
   },
   async delete(id) {
-    const res = await fetch(`${BASE}/gear/${id}`, { method: 'DELETE' })
+    const res = await send(`${BASE}/gear/${id}`, { method: 'DELETE' })
     if (!res.ok) throw apiError('failed to delete gear')
     return res.json()
   },
@@ -440,7 +459,7 @@ export function buildGearFormData({ name, slot, weight, modifiers, description }
 // Saves what belongs to the character rather than to one version: birth
 // date, blood type, birthplace and tags. Returns the current version.
 export async function updateSharedCharacter(characterId, payload) {
-  const res = await fetch(`${BASE}/characters/${characterId}/shared`, {
+  const res = await send(`${BASE}/characters/${characterId}/shared`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -482,7 +501,7 @@ export function buildVersionFormData(form, build, specialBases, pictureFile, spe
 // batched paint/erase. Errors carry the server's message so forms can show
 // things like "that color is already used by another kingdom".
 async function mapRequest(path, options, fallback) {
-  const res = await fetch(`${BASE}${path}`, options)
+  const res = await send(`${BASE}${path}`, options)
   if (!res.ok) throw apiError((await res.text()).trim() || fallback)
   return res.json()
 }
@@ -545,7 +564,7 @@ export const layersApi = {
   create: (f) => mapRequest('/planet/features', jsonBody('POST', f), 'failed to save the feature'),
   update: (id, f) => mapRequest(`/planet/features/${id}`, jsonBody('PUT', f), 'failed to save the feature'),
   async remove(id) {
-    const res = await fetch(`${BASE}/planet/features/${id}`, { method: 'DELETE' })
+    const res = await send(`${BASE}/planet/features/${id}`, { method: 'DELETE' })
     if (!res.ok) throw apiError((await res.text()).trim() || 'failed to delete the feature')
   },
   paint: (featureId, cells) => mapRequest('/planet/features/paint', jsonBody('POST', { feature_id: featureId, cells }), 'failed to paint'),
@@ -580,7 +599,7 @@ export const planetApi = {
 // ---- Events ------------------------------------------------------------------
 
 async function eventRequest(path, options, fallback) {
-  const res = await fetch(`${BASE}${path}`, options)
+  const res = await send(`${BASE}${path}`, options)
   if (!res.ok) throw apiError((await res.text()).trim() || fallback)
   return res.json()
 }
@@ -635,7 +654,7 @@ export const timelineApi = {
 }
 
 export async function fetchCharacterOptions() {
-  const res = await fetch(`${BASE}/character-options`)
+  const res = await send(`${BASE}/character-options`)
   if (!res.ok) return []
   return res.json()
 }
@@ -714,7 +733,7 @@ export const chaptersApi = {
 // only after a load failed, so the pages' fetchers stay as they are.
 export async function isMissing(path) {
   try {
-    const res = await fetch(`${BASE}${path}`)
+    const res = await send(`${BASE}${path}`)
     return res.status === 404 || res.status === 400
   } catch (e) {
     return false

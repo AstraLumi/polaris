@@ -2176,6 +2176,7 @@ export default {
   "a style is either a paragraph style or a character style": "um estilo é de parágrafo ou de caractere",
   "book not found": "livro não encontrado",
   "can't reach the server": "não foi possível falar com o servidor",
+  "the server took too long to answer": "o servidor demorou demais para responder",
   "chapter {n} of this file is too long for one chapter; split it with a Heading 1": "o capítulo {n} deste arquivo é longo demais para um capítulo; divida-o com um Título 1",
   "choose a .docx file": "escolha um arquivo .docx",
   "comments": "comentários",

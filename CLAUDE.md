@@ -9,66 +9,13 @@ frontend. One SQLite database and one uploads folder per story. See
 
     cd backend  && go vet ./... && go test -count=1 ./...
     cd frontend && npm ci && npm run build
-    node frontend/tests/i18n.check.mjs          # must report nothing missing
-    node frontend/tests/timelineLayout.test.mjs
-    node frontend/tests/markdown.test.mjs
-    node frontend/tests/markdownEdit.test.mjs
-    node frontend/tests/graphLayout.test.mjs
-    node frontend/tests/familyLayout.test.mjs
-    node frontend/tests/dateDigits.test.mjs
-    node frontend/tests/storyTime.test.mjs
-    node frontend/tests/formulaBlocks.test.mjs
-    node frontend/tests/seasons.test.mjs
-    node frontend/tests/planet.test.mjs
-    node frontend/tests/planetGrid.test.mjs
-    node frontend/tests/bucketFill.test.mjs
-    node frontend/tests/orbits.test.mjs
-    node frontend/tests/solarSimulation.test.mjs
-    node frontend/tests/eclipses.test.mjs
-    node frontend/tests/climate.test.mjs
-    node frontend/tests/oceanNames.test.mjs
-    node frontend/tests/climateModel.test.mjs
-    node frontend/tests/flowLines.test.mjs
-    node frontend/tests/lighting.test.mjs
-    node frontend/tests/skyFrames.test.mjs
-    node frontend/tests/starCatalog.test.mjs
-    node frontend/tests/bodyOutlines.test.mjs
-    node frontend/tests/recent.test.mjs
-    node frontend/tests/storyDates.test.mjs
-    node frontend/tests/editorSchema.test.mjs
-    node frontend/tests/editorStyles.test.mjs
-    node frontend/tests/editorText.test.mjs
-    node frontend/tests/editorCharStyles.test.mjs
-    node frontend/tests/editorLists.test.mjs
-    node frontend/tests/autosave.test.mjs
-    node frontend/tests/editorSchema.test.mjs
-    node frontend/tests/editorStyles.test.mjs
-    node frontend/tests/editorText.test.mjs
-    node frontend/tests/autosave.test.mjs
-    node frontend/tests/bookLayout.test.mjs
-    node frontend/tests/nameMatch.test.mjs
-    node frontend/tests/editorScript.test.mjs
-    node frontend/tests/readAloud.test.mjs
-    node frontend/tests/fontLibrary.test.mjs
-    node frontend/tests/comments.test.mjs
-    node frontend/tests/spellWords.test.mjs
-    node frontend/tests/spellcheck.test.mjs
-    node frontend/tests/editorSpell.test.mjs
-    node frontend/tests/editorTables.test.mjs
-    node frontend/tests/fontCredits.test.mjs
-    node frontend/tests/fontPlaces.test.mjs
-    node frontend/tests/glyphs.test.mjs
-    node frontend/tests/fontSearch.test.mjs
-    node frontend/tests/pageBreaks.test.mjs
-    node frontend/tests/editorSpellTag.test.mjs
-    node frontend/tests/editorFormatPainter.test.mjs
-    node frontend/tests/editorSpeaker.test.mjs
-    node frontend/tests/editorWrap.test.mjs
-    node frontend/tests/editorBoxes.test.mjs
-    node frontend/tests/footnotes.test.mjs
-    node frontend/tests/offlineMerge.test.mjs
-    node frontend/tests/offlineStore.test.mjs
-    node frontend/tests/serviceWorker.test.mjs
+    cd frontend && npm test                     # every tests/*.test.mjs and the translation check
+
+`npm test` finds the tests by name, so a new `tests/<name>.test.mjs` is run
+without being listed anywhere; `node tests/run.mjs markdown editor` runs
+only the files whose names contain those words, and one file runs on its
+own with `node frontend/tests/<name>.test.mjs`. The translation check
+(`tests/i18n.check.mjs`) must report nothing missing.
 
 Run all of these before committing.
 
@@ -112,7 +59,10 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   an entry in all three catalogs in `frontend/src/locales/` (`pt-BR.js`,
   `es-ES.js`; `es-419.js` inherits `es-ES.js` and only overrides words that
   differ). Placeholders such as `{name}` must match. `i18n.check.mjs` fails on
-  gaps. Only the interface is translated, never user content.
+  gaps. Only the interface is translated, never user content. A catalog
+  is fetched only when its language is in use (`i18n.js`), and pages other
+  than Home and the story picker are fetched when first opened
+  (`router.js`): import neither statically, or the main script grows back.
 - **Wiki links are stored by id:** `[[type#id]]` (shows the current name)
   or `[[type#id|text]]` (schema 42). The typed `[[Name]]`, `[[Name|text]]`,
   `[[type:Name]]` stay valid input: every handler that saves Markdown text
