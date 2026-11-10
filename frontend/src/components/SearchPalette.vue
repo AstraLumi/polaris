@@ -13,7 +13,7 @@
         @keydown.enter.prevent="choose(results[cursor], $event.shiftKey)"
       />
 
-      <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+      <p v-if="loadError" class="error-banner" role="alert">{{ loadError }}</p>
 
       <ul v-if="results.length" ref="listEl" class="results">
         <template v-for="(r, i) in results" :key="r.key">
@@ -279,7 +279,7 @@ onMounted(async () => {
   flex-shrink: 0;
   border-radius: 7px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--wash), 0.05);
   display: flex;
   align-items: center;
   justify-content: center;

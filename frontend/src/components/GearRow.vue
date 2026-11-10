@@ -111,7 +111,7 @@ useLinkNames()
 .bonus {
   padding: 0.05rem 0.45rem;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--wash), 0.05);
   color: var(--text-primary);
 }
 

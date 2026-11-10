@@ -66,7 +66,7 @@
       <button v-if="filtering" type="button" class="btn btn-ghost small" @click="clearFilters">{{ $t('Clear filter') }}</button>
     </div>
 
-    <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+    <p v-if="loadError" class="error-banner" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
 
     <div v-if="!loading && characters.length === 0" class="empty-state glass-panel">
       <p class="empty-title">{{ $t('No characters yet.') }}</p>

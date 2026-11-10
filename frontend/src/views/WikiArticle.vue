@@ -13,7 +13,7 @@
     <NotFoundPanel v-if="missing" :message="$t('This article was deleted, or never existed.')">
       <RouterLink to="/wiki" class="btn btn-ghost">{{ $t('Wiki') }}</RouterLink>
     </NotFoundPanel>
-    <p v-else-if="loadError" class="error-banner">{{ loadError }}</p>
+    <p v-else-if="loadError" class="error-banner" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
     <p v-else-if="!article" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <article v-else class="paper glass-panel">
@@ -36,7 +36,7 @@
         </div>
       </header>
 
-      <p v-if="saveError" class="error-banner">{{ saveError }}</p>
+      <p v-if="saveError" class="error-banner" role="alert">{{ saveError }}</p>
 
       <p v-if="isLore" class="hatnote">{{ $t('A free-form article: everything on it is written here.') }}</p>
       <p v-else class="hatnote">
@@ -370,6 +370,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch, nextTick } from 'vue'
+import { confirmDiscard } from '../confirm'
 import { useRoute, useRouter } from 'vue-router'
 import IconImage from '../components/IconImage.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
@@ -645,8 +646,8 @@ async function startEdit(focusId) {
   }
 }
 
-function cancelEdit() {
-  if (dirty() && !window.confirm(t('Discard your changes?'))) return
+async function cancelEdit() {
+  if (dirty() && !(await confirmDiscard())) return
   editing.value = false
   saveError.value = ''
 }
@@ -851,7 +852,7 @@ useSaveShortcut(() => editing.value && !saving.value && save())
   margin: 0 0 1.4rem;
   padding: 0.7rem 1.2rem 0.8rem;
   border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--wash), 0.03);
   font-size: 0.88rem;
 }
 
@@ -949,7 +950,7 @@ useSaveShortcut(() => editing.value && !saving.value && save())
 
 .infobox {
   border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--wash), 0.03);
   font-size: 0.86rem;
 }
 

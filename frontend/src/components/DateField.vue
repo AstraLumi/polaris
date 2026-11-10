@@ -93,7 +93,7 @@
         </div>
       </div>
     </Teleport>
-    <p v-if="showProblem" class="date-note is-error">{{ problem }}</p>
+    <p v-if="showProblem" class="date-note is-error" role="status">{{ problem }}</p>
     <p v-else-if="legacyText" class="date-note">
       {{ $t('Saved as “{text}”, which can\'t be placed on the timeline. Enter a year to replace it.', { text: legacyText }) }}
     </p>
@@ -533,7 +533,7 @@ onBeforeUnmount(() => listen(false))
 
 .date-pop .pop-month-pick:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--wash), 0.05);
 }
 
 .date-pop .pop-month-pick.is-on {
@@ -553,7 +553,7 @@ onBeforeUnmount(() => listen(false))
   padding: 0;
   border-radius: 6px;
   border: 1px solid transparent;
-  background: var(--season, rgba(255, 255, 255, 0.025));
+  background: var(--season, rgba(var(--wash), 0.025));
   color: var(--text-primary);
   font: inherit;
   font-size: 0.75rem;
@@ -567,7 +567,7 @@ onBeforeUnmount(() => listen(false))
 
 .date-pop .pop-day:hover {
   border-color: var(--glass-border);
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--wash), 0.08);
 }
 
 .date-pop .pop-day.is-on {

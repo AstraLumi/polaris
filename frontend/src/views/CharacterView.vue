@@ -7,13 +7,13 @@
     <NotFoundPanel v-if="missing" :message="$t('This character was deleted, or never existed.')">
       <RouterLink to="/characters" class="btn btn-ghost">{{ $t('All characters') }}</RouterLink>
     </NotFoundPanel>
-    <p v-else-if="loadError" class="error-banner">{{ loadError }}</p>
+    <p v-else-if="loadError" class="error-banner" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
     <p v-else-if="loading" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <template v-else-if="data">
       <header class="identity glass-panel">
         <div class="portrait">
-          <img v-if="data.picture_path" :src="data.picture_path" :alt="data.name" class="zoomable" @click="viewPicture(data.picture_path, data.name)" />
+          <img v-if="data.picture_path" :src="data.picture_path" :alt="data.name" class="zoomable" @click="viewPicture(data.picture_path, data.name)" role="button" tabindex="0" :title="$t('View the picture')" @keydown.enter.prevent="viewPicture(data.picture_path, data.name)" />
           <span v-else class="portrait-fallback">{{ initials }}</span>
         </div>
         <div class="identity-text">

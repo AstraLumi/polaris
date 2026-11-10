@@ -22,7 +22,7 @@
       </label>
     </section>
 
-    <p v-if="error" class="error-banner">{{ error }}</p>
+    <p v-if="error" class="error-banner" role="alert">{{ error }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
     <p v-if="loading" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <div v-else-if="!fontLibrary.length" class="glass-panel empty-state">

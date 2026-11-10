@@ -23,7 +23,7 @@
     </header>
 
     <template v-if="missing" />
-    <p v-else-if="loadError" class="error-banner">{{ loadError }}</p>
+    <p v-else-if="loadError" class="error-banner" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
     <p v-else-if="!versions.length" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <template v-else>

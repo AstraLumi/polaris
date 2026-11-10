@@ -31,6 +31,7 @@
 // export on the clipboard (formatted text for a post). As a "▾" menu, or
 // inline as a list (the book panel).
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { askConfirm } from '../../confirm'
 import { t } from '../../i18n'
 import { STORY_API } from '../../stories'
 import { loadFontLibrary, fetchBookFonts, fontWarningText } from '../../fontLibrary.js'
@@ -71,7 +72,7 @@ async function fontsAllow(format) {
     if (!warns.length) return true
     const lines = warns.map((w) => `• ${fontWarningText(w)}`).join('\n')
     const epub = format === 'epub' ? `\n\n${t('Fonts an e-book may not carry are left out of it; e-readers then show their own.')}` : ''
-    return window.confirm(`${t('About the fonts:')}\n${lines}${epub}\n\n${t('Export anyway?')}`)
+    return await askConfirm(t('Export anyway?'), { message: `${t('About the fonts:')}\n${lines}${epub}`, confirmLabel: t('Export'), danger: false })
   } catch (e) {
     return true
   }

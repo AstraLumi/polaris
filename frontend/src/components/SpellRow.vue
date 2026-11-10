@@ -100,7 +100,7 @@ useLinkNames()
 
 .spell-cost.is-free {
   color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--wash), 0.05);
 }
 
 .spell-meta-item {

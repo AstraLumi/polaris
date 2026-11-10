@@ -18,7 +18,7 @@
       </div>
     </div>
 
-    <p v-if="error" class="error-banner">{{ error }}</p>
+    <p v-if="error" class="error-banner" role="alert">{{ error }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
     <p v-if="!online && done" class="pages-hint">{{ $t('Click a page to write there.') }}</p>
 
     <div ref="area" class="pages-area" @click="onClick">

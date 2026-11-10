@@ -11,7 +11,7 @@
     </form>
     <p class="hint">{{ $t('A version is also kept on its own every 30 minutes of writing.') }}</p>
 
-    <p v-if="error" class="error-banner">{{ error }}</p>
+    <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
     <p v-if="loading" class="loading-hint">{{ $t('Loading…') }}</p>
     <p v-else-if="!list.length" class="hint">{{ $t('No versions of this chapter yet.') }}</p>
 
@@ -42,6 +42,7 @@
 // A chapter's saved versions: list, preview, save one now with a label,
 // restore one (the server keeps the current text as "Before restoring").
 import { ref, watch } from 'vue'
+import { askConfirm } from '../../confirm'
 import { t, tr } from '../../i18n'
 import { textApi } from '../../editor/api.js'
 import { ago, exact } from '../../editor/when.js'
@@ -117,7 +118,7 @@ async function saveNow() {
 async function restore() {
   const v = picked.value
   if (!v) return
-  if (!window.confirm(t('Put "{label}" back as the chapter\'s text? What is there now is kept as a version.', { label: labelOf(v) }))) return
+  if (!(await askConfirm(t('Put "{label}" back as the chapter\'s text? What is there now is kept as a version.', { label: labelOf(v) }), { confirmLabel: t('Put it back'), danger: false }))) return
   busy.value = true
   error.value = ''
   try {

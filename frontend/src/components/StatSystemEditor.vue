@@ -6,7 +6,7 @@
         {{ $t('Which stats your characters have and how each one is calculated. The character sheet, the bonuses of classes, races and gear, and version comparisons all follow this. Saving updates every character at once.') }}
       </p>
 
-      <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+      <p v-if="loadError" class="error-banner" role="alert">{{ loadError }}</p>
 
       <div v-else class="sample">
         <span class="sample-title">{{ $t('Preview with a sample character') }}</span>
@@ -72,7 +72,15 @@
             class="stat-item"
             :class="{ 'is-open': open === stat.key, 'has-issue': issuesFor(stat.key).length }"
           >
-            <div class="stat-row" @click="toggle(stat.key)">
+            <div
+              class="stat-row"
+              role="button"
+              tabindex="0"
+              :aria-expanded="open === stat.key"
+              @click="toggle(stat.key)"
+              @keydown.enter.self.prevent="toggle(stat.key)"
+              @keydown.space.self.prevent="toggle(stat.key)"
+            >
               <div class="order" @click.stop>
                 <button type="button" class="icon-btn" :aria-label="$t('Move up')" :disabled="!canMove(stat, -1)" @click="move(stat, -1)">▲</button>
                 <button type="button" class="icon-btn" :aria-label="$t('Move down')" :disabled="!canMove(stat, 1)" @click="move(stat, 1)">▼</button>
@@ -187,7 +195,7 @@
         <span v-if="issueCount" class="issue-count">{{ $tn('{n} problem to fix', '{n} problems to fix', issueCount) }}</span>
         <span v-else-if="saved" class="saved-hint">{{ $t('Saved.') }}</span>
         <span v-else-if="dirty()" class="unsaved">{{ $t('Unsaved changes') }}</span>
-        <p v-if="saveError" class="save-error">{{ saveError }}</p>
+        <p v-if="saveError" class="save-error" role="alert">{{ saveError }}</p>
         <div class="save-actions">
           <button type="button" class="btn btn-ghost small" :disabled="saving" @click="confirming = 'defaults'">{{ $t('Back to the defaults') }}</button>
           <button type="button" class="btn btn-ghost small" :disabled="saving || !dirty()" @click="discard">{{ $t('Discard changes') }}</button>
@@ -640,7 +648,7 @@ async function useDefaults() {
 }
 
 .stat-row:hover {
-  background: rgba(255, 255, 255, 0.025);
+  background: rgba(var(--wash), 0.025);
 }
 
 .order {
@@ -714,7 +722,7 @@ async function useDefaults() {
 }
 
 .stat-item.is-open {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(var(--wash), 0.02);
 }
 
 .stat-body {

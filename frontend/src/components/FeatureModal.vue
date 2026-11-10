@@ -17,7 +17,7 @@
         </label>
       </div>
       <RouterLink v-if="feature?.id" :to="wikiPath('map_feature', feature.id)" class="wiki-link">{{ $t('Wiki article') }} ›</RouterLink>
-      <p v-if="error" class="error-banner">{{ error }}</p>
+      <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
       <div class="modal-actions">
         <button v-if="feature?.id" type="button" class="btn btn-ghost danger-text" :disabled="busy" @click="confirming = true">{{ $t('Delete') }}</button>
         <span class="spacer"></span>

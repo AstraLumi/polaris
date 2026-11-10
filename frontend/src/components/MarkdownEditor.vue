@@ -175,11 +175,12 @@ async function pick(insert) {
   flex-direction: column;
   border: 1px solid var(--glass-border);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(var(--wash), 0.02);
 }
 
 .md-editor:focus-within {
-  border-color: color-mix(in srgb, var(--line) 55%, var(--glass-border));
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .md-toolbar {
@@ -223,7 +224,7 @@ async function pick(insert) {
 
 .tool:not(:disabled):hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(var(--wash), 0.07);
 }
 
 .tool:disabled {
@@ -283,7 +284,7 @@ async function pick(insert) {
 
 .mode.active {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--wash), 0.08);
 }
 
 .md-editor textarea {

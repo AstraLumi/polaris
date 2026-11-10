@@ -106,17 +106,17 @@ const bonuses = computed(() => formatBonuses(totalBonuses(props.modelValue)))
 .boots-row { max-width: 360px; margin: 0.8rem auto 0; }
 
 .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
-.weight-card, .bonus-card { padding: 0.9rem 1.1rem; background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border); border-radius: 12px; }
+.weight-card, .bonus-card { padding: 0.9rem 1.1rem; background: rgba(var(--wash), 0.03); border: 1px solid var(--glass-border); border-radius: 12px; }
 .weight-head { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.88rem; color: var(--text-muted); }
 .weight-head strong { color: var(--text-primary); }
 .weight-head strong.is-over, .over-note { color: var(--danger, #e5798a); }
 .over-note { margin: 0.5rem 0 0; font-size: 0.78rem; }
-.bar { height: 8px; border-radius: 999px; background: rgba(255,255,255,0.07); margin-top: 0.7rem; overflow: hidden; }
+.bar { height: 8px; border-radius: 999px; background: rgba(var(--wash), 0.07); margin-top: 0.7rem; overflow: hidden; }
 .fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.25s; }
 .fill.is-over { background: var(--danger, #e5798a); }
 .bonus-title { display: block; font-size: 0.88rem; color: var(--text-muted); margin-bottom: 0.55rem; }
 .bonus-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-.bonus { padding: 0.1rem 0.5rem; border-radius: 6px; background: rgba(255,255,255,0.06); font-size: 0.8rem; color: var(--text-primary); }
+.bonus { padding: 0.1rem 0.5rem; border-radius: 6px; background: rgba(var(--wash), 0.06); font-size: 0.8rem; color: var(--text-primary); }
 .bonus.is-negative { color: var(--danger, #e5798a); }
 .no-bonus { color: var(--text-faint); font-style: italic; font-size: 0.82rem; }
 

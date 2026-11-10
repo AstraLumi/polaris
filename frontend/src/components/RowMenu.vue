@@ -141,7 +141,7 @@ defineExpose({ close })
 
 .row-menu-list .menu-item:hover:not(:disabled),
 .row-menu-list .menu-item:focus-visible {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(var(--wash), 0.07);
   outline: none;
 }
 

@@ -17,7 +17,7 @@
       </div>
     </header>
 
-    <p v-if="loadError && !missing" class="error-banner">{{ loadError }}</p>
+    <p v-if="loadError && !missing" class="error-banner" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
     <p v-else-if="loading" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <template v-else-if="!missing">
@@ -45,7 +45,7 @@
           list-id="character-tag-suggestions"
           :hint="$t('Filter by tags on the Characters page.')"
         />
-        <p v-if="sharedError" class="error-banner">{{ sharedError }}</p>
+        <p v-if="sharedError" class="error-banner" role="alert">{{ sharedError }}</p>
         <div class="save-bar">
           <button class="btn btn-primary" :disabled="sharedSaving || !sharedDirty()" @click="saveShared">
             {{ sharedSaving ? $t('Saving…') : $t('Save changes') }}

@@ -82,7 +82,7 @@ function pick(name) {
   padding: 0 0.5rem;
   border-radius: 8px;
   border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--wash), 0.03);
   color: var(--text-muted);
   font: inherit;
   font-size: 0.9rem;

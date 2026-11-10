@@ -7,7 +7,7 @@
       <input v-if="options.length > 6" v-model="query" class="picker-search" type="search" :placeholder="$t('Search gear')" />
 
       <p v-if="loading" class="picker-note">{{ $t('Loading…') }}</p>
-      <p v-else-if="error" class="error-banner">{{ error }}</p>
+      <p v-else-if="error" class="error-banner" role="alert">{{ error }}</p>
       <div v-else-if="options.length === 0" class="picker-empty">
         <p class="picker-note">{{ $t('No {type} gear yet.', { type: typeLabel }) }}</p>
         <p class="picker-hint">{{ $t('Create some on the Character Assets page, under Gear.') }}</p>

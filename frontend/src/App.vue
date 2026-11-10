@@ -1,9 +1,9 @@
 <template>
   <router-view v-if="$route.meta.bare" />
-  <div v-else class="shell" :class="{ 'nav-collapsed': collapsed }">
-    <aside class="rail glass-panel" :class="{ 'is-open': menuOpen, 'is-collapsed': collapsed }">
+  <div v-else class="shell" :class="{ 'nav-collapsed': folded }">
+    <aside class="rail glass-panel" :class="{ 'is-open': menuOpen, 'is-collapsed': folded }">
       <div class="rail-top">
-        <router-link to="/stories" class="story-head" :title="collapsed ? currentStory?.name : $t('Switch story')">
+        <router-link to="/stories" class="story-head" :title="folded ? currentStory?.name : $t('Switch story')">
           <span class="story-icon">
             <IconImage :src="currentStory?.icon || ''" :name="currentStory?.name || ''" />
           </span>
@@ -29,7 +29,7 @@
           type="button"
           class="search-btn"
           :aria-label="$t('Search')"
-          :title="collapsed ? $t('Search') + ' (' + shortcutLabel + ')' : $t('Find any character, place, event or article')"
+          :title="folded ? $t('Search') + ' (' + shortcutLabel + ')' : $t('Find any character, place, event or article')"
           @click="searchOpen = true"
         >
           <NavIcon name="search" />
@@ -49,7 +49,7 @@
               class="nav-item"
               :class="{ 'is-active': activeTo === item.to }"
               :aria-current="activeTo === item.to ? 'page' : undefined"
-              :title="collapsed ? $t(item.label) : $t(item.tip)"
+              :title="folded ? $t(item.label) : $t(item.tip)"
             >
               <NavIcon :name="item.icon" />
               <span class="nav-label">{{ $t(item.label) }}</span>
@@ -63,7 +63,7 @@
             class="nav-item"
             :class="{ 'is-active': activeTo === '/settings' }"
             :aria-current="activeTo === '/settings' ? 'page' : undefined"
-            :title="collapsed ? $t('Settings') : $t('Language, theme, calendar and stats')"
+            :title="folded ? $t('Settings') : $t('Language, theme, calendar and stats')"
           >
             <NavIcon name="settings" />
             <span class="nav-label">{{ $t('Settings') }}</span>
@@ -71,11 +71,11 @@
           <button
             type="button"
             class="nav-item collapse-btn"
-            :aria-label="collapsed ? $t('Expand the sidebar') : $t('Collapse the sidebar')"
-            :title="collapsed ? $t('Expand the sidebar') : $t('Collapse the sidebar')"
+            :aria-label="folded ? $t('Expand the sidebar') : $t('Collapse the sidebar')"
+            :title="folded ? $t('Expand the sidebar') : $t('Collapse the sidebar')"
             @click="toggleCollapsed"
           >
-            <NavIcon :name="collapsed ? 'expand' : 'collapse'" />
+            <NavIcon :name="folded ? 'expand' : 'collapse'" />
             <span class="nav-label">{{ $t('Collapse') }}</span>
           </button>
         </div>
@@ -85,7 +85,7 @@
 
     <main class="stage">
       <OfflineBanner />
-      <router-view />
+      <router-view :key="pageKey" />
     </main>
 
     <SearchPalette v-if="searchOpen" @close="searchOpen = false" />
@@ -93,6 +93,18 @@
   </div>
   <TooltipLayer />
   <LinkPreviewLayer />
+  <!-- Any code's "are you sure?" (confirm.js). Last, so Escape reaches it
+       before the form it was asked over. -->
+  <ConfirmDialog
+    v-if="pendingConfirm"
+    :title="pendingConfirm.title"
+    :message="pendingConfirm.message"
+    :confirm-label="pendingConfirm.confirmLabel"
+    :danger="pendingConfirm.danger"
+    @cancel="answerConfirm(false)"
+    @confirm="answerConfirm(true)"
+  />
+  <div v-if="pageLoading" class="page-loading" role="progressbar" :aria-label="$t('Loading…')"></div>
 </template>
 
 <script setup>
@@ -101,7 +113,9 @@ import { useRoute } from 'vue-router'
 import { loadCalendar } from './calendar'
 import { loadStatSystem } from './stats'
 import { t, tr } from './i18n'
-import { pageTitle, viewedPicture } from './navigation'
+import { pageTitle, viewedPicture, pageKey, pageLoading } from './navigation'
+import { pendingConfirm, answerConfirm } from './confirm'
+import ConfirmDialog from './components/ConfirmDialog.vue'
 import NavIcon from './components/NavIcon.vue'
 import IconImage from './components/IconImage.vue'
 import SearchPalette from './components/SearchPalette.vue'
@@ -163,6 +177,7 @@ const navGroups = [
   {
     label: tr('Story'),
     items: [
+      { label: tr('Write'), to: '/write', icon: 'write', tip: tr('The text of your chapters, laid out as a book') },
       { label: tr('Characters'), to: '/characters', icon: 'characters', tip: tr('Everyone in the story, with their sheets and versions') },
       { label: tr('Factions'), to: '/factions', icon: 'factions', tip: tr('Guilds, orders, houses and who belongs to them') },
       { label: tr('Chapters'), to: '/chapters', icon: 'chapters', tip: tr('Volumes and chapters, with your notes and what happens in each') },
@@ -220,7 +235,32 @@ try {
 } catch (e) {
   /* storage unavailable: start open */
 }
+// The writing page needs the width: on a window too narrow for the
+// sidebar, the chapter list and a page side by side (a tablet, half a
+// screen) the sidebar folds by itself there, until it is opened by hand.
+// Phones have their own bar and are left alone.
+const tight = window.matchMedia('(min-width: 721px) and (max-width: 1100px)')
+const isTight = ref(tight.matches)
+const onTight = (e) => (isTight.value = e.matches)
+onMounted(() => tight.addEventListener('change', onTight))
+onBeforeUnmount(() => tight.removeEventListener('change', onTight))
+const openedHere = ref(false)
+const writing = computed(() => route.name === 'write')
+watch(writing, () => (openedHere.value = false))
+// Narrower still (a tablet held upright), every page needs it.
+const narrow = window.matchMedia('(min-width: 721px) and (max-width: 960px)')
+const isNarrow = ref(narrow.matches)
+const onNarrow = (e) => (isNarrow.value = e.matches)
+onMounted(() => narrow.addEventListener('change', onNarrow))
+onBeforeUnmount(() => narrow.removeEventListener('change', onNarrow))
+const autoFolded = computed(() => ((writing.value && isTight.value) || isNarrow.value) && !openedHere.value)
+const folded = computed(() => collapsed.value || autoFolded.value)
+
 function toggleCollapsed() {
+  if (autoFolded.value) {
+    openedHere.value = true
+    return
+  }
   collapsed.value = !collapsed.value
   try {
     localStorage.setItem(COLLAPSE_KEY, collapsed.value ? '1' : '0')
@@ -231,6 +271,30 @@ function toggleCollapsed() {
 </script>
 
 <style scoped>
+/* A page's script is fetched when the page is first opened: on a slow line
+   this line says something is coming. */
+.page-loading {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: page-loading 1.1s linear infinite;
+}
+
+@keyframes page-loading {
+  from {
+    background-position: -40% 0;
+  }
+  to {
+    background-position: 140% 0;
+  }
+}
+
 .shell {
   display: flex;
   min-height: 100vh;
@@ -287,7 +351,7 @@ function toggleCollapsed() {
 }
 
 .story-head:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--wash), 0.05);
 }
 
 .story-icon {
@@ -343,7 +407,7 @@ function toggleCollapsed() {
   padding: 0.5rem 0.65rem;
   border-radius: 8px;
   border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--wash), 0.03);
   color: var(--text-faint);
   font: inherit;
   font-size: 0.85rem;
@@ -415,7 +479,7 @@ function toggleCollapsed() {
 
 .nav-item:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--wash), 0.05);
 }
 
 .nav-item.is-active {

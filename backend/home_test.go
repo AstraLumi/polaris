@@ -58,3 +58,52 @@ func TestHomeLooseEnds(t *testing.T) {
 		t.Errorf("lore: %+v", l)
 	}
 }
+
+// Home says where the writing stands: nothing without a chapter, the first
+// chapter in reading order while nothing is written, then the chapter
+// written last, with the story's word count.
+func TestHomeWriting(t *testing.T) {
+	app, h, base := planetSetup(t)
+	home := func() homePayload {
+		t.Helper()
+		rec := do(t, h, "GET", base+"/home", nil, "")
+		if rec.Code != 200 {
+			t.Fatalf("home: %d %s", rec.Code, rec.Body.String())
+		}
+		var p homePayload
+		if err := json.Unmarshal(rec.Body.Bytes(), &p); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	if p := home(); p.Writing != nil || p.Counts.Chapters != 0 || p.Counts.Words != 0 {
+		t.Fatalf("no chapters yet: %+v %+v", p.Writing, p.Counts)
+	}
+
+	exec := func(q string, args ...any) int64 {
+		t.Helper()
+		res, err := app.db.Exec(q, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, _ := res.LastInsertId()
+		return id
+	}
+	loose := exec(`INSERT INTO chapters (title, position) VALUES ('Loose', 0)`)
+	vol := exec(`INSERT INTO volumes (title, position) VALUES ('Book one', 0)`)
+	exec(`INSERT INTO chapters (title, volume_id, position) VALUES ('Second', ?, 1)`, vol)
+	first := exec(`INSERT INTO chapters (title, volume_id, position) VALUES ('First', ?, 0)`, vol)
+	if p := home(); p.Writing == nil || p.Writing.ChapterID != first || p.Writing.VolumeID != vol || p.Writing.UpdatedAt != "" || p.Counts.Chapters != 3 {
+		t.Fatalf("nothing written: the first chapter of the first book: %+v", p.Writing)
+	}
+
+	exec(`INSERT INTO chapter_texts (chapter_id, doc, words, updated_at) VALUES (?, '{}', 120, '2026-01-02 10:00:00')`, first)
+	exec(`INSERT INTO chapter_texts (chapter_id, doc, words, updated_at) VALUES (?, '{}', 30, '2026-01-03 10:00:00')`, loose)
+	p := home()
+	if p.Writing == nil || p.Writing.ChapterID != loose || p.Writing.VolumeID != 0 || p.Writing.Words != 30 || p.Writing.Title != "Loose" {
+		t.Errorf("the chapter written last: %+v", p.Writing)
+	}
+	if p.Counts.Words != 150 {
+		t.Errorf("words in the story: %d", p.Counts.Words)
+	}
+}

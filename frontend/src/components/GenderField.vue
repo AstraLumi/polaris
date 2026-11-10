@@ -71,7 +71,7 @@ const kind = computed(() => genderKind(props.modelValue))
   min-height: var(--control-h);
   border-radius: 8px;
   border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--wash), 0.03);
   color: var(--text-muted);
   cursor: pointer;
 }

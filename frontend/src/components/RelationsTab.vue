@@ -1,6 +1,6 @@
 <template>
   <div class="relations-tab">
-    <p v-if="error" class="error-banner">{{ error }}</p>
+    <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
 
     <section>
       <div class="section-head">
@@ -254,7 +254,7 @@ watch(() => props.characterId, load, { immediate: true })
 }
 
 .row:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--wash), 0.03);
 }
 
 .avatar {

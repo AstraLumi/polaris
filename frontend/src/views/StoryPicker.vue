@@ -9,7 +9,7 @@
         </p>
       </header>
 
-      <p v-if="error" class="error-banner">{{ error }}</p>
+      <p v-if="error" class="error-banner" role="alert">{{ error }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
       <p v-if="notice" class="notice-banner">{{ notice }}</p>
       <p v-if="!storiesLoaded && !error" class="loading-hint">{{ $t('Loading…') }}</p>
 

@@ -28,7 +28,7 @@
           <span>{{ $t('Title') }}</span>
           <input ref="newTitleEl" v-model="newTitle" type="text" maxlength="120" required />
         </label>
-        <p v-if="newError" class="error-banner">{{ newError }}</p>
+        <p v-if="newError" class="error-banner" role="alert">{{ newError }}</p>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" @click="newOpen = false">{{ $t('Cancel') }}</button>
           <button type="submit" class="btn btn-primary" :disabled="creating || !newTitle.trim()">{{ $t('Create') }}</button>
@@ -69,7 +69,7 @@
       </label>
     </div>
 
-    <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+    <p v-if="loadError" class="error-banner" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
     <p v-else-if="loading" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <div v-else-if="groups.length === 0" class="empty-state glass-panel">
@@ -115,6 +115,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { confirmDiscard } from '../confirm'
 import { useRoute, useRouter } from 'vue-router'
 import IconImage from '../components/IconImage.vue'
 import { TYPE_ORDER, TYPE_PLURALS, TYPE_LABELS, wikiApi, wikiPath } from '../wiki'
@@ -152,8 +153,8 @@ const creating = ref(false)
 const newTitleEl = ref(null)
 
 // A stray click outside (or Esc) asks before dropping a typed title.
-function closeNew() {
-  if (newTitle.value.trim() && !window.confirm(t('Discard your changes?'))) return
+async function closeNew() {
+  if (newTitle.value.trim() && !(await confirmDiscard())) return
   newOpen.value = false
 }
 

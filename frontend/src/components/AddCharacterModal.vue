@@ -52,7 +52,7 @@
           <FilePick accept="image/*" @change="onFileChange" />
         </label>
 
-        <p v-if="error" class="error-banner">{{ error }}</p>
+        <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
 
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" @click="$emit('close')">{{ $t('Cancel') }}</button>

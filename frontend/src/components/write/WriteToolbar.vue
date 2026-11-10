@@ -125,9 +125,9 @@
       </div>
     </div>
 
-    <div class="tb-group foldable">
-      <button v-bind="btn(t('Bulleted list'), fmt.list === 'bullet_list')" @click="exec(toggleList('bullet_list'))"><TbIcon name="list-bullet" /></button>
-      <button v-bind="btn(t('Numbered list'), fmt.list === 'ordered_list')" @click="exec(toggleList('ordered_list'))"><TbIcon name="list-number" /></button>
+    <div class="tb-group">
+      <button v-bind="btn(t('Bulleted list'), fmt.list === 'bullet_list')" class="foldable" @click="exec(toggleList('bullet_list'))"><TbIcon name="list-bullet" /></button>
+      <button v-bind="btn(t('Numbered list'), fmt.list === 'ordered_list')" class="foldable" @click="exec(toggleList('ordered_list'))"><TbIcon name="list-number" /></button>
       <button v-bind="btn(t('Scene break'))" @click="exec(insertBlock('scene_break'))"><span class="glyph">⁂</span></button>
       <button v-bind="btn(t('Symbols'), panel === 'symbols')" @click="$emit('panel', 'symbols')"><span class="glyph">Ω</span></button>
       <button v-bind="btn(t('Page break') + ' (Ctrl+Enter)')" :disabled="online" @click="exec(insertBlock('page_break'))"><TbIcon name="page-break" /></button>
@@ -188,15 +188,19 @@
       <button v-bind="btn(spellOn ? t('Check spelling: on') : t('Check spelling: off'), spellOn)" class="foldable" @click="$emit('spell')"><TbIcon name="spell" /></button>
       <button v-bind="btn(t('Show tags'), showTags)" class="foldable" @click="$emit('tags')"><TbIcon name="tag" /></button>
       <button v-bind="btn(t('Focus mode'), focusMode)" @click="$emit('focus')"><TbIcon name="focus" /></button>
-      <button type="button" class="tb-btn more-btn" :aria-expanded="more" :title="$t('More tools')" :aria-label="$t('More tools')" @click="more = !more">{{ more ? '▴' : '⋯' }}</button>
     </div>
+    <button type="button" class="tb-btn more-btn" :aria-expanded="more" :title="more ? $t('Fewer tools') : $t('More tools')" :aria-label="more ? $t('Fewer tools') : $t('More tools')" @click="toggleMore">
+      <span aria-hidden="true">{{ more ? '▴' : '⋯' }}</span>
+      <span class="more-label">{{ more ? $t('Fewer tools') : $t('More tools') }}</span>
+    </button>
   </div>
 </template>
 
 <script setup>
 // The writing page's toolbar. Every button runs an editor command (see
 // src/editor/commands.js) through `exec`, which also puts the cursor back
-// in the text. On a phone the rarer groups fold behind "⋯".
+// in the text. The rarer groups fold behind "More tools"; on a phone the
+// everyday ones are one row that scrolls sideways.
 import { ref, computed, h, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { undo, redo, undoDepth, redoDepth } from 'prosemirror-history'
 import { t } from '../../i18n'
@@ -256,7 +260,23 @@ const ALIGNS = computed(() => [
   { key: 'justify', label: t('Justify') + ' (Ctrl+J)' },
 ])
 
+// The everyday tools make one row; "More tools" opens the rest, and the
+// toolbar stays the way it was left on this device.
+const MORE_KEY = 'polaris-write-tools'
 const more = ref(false)
+try {
+  more.value = localStorage.getItem(MORE_KEY) === 'all'
+} catch (e) {
+  /* storage unavailable: start with the everyday tools */
+}
+function toggleMore() {
+  more.value = !more.value
+  try {
+    localStorage.setItem(MORE_KEY, more.value ? 'all' : 'few')
+  } catch (e) {
+    /* not remembered, still toggled */
+  }
+}
 const open = ref('')
 const linkText = ref('')
 const linkEl = ref(null)
@@ -643,9 +663,42 @@ sub {
   color: var(--text-muted);
 }
 
-.more-btn,
 .copy-btn {
   display: none;
+}
+
+/* The everyday buttons stay, the rest folds behind "More tools". */
+.foldable {
+  display: none;
+}
+.show-more .foldable {
+  display: flex;
+}
+.show-more .tb-btn.foldable,
+.show-more .tb-pop.foldable {
+  display: inline-grid;
+}
+.more-btn {
+  display: inline-grid;
+}
+.more-label {
+  display: none;
+}
+/* Its words only where there is room to spare: on a narrower window they
+   pushed the button onto a line of its own. */
+@media (min-width: 1500px) {
+  .more-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    width: auto;
+    padding: 0 0.6rem;
+    white-space: nowrap;
+  }
+  .more-label {
+    display: inline;
+    font-size: 0.8rem;
+  }
 }
 
 /* Touch screens: no Ctrl+A, and selecting a whole chapter by hand is slow. */
@@ -666,18 +719,46 @@ sub {
     flex-wrap: wrap;
     max-width: 100%;
   }
-  .foldable {
+  /* A pop-up spans the toolbar under it, whichever button opened it:
+     hanging from a button near the right edge it ran off the screen. */
+  .write-toolbar {
+    position: relative;
+  }
+  .tb-pop {
+    position: static;
+  }
+  .pop {
+    left: 0.4rem;
+    right: 0.4rem;
+    min-width: 0;
+  }
+  /* The everyday tools are one row that scrolls sideways, with "More"
+     pinned at its end: the page keeps the screen. Not while a pop-up of
+     the toolbar is open (colours, link, the font list): a scrolling box
+     would cut it off, so the row wraps for as long as it shows. */
+  .write-toolbar:not(.show-more):not(:has(.pop, .fp-list)) {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .write-toolbar:not(.show-more):not(:has(.pop, .fp-list))::-webkit-scrollbar {
     display: none;
   }
-  .show-more .foldable {
-    display: flex;
+  .write-toolbar:not(.show-more):not(:has(.pop, .fp-list)) .tb-group {
+    flex: none;
+    flex-wrap: nowrap;
+    max-width: none;
   }
-  .show-more .tb-btn.foldable,
-  .show-more .tb-pop.foldable {
-    display: inline-grid;
+  .write-toolbar:not(.show-more):not(:has(.pop, .fp-list)) .tools {
+    margin-left: 0;
   }
-  .more-btn {
-    display: inline-grid;
+  .write-toolbar:not(.show-more):not(:has(.pop, .fp-list)) .more-btn {
+    position: sticky;
+    right: 0;
+    flex: none;
+    background: var(--surface);
+    box-shadow: -0.9rem 0 0.7rem -0.3rem var(--surface);
   }
   .tb-style {
     width: 6.6rem;
@@ -687,6 +768,19 @@ sub {
   }
   .tb-size {
     width: 3.7rem;
+  }
+}
+
+/* Touch screens: every tool is a finger's width. */
+@media (pointer: coarse) {
+  .tb-btn {
+    min-width: 2.5rem;
+    height: 2.5rem;
+  }
+  .write-toolbar .tb-style,
+  .write-toolbar .tb-size {
+    height: 2.5rem;
+    min-height: 2.5rem;
   }
 }
 </style>

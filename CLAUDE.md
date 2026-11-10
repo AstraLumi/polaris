@@ -110,6 +110,15 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   automatically, but a new outside address (fonts, pictures, a fetch) must
   be added there. Form uploads are capped before they are parsed
   (`parsePictureForm`). Do not weaken these.
+- **Themes** are blocks of colour variables in `style.css`, listed in
+  `theme.js`; one of them (Daylight) is light. Every colour in a style
+  comes from a variable: a faint highlight is `rgba(var(--wash), 0.05)`,
+  never `rgba(255, 255, 255, …)`, which is invisible on the light theme.
+  "Follow this device" picks Daylight or Polaris; `index.html`'s first
+  script knows the same two names (keep them equal).
+- **Asking "are you sure?"** is `askConfirm` / `confirmDiscard`
+  (`confirm.js`, one dialog shown by `App.vue`), never the browser's
+  `confirm()`.
 - Dates are `DD-MM-YYYY`, there is no year 0. They are typed in one box
   (`components/DateField.vue`): digits are typed and shown left to right
   but read from the right, the last four being the year (`dateDigits.js`);

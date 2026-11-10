@@ -15,7 +15,7 @@
         @paint="onPaint"
         @paint-end="onPaintEnd"
       />
-      <p v-else-if="loadError" class="error-banner floating">{{ loadError }}</p>
+      <p v-else-if="loadError" class="error-banner floating" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
       <p v-else class="loading-hint floating">{{ $t('Loading…') }}</p>
 
       <div class="toolbar glass-panel panel-solid">

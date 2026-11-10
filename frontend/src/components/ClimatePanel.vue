@@ -59,7 +59,7 @@
     </div>
 
     <p v-if="working" class="status">{{ $t('Working out the climate…') }}</p>
-    <p v-else-if="error" class="status error">{{ $t("Couldn't work out the climate.") }} {{ error }}</p>
+    <p v-else-if="error" class="status error" role="alert">{{ $t("Couldn't work out the climate.") }} {{ error }}</p>
     <p v-if="assumed" class="note">{{ $t("Nothing in the solar system warms this planet, so the climate uses Earth's sunlight.") }}</p>
     <p class="note">
       {{ $t("Worked out from the continents, their biomes, mountains and volcanoes, the axial tilt, the day's length and the star. The year starts just after the northern winter solstice.") }}

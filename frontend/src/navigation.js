@@ -2,6 +2,7 @@
 // "unsaved changes" guard and the Ctrl+S save shortcut.
 
 import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { confirmDiscard } from './confirm'
 import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import { t } from './i18n'
 
@@ -19,8 +20,8 @@ export const mapPath = (locationId) => (locationId ? `/map?focus=${locationId}` 
 // another article) and closing or reloading the tab. isDirty is a function
 // so it is only evaluated when someone actually tries to leave.
 export function useUnsavedGuard(isDirty) {
-  const ask = () => {
-    if (isDirty() && !window.confirm(t('Discard your changes?'))) return false
+  const ask = async () => {
+    if (isDirty() && !(await confirmDiscard())) return false
   }
   onBeforeRouteLeave(ask)
   onBeforeRouteUpdate(ask)
@@ -44,8 +45,8 @@ export function useModalGuard(state, close) {
   const touched = () => {
     if (start === null) start = snapshot()
   }
-  const requestClose = () => {
-    if (start !== null && snapshot() !== start && !window.confirm(t('Discard your changes?'))) return
+  const requestClose = async () => {
+    if (start !== null && snapshot() !== start && !(await confirmDiscard())) return
     close()
   }
   return { requestClose, touched }
@@ -87,4 +88,22 @@ export const lastVisitOf = (path) => lastSeenAt.get(path) || path
 // this presses it.
 export function openSearch() {
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true }))
+}
+
+// "Try again" beside a page's load error: the page is made anew, so it
+// loads from the start, without reloading the whole app.
+export const pageKey = ref(0)
+export const retryPage = () => pageKey.value++
+
+// True while the router is on its way to a page (its script may still be
+// on the wire), after a moment so a quick change shows nothing.
+export const pageLoading = ref(false)
+let loadingTimer = null
+export function pageLoadStarted() {
+  clearTimeout(loadingTimer)
+  loadingTimer = setTimeout(() => (pageLoading.value = true), 200)
+}
+export function pageLoadEnded() {
+  clearTimeout(loadingTimer)
+  pageLoading.value = false
 }

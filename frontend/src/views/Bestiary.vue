@@ -8,7 +8,7 @@
       <button class="btn btn-primary" @click="openForm(null)">{{ $t('New creature') }}</button>
     </header>
 
-    <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+    <p v-if="loadError" class="error-banner" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
     <p v-else-if="loading" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <div v-else-if="!creatures.length" class="empty-state glass-panel">
@@ -149,7 +149,7 @@ useLinkNames()
   padding: 0 0.85rem;
   border-radius: 8px;
   border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--wash), 0.03);
   color: var(--text-muted);
   font: inherit;
   font-size: 0.85rem;

@@ -4,10 +4,25 @@ import StoryPicker from './views/StoryPicker.vue'
 import NotFound from './views/NotFound.vue'
 import { activeStoryId, forgetStory, loadStories, stories } from './stories'
 import { tr } from './i18n'
-import { pageTitle, rememberVisit } from './navigation'
+import { pageTitle, rememberVisit, pageLoadStarted, pageLoadEnded } from './navigation'
+import { fetchHome } from './api'
+import { lastWriting, writePath } from './writeLast'
 
 // Only the pages every visit starts on are part of the main script; each
 // other page is fetched the first time it is opened.
+// The sidebar's Write: the chapter written last, on any device; without a
+// connection, the one this device was on; else the chapters with no volume.
+async function resumeWriting() {
+  try {
+    const w = (await fetchHome()).writing
+    if (w) return writePath({ volume: w.volume_id, chapter: w.chapter_id })
+  } catch (e) {
+    /* can't ask: go by what this device remembers */
+  }
+  const kept = lastWriting(activeStoryId)
+  return kept ? writePath(kept) : '/write/0'
+}
+
 const routes = [
   // The picker is the one page that isn't inside a story (no sidebar).
   { path: '/stories', name: 'stories', component: StoryPicker, meta: { bare: true, title: tr('Stories') } },
@@ -49,6 +64,7 @@ const routes = [
   { path: '/chapters/:id', name: 'chapter', component: () => import('./views/ChapterView.vue'), meta: { title: tr('Chapters') }, props: true },
   // The writing editor: loaded on its own, with ProseMirror, only when opened.
   // :volume is a volume's id, or 0 for the chapters without one.
+  { path: '/write', name: 'write-last', component: NotFound, beforeEnter: resumeWriting, meta: { title: tr('Write') } },
   { path: '/write/:volume', name: 'write', component: () => import('./views/WritePage.vue'), meta: { title: tr('Write') }, props: true },
   { path: '/write/:volume/pages', name: 'write-pages', component: () => import('./views/BookPagesPage.vue'), meta: { title: tr('Page view') }, props: true },
   // The fonts library: one for every story (fontLibrary.js), loaded on its own.
@@ -70,6 +86,7 @@ const router = createRouter({
 // it and show the picker instead of a page full of errors.
 let storyChecked = false
 router.beforeEach(async (to) => {
+  pageLoadStarted()
   if (to.name === 'stories') return true
   if (!activeStoryId) return { name: 'stories' }
   if (!storyChecked) {
@@ -92,6 +109,7 @@ router.beforeEach(async (to) => {
 // old build's file. Loading the address afresh gets the new build. Once per
 // address, so being offline doesn't make it reload for ever.
 router.onError((err, to) => {
+  pageLoadEnded()
   if (!/dynamically imported module|module script failed|error loading dynamically/i.test(String(err?.message || err))) return
   const key = 'polaris-reloaded'
   try {
@@ -105,6 +123,7 @@ router.onError((err, to) => {
 
 // A detail page names what it shows once it has loaded it (see pageTitle).
 router.afterEach((to, from, failure) => {
+  pageLoadEnded()
   if (!failure) {
     try {
       sessionStorage.removeItem('polaris-reloaded')

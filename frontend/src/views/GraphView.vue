@@ -64,7 +64,7 @@
     </section>
     </FoldOnPhone>
 
-    <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+    <p v-if="loadError" class="error-banner" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
 
     <div ref="wrapEl" class="graph-wrap" :class="{ 'is-grabbing': dragging, 'is-pointer': hovered && !dragging }">
       <canvas

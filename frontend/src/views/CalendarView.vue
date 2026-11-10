@@ -16,7 +16,7 @@
       </div>
     </header>
 
-    <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+    <p v-if="loadError" class="error-banner" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
     <p v-else-if="!data" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <template v-else>
@@ -448,12 +448,12 @@ timelineApi
   padding: 0.35rem 0.4rem;
   border: 1px solid var(--glass-border);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(var(--wash), 0.02);
   cursor: pointer;
 }
 
 .day.has-points {
-  background: rgba(255, 255, 255, 0.045);
+  background: rgba(var(--wash), 0.045);
 }
 
 .day.is-picked {

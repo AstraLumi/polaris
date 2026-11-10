@@ -14,6 +14,7 @@
       // Apply the saved colour theme before first paint, so there is no flash.
       try {
         var t = localStorage.getItem('polaris-theme');
+        if (t === 'system') t = matchMedia('(prefers-color-scheme: light)').matches ? 'daylight' : 'polaris';
         if (t) document.documentElement.setAttribute('data-theme', t);
       } catch (e) {}
     </script>

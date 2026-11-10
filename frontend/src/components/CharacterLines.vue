@@ -1,6 +1,6 @@
 <template>
   <div class="char-lines">
-    <p v-if="error" class="error-banner">{{ error }}</p>
+    <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
     <p v-else-if="lines === null" class="faint">{{ $t('Loading…') }}</p>
     <template v-else-if="lines.length">
       <div class="lines-tools no-print">

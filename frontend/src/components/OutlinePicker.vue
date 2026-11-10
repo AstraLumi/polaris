@@ -95,7 +95,7 @@ function set(part, value) {
   width: 5.5rem;
   flex-shrink: 0;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--wash), 0.03);
   border: 1px solid var(--glass-border);
 }
 
@@ -127,7 +127,7 @@ function set(part, value) {
   padding: 0.3rem 0.6rem;
   border-radius: 8px;
   border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--wash), 0.03);
   color: var(--text-muted);
   font: inherit;
   font-size: 0.78rem;

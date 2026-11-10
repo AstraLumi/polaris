@@ -65,7 +65,7 @@
           </select>
         </div>
 
-        <p v-if="error" class="error-banner">{{ error }}</p>
+        <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
 
         <div class="modal-actions">
           <button v-if="faction" type="button" class="btn btn-danger" @click="confirmOpen = true">{{ $t('Delete') }}</button>

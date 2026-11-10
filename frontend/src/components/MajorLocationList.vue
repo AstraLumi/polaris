@@ -212,7 +212,7 @@ onMounted(() => emit('closed', closed.value))
 
 .group-head:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--wash), 0.04);
 }
 
 .caret {
@@ -245,7 +245,7 @@ ul {
 
 .row:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--wash), 0.04);
 }
 
 .row.active {

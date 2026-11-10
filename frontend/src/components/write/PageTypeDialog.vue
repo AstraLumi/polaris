@@ -39,7 +39,7 @@
           <button v-for="p in PRESETS" :key="p.label" type="button" class="btn btn-ghost small" @click="width = p.w; height = p.h">{{ p.label }}</button>
         </div>
       </div>
-      <p v-if="picked === 'custom' && !sizeOk" class="error-banner">{{ $t('Width and height must be between 50 and 1000 mm.') }}</p>
+      <p v-if="picked === 'custom' && !sizeOk" class="error-banner" role="alert">{{ $t('Width and height must be between 50 and 1000 mm.') }}</p>
 
       <div class="modal-actions">
         <button v-if="!switching" type="button" class="btn btn-ghost import-btn" @click="$emit('import')">{{ $t('Upload a .docx instead') }}</button>
@@ -97,6 +97,20 @@ const cancel = () => emit('cancel')
 <style scoped>
 .overlay {
   z-index: 80;
+}
+
+/* The buttons stay in view while the choices scroll (a phone shows the
+   five page types one under the other). */
+.page-type-dialog .modal-actions {
+  position: sticky;
+  bottom: 0;
+  flex-wrap: wrap;
+  margin-bottom: -0.75rem;
+  padding: 0.75rem 0;
+  background: var(--surface);
+  /* The dialog's own bottom padding lies under the bar: cover it too, or
+     the choices show through below the buttons. */
+  box-shadow: 0 3rem 0 var(--surface);
 }
 
 .lead {

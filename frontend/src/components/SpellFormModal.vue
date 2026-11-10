@@ -99,7 +99,7 @@
           <textarea v-model="description" rows="4"></textarea>
         </label>
 
-        <p v-if="error" class="error-banner">{{ error }}</p>
+        <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
 
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" @click="$emit('close')">{{ $t('Cancel') }}</button>
@@ -255,7 +255,7 @@ async function submit() {
   justify-content: center;
   border-radius: 10px;
   border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--wash), 0.04);
   cursor: pointer;
   padding: 0;
 }

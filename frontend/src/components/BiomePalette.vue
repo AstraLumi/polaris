@@ -151,7 +151,7 @@ const landform = computed(() => (props.modelValue?.kind === 'relief' ? landformO
 }
 
 .swatch:hover {
-  background: var(--glass-hover, rgba(255, 255, 255, 0.05));
+  background: var(--glass-hover, rgba(var(--wash), 0.05));
 }
 
 .swatch.active {

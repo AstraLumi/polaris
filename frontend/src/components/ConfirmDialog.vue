@@ -2,10 +2,10 @@
   <div class="overlay" @click.self="$emit('cancel')">
     <div class="modal glass-panel panel-solid">
       <h2>{{ title }}</h2>
-      <p class="message">{{ message }}</p>
+      <p v-if="message" class="message">{{ message }}</p>
       <div class="modal-actions">
         <button class="btn btn-ghost" @click="$emit('cancel')">{{ $t('Cancel') }}</button>
-        <button ref="confirmBtn" class="btn btn-danger" @click="$emit('confirm')">{{ confirmLabel || $t('Confirm') }}</button>
+        <button ref="confirmBtn" class="btn" :class="danger ? 'btn-danger' : 'btn-primary'" @click="$emit('confirm')">{{ confirmLabel || $t('Confirm') }}</button>
       </div>
     </div>
   </div>
@@ -22,6 +22,8 @@ defineProps({
   title: { type: String, required: true },
   message: { type: String, default: '' },
   confirmLabel: { type: String, default: '' },
+  // false for a step that loses nothing (exporting, say).
+  danger: { type: Boolean, default: true },
 })
 defineEmits(['cancel', 'confirm'])
 </script>
@@ -36,6 +38,7 @@ defineEmits(['cancel', 'confirm'])
   font-size: 0.88rem;
   color: var(--text-muted);
   line-height: 1.5;
+  white-space: pre-line;
 }
 
 </style>

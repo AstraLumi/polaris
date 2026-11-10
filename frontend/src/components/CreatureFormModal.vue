@@ -93,7 +93,7 @@
             <option v-for="c in relatedOptions" :key="c.id" :value="c.id">{{ c.name }}</option>
           </select>
         </div>
-        <p v-if="error" class="error-banner">{{ error }}</p>
+        <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
         <div class="modal-actions">
           <button v-if="creature" type="button" class="btn btn-danger" @click="confirmOpen = true">{{ $t('Delete') }}</button>
           <span class="spacer"></span>
@@ -312,7 +312,7 @@ onMounted(async () => {
   min-height: var(--control-h);
   border-radius: 8px;
   border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--wash), 0.03);
   color: var(--text-muted);
   font: inherit;
   font-size: 0.85rem;

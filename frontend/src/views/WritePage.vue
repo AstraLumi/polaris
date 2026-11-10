@@ -7,13 +7,19 @@
       </Breadcrumbs>
     </div>
 
-    <p v-if="error" class="error-banner">
+    <p v-if="error" class="error-banner" role="alert">
       {{ error }}
       <button type="button" class="link-btn" @click="error = ''">{{ $t('Dismiss') }}</button>
     </p>
     <p v-if="notice" class="write-notice" role="status">
       {{ notice }}
       <button type="button" class="link-btn" @click="notice = ''">{{ $t('Dismiss') }}</button>
+    </p>
+
+    <p v-if="book && book.is_set_up === false && settings && !typeLater && !focusMode" class="write-notice type-offer" role="status">
+      <span>{{ $t('This book is laid out as {type} for now. Choose what it is for before the layout matters.', { type: typeLabel(settings) }) }}</span>
+      <button type="button" class="btn btn-ghost small" @click="typeDialog = 'first'">{{ $t('Choose a page type') }}</button>
+      <button type="button" class="link-btn" @click="typeLater = true">{{ $t('Not now') }}</button>
     </p>
 
     <WriteToolbar
@@ -255,6 +261,7 @@
 // book 0), the text of one at a time, formatted for the book's page type.
 // docs/EDITOR.md is the contract; the editor's logic lives in src/editor/.
 import 'prosemirror-view/style/prosemirror.css'
+import { askConfirm } from '../confirm'
 import 'prosemirror-gapcursor/style/gapcursor.css'
 import '../editor/editor.css'
 import { copyFormat, applyFormat } from '../editor/formatPainter.js'
@@ -265,6 +272,7 @@ import { EditorView } from 'prosemirror-view'
 import { t, tr, locale } from '../i18n'
 import { chaptersApi, spellsApi, createCharacter } from '../api'
 import { activeStoryId } from '../stories'
+import { rememberWriting } from '../writeLast'
 import { chapterIndex, loadChapters } from '../chapters'
 import { pageTitle } from '../navigation'
 import { schema, docFromJSON, docToJSON, emptyDocJSON } from '../editor/schema.js'
@@ -345,6 +353,10 @@ const error = ref('')
 const busy = ref(false)
 const adding = ref(false)
 const typeDialog = ref('') // '' | 'first' | 'switch'
+// A book never set up is written in at once, on the default page type; the
+// choice is offered in a line above the page, not asked before a word is
+// typed. "Not now" hides the line for this visit.
+const typeLater = ref(false)
 const panel = ref('')
 const focusMode = ref(false)
 
@@ -360,6 +372,8 @@ const bookTitle = computed(() => {
 
 // ---- The open chapter ------------------------------------------------------------
 const chapterId = ref(null)
+// Where the sidebar's Write comes back to when the server can't say.
+watch(chapterId, (id) => id && rememberWriting(activeStoryId, volumeKey.value, id))
 const chapter = computed(() => chapters.value.find((c) => c.id === chapterId.value) || null)
 const editorEl = ref(null)
 const paperArea = ref(null)
@@ -987,7 +1001,6 @@ async function loadBook() {
   try {
     const res = await booksApi.get(want)
     book.value = { ...res, settings: normaliseSettings(res.settings), chapters: res.chapters || [] }
-    if (res.is_set_up === false) typeDialog.value = 'first'
     pickChapter()
     // The kept copy brought up to date (what changed only), now and then.
     const kept = offline.record.value
@@ -1263,7 +1276,7 @@ async function toggleOffline(on) {
     return
   }
   const unsent = offline.pendingHere.value.length
-  if (unsent && !window.confirm(t('{n} chapters of this book hold text not sent to the server yet. Forget them on this device anyway?', { n: unsent }))) return
+  if (unsent && !(await askConfirm(t('{n} chapters of this book hold text not sent to the server yet. Forget them on this device anyway?', { n: unsent }), { confirmLabel: t('Forget them') }))) return
   await offline.disable()
   // The open chapter's unsent text is still in the editor: a draft again.
   const had = pendingHere.value
@@ -1828,7 +1841,7 @@ onBeforeRouteLeave(async () => {
   if (settingsTimer) await saveSettings()
   if (!saver || !saver.dirty) return true
   if (await flushText()) return true
-  return window.confirm(t("This chapter isn't saved yet. It is kept in this browser and offered back when you open it again. Leave anyway?"))
+  return askConfirm(t("This chapter isn't saved yet. It is kept in this browser and offered back when you open it again. Leave anyway?"), { confirmLabel: t('Leave') })
 })
 const onUnload = (e) => {
   if (saver?.dirty) {
@@ -2186,6 +2199,13 @@ onBeforeUnmount(() => {
 }
 
 /* Offline writing (stage 5). */
+.type-offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.9rem;
+}
+
 .write-notice {
   margin: 0;
   padding: 0.5rem 0.9rem;

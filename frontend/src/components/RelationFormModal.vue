@@ -63,7 +63,7 @@
           <textarea v-model="notes" rows="3"></textarea>
         </label>
 
-        <p v-if="error" class="error-banner">{{ error }}</p>
+        <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
 
         <div class="modal-actions">
           <button v-if="relation" type="button" class="btn btn-danger" @click="$emit('delete', relation)">{{ $t('Delete') }}</button>
@@ -169,7 +169,7 @@ async function submit() {
   padding: 0.5rem 0.7rem;
   border-radius: 8px;
   border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--wash), 0.03);
   color: var(--text-muted);
   font: inherit;
   font-size: 0.85rem;
@@ -186,7 +186,7 @@ async function submit() {
   margin: 0.25rem 0 0.9rem;
   padding: 0.6rem 0.8rem;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--wash), 0.04);
   font-size: 0.85rem;
   color: var(--text-muted);
   line-height: 1.6;

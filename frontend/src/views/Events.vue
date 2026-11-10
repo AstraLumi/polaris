@@ -54,7 +54,7 @@
       <button type="button" class="clear" @click="clearChapter">{{ $t('Clear filter') }}</button>
     </p>
 
-    <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+    <p v-if="loadError" class="error-banner" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
 
     <div v-if="!loading && !loadError && events.length === 0" class="empty-state glass-panel">
       <p class="empty-title">{{ activeTag || search ? $t('No events match.') : $t('No events yet.') }}</p>
@@ -99,7 +99,7 @@
               <span v-if="e.chapter_id && chapterLabel(e.chapter_id)">{{ chapterLabel(e.chapter_id, { short: true }) }}</span>
             </div>
             <div v-if="e.tags.length" class="row-tags">
-              <span v-for="t in e.tags" :key="t" class="mini-tag" @click.prevent.stop="toggleTag(t)">#{{ t }}</span>
+              <span v-for="t in e.tags" :key="t" class="mini-tag" role="button" tabindex="0" :title="$t('Show only this tag')" @click.prevent.stop="toggleTag(t)" @keydown.enter.prevent.stop="toggleTag(t)">#{{ t }}</span>
             </div>
           </div>
           <img v-if="e.picture_path" :src="e.picture_path" :alt="e.name" class="thumb" />
@@ -255,7 +255,7 @@ onMounted(async () => {
 }
 
 .tag-chip {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--wash), 0.04);
   border: 1px solid var(--glass-border);
   color: var(--text-muted);
   border-radius: 999px;

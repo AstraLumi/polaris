@@ -33,12 +33,13 @@
       <input ref="fileInput" type="file" accept="image/*" multiple hidden @change="onFiles" />
       <span class="note">{{ $t('Pictures are saved as soon as you add or change them.') }}</span>
     </div>
-    <p v-if="error" class="error-banner">{{ error }}</p>
+    <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, watch } from 'vue'
+import { askConfirm } from '../confirm'
 import { wikiApi } from '../wiki'
 import { viewGallery } from '../navigation'
 import { t } from '../i18n'
@@ -98,8 +99,8 @@ function move(i, by) {
   run(() => wikiApi.galleryOrder(props.type, props.id, ids))
 }
 
-function remove(g) {
-  if (window.confirm(t('Remove this picture?'))) run(() => wikiApi.galleryRemove(g.id))
+async function remove(g) {
+  if (await askConfirm(t('Remove this picture?'), { confirmLabel: t('Remove') })) run(() => wikiApi.galleryRemove(g.id))
 }
 </script>
 
@@ -127,7 +128,7 @@ function remove(g) {
   overflow: hidden;
   border: 1px solid var(--glass-border);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--wash), 0.04);
   cursor: zoom-in;
 }
 

@@ -67,7 +67,7 @@ function initials(name) {
   align-items: center;
   gap: 0.45rem;
   border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--wash), 0.04);
   border-radius: 999px;
   padding: 0.2rem 0.4rem 0.2rem 0.25rem;
   font-size: 0.82rem;

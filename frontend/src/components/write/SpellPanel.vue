@@ -35,7 +35,7 @@
       <input v-model="typed" type="text" maxlength="64" :placeholder="$t('Add a word')" :aria-label="$t('Add a word')" />
       <button type="submit" class="btn btn-ghost small" :disabled="!typed.trim()">{{ $t('Add') }}</button>
     </form>
-    <p v-if="spell.error.value" class="error-banner">{{ spell.error.value }}</p>
+    <p v-if="spell.error.value" class="error-banner" role="alert">{{ spell.error.value }}</p>
     <p v-if="!spell.added.value.length" class="hint">{{ $t('Words you add with “Add to dictionary” show here.') }}</p>
     <ul v-else class="word-list">
       <li v-for="w in sorted" :key="w">

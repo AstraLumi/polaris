@@ -50,7 +50,7 @@ const tip = computed(() =>
 .slot {
   display: flex; align-items: center; gap: 0.7rem; width: 100%; min-width: 0; box-sizing: border-box; min-height: 62px; padding: 0.55rem 0.7rem;
   font: inherit; color: inherit; text-align: left;
-  background: rgba(255,255,255,0.03); border: 1px dashed var(--glass-border); border-radius: 14px;
+  background: rgba(var(--wash), 0.03); border: 1px dashed var(--glass-border); border-radius: 14px;
 }
 .slot.is-filled { border-style: solid; background: color-mix(in srgb, var(--accent) 8%, transparent); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
 .slot.is-editable { cursor: pointer; }

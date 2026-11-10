@@ -115,7 +115,7 @@
       <div class="top-notes">
         <p class="hint-line">{{ hint }}</p>
         <p v-if="hoverLatitude" class="lat-line">{{ hoverLatitude }}</p>
-        <p v-if="notice" class="error-banner notice">{{ notice }}</p>
+        <p v-if="notice" class="error-banner notice" role="alert">{{ notice }}</p>
       </div>
 
       <MapHoverPane :entries="hoverEntries" />

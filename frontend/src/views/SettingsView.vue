@@ -47,14 +47,29 @@
       </p>
       <div class="themes" role="radiogroup" :aria-label="$t('Colour theme')">
         <button
+          type="button"
+          class="theme-card system-card"
+          :class="{ 'is-selected': themeChoice === SYSTEM_THEME }"
+          role="radio"
+          :aria-checked="themeChoice === SYSTEM_THEME"
+          @click="saveTheme(SYSTEM_THEME)"
+        >
+          <span class="theme-preview">
+            <span class="swatch" style="background: #f1eee6"></span>
+            <span class="swatch" style="background: #050e26"></span>
+          </span>
+          <span class="theme-name">{{ $t('Follow this device') }}<span v-if="themeChoice === SYSTEM_THEME" class="theme-check">✓</span></span>
+          <span class="theme-blurb">{{ $t('Daylight while the device is set to light, Polaris while it is set to dark.') }}</span>
+        </button>
+        <button
           v-for="t in THEMES"
           :key="t.id"
           type="button"
           class="theme-card"
-          :class="{ 'is-selected': currentTheme === t.id }"
+          :class="{ 'is-selected': themeChoice === t.id }"
           :data-theme="t.id"
           role="radio"
-          :aria-checked="currentTheme === t.id"
+          :aria-checked="themeChoice === t.id"
           @click="saveTheme(t.id)"
         >
           <span class="theme-preview">
@@ -64,7 +79,7 @@
             <span class="swatch" style="background: var(--kind-birth)"></span>
             <span class="swatch" style="background: var(--kind-founding)"></span>
           </span>
-          <span class="theme-name">{{ t.name }}<span v-if="currentTheme === t.id" class="theme-check">✓</span></span>
+          <span class="theme-name">{{ t.name }}<span v-if="themeChoice === t.id" class="theme-check">✓</span></span>
           <span class="theme-blurb">{{ $t(t.blurb) }}</span>
         </button>
       </div>
@@ -101,7 +116,7 @@
         {{ $t('How your world counts time. Date inputs, the Q1–Q4 labels and the timeline all follow this, so set it before entering many dates.') }}
       </p>
 
-      <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+      <p v-if="loadError" class="error-banner" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
       <template v-else>
         <div class="field-row narrow">
           <label class="field">
@@ -158,7 +173,7 @@
           {{ $t('Changing this doesn\'t rewrite dates you\'ve already saved. A saved date that no longer exists in the new calendar (say, day 31 after switching to 30-day months) is kept as is, and will be refused the next time you save that item until you fix it.') }}
         </p>
 
-        <p v-if="saveError" class="error-banner">{{ saveError }}</p>
+        <p v-if="saveError" class="error-banner" role="alert">{{ saveError }}</p>
         <div class="actions">
           <button class="btn btn-primary" :disabled="saving || !valid" @click="save">
             {{ saving ? $t('Saving…') : $t('Save calendar') }}
@@ -228,7 +243,7 @@
           </p>
         </template>
 
-        <p v-if="seasonError" class="error-banner">{{ seasonError }}</p>
+        <p v-if="seasonError" class="error-banner" role="alert">{{ seasonError }}</p>
         <div class="actions">
           <button class="btn btn-primary" :disabled="seasonSaving || !seasonsValid" @click="saveSeasonSettings">
             {{ seasonSaving ? $t('Saving…') : $t('Save seasons') }}
@@ -287,7 +302,7 @@
         <strong v-if="planetCells > 300000">{{ $t('That many hexes may be slow to draw.') }}</strong>
       </p>
 
-      <p v-if="mapError" class="error-banner">{{ mapError }}</p>
+      <p v-if="mapError" class="error-banner" role="alert">{{ mapError }}</p>
       <div class="actions">
         <button class="btn btn-primary" :disabled="mapSaving || !mapValid" @click="saveMapSettings">
           {{ mapSaving ? $t('Saving…') : $t('Save map settings') }}
@@ -343,7 +358,7 @@
         <li>{{ $t('The middle column is above longitude 0; east is to the left. The left and right edges meet, so they must match.') }}</li>
         <li>{{ $t('Near the top and bottom the picture is stretched sideways, as on a world map: draw round things there wider than they are tall.') }}</li>
       </ul>
-      <p v-if="skyError" class="error-banner">{{ skyError }}</p>
+      <p v-if="skyError" class="error-banner" role="alert">{{ skyError }}</p>
     </section>
 
     <section id="blood-types" class="glass-panel card" :class="{ 'is-flash': flash === 'blood-types' }">
@@ -371,7 +386,7 @@
         <button type="button" class="btn btn-ghost small" :disabled="bloodList.length >= 64" @click="addBloodType">{{ $t('Add blood type') }}</button>
       </div>
 
-      <p v-if="bloodError" class="error-banner">{{ bloodError }}</p>
+      <p v-if="bloodError" class="error-banner" role="alert">{{ bloodError }}</p>
       <div class="actions">
         <button class="btn btn-primary" :disabled="bloodSaving || !bloodValid" @click="saveBloodTypeList()">
           {{ bloodSaving ? $t('Saving…') : $t('Save blood types') }}
@@ -443,7 +458,7 @@ import { fetchSettings, saveSettings, saveSeasons, saveBloodTypes, planetApi } f
 import RestoreDefaultDialog from '../components/RestoreDefaultDialog.vue'
 import { applyBloodTypes, bloodTypeNote, DEFAULT_BLOOD_TYPES } from '../bloodTypes'
 import { loadCalendar, calendar } from '../calendar'
-import { THEMES, currentTheme, saveTheme } from '../theme'
+import { THEMES, themeChoice, saveTheme, SYSTEM_THEME } from '../theme'
 import { t, tn, tr, LOCALES, locale, saveLocale } from '../i18n'
 import pkg from '../../package.json'
 import { useRoute, useRouter } from 'vue-router'
@@ -1152,7 +1167,7 @@ onBeforeUnmount(() => {
   width: 1.1rem;
   height: 1.1rem;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(var(--wash), 0.18);
 }
 
 .theme-name {

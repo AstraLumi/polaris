@@ -73,7 +73,7 @@ function update(key, rawValue) {
 
 .modifier-field input {
   width: 100%;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--wash), 0.04);
   border: 1px solid var(--glass-border);
   border-radius: 6px;
   padding: 0.4rem 0.5rem;

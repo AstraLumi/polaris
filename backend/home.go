@@ -13,6 +13,18 @@ type homeCounts struct {
 	Locations  int `json:"locations"` // every location, major and minor
 	Spells     int `json:"spells"`
 	Events     int `json:"events"`
+	Chapters   int `json:"chapters"`
+	Words      int `json:"words"` // in every chapter's text
+}
+
+// homeWriting is where the writing stands: the chapter whose text was
+// written last or, when nothing is written yet, the first chapter.
+type homeWriting struct {
+	ChapterID int64  `json:"chapter_id"`
+	VolumeID  int64  `json:"volume_id"` // 0: a chapter without a volume
+	Title     string `json:"title"`
+	Words     int    `json:"words"`      // this chapter's
+	UpdatedAt string `json:"updated_at"` // "" when nothing is written yet
 }
 
 type homeRecent struct {
@@ -54,6 +66,8 @@ type homePayload struct {
 	// 20 counted per kind).
 	LooseMore int         `json:"loose_more"`
 	Events    []homeEvent `json:"events"`
+	// nil while the story has no chapter.
+	Writing *homeWriting `json:"writing"`
 }
 
 func homeHandler(db *sql.DB) http.HandlerFunc {
@@ -70,6 +84,8 @@ func homeHandler(db *sql.DB) http.HandlerFunc {
 			{&p.Counts.Locations, `SELECT COUNT(*) FROM locations`},
 			{&p.Counts.Spells, `SELECT COUNT(*) FROM spells`},
 			{&p.Counts.Events, `SELECT COUNT(*) FROM events`},
+			{&p.Counts.Chapters, `SELECT COUNT(*) FROM chapters`},
+			{&p.Counts.Words, `SELECT COALESCE(SUM(t.words), 0) FROM chapter_texts t JOIN chapters c ON c.id = t.chapter_id`},
 		} {
 			if err := db.QueryRow(c.q).Scan(c.dest); err != nil {
 				http.Error(w, "failed to load home", http.StatusInternalServerError)
@@ -175,6 +191,23 @@ func homeHandler(db *sql.DB) http.HandlerFunc {
 			log.Printf("homeHandler: reading rows: %v", err)
 		}
 		er.Close()
+
+		var wr homeWriting
+		err = db.QueryRow(`SELECT c.id, COALESCE(c.volume_id, 0), c.title, t.words, t.updated_at
+			FROM chapter_texts t JOIN chapters c ON c.id = t.chapter_id
+			WHERE t.words > 0 ORDER BY t.updated_at DESC, c.id DESC LIMIT 1`).Scan(&wr.ChapterID, &wr.VolumeID, &wr.Title, &wr.Words, &wr.UpdatedAt)
+		if err == sql.ErrNoRows {
+			// Books in their order (volumes by position, then the chapters
+			// without one), each book's chapters in theirs.
+			err = db.QueryRow(`SELECT c.id, COALESCE(c.volume_id, 0), c.title FROM chapters c
+				LEFT JOIN volumes v ON v.id = c.volume_id
+				ORDER BY c.volume_id IS NULL, v.position, v.id, c.position, c.id LIMIT 1`).Scan(&wr.ChapterID, &wr.VolumeID, &wr.Title)
+		}
+		if err == nil {
+			p.Writing = &wr
+		} else if err != sql.ErrNoRows {
+			log.Printf("home writing: %v", err)
+		}
 
 		writeJSON(w, p)
 	}

@@ -21,7 +21,7 @@
         class="picker-search"
       />
 
-      <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+      <p v-if="loadError" class="error-banner" role="alert">{{ loadError }}</p>
       <p v-else-if="allSpells.length === 0 && !loading" class="hint">
         {{ $t('No spells exist yet — create some on the Character Assets page first.') }}
       </p>

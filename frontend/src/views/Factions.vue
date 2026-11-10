@@ -17,7 +17,7 @@
       :aria-label="$t('Search factions')"
     />
 
-    <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+    <p v-if="loadError" class="error-banner" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
     <p v-else-if="loading" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <div v-else-if="!factions.length" class="empty-state glass-panel">

@@ -36,7 +36,7 @@
           <textarea v-model="description" rows="4"></textarea>
         </label>
 
-        <p v-if="error" class="error-banner">{{ error }}</p>
+        <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
 
         <div class="modal-actions">
           <button v-if="location" type="button" class="btn btn-danger" @click="confirmOpen = true">

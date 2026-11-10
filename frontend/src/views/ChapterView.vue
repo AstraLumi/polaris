@@ -5,7 +5,7 @@
     <NotFoundPanel v-if="missing" :message="$t('This chapter was deleted, or never existed.')">
       <RouterLink to="/chapters" class="btn btn-ghost">{{ $t('All chapters') }}</RouterLink>
     </NotFoundPanel>
-    <p v-else-if="loadError" class="error-banner">{{ loadError }}</p>
+    <p v-else-if="loadError" class="error-banner" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
     <p v-else-if="!chapter" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <template v-else>
@@ -38,7 +38,7 @@
             <label for="chapter-notes">{{ $t('Notes') }}</label>
             <MarkdownEditor id="chapter-notes" v-model="draft.notes" :rows="14" :items="wikiItems" :resolve="resolver" :placeholder="$t('What happens, threads to pick up, anything you want to remember. Markdown and [[links]] work as in the wiki.')" />
           </div>
-          <p v-if="saveError" class="error-banner">{{ saveError }}</p>
+          <p v-if="saveError" class="error-banner" role="alert">{{ saveError }}</p>
           <div class="edit-actions">
             <button type="button" class="btn btn-danger" @click="confirmOpen = true">{{ $t('Delete') }}</button>
             <span class="spacer"></span>

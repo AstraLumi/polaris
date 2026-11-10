@@ -11,7 +11,7 @@
     <NotFoundPanel v-if="missing" :message="$t('This event was deleted, or never existed.')">
       <RouterLink to="/events" class="btn btn-ghost">{{ $t('All events') }}</RouterLink>
     </NotFoundPanel>
-    <p v-else-if="loadError" class="error-banner">{{ loadError }}</p>
+    <p v-else-if="loadError" class="error-banner" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
     <p v-else-if="loading" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <form v-else class="glass-panel form" @submit.prevent="save">
@@ -69,7 +69,7 @@
         </div>
       </div>
 
-      <p v-if="saveError" class="error-banner">{{ saveError }}</p>
+      <p v-if="saveError" class="error-banner" role="alert">{{ saveError }}</p>
       <div class="actions sticky-save">
         <button class="btn btn-primary" type="submit" :disabled="saving">
           {{ saving ? $t('Saving…') : id ? $t('Save changes') : $t('Create event') }}

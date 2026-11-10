@@ -67,7 +67,7 @@
 
 .tool-btn:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--wash), 0.05);
 }
 
 .tool-btn.active {

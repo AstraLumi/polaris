@@ -42,7 +42,7 @@
     </header>
 
     <aside class="sky-info glass-panel panel-solid">
-      <p v-if="error" class="error-banner">{{ error }}</p>
+      <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
       <template v-else-if="sky">
         <p class="row"><span>{{ $t('Standing on') }}</span><strong>{{ groundText }}</strong></p>
         <p class="row"><span>{{ $t('Horizon') }}</span><strong>{{ horizonText }}</strong></p>

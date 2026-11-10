@@ -69,7 +69,7 @@ const isTaken = (c) => props.takenColors.some((t) => t && t.toLowerCase() === c)
 }
 
 .swatch-none {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--wash), 0.05);
   border: 2px dashed var(--glass-border);
 }
 

@@ -150,6 +150,7 @@
 // A book's styles: pick one to change it (an empty box follows the style it
 // is based on), make new ones, apply one to the selected paragraphs.
 import { ref, computed, watch } from 'vue'
+import { askConfirm } from '../../confirm'
 import { t, tr } from '../../i18n'
 import { BUILTIN_NAMES, resolveStyle, resolveCharStyle, newStyleId, basedOnChoices, styleById } from '../../editor/styles.js'
 import { mmToPt, ptToMm, num, textDeclarations, charDeclarations } from '../../editor/css.js'
@@ -244,13 +245,13 @@ function addStyle(kind) {
   pickedId.value = id
 }
 
-function removeStyle() {
+async function removeStyle() {
   const gone = picked.value
   if (!gone || gone.builtin) return
   const sure = gone.kind === 'character'
     ? t('Delete the character style "{name}"? Text that uses it loses its look.', { name: gone.name })
     : t('Delete the style "{name}"? Paragraphs that use it look like Normal.', { name: gone.name })
-  if (!window.confirm(sure)) return
+  if (!(await askConfirm(sure, { confirmLabel: t('Delete') }))) return
   // Styles based on it are based on what it was based on.
   const next = props.styles.filter((s) => s.id !== gone.id).map((s) => (s.based_on === gone.id ? { ...s, based_on: gone.based_on || (gone.kind === 'character' ? null : 'normal') } : s))
   pickedId.value = 'normal'

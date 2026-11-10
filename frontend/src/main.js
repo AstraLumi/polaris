@@ -5,6 +5,7 @@ import './style.css'
 import { loadSavedTheme } from './theme'
 import { loadSavedLocale, i18nPlugin } from './i18n'
 import { trackRecent } from './recentTracker'
+import { retryPage } from './navigation'
 import { registerServiceWorker } from './offline/index.js'
 
 loadSavedTheme()
@@ -18,7 +19,9 @@ document.addEventListener('mousedown', (e) => (pressedOn = e.target), true)
 document.addEventListener(
   'click',
   (e) => {
-    if (e.target.classList?.contains('overlay') && pressedOn !== e.target) e.stopPropagation()
+    // Only a real click: Escape closes a dialog by sending its backdrop a
+    // made-up one (App.vue), with no press before it, and must get through.
+    if (e.isTrusted && e.target.classList?.contains('overlay') && pressedOn !== e.target) e.stopPropagation()
   },
   true,
 )
@@ -28,7 +31,12 @@ trackRecent(router)
 
 // The page shows once its language is loaded (i18n.js), so it never
 // appears in English first.
-loadSavedLocale().finally(() => createApp(App).use(router).use(i18nPlugin).mount('#app'))
+loadSavedLocale().finally(() => {
+  const app = createApp(App).use(router).use(i18nPlugin)
+  // "Try again" beside any page's load error (navigation.js).
+  app.config.globalProperties.$retryPage = retryPage
+  app.mount('#app')
+})
 
 // Offline writing (docs/EDITOR.md): the app's files kept by a service worker.
 if (import.meta.env.PROD) registerServiceWorker()

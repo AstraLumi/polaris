@@ -99,7 +99,7 @@
         </div>
       </div>
 
-      <p v-if="loadError" class="error-banner floating">{{ loadError }}</p>
+      <p v-if="loadError" class="error-banner floating" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
       <div v-else-if="ready && !bodies.length" class="empty glass-panel panel-solid">
         <h2>{{ $t('Solar system') }}</h2>
         <p>{{ $t('Start with the star your world turns round. Then add planets, and moons round them, and pick which planet is the one on the map.') }}</p>
@@ -319,7 +319,7 @@
             </dl>
             <p v-if="problem" class="problem">{{ problem }}</p>
 
-            <p v-if="saveError" class="error-banner">{{ saveError }}</p>
+            <p v-if="saveError" class="error-banner" role="alert">{{ saveError }}</p>
             <RouterLink :to="wikiPath('celestial_body', draft.id)" class="wiki-link">{{ $t('Wiki article') }} ›</RouterLink>
             <div class="form-actions">
               <button type="submit" class="btn btn-primary small" :disabled="busy || !dirty">{{ $t('Save') }}</button>

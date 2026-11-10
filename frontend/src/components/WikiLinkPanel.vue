@@ -131,7 +131,7 @@ function pick(item) {
   height: 1.7rem;
   overflow: hidden;
   border-radius: 5px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--wash), 0.06);
   font-size: 0.8rem;
   color: var(--text-muted);
 }

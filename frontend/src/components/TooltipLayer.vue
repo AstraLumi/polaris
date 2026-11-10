@@ -238,7 +238,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--glass-border);
   border-bottom-width: 2px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--wash), 0.06);
   color: var(--text-muted);
   font-family: inherit;
   font-size: 0.68rem;

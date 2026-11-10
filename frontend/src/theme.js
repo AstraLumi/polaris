@@ -12,22 +12,39 @@ export const THEMES = [
   { id: 'verdant', name: 'Verdant', blurb: tr('Deep forest with a mint accent.') },
   { id: 'crimson', name: 'Crimson', blurb: tr('Wine-dark with a rose accent.') },
   { id: 'ashen', name: 'Ashen', blurb: tr('Neutral graphite with a teal accent.') },
+  { id: 'daylight', name: 'Daylight', blurb: tr('Warm paper and dark ink, for bright rooms.') },
 ]
+
+// Not a theme but a choice: Daylight while the device is set to light,
+// Polaris while it is set to dark. index.html's first script knows the
+// same two names, so the page never flashes the wrong one.
+export const SYSTEM_THEME = 'system'
+const LIGHT_THEME = 'daylight'
+const lightQuery = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: light)') : null
 
 export const DEFAULT_THEME = 'polaris'
 const KEY = 'polaris-theme'
 
+// The theme on screen, and what was picked (a theme, or SYSTEM_THEME).
 export const currentTheme = ref(DEFAULT_THEME)
+export const themeChoice = ref(DEFAULT_THEME)
 
 let colorCache = new Map()
 
 export function applyTheme(id) {
-  const theme = THEMES.some((t) => t.id === id) ? id : DEFAULT_THEME
+  const choice = id === SYSTEM_THEME || THEMES.some((t) => t.id === id) ? id : DEFAULT_THEME
+  themeChoice.value = choice
+  const theme = choice === SYSTEM_THEME ? (lightQuery?.matches ? LIGHT_THEME : DEFAULT_THEME) : choice
   currentTheme.value = theme
   document.documentElement.dataset.theme = theme
   colorCache = new Map()
-  return theme
+  return choice
 }
+
+// The device going light or dark changes the theme at once, when asked to.
+lightQuery?.addEventListener('change', () => {
+  if (themeChoice.value === SYSTEM_THEME) applyTheme(SYSTEM_THEME)
+})
 
 export function loadSavedTheme() {
   let id = DEFAULT_THEME

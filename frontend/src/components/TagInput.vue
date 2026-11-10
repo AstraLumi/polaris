@@ -88,7 +88,7 @@ function onKey(e) {
   flex-wrap: wrap;
   gap: 0.4rem;
   align-items: center;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--wash), 0.04);
   border: 1px solid var(--glass-border);
   border-radius: 8px;
   padding: 0.4rem 0.5rem;

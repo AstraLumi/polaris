@@ -21,7 +21,7 @@
     </header>
 
     <template v-if="missing" />
-    <p v-else-if="loadError" class="error-banner">{{ loadError }}</p>
+    <p v-else-if="loadError" class="error-banner" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
     <p v-else-if="!data" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <div v-else-if="data.people.length === 1" class="empty-state glass-panel">
@@ -358,7 +358,7 @@ watch(() => props.id, load, { immediate: true })
   height: 2.6rem;
   overflow: hidden;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--wash), 0.06);
   color: var(--text-muted);
   font-weight: 700;
 }

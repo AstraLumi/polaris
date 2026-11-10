@@ -8,7 +8,7 @@
       <button type="button" class="icon-btn" :title="$t('Close')" @click="$emit('close')">✕</button>
     </header>
 
-    <p v-if="error" class="error-banner">{{ error }}</p>
+    <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
 
     <section>
       <h4>{{ $t('Major locations here') }}</h4>
@@ -318,7 +318,7 @@ h4 {
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.6rem;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--wash), 0.03);
   border: 1px solid var(--glass-border);
   border-radius: 8px;
 }

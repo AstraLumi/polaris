@@ -27,7 +27,7 @@
       {{ $t('Kept on this device, brought up to date {when}.', { when: ago(offline.record.value.saved_at) }) }}
       <button v-if="offline.connected.value" type="button" class="link-btn" :disabled="offline.busy.value" @click="offline.refresh()">{{ $t('Update now') }}</button>
     </p>
-    <p v-if="offline.error.value" class="error-banner">{{ offline.error.value }}</p>
+    <p v-if="offline.error.value" class="error-banner" role="alert">{{ offline.error.value }}</p>
     <p v-if="offline.available.value && offline.persisted.value === false" class="hint">{{ $t('The browser may clear what it keeps when the device runs low on space. Write with a connection now and then.') }}</p>
 
     <template v-if="offline.dirty.value.length">

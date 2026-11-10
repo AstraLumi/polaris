@@ -7,12 +7,12 @@
     <NotFoundPanel v-if="missing" :message="$t('This event was deleted, or never existed.')">
       <RouterLink to="/events" class="btn btn-ghost">{{ $t('All events') }}</RouterLink>
     </NotFoundPanel>
-    <p v-else-if="loadError" class="error-banner">{{ loadError }}</p>
+    <p v-else-if="loadError" class="error-banner" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
     <p v-else-if="!event" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <template v-else>
       <article class="glass-panel hero">
-        <img v-if="event.picture_path" :src="event.picture_path" :alt="event.name" class="hero-pic zoomable" @click="viewPicture(event.picture_path, event.name)" />
+        <img v-if="event.picture_path" :src="event.picture_path" :alt="event.name" class="hero-pic zoomable" @click="viewPicture(event.picture_path, event.name)" role="button" tabindex="0" :title="$t('View the picture')" @keydown.enter.prevent="viewPicture(event.picture_path, event.name)" />
         <div class="hero-text">
           <div class="when">
             <template v-if="shown">
@@ -79,7 +79,7 @@
             <option value="">{{ $t('Add a character…') }}</option>
             <option v-for="o in addable" :key="o.id" :value="o.id">{{ o.name }}</option>
           </select>
-          <p v-if="peopleError" class="error-banner">{{ peopleError }}</p>
+          <p v-if="peopleError" class="error-banner" role="alert">{{ peopleError }}</p>
         </section>
       </div>
 
@@ -446,7 +446,7 @@ watch(() => props.id, load, { immediate: true })
   align-items: center;
   gap: 0.5rem;
   border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--wash), 0.04);
   border-radius: 999px;
   padding: 0.25rem 0.8rem 0.25rem 0.3rem;
   font-size: 0.85rem;
@@ -454,7 +454,7 @@ watch(() => props.id, load, { immediate: true })
 }
 
 .person:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--wash), 0.08);
 }
 
 .person-item {
@@ -534,7 +534,7 @@ watch(() => props.id, load, { immediate: true })
 }
 
 .related-row:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--wash), 0.05);
 }
 
 .related-date {

@@ -139,7 +139,7 @@ function updateBase(stat, raw) {
 }
 
 .stat-box {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--wash), 0.03);
   border: 1px solid var(--glass-border);
   border-radius: 10px;
   padding: 0.55rem 0.35rem;
@@ -256,7 +256,7 @@ function updateBase(stat, raw) {
   text-align: right;
   padding: 0.25rem 0.4rem;
   font-size: 0.85rem;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--wash), 0.04);
   border: 1px solid var(--glass-border);
   border-radius: 6px;
   color: var(--text-primary);

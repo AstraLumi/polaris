@@ -75,7 +75,7 @@ defineExpose({
   padding: 0.45rem;
   border: 1px dashed var(--glass-border);
   border-radius: var(--radius-control);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(var(--wash), 0.02);
   transition: border-color 0.12s ease, background 0.12s ease;
 }
 

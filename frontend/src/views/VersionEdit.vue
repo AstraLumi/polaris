@@ -14,7 +14,7 @@
     <NotFoundPanel v-if="missing" :message="$t('This version was deleted, or never existed.')">
       <RouterLink :to="`/characters/${id}/versions`" class="btn btn-ghost">{{ $t('Versions') }}</RouterLink>
     </NotFoundPanel>
-    <p v-else-if="loadError" class="error-banner">{{ loadError }}</p>
+    <p v-else-if="loadError" class="error-banner" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
     <p v-else-if="loading" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <template v-else>
@@ -202,7 +202,7 @@
       </section>
 
 
-      <p v-if="saveError" class="error-banner save-error">{{ saveError }}</p>
+      <p v-if="saveError" class="error-banner save-error" role="alert">{{ saveError }}</p>
 
       <div class="save-bar sticky-save">
         <button class="btn btn-primary" :disabled="saving" @click="save">
@@ -533,7 +533,7 @@ onMounted(async () => {
   padding: 0 0.5rem;
   border-radius: 8px;
   border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--wash), 0.03);
   color: var(--text-muted);
   font: inherit;
   font-size: 0.85rem;

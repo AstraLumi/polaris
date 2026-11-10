@@ -28,7 +28,7 @@
       </button>
     </div>
 
-    <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+    <p v-if="loadError" class="error-banner" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
 
     <!-- Classes -->
     <section v-if="tab === 'classes'">
@@ -684,7 +684,7 @@ onMounted(load)
 .scope-badge {
   font-size: 0.7rem;
   color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--wash), 0.04);
   border: 1px solid var(--glass-border);
   border-radius: 999px;
   padding: 0.15rem 0.6rem;
@@ -761,7 +761,7 @@ onMounted(load)
   font: inherit;
   font-size: 0.78rem;
   color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--wash), 0.04);
   border: 1px solid var(--glass-border);
   border-radius: 999px;
   padding: 0.25rem 0.8rem;

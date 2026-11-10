@@ -70,7 +70,7 @@ const facts = computed(() =>
   height: 3rem;
   overflow: hidden;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--wash), 0.06);
   color: var(--text-muted);
   font-weight: 700;
 }

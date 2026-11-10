@@ -13,7 +13,7 @@
       </div>
     </header>
 
-    <p v-if="error" class="error-banner">{{ error }}</p>
+    <p v-if="error" class="error-banner" role="alert">{{ error }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
     <p v-else-if="!data" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <template v-else>
@@ -38,10 +38,26 @@
             <span>{{ $t('with a date, it lands on the timeline and the calendar') }}</span>
           </li>
           <li>
-            <RouterLink :to="{ path: '/chapters', query: { new: '1' } }">{{ $t('Start a chapter') }}</RouterLink>
-            <span>{{ $t('notes per chapter, and what happens in each') }}</span>
+            <RouterLink to="/write">{{ $t('Write the first chapter') }}</RouterLink>
+            <span>{{ $t('the text itself, laid out as a book; notes and events hang on each chapter') }}</span>
           </li>
         </ol>
+      </section>
+
+      <section v-if="data.writing" class="glass-panel block writing">
+        <div class="writing-text">
+          <h2>{{ data.writing.updated_at ? $t('Continue writing') : $t('Start writing') }}</h2>
+          <p>
+            <strong data-tip-overflow>{{ data.writing.title }}</strong>
+            <span v-if="data.writing.updated_at">
+              {{ $tn('{n} word', '{n} words', data.writing.words, { n: num(data.writing.words) }) }} · {{ ago(data.writing.updated_at) }}
+            </span>
+            <span v-else>{{ $t('nothing written yet') }}</span>
+          </p>
+        </div>
+        <RouterLink :to="writePath({ volume: data.writing.volume_id, chapter: data.writing.chapter_id })" class="btn btn-primary">
+          {{ $t('Open the chapter') }}
+        </RouterLink>
       </section>
 
       <section class="tiles">
@@ -136,7 +152,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { fetchHome } from '../api'
-import { t, tn, tr } from '../i18n'
+import { t, tn, tr, locale } from '../i18n'
+import { writePath } from '../writeLast'
 import { fullDate } from '../calendar'
 import { timeAgo } from '../timeAgo'
 import { TYPE_LABELS } from '../wiki'
@@ -163,6 +180,7 @@ function looseLink(l) {
 
 const data = ref(null)
 const error = ref('')
+const num = (n) => Number(n || 0).toLocaleString(locale.value)
 
 // Nothing in the story yet: Home shows where to start.
 const isNew = computed(() => {
@@ -173,6 +191,7 @@ const isNew = computed(() => {
 const tiles = computed(() => {
   const c = data.value.counts
   return [
+    { label: tr('Words written'), value: num(c.words), to: '/write', note: c.chapters ? tn('{n} chapter', '{n} chapters', c.chapters) : '' },
     { label: tr('Characters'), value: c.characters, to: '/characters', note: c.versions > c.characters ? tn('{n} version', '{n} versions', c.versions) : '' },
     { label: tr('Kingdoms'), value: c.kingdoms, to: '/map' },
     { label: tr('Locations'), value: c.locations, to: '/map', note: tr('incl. regions') },
@@ -217,6 +236,44 @@ onMounted(async () => {
 <style scoped>
 .start-here {
   margin-bottom: 1.25rem;
+}
+
+/* Where the writing stands: the one thing Home always offers first. */
+.writing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.writing-text {
+  min-width: 0;
+}
+
+.writing h2 {
+  margin: 0 0 0.25rem;
+}
+
+.writing p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.75rem;
+  margin: 0;
+}
+
+.writing p strong {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.writing p span {
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }
 
 .start-here h2 {
@@ -332,7 +389,7 @@ onMounted(async () => {
 }
 
 .resume-row:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--wash), 0.05);
 }
 
 .resume-icon {
@@ -397,7 +454,7 @@ onMounted(async () => {
 
 .recent-row:hover,
 .loose-row:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--wash), 0.05);
 }
 
 .avatar {

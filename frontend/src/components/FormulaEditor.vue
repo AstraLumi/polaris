@@ -221,7 +221,7 @@ function onKey(e) {
   gap: 0.3rem;
   min-height: var(--control-h);
   padding: 0.4rem 0.55rem;
-  background: rgba(255, 255, 255, 0.045);
+  background: rgba(var(--wash), 0.045);
   border: 1px solid var(--glass-border);
   border-radius: 8px;
   cursor: text;
@@ -326,7 +326,7 @@ function onKey(e) {
   padding: 0.75rem;
   border: 1px solid var(--glass-border);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(var(--wash), 0.02);
 }
 
 .tool-group {

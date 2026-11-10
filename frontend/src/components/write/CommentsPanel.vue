@@ -13,7 +13,7 @@
       </label>
     </div>
 
-    <p v-if="error" class="error-banner">{{ error }}</p>
+    <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
     <p v-if="loading" class="loading-hint">{{ $t('Loading…') }}</p>
     <p v-else-if="!threads.length" class="hint">{{ $t('No comments here. Select some text and press Ctrl+Alt+M to comment on it.') }}</p>
 
@@ -118,6 +118,7 @@
 // reply, resolve or reopen, delete. The writing page holds the comments and
 // does the calls; this panel shows them and says what the writer did.
 import { ref, watch, nextTick } from 'vue'
+import { askConfirm } from '../../confirm'
 import { t } from '../../i18n'
 import { ago, exact } from '../../editor/when.js'
 import { COMMENT_MAX } from '../../editor/comments.js'
@@ -222,8 +223,8 @@ function menu(c) {
     {
       label: isReply ? t('Delete reply') : t('Delete comment'),
       danger: true,
-      action: () => {
-        if (isReply || !c.text || window.confirm(t('Delete this comment and its replies?'))) emit('remove', c.id)
+      action: async () => {
+        if (isReply || !c.text || (await askConfirm(t('Delete this comment and its replies?'), { confirmLabel: t('Delete') }))) emit('remove', c.id)
       },
     },
   ]

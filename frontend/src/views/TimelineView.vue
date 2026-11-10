@@ -19,7 +19,7 @@
       </div>
     </header>
 
-    <p v-if="loadError" class="error-banner">{{ loadError }}</p>
+    <p v-if="loadError" class="error-banner" role="alert">{{ loadError }} <button type="button" class="retry" @click="$retryPage()">{{ $t('Try again') }}</button></p>
     <p v-else-if="!data" class="loading-hint">{{ $t('Loading…') }}</p>
 
     <template v-else>
@@ -188,7 +188,7 @@
         </p>
         <p v-if="selected.location_name" class="where">{{ $t('at {place}', { place: selected.location_name }) }}</p>
 
-        <img v-if="selected.picture_path" :src="selected.picture_path" :alt="selected.name" class="pic zoomable" @click="viewPicture(selected.picture_path, selected.name)" />
+        <img v-if="selected.picture_path" :src="selected.picture_path" :alt="selected.name" class="pic zoomable" @click="viewPicture(selected.picture_path, selected.name)" role="button" tabindex="0" :title="$t('View the picture')" @keydown.enter.prevent="viewPicture(selected.picture_path, selected.name)" />
 
         <p v-if="selected.description" class="desc">{{ linkText(selected.description) }}</p>
         <p v-else class="desc is-empty">{{ $t('No description yet.') }}</p>
@@ -228,7 +228,7 @@
           </ul>
         </div>
 
-        <p v-if="actionError" class="error-banner">{{ actionError }}</p>
+        <p v-if="actionError" class="error-banner" role="alert">{{ actionError }}</p>
         <div class="actions">
           <RouterLink
             v-if="selected.kind === 'event'"
@@ -790,7 +790,7 @@ onBeforeUnmount(() => {
 
 .node.is-selected {
   transform: translate(-50%, -50%) scale(1.45);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.85), 0 0 14px rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 0 3px rgba(var(--wash), 0.85), 0 0 14px rgba(var(--wash), 0.35);
 }
 
 .node.is-related {
@@ -982,7 +982,7 @@ onBeforeUnmount(() => {
 .person-chip {
   color: var(--text-primary);
   border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--wash), 0.04);
 }
 
 .linked {
@@ -1007,7 +1007,7 @@ onBeforeUnmount(() => {
 }
 
 .linked-row:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--wash), 0.06);
 }
 
 .linked-date {
