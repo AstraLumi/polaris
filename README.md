@@ -150,6 +150,40 @@ it, for example:
 Then set `BIND_ADDR` (see [Configuration](#configuration)) so it listens on
 your network. **Do not forward its port directly to the internet.**
 
+### The names Polaris answers to
+
+If you reach Polaris by a domain name (`polaris.example.com`), write that
+name in `.env`, or Polaris answers with a page telling you to:
+
+```
+ALLOWED_HOSTS=polaris.example.com
+```
+
+Several names are separated by commas. You never need to list `localhost`,
+an address in numbers (`192.168.1.20`), a name without a dot (`nas`) or a
+name ending in `.local`, `.home.arpa` or `.internal`: those always work.
+
+Why: with no login, Polaris has to be sure a request was meant for it.
+Another website can point a name of its own at your machine ("DNS
+rebinding"); your browser then takes that site and Polaris for one site, and
+its pages could read your stories and change them. The name the request was
+addressed to is the only thing that gives it away, and a website can only
+use a name someone can register, which the ones above are not.
+`ALLOWED_HOSTS=*` turns the check off (Polaris then answers to any name, as
+it did before 3.2); only do that behind something that checks the name
+itself.
+
+### Inside the container
+
+The image runs Polaris as an ordinary user, not as root, and
+`docker-compose.yml` makes the container's own files read-only and takes
+away root's special rights. Three are given back (`CHOWN`, `SETUID`,
+`SETGID`) and used once, at start, to hand the two volumes to that user;
+stories kept by an earlier version are handed over the first time 3.2
+starts, by itself. If you keep a compose file of your own with
+`cap_drop: ALL`, add those three under `cap_add`: without them Polaris says
+so in its log and keeps running as root, as before.
+
 ## Quick start (Docker)
 
 Requirements: Docker with the Compose plugin.
@@ -174,7 +208,7 @@ automatically, and git ignores it, so your settings are kept across updates.
 | Variable    | Default     | Description                                                       |
 |-------------|-------------|-------------------------------------------------------------------|
 | `BIND_ADDR` | `127.0.0.1` | Host address to listen on. `0.0.0.0` exposes it to your network.  |
-| `ALLOWED_HOSTS` | *(any)* | Every name you use to reach Polaris, separated by commas (`polaris.example.com,nas`); `localhost` always works. Requests under any other name are refused, which stops another website from reaching your stories through a name it points at your machine (see `.env.example`). |
+| `ALLOWED_HOSTS` | *(none)* | The domain names you reach Polaris by, separated by commas (`polaris.example.com`). `localhost`, addresses in numbers and names without a dot always work; any other name not listed here is refused. `*` answers to any name. See [The names Polaris answers to](#the-names-polaris-answers-to). |
 | `AUTO_BACKUPS` | on | Polaris keeps a copy of each story on the days it changes (the last 7, then one a week for 4 weeks; "Earlier copies…" in a story's menu). `off` turns that off. They are on the same disk as the story: keep exporting for a backup elsewhere. |
 | `HOST_PORT` | `8091`      | Port on the host.                                                 |
 | `POLARIS_VERSION` | `latest` | Release to run, such as `3.0.0`, to stay on it until you change it. |

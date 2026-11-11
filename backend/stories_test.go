@@ -15,6 +15,14 @@ import (
 	"testing/fstest"
 )
 
+// The tests call the server by the names httptest gives a request
+// (example.com) and security_test.go's own, which a real server would only
+// answer to when they are listed. The tests about the names set their own.
+func TestMain(m *testing.M) {
+	os.Setenv("ALLOWED_HOSTS", "example.com,polaris.test")
+	os.Exit(m.Run())
+}
+
 func newTestServer(t *testing.T) (*storyManager, http.Handler) {
 	t.Helper()
 	dir := t.TempDir()

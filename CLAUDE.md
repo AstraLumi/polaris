@@ -19,6 +19,16 @@ own with `node frontend/tests/<name>.test.mjs`. The translation check
 
 Run all of these before committing.
 
+To see what gets slow on a long story (3,000 characters, 10,000 events,
+1,000 chapters, made in a few seconds), time every read on one:
+
+    cd backend && POLARIS_AUDIT=1 go test -count=1 -run TestAudit -v .
+
+A read at the top of that list is missing an index (they live in
+`backend/indexes.go`, each with the lookup it is for) or asks the database
+once per row of a list (read the whole table once instead, as
+`loadCardBuild` and `eventExtras` do).
+
 To see the Solar system's 3D view without a screen (headless Edge, a
 throwaway story, never real data), take screenshots and look at them:
 
@@ -109,7 +119,15 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   from Polaris; an inline script in `index.html` is allowed by its hash
   automatically, but a new outside address (fonts, pictures, a fetch) must
   be added there. Form uploads are capped before they are parsed
-  (`parsePictureForm`). Do not weaken these.
+  (`parsePictureForm`). A request addressed to a name that is neither
+  safe by itself (`safeName`: localhost, an IP, a name without a dot) nor
+  in `ALLOWED_HOSTS` is refused with a page saying what to write; the
+  tests run with `example.com` listed (`TestMain`). Do not weaken these.
+- **The container runs Polaris as the `polaris` user** (10001), never
+  root: `docker/entrypoint.sh` starts as root only to hand the volumes
+  over, which is why `docker-compose.yml` adds back `CHOWN`, `SETUID`
+  and `SETGID`. Anything new the server writes must be under `DATA_DIR`
+  or `UPLOADS_DIR`; the rest of the container is read-only.
 - **Themes** are blocks of colour variables in `style.css`, listed in
   `theme.js`; one of them (Daylight) is light. Every colour in a style
   comes from a variable: a faint highlight is `rgba(var(--wash), 0.05)`,

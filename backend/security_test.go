@@ -71,22 +71,64 @@ func TestAllowedHosts(t *testing.T) {
 	_, h := newTestServer(t)
 	for host, want := range map[string]int{
 		"polaris.test:8091": 200, "polaris.test": 200, "stories.example": 200,
-		// This machine's own names always pass (the health check uses one).
-		"localhost": 200, "127.0.0.1:8091": 200, "[::1]:8091": 200,
-		"rebound.example:8091": 403, "localhost.rebound.example": 403, "192.168.1.20:8091": 403, "": 403,
+		// Names no other site can own always pass (the health check uses one).
+		"localhost": 200, "127.0.0.1:8091": 200, "[::1]:8091": 200, "192.168.1.20:8091": 200,
+		"nas": 200, "polaris:8091": 200, "nas.local": 200, "app.localhost": 200, "box.home.arpa": 200, "db.internal": 200,
+		"rebound.example:8091": 403, "localhost.rebound.example": 403, "local": 200, "evil.local.example": 403, "": 403,
 	} {
-		req := httptest.NewRequest("GET", "/api/health", nil)
-		req.Host = host
-		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, req)
-		if rec.Code != want {
-			t.Errorf("host %q: %d, want %d", host, rec.Code, want)
+		if code := askAs(h, host, "").Code; code != want {
+			t.Errorf("host %q: %d, want %d", host, code, want)
 		}
 	}
+
+	// With nothing set, a domain is refused all the same: the check is on
+	// from the start.
 	t.Setenv("ALLOWED_HOSTS", "")
+	_, bare := newTestServer(t)
+	for host, want := range map[string]int{"example.com": 403, "polaris.test": 403, "localhost:8091": 200, "10.0.0.5": 200} {
+		if code := askAs(bare, host, "").Code; code != want {
+			t.Errorf("nothing set, host %q: %d, want %d", host, code, want)
+		}
+	}
+
+	// "*" is the way back to answering any name.
+	t.Setenv("ALLOWED_HOSTS", "*")
 	_, open := newTestServer(t)
-	if rec := send(open, "GET", "/api/health", "", nil); rec.Code != 200 {
-		t.Errorf("without the setting any name is answered: %d", rec.Code)
+	if code := askAs(open, "anything.example", "").Code; code != 200 {
+		t.Errorf("ALLOWED_HOSTS=*: %d", code)
+	}
+}
+
+func askAs(h http.Handler, host, accept string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest("GET", "/api/health", nil)
+	req.Host = host
+	if accept != "" {
+		req.Header.Set("Accept", accept)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+// Someone locked out by the name they use is told which line to write, with
+// the name as text, never as markup.
+func TestRefusedNameSaysWhatToDo(t *testing.T) {
+	t.Setenv("ALLOWED_HOSTS", "")
+	_, h := newTestServer(t)
+	page := askAs(h, "stories.example:8091", "text/html,application/xhtml+xml")
+	if page.Code != 403 || !strings.Contains(page.Body.String(), "ALLOWED_HOSTS=stories.example") || !strings.HasPrefix(page.Header().Get("Content-Type"), "text/html") {
+		t.Errorf("the page: %d %s", page.Code, page.Body.String())
+	}
+	if csp := page.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'none'") {
+		t.Errorf("the page runs nothing: %q", csp)
+	}
+	evil := askAs(h, `<script>alert(1)</script>.example`, "text/html")
+	if evil.Code != 403 || strings.Contains(evil.Body.String(), "<script>") {
+		t.Errorf("a name is shown as text: %s", evil.Body.String())
+	}
+	plain := askAs(h, "stories.example", "application/json")
+	if plain.Code != 403 || !strings.Contains(plain.Body.String(), "ALLOWED_HOSTS") || strings.Contains(plain.Body.String(), "<") {
+		t.Errorf("a script gets a line of text: %s", plain.Body.String())
 	}
 }
 

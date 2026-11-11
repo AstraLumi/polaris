@@ -72,6 +72,7 @@ func main() {
 	failed := make(chan error, 1)
 	go func() { failed <- srv.ListenAndServe() }()
 	log.Printf("Polaris listening on %s (data: %s, uploads: %s)", addr, dataDir, uploadsRoot)
+	log.Print(describeAllowedHosts(allowedHostsFromEnv()))
 
 	// Asked to stop (Ctrl+C, `docker stop`): take no new requests, let the
 	// ones under way finish, then close every database. Docker waits ten

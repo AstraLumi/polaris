@@ -17,10 +17,17 @@ services:
     container_name: polaris
     restart: unless-stopped
     # Nothing in the container needs more than its two volumes: its own
-    # files are read-only and it holds no special rights.
+    # files are read-only and it holds no special rights. The three given
+    # back are used once, at start, to hand the volumes to an ordinary user
+    # and become it (docker/entrypoint.sh); Polaris itself then runs as
+    # that user, with none.
     read_only: true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
     security_opt:
       - no-new-privileges:true
     tmpfs:
