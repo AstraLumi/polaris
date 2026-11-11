@@ -5,6 +5,7 @@
 // sending back what was written without a connection. The logic is in
 // src/offline/ (store, sync, merge); this joins it to the page.
 import { ref, computed } from 'vue'
+import { send } from '../request'
 import { t, locale } from '../i18n'
 import { offlineStore as store } from '../offline/index.js'
 import { createSync } from '../offline/sync.js'
@@ -18,7 +19,7 @@ import { booksApi, textApi, commentsApi, spellingApi } from './api.js'
 import { wikiApi } from '../wiki'
 
 async function fetchLibrary() {
-  const res = await fetch('/api/fonts')
+  const res = await send('/api/fonts')
   if (!res.ok) throw Object.assign(new Error('failed to load the fonts'), { status: res.status })
   return res.json()
 }

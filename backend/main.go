@@ -78,6 +78,8 @@ func main() {
 	// seconds before it kills the container, so this takes less.
 	stop, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	go mgr.snapshotLoop(stop) // a daily copy of each story (snapshots.go)
+	go mgr.idleLoop(stop)     // stories nobody uses are closed (stories.go)
 	select {
 	case err := <-failed:
 		mgr.Close()

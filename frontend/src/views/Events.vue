@@ -64,7 +64,7 @@
     </div>
 
     <ul class="event-list">
-      <li v-for="e in events" :key="e.id">
+      <li v-for="e in notGone('event', events)" :key="e.id">
         <!-- While selecting, a row is a toggle rather than a link. -->
         <component
           :is="selectMode ? 'div' : RouterLink"
@@ -110,7 +110,7 @@
     <ConfirmDialog
       v-if="confirmOpen"
       :title="$tn('Delete {n} event?', 'Delete {n} events?', selectedIds.size)"
-      :message="$t('Their pictures go with them. This can\'t be undone.')"
+      :message="$t('Their pictures go with them.')"
       :confirm-label="$t('Delete')"
       @cancel="confirmOpen = false"
       @confirm="handleDelete"
@@ -126,6 +126,7 @@ import { eventsApi } from '../api'
 import { dateParts } from '../calendar'
 import { t, tn } from '../i18n'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { deleteSoon, notGone } from '../undoDelete'
 import { chapterLabel, loadChapters } from '../chapters'
 
 const route = useRoute()
@@ -152,25 +153,35 @@ function toggleSelected(id) {
   else next.add(id)
   selectedIds.value = next
 }
-async function handleDelete() {
+function handleDelete() {
   confirmOpen.value = false
-  let failed = 0
-  for (const id of selectedIds.value) {
-    try {
-      await eventsApi.remove(id)
-    } catch (err) {
-      failed++
-    }
-  }
+  const ids = [...selectedIds.value]
   selectMode.value = false
   selectedIds.value = new Set()
-  await load()
-  if (failed) loadError.value = tn("Couldn't delete {n} of them.", "Couldn't delete {n} of them.", failed)
-  try {
-    allTags.value = await eventsApi.tags()
-  } catch (err) {
-    // Tag chips are a convenience; they refresh next visit.
-  }
+  deleteSoon({
+    kind: 'event',
+    ids,
+    label: tn('Deleted {n} item.', 'Deleted {n} items.', ids.length),
+    async run() {
+      let failed = 0
+      for (const id of ids) {
+        try {
+          await eventsApi.remove(id)
+        } catch (err) {
+          failed++
+        }
+      }
+      if (failed) throw new Error(tn("Couldn't delete {n} of them.", "Couldn't delete {n} of them.", failed))
+    },
+    async done() {
+      await load()
+      try {
+        allTags.value = await eventsApi.tags()
+      } catch (err) {
+        // Tag chips are a convenience; they refresh next visit.
+      }
+    },
+  })
 }
 
 const activeTag = computed(() => (typeof route.query.tag === 'string' ? route.query.tag : ''))

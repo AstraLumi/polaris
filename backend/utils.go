@@ -3,10 +3,25 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 )
+
+// readErrors counts the reads that broke off partway in a helper that has
+// no error to return (it gives back what it had read so far). Such a list
+// must not pass for the whole one: a story's request that saw the count
+// rise is answered as failed (storyHandler), and the page offers to try
+// again. A count for the whole server: a request can at worst be failed
+// for a neighbour's broken read, which only costs a second try.
+var readErrors atomic.Int64
+
+func noteReadError(where string, err error) {
+	readErrors.Add(1)
+	log.Printf("%s: reading rows: %v", where, err)
+}
 
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")

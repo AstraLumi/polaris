@@ -72,19 +72,9 @@
       :characters="characters"
       @close="formOpen = false"
       @saved="onSaved"
-      @delete="confirmTarget = $event"
+      @delete="remove"
     />
 
-    <Teleport to="body">
-      <ConfirmDialog
-        v-if="confirmTarget"
-        :title="$t('Delete this relation?')"
-        :message="$t('It disappears from both characters.')"
-        :confirm-label="$t('Delete')"
-        @cancel="confirmTarget = null"
-        @confirm="remove"
-      />
-    </Teleport>
   </div>
 </template>
 
@@ -101,7 +91,7 @@ import { chapterRanks, storyPoint, holdsAt } from '../storyTime'
 import { wikiPath } from '../wiki'
 import IconImage from './IconImage.vue'
 import RelationFormModal from './RelationFormModal.vue'
-import ConfirmDialog from './ConfirmDialog.vue'
+import { deleteSoon, notGone } from '../undoDelete'
 
 const props = defineProps({
   characterId: { type: Number, required: true },
@@ -118,7 +108,6 @@ const characters = ref([])
 const error = ref('')
 const formOpen = ref(false)
 const editing = ref(null)
-const confirmTarget = ref(null)
 
 const me = computed(() => ({ id: props.characterId, name: props.characterName }))
 
@@ -138,7 +127,7 @@ const ranks = computed(() => chapterRanks(chapterIndex.value.chapters))
 const point = computed(() => (props.point ? storyPoint(props.point.chapterId, props.point.date, ranks.value) : null))
 
 const rows = computed(() => {
-  const list = relations.value.map((rel) => {
+  const list = notGone('relation', relations.value).map((rel) => {
     const { other, wording } = relationFor(rel, props.characterId)
     return {
       rel,
@@ -173,16 +162,17 @@ function onSaved() {
   load()
 }
 
-async function remove() {
-  try {
-    await relationsApi.remove(confirmTarget.value.id)
-    confirmTarget.value = null
-    formOpen.value = false
-    load()
-  } catch (e) {
-    error.value = e.message
-    confirmTarget.value = null
-  }
+// No "are you sure?": the relation can be brought back for a few seconds
+// (undoDelete.js).
+function remove(rel) {
+  formOpen.value = false
+  deleteSoon({
+    kind: 'relation',
+    ids: [rel.id],
+    label: t('Relation deleted.'),
+    run: () => relationsApi.remove(rel.id),
+    done: load,
+  })
 }
 
 watch(() => props.characterId, load, { immediate: true })

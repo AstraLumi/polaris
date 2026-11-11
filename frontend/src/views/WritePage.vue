@@ -353,9 +353,9 @@ const error = ref('')
 const busy = ref(false)
 const adding = ref(false)
 const typeDialog = ref('') // '' | 'first' | 'switch'
-// A book never set up is written in at once, on the default page type; the
-// choice is offered in a line above the page, not asked before a word is
-// typed. "Not now" hides the line for this visit.
+// A book never set up asks its page type when it is opened. "Later" lets
+// it be written in on the default type; a line above the page then keeps
+// offering the choice. "Not now" hides the line for this visit.
 const typeLater = ref(false)
 const panel = ref('')
 const focusMode = ref(false)
@@ -1001,6 +1001,7 @@ async function loadBook() {
   try {
     const res = await booksApi.get(want)
     book.value = { ...res, settings: normaliseSettings(res.settings), chapters: res.chapters || [] }
+    if (res.is_set_up === false) typeDialog.value = 'first'
     pickChapter()
     // The kept copy brought up to date (what changed only), now and then.
     const kept = offline.record.value
@@ -2296,6 +2297,27 @@ onBeforeUnmount(() => {
   }
   .chapter-select {
     display: block;
+  }
+  /* A panel (comments, styles, versions, the book…) is a sheet over the
+     lower part of the screen, so the text it is about stays in sight
+     above it; the page gets room to scroll its last lines clear of it. */
+  .write-body.has-side > .side-panel {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    height: auto;
+    max-height: 58vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: 16px 16px 0 0;
+    border-bottom: none;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.35);
+  }
+  .write-body.has-side .paper-area {
+    padding-bottom: 60vh;
   }
   .paper-area {
     overflow: visible;

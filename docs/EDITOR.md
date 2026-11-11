@@ -207,8 +207,9 @@ database like every other route).
   "title", "position", "words", "version" } ] }`, chapters in reading
   order. A book never set up gets the `a5` defaults (with the built-in
   styles) until it is saved; `"is_set_up": false` tells the client to
-  offer the page type choice (a line above the page with "Choose a page
-  type"; the book can be written in at once, on those defaults). Also in the answer: `volume`, `title` (the
+  offer the page type choice: a dialog when the book is opened, and after
+  "Later" a line above the page with "Choose a page type" (the book can
+  then be written in on those defaults). Also in the answer: `volume`, `title` (the
   volume's, `""` for book 0), `words` (the whole book), `page_types` (the
   keys in order) and `defaults` (every page type's default settings, what
   a switch applies). Book 0 always exists; an unknown volume is `404`.

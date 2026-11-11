@@ -265,7 +265,8 @@ func loadChapter(db *sql.DB, id int64) (*chapterDetail, error) {
 			}
 		}
 		if err := rows.Err(); err != nil {
-			log.Printf("loadChapter: reading rows: %v", err)
+			rows.Close()
+			return nil, err
 		}
 		rows.Close()
 	}
@@ -288,7 +289,8 @@ func loadChapter(db *sql.DB, id int64) (*chapterDetail, error) {
 			}
 		}
 		if err := rows.Err(); err != nil {
-			log.Printf("loadChapter: reading rows: %v", err)
+			rows.Close()
+			return nil, err
 		}
 		rows.Close()
 	}

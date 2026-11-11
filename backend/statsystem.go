@@ -529,7 +529,8 @@ func statSystemResponse(db *sql.DB) (statSystemPayload, error) {
 			}
 		}
 		if err := rows.Err(); err != nil {
-			log.Printf("statSystemResponse: reading rows: %v", err)
+			rows.Close()
+			return statSystemPayload{}, err
 		}
 		rows.Close()
 	}

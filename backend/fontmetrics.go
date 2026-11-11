@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -157,7 +156,7 @@ func (l *fontLibrary) fileMetrics(key string) (lineMetrics, bool) {
 		}
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("fileMetrics: reading rows: %v", err)
+		noteReadError("fileMetrics", err)
 	}
 	rows.Close()
 	for _, f := range files {

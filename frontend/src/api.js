@@ -1,5 +1,6 @@
 import { t, tr } from './i18n'
 import { STORY_API } from './stories'
+import { send } from './request'
 
 // Everything here belongs to the open story (see stories.js).
 const BASE = STORY_API
@@ -9,25 +10,6 @@ const BASE = STORY_API
 // through t(), so anything with a translation shows in the chosen language.
 function apiError(message) {
   return new Error(t(String(message).trim()))
-}
-
-// Every call here goes through this one fetch, so they all fail the same
-// way: with no connection (or the server down) the error says so in the
-// reader's language instead of the browser's "Failed to fetch", and a read
-// that gets no answer gives up after a minute rather than leave a page
-// loading for ever. Saves and uploads are never timed: a large picture on a
-// slow line may rightly take longer.
-const READ_TIMEOUT = 60000
-
-async function send(url, options = {}) {
-  const read = !options.method || options.method === 'GET'
-  try {
-    return await fetch(url, read && !options.signal ? { ...options, signal: AbortSignal.timeout(READ_TIMEOUT) } : options)
-  } catch (e) {
-    if (e?.name === 'AbortError') throw e // the caller's own signal
-    const slow = e?.name === 'TimeoutError'
-    throw apiError(slow ? tr('the server took too long to answer') : tr("can't reach the server"))
-  }
 }
 
 export async function fetchCharacters() {

@@ -64,7 +64,8 @@ func (m *storyManager) exportHandler(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, err)
 		return
 	}
-	app, err := m.open(id)
+	app, done, err := m.use(id)
+	defer done()
 	if err != nil {
 		m.fail(w, err)
 		return
@@ -369,9 +370,7 @@ func (m *storyManager) importZip(zipPath string, size int64) (storyInfo, error) 
 	if _, err := m.reg.Exec(`INSERT INTO stories (id, name, icon) VALUES (?, ?, ?)`, id, name, icon); err != nil {
 		return storyInfo{}, err
 	}
-	m.mu.Lock()
-	_, err = m.openLocked(id) // migrates an older export up to the current schema
-	m.mu.Unlock()
+	_, err = m.openStory(id, false) // migrates an older export up to the current schema
 	if err != nil {
 		return storyInfo{}, err
 	}

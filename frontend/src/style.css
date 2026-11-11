@@ -274,9 +274,76 @@ h3 {
   margin: 0 0 1rem;
 }
 
+/* A page that is still loading shows the shape of what is coming (a
+   heading and a few rows) instead of the word "Loading…": the page doesn't
+   jump when its content arrives. The word stays in the markup for screen
+   readers. Nothing shows for the first quarter second, so a quick load
+   doesn't flash. */
 .loading-hint {
-  color: var(--text-faint);
+  position: relative;
+  overflow: hidden;
+  min-height: 11.9rem;
+  margin: 0;
+  border-radius: 10px;
+  color: transparent;
   font-size: 0.9rem;
+  user-select: none;
+  background:
+    linear-gradient(rgba(var(--wash), 0.1), rgba(var(--wash), 0.1)) 0 0 / 38% 1.6rem no-repeat,
+    linear-gradient(rgba(var(--wash), 0.07), rgba(var(--wash), 0.07)) 0 2.9rem / 100% 2.6rem no-repeat,
+    linear-gradient(rgba(var(--wash), 0.07), rgba(var(--wash), 0.07)) 0 6.1rem / 100% 2.6rem no-repeat,
+    linear-gradient(rgba(var(--wash), 0.07), rgba(var(--wash), 0.07)) 0 9.3rem / 72% 2.6rem no-repeat;
+  opacity: 0;
+  animation: loading-in 0.2s ease 0.25s forwards;
+}
+
+.loading-hint::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(var(--wash), 0.09) 50%, transparent 70%) 0 0 / 200% 100%;
+  animation: loading-sweep 1.5s linear infinite;
+}
+
+@keyframes loading-in {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes loading-sweep {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-hint::after {
+    animation: none;
+    background: none;
+  }
+}
+
+/* In a small place (a side panel, a pop-up form, a note over the map) the
+   word is enough. */
+.side-panel .loading-hint,
+.modal .loading-hint,
+.loading-hint.floating {
+  min-height: 0;
+  color: var(--text-faint);
+  background: none;
+  opacity: 1;
+  animation: none;
+  user-select: auto;
+}
+
+.side-panel .loading-hint::after,
+.modal .loading-hint::after,
+.loading-hint.floating::after {
+  content: none;
 }
 
 /* ---- 3. Page layout ----------------------------------------------------- */
@@ -939,4 +1006,15 @@ input[type='radio'] {
   .link-btn {
     min-height: 2.25rem;
   }
+}
+
+/* Read out, not shown. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

@@ -150,7 +150,7 @@ func loadEventTags(db *sql.DB, eventID int64) []string {
 		}
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("loadEventTags: reading rows: %v", err)
+		noteReadError("loadEventTags", err)
 	}
 	return tags
 }
@@ -178,7 +178,7 @@ func loadEventPeople(db *sql.DB, eventID int64) []eventPerson {
 		}
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("loadEventPeople: reading rows: %v", err)
+		noteReadError("loadEventPeople", err)
 	}
 	return people
 }
@@ -806,7 +806,10 @@ func listEventTagsHandler(db *sql.DB) http.HandlerFunc {
 			}
 		}
 		if err := rows.Err(); err != nil {
+			rows.Close()
+			http.Error(w, "failed to load tags", http.StatusInternalServerError)
 			log.Printf("listEventTagsHandler: reading rows: %v", err)
+			return
 		}
 		writeJSON(w, out)
 	}
@@ -844,7 +847,10 @@ func listCharacterOptionsHandler(db *sql.DB) http.HandlerFunc {
 			}
 		}
 		if err := rows.Err(); err != nil {
+			rows.Close()
+			http.Error(w, "failed to load characters", http.StatusInternalServerError)
 			log.Printf("listCharacterOptionsHandler: reading rows: %v", err)
+			return
 		}
 		writeJSON(w, out)
 	}

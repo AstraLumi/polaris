@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 )
 
 func get(h http.Handler, url string, headers map[string]string) *httptest.ResponseRecorder {
@@ -131,5 +132,74 @@ func TestListingDoesNotOpenStories(t *testing.T) {
 	defer db.Close()
 	if v := storedSchema(db); open || v != "27" {
 		t.Errorf("the story was opened by the list (open %v, schema %s)", open, v)
+	}
+}
+
+// A story nobody used for a while is closed and opens again on the next
+// request; one that is in use is left alone.
+func TestIdleStoriesAreClosed(t *testing.T) {
+	mgr, h := newTestServer(t)
+	idle := createStoryDirect(t, mgr, "Idle")
+	busy := createStoryDirect(t, mgr, "Busy")
+	addClass(t, h, idle, "Keeper")
+	_, done, err := mgr.use(busy)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	later := time.Now().Add(storyIdleAfter + time.Minute)
+	if n := mgr.closeIdle(time.Now()); n != 0 {
+		t.Fatalf("nothing is idle yet: %d closed", n)
+	}
+	if n := mgr.closeIdle(later); n != 1 {
+		t.Fatalf("the idle story is closed, the one in use is not: %d closed", n)
+	}
+	mgr.mu.Lock()
+	_, idleOpen := mgr.apps[idle]
+	_, busyOpen := mgr.apps[busy]
+	mgr.mu.Unlock()
+	if idleOpen || !busyOpen {
+		t.Fatalf("idle open %v, busy open %v", idleOpen, busyOpen)
+	}
+	if rec := do(t, h, "GET", "/api/s/"+idle+"/classes", nil, ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), "Keeper") {
+		t.Errorf("it opens again when asked for: %d %s", rec.Code, rec.Body.String())
+	}
+	// The list still counts a closed story's characters.
+	mgr.closeIdle(time.Now().Add(2 * storyIdleAfter))
+	if rec := do(t, h, "GET", "/api/stories", nil, ""); rec.Code != 200 || strings.Count(rec.Body.String(), `"characters":0`) != 2 {
+		t.Errorf("list: %d %s", rec.Code, rec.Body.String())
+	}
+
+	done()
+	if n := mgr.closeIdle(time.Now().Add(2 * storyIdleAfter)); n != 1 {
+		t.Errorf("once released, it closes too: %d", n)
+	}
+}
+
+// Many requests for a story that isn't open yet open it once, and all get
+// the same one.
+func TestAStoryIsOpenedOnce(t *testing.T) {
+	mgr, _ := newTestServer(t)
+	id := createStoryDirect(t, mgr, "Crowd")
+	closeStory(mgr, id)
+	const n = 12
+	got := make(chan *storyApp, n)
+	for range n {
+		go func() {
+			a, err := mgr.open(id)
+			if err != nil {
+				t.Error(err)
+			}
+			got <- a
+		}()
+	}
+	first := <-got
+	for range n - 1 {
+		if a := <-got; a != first {
+			t.Fatal("two copies of one story were opened")
+		}
+	}
+	if _, err := mgr.open("00000000000000ff"); err != errNoStory {
+		t.Errorf("no such story: %v", err)
 	}
 }

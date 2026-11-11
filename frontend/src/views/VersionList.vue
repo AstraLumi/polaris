@@ -66,7 +66,7 @@
 
       <ul class="versions">
         <li
-          v-for="v in versions"
+          v-for="v in notGone('version', versions)"
           :key="v.id"
           class="version-row glass-panel"
           :class="{ 'is-current': v.is_current }"
@@ -100,7 +100,7 @@
             <RowMenu
               v-if="versions.length > 1"
               :label="$t('More actions')"
-              :items="[{ label: $t('Delete version'), danger: true, action: () => (confirmTarget = v) }]"
+              :items="[{ label: $t('Delete version'), danger: true, action: () => removeVersion(v) }]"
             />
           </div>
         </li>
@@ -117,15 +117,6 @@
       :character-id="id"
       @close="newOpen = false"
       @created="onCreated"
-    />
-
-    <ConfirmDialog
-      v-if="confirmTarget"
-      :title="$t('Delete this version?')"
-      :message="$t('Its Story and Build data goes with it. This can\'t be undone.')"
-      :confirm-label="$t('Delete')"
-      @cancel="confirmTarget = null"
-      @confirm="handleDelete"
     />
   </div>
 </template>
@@ -147,7 +138,7 @@ import TagInput from '../components/TagInput.vue'
 import BloodTypePicker from '../components/BloodTypePicker.vue'
 import RelationsTab from '../components/RelationsTab.vue'
 import { chapterLabel, loadChapters } from '../chapters'
-import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { deleteSoon, notGone } from '../undoDelete'
 import RowMenu from '../components/RowMenu.vue'
 import { pageTitle, useUnsavedGuard, useSaveShortcut } from '../navigation'
 
@@ -159,7 +150,6 @@ const loading = ref(true)
 const loadError = ref('')
 const missing = ref(false)
 const newOpen = ref(false)
-const confirmTarget = ref(null)
 const currentVersion = computed(() => versions.value.find((v) => v.is_current) || null)
 
 // What belongs to the character rather than to a version
@@ -249,15 +239,22 @@ async function handleSetCurrent(versionId) {
   }
 }
 
-async function handleDelete() {
-  try {
-    await deleteVersion(confirmTarget.value.id)
-    confirmTarget.value = null
-    await loadVersions()
-  } catch (err) {
-    loadError.value = t("Couldn't delete that version.")
-    confirmTarget.value = null
-  }
+// No "are you sure?": the version can be brought back for a few seconds
+// (undoDelete.js).
+function removeVersion(v) {
+  deleteSoon({
+    kind: 'version',
+    ids: [v.id],
+    label: t('Deleted “{name}”.', { name: v.name }),
+    async run() {
+      try {
+        await deleteVersion(v.id)
+      } catch (err) {
+        throw new Error(t("Couldn't delete that version."))
+      }
+    },
+    done: loadVersions,
+  })
 }
 
 onMounted(async () => {

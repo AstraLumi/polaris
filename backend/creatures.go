@@ -133,7 +133,7 @@ func cellsOf(db *sql.DB, c creatureOut) []int64 {
 		}
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("cellsOf: reading rows: %v", err)
+		noteReadError("cellsOf", err)
 	}
 	return out
 }
@@ -166,7 +166,7 @@ func territoryOf(db *sql.DB, c creatureOut) [][2]int64 {
 		}
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("territoryOf: reading rows: %v", err)
+		noteReadError("territoryOf", err)
 	}
 	return out
 }
@@ -189,7 +189,7 @@ func creatureLinks(db *sql.DB) map[int64][]creatureRef {
 		}
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("creatureLinks: reading rows: %v", err)
+		noteReadError("creatureLinks", err)
 	}
 	return out
 }
@@ -218,7 +218,10 @@ func listCreaturesHandler(db *sql.DB) http.HandlerFunc {
 			out = append(out, c)
 		}
 		if err := rows.Err(); err != nil {
+			rows.Close()
+			http.Error(w, "failed to load the bestiary", http.StatusInternalServerError)
 			log.Printf("listCreaturesHandler: reading rows: %v", err)
+			return
 		}
 		writeJSON(w, out)
 	}

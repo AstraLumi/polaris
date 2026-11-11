@@ -618,7 +618,7 @@ func (l *fontLibrary) deleteHandler(w http.ResponseWriter, r *http.Request) {
 			files = append(files, f)
 		}
 		if err := rows.Err(); err != nil {
-			log.Printf("deleteHandler: reading rows: %v", err)
+			noteReadError("deleteHandler", err)
 		}
 		rows.Close()
 	}
@@ -875,7 +875,8 @@ func bookFontUses(db editorDB, vol int64) ([]bookFontUse, error) {
 		counted[id] = true
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("bookFontUses: reading rows: %v", err)
+		rows.Close()
+		return nil, err
 	}
 	rows.Close()
 	rows, err = db.Query(`SELECT DISTINCT COALESCE(volume_id, 0) FROM chapters`)
@@ -888,7 +889,8 @@ func bookFontUses(db editorDB, vol int64) ([]bookFontUse, error) {
 		counted[id] = true
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("bookFontUses: reading rows: %v", err)
+		rows.Close()
+		return nil, err
 	}
 	rows.Close()
 
@@ -1089,7 +1091,8 @@ func (l *fontLibrary) usedIn() (map[int64][]fontUseOut, error) {
 		fams[strings.ToLower(name)] = id
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("usedIn: reading rows: %v", err)
+		rows.Close()
+		return nil, err
 	}
 	rows.Close()
 	out := map[int64][]fontUseOut{}
@@ -1108,15 +1111,17 @@ func (l *fontLibrary) usedIn() (map[int64][]fontUseOut, error) {
 		stories = append(stories, s)
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("usedIn: reading rows: %v", err)
+		rows.Close()
+		return nil, err
 	}
 	rows.Close()
 	for _, s := range stories {
-		app, err := l.mgr.open(s.id)
+		app, done, err := l.mgr.use(s.id)
 		if err != nil {
 			continue // a story at a newer schema, say: its uses can't be read
 		}
 		uses, err := bookFontUses(app.db, -1)
+		done()
 		if err != nil {
 			log.Printf("fonts used in story %s: %v", s.id, err)
 			continue

@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"log"
 )
 
 // When something holds in the story. A character version sits at a point:
@@ -36,7 +35,7 @@ func chapterRanks(db *sql.DB) map[int64]int {
 		}
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("chapterRanks: reading rows: %v", err)
+		noteReadError("chapterRanks", err)
 	}
 	rows.Close()
 	rows, err = db.Query(`SELECT id, volume_id, position FROM chapters`)
@@ -55,7 +54,7 @@ func chapterRanks(db *sql.DB) map[int64]int {
 		}
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("chapterRanks: reading rows: %v", err)
+		noteReadError("chapterRanks", err)
 	}
 	rows.Close()
 	sortChapters(list, func(c chapterSummary) int {

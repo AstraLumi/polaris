@@ -167,7 +167,7 @@ func (e mapEquator) hexLatitudes(db *sql.DB, kind string, id int64) []float64 {
 		}
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("hexLatitudes: reading rows: %v", err)
+		noteReadError("hexLatitudes", err)
 	}
 	return out
 }

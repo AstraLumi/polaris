@@ -706,7 +706,7 @@ func addSharesFact(db *sql.DB, a *wikiArticle, cellsOf string, arg any, k cellKi
 		}
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("addSharesFact: reading rows: %v", err)
+		noteReadError("addSharesFact", err)
 	}
 	sort.Slice(shares, func(i, j int) bool {
 		if shares[i].n != shares[j].n {

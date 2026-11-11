@@ -47,7 +47,13 @@
             <div class="card-actions">
               <button class="btn btn-ghost small" type="button" :title="$t('Rename it or change its icon')" @click="formStory = s">{{ $t('Edit') }}</button>
               <a class="btn btn-ghost small" :href="storyExportUrl(s.id)" download :title="$t('Download the whole story as a .zip, pictures included. Import it to restore.')">{{ $t('Export') }}</a>
-              <RowMenu :label="$t('More actions')" :items="[{ label: $t('Delete story'), danger: true, action: () => (toDelete = s) }]" />
+              <RowMenu
+                :label="$t('More actions')"
+                :items="[
+                  { label: $t('Earlier copies…'), action: () => (copiesOf = s) },
+                  { label: $t('Delete story'), danger: true, action: () => (toDelete = s) },
+                ]"
+              />
             </div>
           </li>
 
@@ -77,6 +83,7 @@
       @saved="onSaved"
     />
     <StoryDeleteModal v-if="toDelete" :story="toDelete" @cancel="toDelete = null" @deleted="onDeleted" />
+    <StorySnapshotsModal v-if="copiesOf" :story="copiesOf" @close="copiesOf = null" @restored="onRestored" />
   </div>
 </template>
 
@@ -86,6 +93,7 @@ import PolarisLogo from '../components/PolarisLogo.vue'
 import IconImage from '../components/IconImage.vue'
 import StoryFormModal from '../components/StoryFormModal.vue'
 import StoryDeleteModal from '../components/StoryDeleteModal.vue'
+import StorySnapshotsModal from '../components/StorySnapshotsModal.vue'
 import RowMenu from '../components/RowMenu.vue'
 import {
   stories, storiesLoaded, loadStories, activeStoryId, openStory, forgetStory,
@@ -109,6 +117,7 @@ const notice = ref('')
 const creating = ref(false)
 const formStory = ref(null)
 const toDelete = ref(null)
+const copiesOf = ref(null) // the story whose daily copies are listed
 const importing = ref(false)
 const fileInput = ref(null)
 
@@ -161,6 +170,13 @@ async function onSaved(saved, wasNew) {
     openStory(saved.id) // straight into the new story
     return
   }
+  await refresh()
+}
+
+// A copy brought back is a story of its own, beside the one it came from.
+async function onRestored(made) {
+  copiesOf.value = null
+  notice.value = t('Opened the copy as “{name}”.', { name: made.name })
   await refresh()
 }
 

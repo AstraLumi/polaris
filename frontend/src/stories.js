@@ -6,6 +6,7 @@
 // STORY_API (/api/s/<id>).
 
 import { ref, computed } from 'vue'
+import { send } from './request'
 import { t, tr } from './i18n'
 
 const KEY = 'polaris-story'
@@ -72,6 +73,10 @@ void [
   tr("this story was saved by a newer version of Polaris; update Polaris to open it. A backup was saved in the story's backups folder"),
   tr("this story's database is at a version Polaris can't upgrade from; it was left untouched"),
   tr('this story needs upgrading, but its backup could not be saved first (is the disk full?); it was left untouched'),
+  tr('that copy is gone'),
+  tr('failed to bring that copy back'),
+  tr("Couldn't load the copies."),
+  tr("Couldn't open that copy."),
   tr("couldn't read the upload"),
   tr('choose a story .zip to import'),
   tr('import failed'),
@@ -91,7 +96,7 @@ async function failure(res, fallback) {
 }
 
 export async function loadStories() {
-  const res = await fetch('/api/stories')
+  const res = await send('/api/stories')
   if (!res.ok) throw await failure(res, 'failed to load stories')
   stories.value = await res.json()
   storiesLoaded.value = true
@@ -108,28 +113,42 @@ function storyForm({ name, file, iconChoice, copyFrom }) {
 }
 
 export async function createStory(fields) {
-  const res = await fetch('/api/stories', { method: 'POST', body: storyForm(fields) })
+  const res = await send('/api/stories', { method: 'POST', body: storyForm(fields) })
   if (!res.ok) throw await failure(res, "Couldn't create that story.")
   return res.json()
 }
 
 export async function updateStory(id, fields) {
-  const res = await fetch(`/api/stories/${id}`, { method: 'PUT', body: storyForm(fields) })
+  const res = await send(`/api/stories/${id}`, { method: 'PUT', body: storyForm(fields) })
   if (!res.ok) throw await failure(res, "Couldn't save that story.")
   return res.json()
 }
 
 export async function deleteStory(id, confirmName) {
-  const res = await fetch(`/api/stories/${id}?confirm=${encodeURIComponent(confirmName)}`, { method: 'DELETE' })
+  const res = await send(`/api/stories/${id}?confirm=${encodeURIComponent(confirmName)}`, { method: 'DELETE' })
   if (!res.ok) throw await failure(res, "Couldn't delete that story.")
 }
 
 export async function importStory(file) {
   const fd = new FormData()
   fd.append('file', file)
-  const res = await fetch('/api/stories/import', { method: 'POST', body: fd })
+  const res = await send('/api/stories/import', { method: 'POST', body: fd })
   if (!res.ok) throw await failure(res, "Couldn't import that file.")
   return res.json()
 }
 
 export const storyExportUrl = (id) => `/api/stories/${id}/export`
+
+// The server's own daily copies of a story (backend/snapshots.go).
+export async function fetchSnapshots(id) {
+  const res = await send(`/api/stories/${id}/snapshots`)
+  if (!res.ok) throw await failure(res, "Couldn't load the copies.")
+  return res.json()
+}
+
+// Brings one back as a new story; answers that story.
+export async function restoreSnapshot(id, name) {
+  const res = await send(`/api/stories/${id}/snapshots/${encodeURIComponent(name)}/restore`, { method: 'POST' })
+  if (!res.ok) throw await failure(res, "Couldn't open that copy.")
+  return res.json()
+}

@@ -153,6 +153,7 @@
             <button
               type="button"
               class="label"
+              tabindex="-1"
               :class="[labelClass(n), { 'is-selected': selectedKey === n.key, 'is-dim': isDim(n), 'is-marked': isMarked(n) }]"
               :style="{ left: n.x + 'px', top: n.y + labelOffset(n) + 'px', width: n.labelWidth + 'px' }"
               @click="select(n.key)"

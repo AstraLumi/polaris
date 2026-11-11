@@ -33,7 +33,7 @@
         <div v-else class="write-row">
           <RouterLink to="/write/0" class="btn btn-ghost small">{{ $t('Write') }}</RouterLink>
         </div>
-        <ChapterRows :chapters="loose" :volume-id="null" @move="moveChapter" @delete="(c) => (confirmChapter = c)" @drop-on="dropChapter" />
+        <ChapterRows :chapters="loose" :volume-id="null" @move="moveChapter" @delete="removeChapter" @drop-on="dropChapter" />
       </section>
 
       <section v-for="(v, vi) in idx.volumes" :key="v.id" class="glass-panel block">
@@ -62,7 +62,7 @@
             />
           </div>
         </div>
-        <ChapterRows :chapters="chaptersOf(v.id)" :volume-id="v.id" @move="moveChapter" @delete="(c) => (confirmChapter = c)" @drop-on="dropChapter" />
+        <ChapterRows :chapters="chaptersOf(v.id)" :volume-id="v.id" @move="moveChapter" @delete="removeChapter" @drop-on="dropChapter" />
         <button type="button" class="btn btn-ghost small add-here" @click="addChapter(v.id)">{{ $t('Add a chapter to {name}', { name: v.title }) }}</button>
       </section>
     </template>
@@ -88,14 +88,6 @@
       @cancel="confirmVolume = null"
       @confirm="removeVolume"
     />
-    <ConfirmDialog
-      v-if="confirmChapter"
-      :title="$t('Delete {name}?', { name: confirmChapter.title })"
-      :message="$t('Its notes are deleted. Events and character versions that pointed to it are kept, without a chapter.')"
-      :confirm-label="$t('Delete')"
-      @cancel="confirmChapter = null"
-      @confirm="removeChapter"
-    />
   </div>
 </template>
 
@@ -110,6 +102,7 @@ import { useQuickAdd } from '../quickAdd'
 import { chapterIndex as idx, loadChapters, chapterNumber } from '../chapters'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import RowMenu from '../components/RowMenu.vue'
+import { deleteSoon, notGone, flushDeletes, pendingDelete } from '../undoDelete'
 
 const router = useRouter()
 const loading = ref(true)
@@ -117,19 +110,31 @@ const error = ref('')
 const renaming = ref(null)
 const renameText = ref('')
 const confirmVolume = ref(null)
-const confirmChapter = ref(null)
 
-function removeChapter() {
-  const c = confirmChapter.value
-  confirmChapter.value = null
-  run(async () => {
-    await chaptersApi.remove(c.id)
-    await loadChapters(true)
+// No "are you sure?": the chapter can be brought back for a few seconds
+// (undoDelete.js).
+function removeChapter(c) {
+  deleteSoon({
+    kind: 'chapter',
+    ids: [c.id],
+    label: t('Deleted “{name}”.', { name: c.title }),
+    run: () => chaptersApi.remove(c.id),
+    done: () => loadChapters(true),
   })
 }
 
-const loose = computed(() => idx.value.chapters.filter((c) => !c.volume_id))
-const chaptersOf = (volumeId) => idx.value.chapters.filter((c) => c.volume_id === volumeId)
+const shownChapters = computed(() => notGone('chapter', idx.value.chapters))
+const loose = computed(() => shownChapters.value.filter((c) => !c.volume_id))
+const chaptersOf = (volumeId) => shownChapters.value.filter((c) => c.volume_id === volumeId)
+
+// Before the order changes, a deletion still offering Undo is carried out,
+// so the order sent is of the chapters there are. Answers the chapter as it
+// is in the list read again.
+async function settled(c) {
+  if (!pendingDelete.value) return c
+  await flushDeletes()
+  return c && idx.value.chapters.find((x) => x.id === c.id)
+}
 
 // The chapter being dragged, shared by every list so one can go to another
 // volume.
@@ -218,8 +223,16 @@ const ChapterRows = {
 
 // A dragged chapter dropped before `target` (null: the end of the volume),
 // moving into that volume.
-function dropChapter(c, target, volumeId) {
+async function dropChapter(c, target, volumeId) {
   if (c === target) return
+  if (pendingDelete.value) {
+    await flushDeletes()
+    const again = (x) => x && idx.value.chapters.find((y) => y.id === x.id)
+    const wanted = !!target
+    c = again(c)
+    target = again(target)
+    if (!c || (wanted && !target)) return
+  }
   const list = idx.value.chapters.filter((x) => x !== c)
   const moved = { ...c, volume_id: volumeId }
   if (target) list.splice(list.indexOf(target), 0, moved)
@@ -251,7 +264,9 @@ function saveOrder(volumes, chapters) {
   })
 }
 
-function moveChapter(c, by) {
+async function moveChapter(c, by) {
+  c = await settled(c)
+  if (!c) return
   const list = idx.value.chapters.slice()
   const group = list.filter((x) => (x.volume_id ?? null) === (c.volume_id ?? null))
   const i = group.indexOf(c)
@@ -263,7 +278,8 @@ function moveChapter(c, by) {
   saveOrder(idx.value.volumes, list)
 }
 
-function moveVolume(i, by) {
+async function moveVolume(i, by) {
+  await settled(null)
   const vols = idx.value.volumes.slice()
   ;[vols[i], vols[i + by]] = [vols[i + by], vols[i]]
   saveOrder(vols, idx.value.chapters)

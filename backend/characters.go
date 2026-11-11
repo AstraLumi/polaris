@@ -104,7 +104,10 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 				}
 			}
 			if err := fr.Err(); err != nil {
+				fr.Close()
+				http.Error(w, "failed to read characters", http.StatusInternalServerError)
 				log.Printf("listCharactersHandler: reading rows: %v", err)
+				return
 			}
 			fr.Close()
 		}
@@ -119,7 +122,10 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 				}
 			}
 			if err := tr.Err(); err != nil {
+				tr.Close()
+				http.Error(w, "failed to read characters", http.StatusInternalServerError)
 				log.Printf("listCharactersHandler: reading rows: %v", err)
+				return
 			}
 			tr.Close()
 		}
@@ -360,7 +366,7 @@ func deleteCharactersHandler(db *sql.DB, uploadsDir string) http.HandlerFunc {
 				}
 			}
 			if err := rows.Err(); err != nil {
-				log.Printf("deleteCharactersHandler: reading rows: %v", err)
+				noteReadError("deleteCharactersHandler", err)
 			}
 			rows.Close()
 		}

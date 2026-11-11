@@ -70,12 +70,17 @@
       <canvas
         ref="canvasEl"
         class="graph-canvas"
+        tabindex="0"
+        role="application"
+        :aria-label="$t('The graph. Arrow keys step from article to article, Enter opens the one picked, + and − zoom, 0 shows everything, Shift with an arrow moves the view.')"
+        @keydown="onKey"
         @pointerdown="onDown"
         @pointermove="onMove"
         @pointerup="onUp"
         @pointercancel="onUp"
         @pointerleave="onLeave"
       ></canvas>
+      <p class="sr-only" aria-live="polite">{{ selected ? selected.name : '' }}</p>
       <p v-if="!data && !loadError" class="overlay-note">{{ $t('Loading…') }}</p>
       <p v-else-if="data && !data.nodes.length" class="overlay-note">
         {{ $t('Nothing to connect yet: add characters, places or events and they show up here, joined by what links them.') }}
@@ -639,6 +644,68 @@ function placeCard(e) {
   if (y + h > r.height - 8) y = Math.max(8, r.height - h - 8)
   card.value.x = Math.max(8, x)
   card.value.y = y
+}
+
+// ---- the keyboard ---------------------------------------------------------------------
+
+// The article nearest in a direction from the one picked (from the middle of
+// the view when none is): what is straight ahead counts for more than what
+// is merely close.
+function nodeToward(dx, dy) {
+  const from = selected.value || { x: (size.w / 2 - view.x) / view.k, y: (size.h / 2 - view.y) / view.k }
+  let best = null
+  let bestCost = Infinity
+  for (const n of nodes) {
+    if (n === from) continue
+    const ax = n.x - from.x
+    const ay = n.y - from.y
+    const along = ax * dx + ay * dy
+    if (along <= 0) continue
+    const across = Math.abs(ax * dy - ay * dx)
+    const cost = along + across * 2.5
+    if (cost < bestCost) {
+      best = n
+      bestCost = cost
+    }
+  }
+  return best
+}
+
+const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }
+
+function onKey(e) {
+  if (e.ctrlKey || e.metaKey || e.altKey) return
+  const dir = ARROWS[e.key]
+  if (dir) {
+    e.preventDefault()
+    refit = null
+    if (e.shiftKey) {
+      view.x -= dir[0] * 80
+      view.y -= dir[1] * 80
+      draw()
+      return
+    }
+    const n = selected.value ? nodeToward(dir[0], dir[1]) : nodeToward(dir[0], dir[1]) || nodes[0]
+    if (n) {
+      selected.value = n
+      goTo(n.x, n.y, view.k, true)
+    }
+  } else if (e.key === 'Enter' && selected.value) {
+    e.preventDefault()
+    router.push(wikiPath(selected.value.type, selected.value.id))
+  } else if (e.key === '+' || e.key === '=') {
+    e.preventDefault()
+    zoomBy(1.25)
+  } else if (e.key === '-' || e.key === '_') {
+    e.preventDefault()
+    zoomBy(0.8)
+  } else if (e.key === '0') {
+    e.preventDefault()
+    fit(true)
+  } else if (e.key === 'Escape' && selected.value) {
+    selected.value = null
+    draw()
+  }
 }
 
 // ---- finding an article -------------------------------------------------------------

@@ -157,7 +157,10 @@ func timelineHandler(db *sql.DB) http.HandlerFunc {
 			out.Nodes = append(out.Nodes, n)
 		}
 		if err := crow.Err(); err != nil {
+			crow.Close()
+			http.Error(w, "failed to load timeline", http.StatusInternalServerError)
 			log.Printf("timelineHandler: reading rows: %v", err)
+			return
 		}
 		crow.Close()
 
@@ -186,7 +189,10 @@ func timelineHandler(db *sql.DB) http.HandlerFunc {
 			out.Nodes = append(out.Nodes, n)
 		}
 		if err := lrow.Err(); err != nil {
+			lrow.Close()
+			http.Error(w, "failed to load timeline", http.StatusInternalServerError)
 			log.Printf("timelineHandler: reading rows: %v", err)
+			return
 		}
 		lrow.Close()
 
@@ -215,7 +221,10 @@ func timelineHandler(db *sql.DB) http.HandlerFunc {
 			}
 		}
 		if err := drow.Err(); err != nil {
+			drow.Close()
+			http.Error(w, "failed to load timeline", http.StatusInternalServerError)
 			log.Printf("timelineHandler: reading rows: %v", err)
+			return
 		}
 		drow.Close()
 

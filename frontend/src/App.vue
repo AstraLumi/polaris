@@ -93,6 +93,7 @@
   </div>
   <TooltipLayer />
   <LinkPreviewLayer />
+  <UndoBar />
   <!-- Any code's "are you sure?" (confirm.js). Last, so Escape reaches it
        before the form it was asked over. -->
   <ConfirmDialog
@@ -116,6 +117,7 @@ import { t, tr } from './i18n'
 import { pageTitle, viewedPicture, pageKey, pageLoading } from './navigation'
 import { pendingConfirm, answerConfirm } from './confirm'
 import ConfirmDialog from './components/ConfirmDialog.vue'
+import UndoBar from './components/UndoBar.vue'
 import NavIcon from './components/NavIcon.vue'
 import IconImage from './components/IconImage.vue'
 import SearchPalette from './components/SearchPalette.vue'
@@ -241,18 +243,20 @@ try {
 // Phones have their own bar and are left alone.
 const tight = window.matchMedia('(min-width: 721px) and (max-width: 1100px)')
 const isTight = ref(tight.matches)
-const onTight = (e) => (isTight.value = e.matches)
-onMounted(() => tight.addEventListener('change', onTight))
-onBeforeUnmount(() => tight.removeEventListener('change', onTight))
+// Read again whenever the window changes size (the queries' own "change"
+// event did not reach here on a resized browser pane).
+const onResize = () => {
+  isTight.value = tight.matches
+  isNarrow.value = narrow.matches
+}
+onMounted(() => window.addEventListener('resize', onResize))
+onBeforeUnmount(() => window.removeEventListener('resize', onResize))
 const openedHere = ref(false)
 const writing = computed(() => route.name === 'write')
 watch(writing, () => (openedHere.value = false))
 // Narrower still (a tablet held upright), every page needs it.
 const narrow = window.matchMedia('(min-width: 721px) and (max-width: 960px)')
 const isNarrow = ref(narrow.matches)
-const onNarrow = (e) => (isNarrow.value = e.matches)
-onMounted(() => narrow.addEventListener('change', onNarrow))
-onBeforeUnmount(() => narrow.removeEventListener('change', onNarrow))
 const autoFolded = computed(() => ((writing.value && isTight.value) || isNarrow.value) && !openedHere.value)
 const folded = computed(() => collapsed.value || autoFolded.value)
 

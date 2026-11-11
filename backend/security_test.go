@@ -67,11 +67,13 @@ func TestRequestsFromOtherSitesAreRefused(t *testing.T) {
 // With ALLOWED_HOSTS, a request addressed to any other name is refused,
 // reading included.
 func TestAllowedHosts(t *testing.T) {
-	t.Setenv("ALLOWED_HOSTS", "polaris.test, LOCALHOST:8091 ,[::1]")
+	t.Setenv("ALLOWED_HOSTS", "polaris.test, Stories.Example:8091")
 	_, h := newTestServer(t)
 	for host, want := range map[string]int{
-		"polaris.test:8091": 200, "polaris.test": 200, "localhost": 200, "[::1]:8091": 200,
-		"rebound.example:8091": 403, "": 403,
+		"polaris.test:8091": 200, "polaris.test": 200, "stories.example": 200,
+		// This machine's own names always pass (the health check uses one).
+		"localhost": 200, "127.0.0.1:8091": 200, "[::1]:8091": 200,
+		"rebound.example:8091": 403, "localhost.rebound.example": 403, "192.168.1.20:8091": 403, "": 403,
 	} {
 		req := httptest.NewRequest("GET", "/api/health", nil)
 		req.Host = host

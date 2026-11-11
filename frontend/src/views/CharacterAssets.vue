@@ -38,7 +38,7 @@
       </div>
       <AssetEmptyState v-if="!loading && classes.length === 0" kind="classes" />
       <ul class="asset-list">
-        <li v-for="c in classes" :key="c.id" class="asset-row glass-panel is-clickable" @click="rowClick('class', c, $event)">
+        <li v-for="c in notGone('asset-class', classes)" :key="c.id" class="asset-row glass-panel is-clickable" @click="rowClick('class', c, $event)">
           <div class="asset-name-group">
             <span class="asset-icon"><IconImage :src="c.icon_path" :name="c.name" /></span>
             <span class="asset-name">{{ c.name }}</span>
@@ -59,7 +59,7 @@
       </div>
       <AssetEmptyState v-if="!loading && subclasses.length === 0" kind="subclasses" />
       <ul class="asset-list">
-        <li v-for="s in subclasses" :key="s.id" class="asset-row glass-panel is-clickable" @click="rowClick('subclass', s, $event)">
+        <li v-for="s in notGone('asset-subclass', subclasses)" :key="s.id" class="asset-row glass-panel is-clickable" @click="rowClick('subclass', s, $event)">
           <div class="asset-name-group">
             <span class="asset-name">{{ s.name }}</span>
             <span v-if="s.class_names.length" class="scope-badges">
@@ -83,7 +83,7 @@
       </div>
       <AssetEmptyState v-if="!loading && specializations.length === 0" kind="specializations" />
       <ul class="asset-list">
-        <li v-for="s in specializations" :key="s.id" class="asset-row glass-panel is-clickable" @click="rowClick('specialization', s, $event)">
+        <li v-for="s in notGone('asset-specialization', specializations)" :key="s.id" class="asset-row glass-panel is-clickable" @click="rowClick('specialization', s, $event)">
           <div class="asset-name-group">
             <span class="asset-name">{{ s.name }}</span>
             <span class="scope-badge">{{ s.class_name }}</span>
@@ -104,7 +104,7 @@
       </div>
       <AssetEmptyState v-if="!loading && races.length === 0" kind="races" />
       <ul class="asset-list">
-        <li v-for="r in races" :key="r.id" class="asset-row glass-panel is-clickable" @click="rowClick('race', r, $event)">
+        <li v-for="r in notGone('asset-race', races)" :key="r.id" class="asset-row glass-panel is-clickable" @click="rowClick('race', r, $event)">
           <div class="asset-name-group">
             <span class="asset-name">{{ r.name }}</span>
           </div>
@@ -124,7 +124,7 @@
       </div>
       <AssetEmptyState v-if="!loading && bodyTypes.length === 0" kind="bodyTypes" />
       <ul class="asset-list">
-        <li v-for="b in bodyTypes" :key="b.id" class="asset-row glass-panel is-clickable" @click="rowClick('bodyType', b, $event)">
+        <li v-for="b in notGone('asset-bodyType', bodyTypes)" :key="b.id" class="asset-row glass-panel is-clickable" @click="rowClick('bodyType', b, $event)">
           <span class="asset-name-group">
             <svg class="body-outline" viewBox="-14 -1 28 42" aria-hidden="true">
               <OutlineFigure :outline="outlineFor(b.outline)" :ground="40" :height="40" :line="1" />
@@ -153,7 +153,7 @@
         :hint="$t('Add one to make it available on characters.')"
       />
       <div class="spell-list">
-        <SpellRow v-for="s in spells" :key="s.id" :spell="s">
+        <SpellRow v-for="s in notGone('asset-spell', spells)" :key="s.id" :spell="s">
           <template #actions>
             <RowActions kind="spell" :item="s" />
           </template>
@@ -185,7 +185,7 @@
         :hint="$t('Add one to make it available on characters.')"
       />
       <div class="spell-list">
-        <GearRow v-for="g in filteredGear" :key="g.id" :gear="g">
+        <GearRow v-for="g in notGone('asset-gear', filteredGear)" :key="g.id" :gear="g">
           <template #actions>
             <RowActions kind="gear" :item="g" />
           </template>
@@ -257,15 +257,6 @@
       @cancel="bulkConfirm = false"
       @confirm="handleBulkDelete"
     />
-
-    <ConfirmDialog
-      v-if="confirmTarget"
-      :title="$t('Delete {name}?', { name: confirmTarget.item.name })"
-      :message="confirmMessage"
-      :confirm-label="$t('Delete')"
-      @cancel="confirmTarget = null"
-      @confirm="handleDelete"
-    />
   </div>
 </template>
 
@@ -287,6 +278,7 @@ import GearRow from '../components/GearRow.vue'
 import GearFormModal from '../components/GearFormModal.vue'
 import { GEAR_SLOT_TYPES } from '../gear'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { deleteSoon, notGone } from '../undoDelete'
 import RowMenu from '../components/RowMenu.vue'
 import { statLabel, loadStatSystem } from '../stats'
 
@@ -351,8 +343,6 @@ const subclassEdit = ref(null)
 const spellAdd = ref(false)
 const spellEdit = ref(null)
 
-const confirmTarget = ref(null) // { kind, item }
-
 const spellCatalogs = computed(() => ({
   classes: classes.value,
   subclasses: subclasses.value,
@@ -362,12 +352,6 @@ const spellCatalogs = computed(() => ({
 
 const usedSlotTypes = computed(() => GEAR_SLOT_TYPES.filter((st) => gearList.value.some((g) => g.slot === st.id)))
 const filteredGear = computed(() => (gearFilter.value ? gearList.value.filter((g) => g.slot === gearFilter.value) : gearList.value))
-
-const confirmMessage = computed(() =>
-  ['spell', 'gear'].includes(confirmTarget.value?.kind)
-    ? t("It's removed from every character that has it.")
-    : t('Characters using it keep their data, but lose the link and any bonuses it gave them.'),
-)
 
 async function load() {
   loading.value = true
@@ -448,8 +432,22 @@ async function editSubclass(s) {
   }
 }
 
+// No "are you sure?": the item can be brought back for a few seconds
+// (undoDelete.js).
 function confirmDelete(kind, item) {
-  confirmTarget.value = { kind, item }
+  deleteSoon({
+    kind: 'asset-' + kind,
+    ids: [item.id],
+    label: t('Deleted “{name}”.', { name: item.name }),
+    async run() {
+      try {
+        await deleteApis[kind].delete(item.id)
+      } catch (err) {
+        throw new Error(deleteFailed[kind]())
+      }
+    },
+    done: load,
+  })
 }
 
 // ---- Selecting several to delete at once (on the open tab) -------------------
@@ -483,21 +481,29 @@ const bulkMessage = computed(() =>
     : t('Characters using them keep their data, but lose the link and any bonuses they gave them.'),
 )
 
-async function handleBulkDelete() {
+function handleBulkDelete() {
   const kind = TAB_KIND[tab.value]
   bulkConfirm.value = false
-  let failed = 0
-  for (const id of selectedIds.value) {
-    try {
-      await deleteApis[kind].delete(id)
-    } catch (err) {
-      failed++
-    }
-  }
-  if (failed) loadError.value = tn("Couldn't delete {n} of them.", "Couldn't delete {n} of them.", failed)
+  const ids = [...selectedIds.value]
   selectMode.value = false
   selectedIds.value = new Set()
-  await load()
+  deleteSoon({
+    kind: 'asset-' + kind,
+    ids,
+    label: tn('Deleted {n} item.', 'Deleted {n} items.', ids.length),
+    async run() {
+      let failed = 0
+      for (const id of ids) {
+        try {
+          await deleteApis[kind].delete(id)
+        } catch (err) {
+          failed++
+        }
+      }
+      if (failed) throw new Error(tn("Couldn't delete {n} of them.", "Couldn't delete {n} of them.", failed))
+    },
+    done: load,
+  })
 }
 
 const editors = {
@@ -572,18 +578,6 @@ const deleteFailed = {
   subclass: () => t("Couldn't delete that subclass."),
   spell: () => t("Couldn't delete that spell."),
   gear: () => t("Couldn't delete that gear."),
-}
-
-async function handleDelete() {
-  const { kind, item } = confirmTarget.value
-  try {
-    await deleteApis[kind].delete(item.id)
-    confirmTarget.value = null
-    await load()
-  } catch (err) {
-    loadError.value = deleteFailed[kind]()
-    confirmTarget.value = null
-  }
 }
 
 onMounted(load)

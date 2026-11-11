@@ -166,7 +166,10 @@ func homeHandler(db *sql.DB) http.HandlerFunc {
 				}
 			}
 			if err := lr.Err(); err != nil {
+				lr.Close()
+				http.Error(w, "failed to read home", http.StatusInternalServerError)
 				log.Printf("homeHandler: reading rows: %v", err)
+				return
 			}
 			lr.Close()
 			if n > looseEach {
@@ -188,7 +191,10 @@ func homeHandler(db *sql.DB) http.HandlerFunc {
 			}
 		}
 		if err := er.Err(); err != nil {
+			er.Close()
+			http.Error(w, "failed to load home", http.StatusInternalServerError)
 			log.Printf("homeHandler: reading rows: %v", err)
+			return
 		}
 		er.Close()
 

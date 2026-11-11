@@ -416,7 +416,7 @@ func readAliases(db wikiQuerier, filter string, args ...any) map[int64][]string 
 		}
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("readAliases: reading rows: %v", err)
+		noteReadError("readAliases", err)
 	}
 	return out
 }
@@ -446,7 +446,7 @@ func characterNicknames(db wikiQuerier) map[int64][]string {
 		}
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("characterNicknames: reading rows: %v", err)
+		noteReadError("characterNicknames", err)
 	}
 	return out
 }
@@ -478,7 +478,7 @@ func queryRefs(db *sql.DB, typ, q string, args ...any) []wikiRef {
 		}
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("queryRefs: reading rows: %v", err)
+		noteReadError("queryRefs", err)
 	}
 	return out
 }
@@ -909,7 +909,8 @@ func loadWikiArticle(db *sql.DB, t wikiTypeDef, id int64) (*wikiArticle, error) 
 				}
 			}
 			if err := rows.Err(); err != nil {
-				log.Printf("loadWikiArticle: reading rows: %v", err)
+				rows.Close()
+				return nil, err
 			}
 			rows.Close()
 		}
@@ -921,7 +922,8 @@ func loadWikiArticle(db *sql.DB, t wikiTypeDef, id int64) (*wikiArticle, error) 
 				}
 			}
 			if err := rows.Err(); err != nil {
-				log.Printf("loadWikiArticle: reading rows: %v", err)
+				rows.Close()
+				return nil, err
 			}
 			rows.Close()
 		}
@@ -1014,7 +1016,7 @@ func characterWikiVersions(db *sql.DB, id int64) []wikiVersion {
 		points = append(points, pointOf(ch, v.Date, ranks))
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("characterWikiVersions: reading rows: %v", err)
+		noteReadError("characterWikiVersions", err)
 	}
 	rows.Close()
 	if len(out) < 2 {

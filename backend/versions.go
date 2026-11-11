@@ -396,7 +396,7 @@ func characterTags(db *sql.DB, characterID int64) []string {
 		}
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("characterTags: reading rows: %v", err)
+		noteReadError("characterTags", err)
 	}
 	return out
 }

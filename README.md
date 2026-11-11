@@ -174,7 +174,8 @@ automatically, and git ignores it, so your settings are kept across updates.
 | Variable    | Default     | Description                                                       |
 |-------------|-------------|-------------------------------------------------------------------|
 | `BIND_ADDR` | `127.0.0.1` | Host address to listen on. `0.0.0.0` exposes it to your network.  |
-| `ALLOWED_HOSTS` | *(any)* | Names Polaris answers to, separated by commas (`localhost,polaris.example.com`). Stops another website from reading your stories through a name it points at your machine. |
+| `ALLOWED_HOSTS` | *(any)* | Every name you use to reach Polaris, separated by commas (`polaris.example.com,nas`); `localhost` always works. Requests under any other name are refused, which stops another website from reaching your stories through a name it points at your machine (see `.env.example`). |
+| `AUTO_BACKUPS` | on | Polaris keeps a copy of each story on the days it changes (the last 7, then one a week for 4 weeks; "Earlier copies…" in a story's menu). `off` turns that off. They are on the same disk as the story: keep exporting for a backup elsewhere. |
 | `HOST_PORT` | `8091`      | Port on the host.                                                 |
 | `POLARIS_VERSION` | `latest` | Release to run, such as `3.0.0`, to stay on it until you change it. |
 

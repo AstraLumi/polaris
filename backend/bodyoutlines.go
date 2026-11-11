@@ -158,7 +158,10 @@ func characterHeightsHandler(db *sql.DB) http.HandlerFunc {
 			last.Versions = append(last.Versions, v)
 		}
 		if err := rows.Err(); err != nil {
+			rows.Close()
+			http.Error(w, "failed to read characters", http.StatusInternalServerError)
 			log.Printf("characterHeightsHandler: reading rows: %v", err)
+			return
 		}
 		writeJSON(w, map[string]any{"characters": characters, "body_types": bodyTypes})
 	}

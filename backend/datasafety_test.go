@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -167,4 +168,34 @@ func openRaw(t *testing.T, path string) *sql.DB {
 		t.Fatal(err)
 	}
 	return db
+}
+
+// A list a helper could only read part of is not sent as if it were whole:
+// the request fails and the page can try again. A save is never failed
+// after the fact.
+func TestBrokenReadFailsTheRequest(t *testing.T) {
+	mgr, h := newTestServer(t)
+	id := createStoryDirect(t, mgr, "Torn")
+	app, _ := mgr.open(id)
+	real := app.handler
+	app.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("torn") != "" {
+			noteReadError("test", errors.New("database is locked"))
+		}
+		real.ServeHTTP(w, r)
+	})
+	url := "/api/s/" + id + "/classes"
+	if rec := do(t, h, "GET", url, nil, ""); rec.Code != 200 {
+		t.Fatalf("a whole read: %d", rec.Code)
+	}
+	rec := do(t, h, "GET", url+"?torn=1", nil, "")
+	if rec.Code != 500 || !strings.Contains(rec.Body.String(), "failed to load") || strings.Contains(rec.Body.String(), "[") {
+		t.Errorf("a torn read: %d %q", rec.Code, rec.Body.String())
+	}
+	if rec := do(t, h, "POST", url+"?torn=1", strings.NewReader(`{"name":"Kept"}`), "application/json"); rec.Code != 200 {
+		t.Errorf("a save is answered as it went: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := do(t, h, "GET", url, nil, ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), "Kept") {
+		t.Errorf("and the next read is whole again: %d %s", rec.Code, rec.Body.String())
+	}
 }

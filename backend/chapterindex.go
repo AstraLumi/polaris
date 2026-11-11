@@ -424,7 +424,10 @@ func appearsInHandler(db *sql.DB) http.HandlerFunc {
 			}
 		}
 		if err := rows.Err(); err != nil {
+			rows.Close()
+			http.Error(w, "failed to load the chapters", http.StatusInternalServerError)
 			log.Printf("appearsInHandler: reading rows: %v", err)
+			return
 		}
 		sortByOrder(out, func(x appearsInRow) int { return x.order })
 		writeJSON(w, out)
@@ -473,7 +476,10 @@ func characterLinesHandler(db *sql.DB) http.HandlerFunc {
 			}
 		}
 		if err := rows.Err(); err != nil {
+			rows.Close()
+			http.Error(w, "failed to load the lines", http.StatusInternalServerError)
 			log.Printf("characterLinesHandler: reading rows: %v", err)
+			return
 		}
 		sortByOrder(out, func(x lineRow) int { return x.order*1_000_000 + x.Position })
 		writeJSON(w, out)
@@ -532,7 +538,10 @@ func chapterSpeakersHandler(db *sql.DB) http.HandlerFunc {
 			out[i].Words += countWords(text)
 		}
 		if err := rows.Err(); err != nil {
+			rows.Close()
+			http.Error(w, "failed to load the speakers", http.StatusInternalServerError)
 			log.Printf("chapterSpeakersHandler: reading rows: %v", err)
+			return
 		}
 		sortByOrder(out, func(x speakerRow) int { return -x.Lines*1_000_000 + x.First })
 		writeJSON(w, out)

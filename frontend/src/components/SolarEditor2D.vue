@@ -31,7 +31,15 @@
         <circle v-if="peri" :cx="peri[0]" :cy="peri[1]" :r="vu * 0.006" class="peri" :class="{ 'is-selected': c.id === selected }" />
       </template>
       <!-- What everything here orbits -->
-      <g v-if="focus" class="body is-focus" @click="$emit('select', focus.id)">
+      <g
+        v-if="focus"
+        class="body is-focus"
+        tabindex="0"
+        role="button"
+        :aria-label="focus.name"
+        @click="$emit('select', focus.id)"
+        @keydown.enter.prevent="$emit('select', focus.id)"
+      >
         <circle :r="size(focus)" :fill="colorOf(focus)" />
         <circle v-if="focus.kind === 'star'" :r="size(focus) * 1.35" :fill="focus.star_class === 'black_hole' ? '#ff8c3a' : colorOf(focus)" opacity="0.18" />
       </g>
@@ -42,8 +50,14 @@
         class="body"
         :class="{ 'is-selected': c.id === selected, 'is-dragging': drag?.id === c.id }"
         :transform="`translate(${at[0]} ${at[1]})`"
+        tabindex="0"
+        role="button"
+        :aria-label="moons ? $t('{name}, {n} moons. Enter picks it, Shift+Enter shows its moons.', { name: c.name, n: moons }) : c.name"
+        :aria-pressed="c.id === selected"
         @pointerdown.stop="onDown($event, c)"
         @dblclick.stop="moons && $emit('focus', c.id)"
+        @keydown.enter.exact.prevent="$emit('select', c.id)"
+        @keydown.shift.enter.exact.prevent="moons && $emit('focus', c.id)"
       >
         <circle :r="hitSize(c)" fill="transparent" />
         <circle :r="size(c)" :fill="colorOf(c)" class="disc" :stroke-width="vu * 0.004" />
@@ -369,6 +383,16 @@ const dragNote = computed(() => {
 
 .body {
   cursor: grab;
+}
+
+.body:focus {
+  outline: none;
+}
+
+.body:focus-visible circle {
+  stroke: var(--accent);
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
 }
 
 .body.is-dragging {

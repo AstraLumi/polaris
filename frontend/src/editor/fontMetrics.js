@@ -7,6 +7,7 @@
 // span at 100px once the family has loaded. Cached per family, and kept in
 // localStorage so a book opened offline draws the same lines.
 import { setLineRatio, lineRatio, familyCSS } from './css.js'
+import { send } from '../request'
 
 const done = new Map() // lower-case family → promise
 
@@ -39,7 +40,7 @@ const keep = (key, r) => {
 // The server's Windows ratio for a family, or null.
 async function serverRatio(family) {
   try {
-    const res = await fetch(`/api/fonts/line-metrics?family=${encodeURIComponent(family)}`)
+    const res = await send(`/api/fonts/line-metrics?family=${encodeURIComponent(family)}`)
     if (!res.ok) return null
     const win = +(await res.json())?.win
     return win > 0 ? win : null

@@ -2,12 +2,13 @@
 // editor's index, backend/chapterindex.go): "Appears in" lists, a
 // character's Lines and a chapter's "Who speaks".
 import { t, tr } from './i18n'
+import { send } from './request'
 import { STORY_API } from './stories'
 
 void [tr('failed to load the chapters'), tr('failed to load the lines'), tr('failed to load the speakers')]
 
 async function request(path, fallback) {
-  const res = await fetch(`${STORY_API}${path}`)
+  const res = await send(`${STORY_API}${path}`)
   if (!res.ok) throw new Error(t((await res.text()).trim() || fallback))
   return res.json()
 }

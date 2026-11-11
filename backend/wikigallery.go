@@ -57,7 +57,7 @@ func loadGallery(db *sql.DB, entryID int64) []galleryItem {
 		}
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("loadGallery: reading rows: %v", err)
+		noteReadError("loadGallery", err)
 	}
 	return out
 }

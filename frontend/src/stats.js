@@ -5,6 +5,7 @@
 // reloads the app) and again after Settings saves.
 
 import { reactive } from 'vue'
+import { send } from './request'
 import { t, tr } from './i18n'
 import { STORY_API } from './stories'
 
@@ -51,7 +52,7 @@ export function applyStatSystem(data) {
 export function loadStatSystem(force = false) {
   if (!STORY_API) return Promise.resolve()
   if (loading && !force) return loading
-  loading = fetch(`${STORY_API}/stat-system`)
+  loading = send(`${STORY_API}/stat-system`)
     .then((r) => (r.ok ? r.json() : null))
     .then((data) => data && applyStatSystem(data))
     .catch(() => {

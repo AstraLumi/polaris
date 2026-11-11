@@ -4,6 +4,10 @@
       <canvas
         ref="canvasEl"
         class="map-canvas"
+        tabindex="0"
+        role="application"
+        :aria-label="$t('The map. Arrow keys move the view, + and − zoom, 0 shows everything.')"
+        @keydown="onCanvasKey"
         @pointerdown="onPointerDown"
         @pointermove="onPointerMove"
         @pointerup="onPointerUp"
@@ -1368,6 +1372,23 @@ function onKeyDown(e) {
       redo()
     }
   }
+}
+
+// With the map itself in focus: the view by keyboard. The places on it are
+// reached from the lists beside it.
+const PAN_KEYS = { ArrowLeft: [1, 0], ArrowRight: [-1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }
+function onCanvasKey(e) {
+  if (e.ctrlKey || e.metaKey || e.altKey) return
+  const pan = PAN_KEYS[e.key]
+  if (pan) {
+    view.x += pan[0] * 80
+    view.y += pan[1] * 80
+    scheduleDraw()
+  } else if (e.key === '+' || e.key === '=') zoomBy(1.25)
+  else if (e.key === '-' || e.key === '_') zoomBy(0.8)
+  else if (e.key === '0') fitToContent()
+  else return
+  e.preventDefault()
 }
 
 function onKeyUp(e) {

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -212,7 +211,8 @@ func copyAssets(dst *sql.DB, src wikiQuerier, srcDBPath, srcUploads, dstUploads 
 				}
 			}
 			if err := fr.Err(); err != nil {
-				log.Printf("copyAssets: reading rows: %v", err)
+				fr.Close()
+				return rollback(err)
 			}
 			fr.Close()
 		}

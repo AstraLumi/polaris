@@ -30,6 +30,7 @@ services:
       - DATA_DIR=/data
       - UPLOADS_DIR=/app/uploads
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-}
+      - AUTO_BACKUPS=${AUTO_BACKUPS:-}
     volumes:
       - polaris_data:/data
       - polaris_uploads:/app/uploads

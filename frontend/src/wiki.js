@@ -1,4 +1,5 @@
 import { tr, t } from './i18n'
+import { send } from './request'
 import { STORY_API } from './stories'
 import { mapPath } from './navigation'
 import { biomeOf, landformOf } from './biomes'
@@ -268,7 +269,7 @@ export const SERVER_MESSAGES = [
 ]
 
 async function request(path, options, fallback) {
-  const res = await fetch(`${STORY_API}${path}`, options)
+  const res = await send(`${STORY_API}${path}`, options)
   if (!res.ok) throw new Error(t((await res.text()).trim() || fallback))
   return res.json()
 }

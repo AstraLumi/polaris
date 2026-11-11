@@ -1,4 +1,5 @@
 import { reactive } from 'vue'
+import { send } from './request'
 import { t, tr } from './i18n'
 import { STORY_API } from './stories'
 import { applyMapSettings } from './worldMap'
@@ -26,7 +27,7 @@ export const calendar = reactive({
 
 export async function loadCalendar() {
   try {
-    const res = await fetch(`${STORY_API}/settings`)
+    const res = await send(`${STORY_API}/settings`)
     if (res.ok) {
       const data = await res.json()
       calendar.months_per_year = data.months_per_year

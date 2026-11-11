@@ -93,7 +93,7 @@
     <ConfirmDialog
       v-if="confirmOpen"
       :title="$tn('Delete {n} character?', 'Delete {n} characters?', selectedIds.size)"
-      :message="$t('This removes their Story and Build data too. This can\'t be undone.')"
+      :message="$t('This removes their Story and Build data too.')"
       :confirm-label="$t('Delete')"
       @cancel="confirmOpen = false"
       @confirm="handleDelete"
@@ -110,6 +110,7 @@ import { STATUSES } from '../characterStatus'
 import CharacterCard from '../components/CharacterCard.vue'
 import AddCharacterModal from '../components/AddCharacterModal.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { deleteSoon, notGone } from '../undoDelete'
 import { fetchCharacters, deleteCharacters, factionsApi } from '../api'
 import { useQuickAdd } from '../quickAdd'
 
@@ -173,7 +174,7 @@ const hasTag = (c, tag) => (c.tags || []).some((x) => x.toLowerCase() === tag.to
 
 const shown = computed(() => {
   const words = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean)
-  const list = characters.value.filter((c) => {
+  const list = notGone('character', characters.value).filter((c) => {
     if (classFilter.value && c.class_name !== classFilter.value) return false
     if (raceFilter.value && c.race_name !== raceFilter.value) return false
     if (statusFilter.value && (c.status || 'alive') !== statusFilter.value) return false
@@ -220,17 +221,24 @@ function onCreated() {
   load()
 }
 
-async function handleDelete() {
-  try {
-    await deleteCharacters([...selectedIds.value])
-    confirmOpen.value = false
-    selectMode.value = false
-    selectedIds.value = new Set()
-    await load()
-  } catch (err) {
-    loadError.value = t("Couldn't delete those characters. Try again.")
-    confirmOpen.value = false
-  }
+function handleDelete() {
+  const ids = [...selectedIds.value]
+  confirmOpen.value = false
+  selectMode.value = false
+  selectedIds.value = new Set()
+  deleteSoon({
+    kind: 'character',
+    ids,
+    label: tn('Deleted {n} item.', 'Deleted {n} items.', ids.length),
+    async run() {
+      try {
+        await deleteCharacters(ids)
+      } catch (err) {
+        throw new Error(t("Couldn't delete those characters. Try again."))
+      }
+    },
+    done: load,
+  })
 }
 
 onMounted(load)

@@ -364,7 +364,10 @@ func getPlanetHandler(db *sql.DB) http.HandlerFunc {
 			}
 		}
 		if err := cells.Err(); err != nil {
+			cells.Close()
+			http.Error(w, "failed to load the planet", http.StatusInternalServerError)
 			log.Printf("getPlanetHandler: reading rows: %v", err)
+			return
 		}
 		writeJSON(w, p)
 	}

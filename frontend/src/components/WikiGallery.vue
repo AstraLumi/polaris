@@ -1,7 +1,7 @@
 <template>
   <div class="wiki-gallery" :class="{ 'is-editing': editable }">
     <ul v-if="items.length" class="grid">
-      <li v-for="(g, i) in items" :key="g.id" class="item">
+      <li v-for="(g, i) in items" v-show="!isGone('gallery', g.id)" :key="g.id" class="item">
         <button type="button" class="thumb" :title="g.caption || $t('View full size')" @click="open(i)">
           <img :src="g.picture" :alt="g.caption" loading="lazy" />
         </button>
@@ -39,7 +39,7 @@
 
 <script setup>
 import { ref, reactive, watch } from 'vue'
-import { askConfirm } from '../confirm'
+import { deleteSoon, isGone } from '../undoDelete'
 import { wikiApi } from '../wiki'
 import { viewGallery } from '../navigation'
 import { t } from '../i18n'
@@ -99,8 +99,15 @@ function move(i, by) {
   run(() => wikiApi.galleryOrder(props.type, props.id, ids))
 }
 
-async function remove(g) {
-  if (await askConfirm(t('Remove this picture?'), { confirmLabel: t('Remove') })) run(() => wikiApi.galleryRemove(g.id))
+// No "are you sure?": the picture can be brought back for a few seconds
+// (undoDelete.js).
+function remove(g) {
+  deleteSoon({
+    kind: 'gallery',
+    ids: [g.id],
+    label: t('Picture removed.'),
+    run: async () => emit('update:items', await wikiApi.galleryRemove(g.id)),
+  })
 }
 </script>
 

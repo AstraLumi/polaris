@@ -40,12 +40,15 @@ func parsePictureForm(w http.ResponseWriter, r *http.Request) error {
 //     or with Origin, which must then name this server. A request with
 //     neither is not from a browser page (curl, a script) and passes;
 //   - with ALLOWED_HOSTS set, every request must be addressed to one of
-//     those names. That closes "DNS rebinding", where another site's name
-//     is pointed at this machine so its pages may read the answers too;
+//     those names (or to this machine's own: localhost, 127.0.0.1, ::1).
+//     That closes "DNS rebinding", where another site's name is pointed at
+//     this machine: to the browser its pages and Polaris are then one
+//     site, so they may read the answers, and the check above no longer
+//     sees them as another site either. Only the name gives them away;
 //   - nothing is ever guessed to be a page or a script from its contents.
 func guard(next http.Handler, allowedHosts map[string]bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if len(allowedHosts) > 0 && !allowedHosts[hostName(r.Host)] {
+		if len(allowedHosts) > 0 && !allowedHosts[hostName(r.Host)] && !ownName(hostName(r.Host)) {
 			http.Error(w, "this address is not one Polaris answers to (see ALLOWED_HOSTS)", http.StatusForbidden)
 			return
 		}
@@ -56,6 +59,17 @@ func guard(next http.Handler, allowedHosts map[string]bool) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		next.ServeHTTP(w, r)
 	})
+}
+
+// ownName: a name that only ever means this machine. A rebinding attack
+// arrives under the attacker's name, never under these, and the container's
+// health check (and anyone at the machine itself) uses them.
+func ownName(host string) bool {
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func changesThings(method string) bool {

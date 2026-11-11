@@ -114,7 +114,7 @@ func factionMembers(db *sql.DB, factionID int64) []factionMember {
 		}
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("factionMembers: reading rows: %v", err)
+		noteReadError("factionMembers", err)
 	}
 	return out
 }
@@ -151,7 +151,7 @@ func membershipsOf(db *sql.DB, characterID int64) []membership {
 		}
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("membershipsOf: reading rows: %v", err)
+		noteReadError("membershipsOf", err)
 	}
 	return out
 }
@@ -175,7 +175,10 @@ func listFactionsHandler(db *sql.DB) http.HandlerFunc {
 			out = append(out, f)
 		}
 		if err := rows.Err(); err != nil {
+			rows.Close()
+			http.Error(w, "failed to load factions", http.StatusInternalServerError)
 			log.Printf("listFactionsHandler: reading rows: %v", err)
+			return
 		}
 		rows.Close()
 		// The members (for the list's faces) and a kingdom's people.

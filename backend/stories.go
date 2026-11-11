@@ -15,6 +15,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
@@ -57,8 +58,9 @@ type storyManager struct {
 	reg         *sql.DB
 	fonts       *fontLibrary // the fonts library, one for every story (fontlib.go)
 
-	mu   sync.Mutex
-	apps map[string]*storyApp
+	mu      sync.Mutex
+	apps    map[string]*storyApp
+	opening map[string]*opening // stories being opened (openStory)
 }
 
 type storyApp struct {
@@ -68,6 +70,11 @@ type storyApp struct {
 	uploadsDir string
 	handler    http.Handler
 	graph      *graphCache // the wiki graph, kept ready (graphcache.go)
+
+	// Under the manager's lock: how many are using the story right now, and
+	// when it was last used (closeIdle).
+	users    int
+	lastUsed time.Time
 }
 
 // storyInfo is what the picker shows.
@@ -114,6 +121,7 @@ func newStoryManager(dataDir, uploadsRoot string) (*storyManager, error) {
 		uploadsRoot: uploadsRoot,
 		reg:         reg,
 		apps:        map[string]*storyApp{},
+		opening:     map[string]*opening{},
 	}
 	if m.fonts, err = newFontLibrary(reg, uploadsRoot, m); err != nil {
 		reg.Close()
@@ -161,27 +169,148 @@ func newStoryID() (string, error) {
 }
 
 // open returns the story's running app, opening (and upgrading) its database
-// on first use.
+// on first use. For code that uses the story at once and is done: something
+// that holds on to it (a request, an export) takes it with use instead, so
+// it isn't closed for being idle in the meantime.
 func (m *storyManager) open(id string) (*storyApp, error) {
+	return m.openStory(id, true)
+}
+
+// opening is a story on its way to being open: whoever else asks for it
+// meanwhile waits for this one attempt instead of starting another.
+type opening struct {
+	done chan struct{}
+	app  *storyApp
+	err  error
+}
+
+// openStory opens a story without holding up the others: the manager's lock
+// is only held to look the story up, never while its database is opened,
+// backed up or upgraded (which can take a while). listed is false for a
+// story being made, whose row the caller has just written.
+func (m *storyManager) openStory(id string, listed bool) (*storyApp, error) {
 	if !storyIDPattern.MatchString(id) {
 		return nil, errNoStory
 	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	if a, ok := m.apps[id]; ok {
+		a.lastUsed = time.Now()
+		m.mu.Unlock()
 		return a, nil
 	}
-	var one int
-	if err := m.reg.QueryRow(`SELECT 1 FROM stories WHERE id = ?`, id).Scan(&one); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, errNoStory
-		}
-		return nil, err
+	if o := m.opening[id]; o != nil {
+		m.mu.Unlock()
+		<-o.done
+		return o.app, o.err
 	}
-	return m.openLocked(id)
+	o := &opening{done: make(chan struct{})}
+	m.opening[id] = o
+	m.mu.Unlock()
+
+	if listed {
+		var one int
+		if err := m.reg.QueryRow(`SELECT 1 FROM stories WHERE id = ?`, id).Scan(&one); err != nil {
+			o.err = err
+			if errors.Is(err, sql.ErrNoRows) {
+				o.err = errNoStory
+			}
+		}
+	}
+	if o.err == nil {
+		o.app, o.err = m.build(id)
+	}
+
+	m.mu.Lock()
+	delete(m.opening, id)
+	if o.err == nil {
+		o.app.lastUsed = time.Now()
+		m.apps[id] = o.app
+	}
+	m.mu.Unlock()
+	close(o.done)
+	return o.app, o.err
 }
 
-func (m *storyManager) openLocked(id string) (*storyApp, error) {
+// use is open for as long as the story is needed: it is not closed for
+// being idle until done is called.
+func (m *storyManager) use(id string) (app *storyApp, done func(), err error) {
+	for {
+		a, err := m.open(id)
+		if err != nil {
+			return nil, func() {}, err
+		}
+		m.mu.Lock()
+		if m.apps[id] == a {
+			a.users++
+			m.mu.Unlock()
+			return a, func() { m.release(a) }, nil
+		}
+		m.mu.Unlock() // closed between the two looks: open it again
+	}
+}
+
+// peek is use for a story only if it is open already.
+func (m *storyManager) peek(id string) (app *storyApp, done func()) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	a := m.apps[id]
+	if a == nil {
+		return nil, func() {}
+	}
+	a.users++
+	return a, func() { m.release(a) }
+}
+
+func (m *storyManager) release(a *storyApp) {
+	m.mu.Lock()
+	a.users--
+	a.lastUsed = time.Now()
+	m.mu.Unlock()
+}
+
+// Variables only so the tests can shorten them.
+var (
+	storyIdleAfter = 30 * time.Minute // close a story nobody used for this long
+	storyIdleLook  = 5 * time.Minute
+)
+
+// closeIdle closes the stories nobody has used lately: their connections,
+// and the wiki graph kept for them, are given back. The next request opens
+// the story again in a moment.
+func (m *storyManager) closeIdle(now time.Time) (closed int) {
+	m.mu.Lock()
+	var idle []*storyApp
+	for id, a := range m.apps {
+		if a.users == 0 && now.Sub(a.lastUsed) >= storyIdleAfter {
+			idle = append(idle, a)
+			delete(m.apps, id)
+		}
+	}
+	m.mu.Unlock()
+	for _, a := range idle {
+		a.graph.stop()
+		a.db.Close()
+	}
+	return len(idle)
+}
+
+func (m *storyManager) idleLoop(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(storyIdleLook):
+		}
+		if n := m.closeIdle(time.Now()); n > 0 {
+			log.Printf("closed %d idle stories", n)
+		}
+	}
+}
+
+// build opens one story's database (backing it up and upgrading it when it
+// is at an older schema) and makes its routes. It doesn't touch the
+// manager's list: openStory does.
+func (m *storyManager) build(id string) (*storyApp, error) {
 	if err := os.MkdirAll(m.storyDir(id), 0o755); err != nil {
 		return nil, err
 	}
@@ -216,9 +345,7 @@ func (m *storyManager) openLocked(id string) (*storyApp, error) {
 		return nil, err
 	}
 	graph := newGraphCache(db, dbPath)
-	a := &storyApp{id: id, db: db, dbPath: dbPath, uploadsDir: uploads, handler: storyRoutes(db, uploads, graph), graph: graph}
-	m.apps[id] = a
-	return a, nil
+	return &storyApp{id: id, db: db, dbPath: dbPath, uploadsDir: uploads, handler: storyRoutes(db, uploads, graph), graph: graph}, nil
 }
 
 func validStoryName(raw string) (string, error) {
@@ -275,10 +402,8 @@ func (m *storyManager) info(id, name, icon, created string) storyInfo {
 // must not open them all (each would be upgraded and backed up there and
 // then, and kept open for good).
 func (m *storyManager) characterCount(id string) (n int) {
-	m.mu.Lock()
-	a := m.apps[id]
-	m.mu.Unlock()
-	if a != nil {
+	if a, done := m.peek(id); a != nil {
+		defer done()
 		a.db.QueryRow(`SELECT COUNT(*) FROM characters`).Scan(&n)
 		return n
 	}
@@ -376,9 +501,11 @@ func (m *storyManager) create(name string, up *iconUpload, choice, copyFrom stri
 	}
 	var src *storyApp
 	if copyFrom != "" {
-		if src, err = m.open(copyFrom); err != nil {
+		var done func()
+		if src, done, err = m.use(copyFrom); err != nil {
 			return storyInfo{}, errors.New("the story to copy from doesn't exist")
 		}
+		defer done()
 	}
 	id, err := newStoryID()
 	if err != nil {
@@ -399,9 +526,7 @@ func (m *storyManager) create(name string, up *iconUpload, choice, copyFrom stri
 	if _, err := m.reg.Exec(`INSERT INTO stories (id, name, icon) VALUES (?, ?, ?)`, id, name, icon); err != nil {
 		return fail(err)
 	}
-	m.mu.Lock()
-	app, err := m.openLocked(id)
-	m.mu.Unlock()
+	app, err := m.openStory(id, false)
 	if err != nil {
 		return fail(err)
 	}
@@ -492,6 +617,9 @@ func (m *storyManager) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/stories/{id}", m.updateHandler)
 	mux.HandleFunc("DELETE /api/stories/{id}", m.deleteHandler)
 	mux.HandleFunc("GET /api/stories/{id}/export", m.exportHandler)
+	// The server's own daily copies (snapshots.go).
+	mux.HandleFunc("GET /api/stories/{id}/snapshots", m.snapshotsHandler)
+	mux.HandleFunc("POST /api/stories/{id}/snapshots/{name}/restore", m.restoreSnapshotHandler)
 	mux.HandleFunc("/api/s/{id}/{rest...}", m.storyHandler)
 	mux.HandleFunc("GET /uploads/s/{id}/{path...}", m.uploadsHandler)
 	m.fonts.registerRoutes(mux)
@@ -579,7 +707,8 @@ func (m *storyManager) deleteHandler(w http.ResponseWriter, r *http.Request) {
 // storyHandler hands a request to the story's own routes.
 func (m *storyManager) storyHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	app, err := m.open(id)
+	app, done, err := m.use(id)
+	defer done()
 	if err != nil {
 		if errors.Is(err, errNoStory) {
 			http.Error(w, "story not found", http.StatusNotFound)
@@ -602,7 +731,14 @@ func (m *storyManager) storyHandler(w http.ResponseWriter, r *http.Request) {
 	u.RawPath = ""
 	r2.URL = &u
 	rw := &uploadsRewriter{w: w, replacement: []byte(`"/uploads/s/` + id + `/`)}
+	reads := readErrors.Load()
 	app.handler.ServeHTTP(rw, r2)
+	// A list cut short by a broken read is not sent as if it were whole
+	// (noteReadError, utils.go). Only what was asked for: something saved
+	// stays saved.
+	if r.Method == http.MethodGet && readErrors.Load() != reads {
+		rw.failInstead("failed to load: the story could not be read just now")
+	}
 	rw.finish()
 	// The server only clears the temporary files of the request it was
 	// given, and the form was read on the copy.
@@ -663,6 +799,20 @@ func (u *uploadsRewriter) Flush() {
 	if f, ok := u.w.(http.Flusher); ok && u.direct {
 		f.Flush()
 	}
+}
+
+// failInstead drops a JSON answer still held back and sends an error in its
+// place. An answer already on its way (not JSON) is left as it is.
+func (u *uploadsRewriter) failInstead(msg string) {
+	if u.direct || (u.status != 0 && u.status != http.StatusOK) {
+		return
+	}
+	u.buf.Reset()
+	u.w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	u.w.Header().Del("ETag")
+	u.status = http.StatusInternalServerError
+	u.decided = true
+	u.buf.WriteString(msg)
 }
 
 func (u *uploadsRewriter) finish() {

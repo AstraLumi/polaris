@@ -501,7 +501,10 @@ func getSubclassHandler(db *sql.DB) http.HandlerFunc {
 			}
 		}
 		if err := rows.Err(); err != nil {
+			rows.Close()
+			http.Error(w, "failed to load classes", http.StatusInternalServerError)
 			log.Printf("getSubclassHandler: reading rows: %v", err)
+			return
 		}
 		rows.Close()
 

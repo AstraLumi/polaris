@@ -7,6 +7,7 @@ import { tr } from './i18n'
 import { pageTitle, rememberVisit, pageLoadStarted, pageLoadEnded } from './navigation'
 import { fetchHome } from './api'
 import { lastWriting, writePath } from './writeLast'
+import { flushDeletes } from './undoDelete'
 
 // Only the pages every visit starts on are part of the main script; each
 // other page is fetched the first time it is opened.
@@ -87,6 +88,8 @@ const router = createRouter({
 let storyChecked = false
 router.beforeEach(async (to) => {
   pageLoadStarted()
+  // A deletion still offering Undo is carried out before another page loads.
+  await flushDeletes({ reload: false })
   if (to.name === 'stories') return true
   if (!activeStoryId) return { name: 'stories' }
   if (!storyChecked) {
