@@ -565,6 +565,11 @@ function toggleCollapsed() {
     flex-direction: column;
     gap: 0.75rem;
     padding: 0.75rem;
+    /* Not 100vh: on a phone that is the screen with the browser's address
+       bar away, so every page was a little taller than what shows and
+       could be pushed up under the bar below (the map's tools vanished
+       behind it). */
+    min-height: 100dvh;
   }
   .rail,
   .rail.is-collapsed {

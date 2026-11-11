@@ -21,8 +21,8 @@ import { pickLabels } from '../planetLabels'
 import { drawDot, drawCity, drawCapital, lighten } from '../mapMarkers'
 
 // The planet laid flat in a projection, to look at only: drag to move,
-// scroll to zoom, hover a cell to see what is there. Painting happens on the
-// globe.
+// scroll or pinch to zoom, hover a cell to see what is there. Painting
+// happens on the globe.
 const props = defineProps({
   frequency: { type: Number, required: true },
   projection: { type: String, default: 'equirectangular' },
@@ -62,6 +62,8 @@ function fit() {
 function prepare() {
   grid = new PlanetGrid(props.frequency)
   projected = new ProjectedCells(grid, props.projection)
+  groups = null
+  fullAt = 0
   fit()
   schedule()
 }
@@ -71,8 +73,70 @@ function schedule() {
   queued = true
   requestAnimationFrame(() => {
     queued = false
-    draw()
+    frame()
   })
+}
+
+// ---- Moving without drawing every hex ---------------------------------------------
+// A full picture is every coloured hex as a path: fine once, far too much
+// sixty times a second on a phone with a painted planet. So while the map
+// is being moved, and only when a full picture is slow here, the last one
+// is kept and shown moved and stretched to where the map now is; a full
+// picture follows now and then, when the fingers pause, and when they lift.
+const SLOW_MS = 12 // a full picture that takes longer is not drawn per frame
+let fullMs = 0 // how long the last full picture took
+let fullAt = 0
+let snap = null // { canvas, scale, ox, oy }: the last full picture and its view
+let settleTimer = 0
+
+function keepPicture() {
+  const canvas = canvasEl.value
+  if (!canvas || !canvas.width) return
+  if (!snap || snap.canvas.width !== canvas.width || snap.canvas.height !== canvas.height) {
+    snap = { canvas: document.createElement('canvas') }
+    snap.canvas.width = canvas.width
+    snap.canvas.height = canvas.height
+  }
+  const c = snap.canvas.getContext('2d')
+  c.clearRect(0, 0, canvas.width, canvas.height)
+  c.drawImage(canvas, 0, 0)
+  Object.assign(snap, { scale: view.scale, ox: view.ox, oy: view.oy })
+}
+
+function drawFull() {
+  const start = performance.now()
+  draw()
+  fullAt = performance.now()
+  fullMs = fullAt - start
+  if (moving() && fullMs > SLOW_MS) keepPicture()
+}
+
+function drawMoved() {
+  const canvas = canvasEl.value
+  const ctx = canvas.getContext('2d')
+  const k = view.scale / snap.scale
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  ctx.drawImage(snap.canvas, (view.ox - snap.ox * k) * size.dpr, (view.oy - snap.oy * k) * size.dpr, canvas.width * k, canvas.height * k)
+}
+
+const moving = () => pointers.size > 0 || wheeling
+
+function frame() {
+  clearTimeout(settleTimer)
+  const quick = fullMs <= SLOW_MS
+  // Now and then a full one all the same, so what slid into view fills in.
+  const due = performance.now() - fullAt > Math.max(250, fullMs * 8)
+  if (!moving() || quick || !snap || due) drawFull()
+  else drawMoved()
+  if (moving() && !quick) settleTimer = setTimeout(drawFull, 140)
+}
+
+// The cells by colour, worked out when they change and not for every picture.
+let groups = null
+function grouped() {
+  if (!groups) groups = byColor(props.cells, props.colorOf)
+  return groups
 }
 
 function css(name, fallback) {
@@ -86,7 +150,7 @@ function draw() {
   ctx.setTransform(size.dpr, 0, 0, size.dpr, 0, 0)
   ctx.clearRect(0, 0, size.w, size.h)
   drawPlanet(ctx, projected, view, {
-    cells: byColor(props.cells, props.colorOf),
+    cells: grouped(),
     lines: props.lines,
     land: (c, sx, sy) => {
       // Oceans: the outline of their water.
@@ -163,6 +227,7 @@ function resize() {
   canvas.width = Math.round(size.w * size.dpr)
   canvas.height = Math.round(size.h * size.dpr)
   if (first) fit()
+  fullAt = 0 // the kept picture was of another size
   schedule()
 }
 
@@ -175,14 +240,51 @@ function cellAt(e) {
   return ll ? grid.cellAt(fromLatLon(ll[1], ll[0])) : null
 }
 
+const SCALE_MIN = 20
+const SCALE_MAX = 20000
+
+// Every finger (or the mouse button) that is down, by pointer id. One moves
+// the map; two move it by their middle and zoom it by their distance.
+const pointers = new Map() // pointerId -> { x, y } on the canvas
+let grip = null // where the fingers and the view were when the last one came or went
+
+function gripNow() {
+  const pts = [...pointers.values()]
+  if (!pts.length) return null
+  const x = pts.reduce((sum, p) => sum + p.x, 0) / pts.length
+  const y = pts.reduce((sum, p) => sum + p.y, 0) / pts.length
+  const dist = pts.length > 1 ? Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) : 0
+  return { x, y, dist }
+}
+
+// Taken again whenever a finger comes or goes, so the map never jumps.
+function regrip() {
+  const g = gripNow()
+  grip = g && { ...g, scale: view.scale, ox: view.ox, oy: view.oy }
+  drag.value = grip
+}
+
+function place(e) {
+  const rect = canvasEl.value.getBoundingClientRect()
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top }
+}
+
 let lastHover = null
 function onMove(e) {
-  if (drag.value) {
-    view.ox = drag.value.ox + (e.clientX - drag.value.x)
-    view.oy = drag.value.oy + (e.clientY - drag.value.y)
+  if (pointers.has(e.pointerId)) {
+    pointers.set(e.pointerId, place(e))
+    const now = gripNow()
+    const k = grip.dist && now.dist ? now.dist / grip.dist : 1
+    const scale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, grip.scale * k))
+    const f = scale / grip.scale
+    // The point of the map that was under the fingers' middle stays there.
+    view.scale = scale
+    view.ox = now.x - (grip.x - grip.ox) * f
+    view.oy = now.y - (grip.y - grip.oy) * f
     schedule()
     return
   }
+  if (e.pointerType === 'touch') return
   const c = cellAt(e)
   if (c !== lastHover) {
     lastHover = c
@@ -192,12 +294,17 @@ function onMove(e) {
 
 function onDown(e) {
   canvasEl.value.setPointerCapture(e.pointerId)
-  drag.value = { x: e.clientX, y: e.clientY, ox: view.ox, oy: view.oy }
+  const first = !pointers.size
+  pointers.set(e.pointerId, place(e))
+  regrip()
+  if (first && fullMs > SLOW_MS) keepPicture()
 }
 
 function onUp(e) {
-  drag.value = null
+  if (!pointers.delete(e.pointerId)) return
   if (canvasEl.value?.hasPointerCapture?.(e.pointerId)) canvasEl.value.releasePointerCapture(e.pointerId)
+  regrip()
+  if (!pointers.size) schedule() // a full picture, where the map was left
 }
 
 function onLeave() {
@@ -211,13 +318,23 @@ function onWheel(e) {
   const mx = e.clientX - rect.left
   const my = e.clientY - rect.top
   const k = Math.exp(-e.deltaY * 0.0015)
-  const next = Math.max(20, Math.min(20000, view.scale * k))
+  const next = Math.max(SCALE_MIN, Math.min(SCALE_MAX, view.scale * k))
   const f = next / view.scale
   view.ox = mx - (mx - view.ox) * f
   view.oy = my - (my - view.oy) * f
   view.scale = next
+  // The wheel moves the map as fingers do, for as long as it keeps turning.
+  if (!wheeling && fullMs > SLOW_MS) keepPicture()
+  wheeling = true
+  clearTimeout(wheelTimer)
+  wheelTimer = setTimeout(() => {
+    wheeling = false
+    schedule()
+  }, 160)
   schedule()
 }
+let wheeling = false
+let wheelTimer = 0
 
 onMounted(() => {
   prepare()
@@ -226,12 +343,23 @@ onMounted(() => {
   canvasEl.value.addEventListener('wheel', onWheel, { passive: false })
 })
 
-onBeforeUnmount(() => resizeObserver?.disconnect())
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  clearTimeout(settleTimer)
+  clearTimeout(wheelTimer)
+})
+
+// What is drawn changed: the kept picture is of something else now.
+function redraw() {
+  groups = null
+  fullAt = 0
+  schedule()
+}
 
 watch(() => [props.frequency, props.projection], prepare)
-watch(() => [props.version, props.cells, props.markers, props.lines, props.areas, props.borders], schedule, { deep: false })
+watch(() => [props.version, props.cells, props.colorOf, props.markers, props.lines, props.areas, props.borders], redraw, { deep: false })
 
-defineExpose({ fit: () => (fit(), schedule()) })
+defineExpose({ fit: () => (fit(), (fullAt = 0), schedule()) })
 </script>
 
 <style scoped>

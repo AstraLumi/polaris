@@ -11,6 +11,10 @@
 //     --month <n>      a month (1…12) instead of the whole year
 //     --face <lon,lat> where the globe looks (default -30,25: the Atlantic)
 //     --flat           the flat map instead of the globe
+//     --phone          a phone: 390x800, touch, a slow processor. With
+//                      --flat it then spreads two fingers and drags one,
+//                      saves a picture after each and says how many
+//                      pictures a second the dragging managed
 //     --hover <x,y>    rest the pointer there (to see a hex's readout)
 //     --sky <lon,lat>  also open the sky view from that hex (the story gets
 //                      a Sun, the planet and a Moon), with:
@@ -52,7 +56,7 @@ const LABELS = { continents: 'Continents', wind: 'Winds', currents: 'Ocean curre
 const layers = option('layers', Object.keys(LABELS).join(',')).split(',').map((v) => v.trim()).filter(Boolean)
 const month = Number(option('month', 0))
 const [faceLon, faceLat] = option('face', '-30,25').split(',').map(Number)
-const [width, height] = option('size', '1400x900').split('x').map(Number)
+const [width, height] = flag('phone') ? [390, 800] : option('size', '1400x900').split('x').map(Number)
 const out = resolve(option('out', join(here, 'out')))
 
 const cleanups = []
@@ -172,7 +176,7 @@ async function makeStory() {
 async function shoot(storyId) {
   const browser = await chromium.launch({ channel: option('channel', 'msedge'), headless: true, args: ['--enable-gpu', '--ignore-gpu-blocklist'] })
   cleanups.push(() => browser.close())
-  const context = await browser.newContext({ viewport: { width, height }, locale: 'en-US' })
+  const context = await browser.newContext({ viewport: { width, height }, locale: 'en-US', ...(flag('phone') ? { hasTouch: true, isMobile: true, deviceScaleFactor: 2.75 } : {}) })
   await context.addInitScript(([id, flat]) => {
     localStorage.setItem('polaris-story', id)
     localStorage.setItem('polaris-planet-view', flat ? 'flat' : 'globe')
@@ -186,7 +190,11 @@ async function shoot(storyId) {
   await page.waitForTimeout(1500)
   mkdirSync(out, { recursive: true })
   const saved = []
-  for (const id of layers) {
+  if (flag('phone')) {
+    saved.push(join(out, `phone_${flag('flat') ? 'flat' : 'globe'}.png`))
+    await page.screenshot({ path: saved.at(-1) })
+  }
+  for (const id of flag('phone') ? [] : layers) {
     await page.getByRole('radio', { name: LABELS[id], exact: true }).click()
     if (id !== 'continents') {
       // The climate starts working a moment after the layer is picked.
@@ -211,6 +219,44 @@ async function shoot(storyId) {
     const file = join(out, `climate_${id}${month ? '_m' + month : ''}${flag('flat') ? '_flat' : ''}.png`)
     await page.screenshot({ path: file })
     saved.push(file)
+  }
+  if (flag('phone') && flag('flat')) {
+    // Fingers, as the phone's browser sends them, on a processor four times
+    // slower than this one.
+    const cdp = await context.newCDPSession(page)
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 })
+    const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map(([x, y], id) => ({ x, y, id })) })
+    const box = await page.locator('.flat-canvas').boundingBox()
+    const cx = box.x + box.width / 2
+    const cy = box.y + box.height / 2
+    await touch('touchStart', [[cx - 30, cy], [cx + 30, cy]])
+    for (let i = 1; i <= 20; i++) {
+      await touch('touchMove', [[cx - 30 - i * 0.75, cy], [cx + 30 + i * 0.75, cy]])
+      await page.waitForTimeout(16)
+    }
+    await touch('touchEnd', [])
+    await page.waitForTimeout(600)
+    saved.push(join(out, 'phone_flat_pinched.png'))
+    await page.screenshot({ path: saved.at(-1) })
+
+    await page.evaluate(() => {
+      window.__frames = 0
+      const tick = () => (window.__frames++, requestAnimationFrame(tick))
+      requestAnimationFrame(tick)
+    })
+    const start = Date.now()
+    await touch('touchStart', [[cx, cy]])
+    for (let i = 1; i <= 60; i++) {
+      await touch('touchMove', [[cx - i * 2, cy + i]])
+      await page.waitForTimeout(16)
+    }
+    const frames = await page.evaluate(() => window.__frames)
+    console.log(`dragging: ${Math.round((frames * 1000) / (Date.now() - start))} pictures a second`)
+    await touch('touchEnd', [])
+    await page.waitForTimeout(600)
+    saved.push(join(out, 'phone_flat_dragged.png'))
+    await page.screenshot({ path: saved.at(-1) })
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 })
   }
   const sky = option('sky', '')
   if (sky) {
