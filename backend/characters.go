@@ -49,7 +49,9 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 				c.id, v.id, v.name, COALESCE(v.nickname, ''), v.level,
 				COALESCE(cl.name, ''), COALESCE(sc.name, ''), COALESCE(sp.name, ''),
 				COALESCE(v.picture_path, ''), COALESCE(cl.icon_path, ''),
-				COALESCE(ra.name, ''), v.updated_at, COALESCE(st.status, 'alive')
+				COALESCE(ra.name, ''), v.updated_at, COALESCE(st.status, 'alive'),
+				v.class_id, v.subclass_id, v.specialization_id, st.race_id, st.body_type_id,
+				st.age, st.height, st.weight
 			FROM characters c
 			JOIN character_versions v ON v.character_id = c.id AND v.is_current = 1
 			LEFT JOIN classes cl ON cl.id = v.class_id
@@ -70,6 +72,8 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 			name, nickname, className, subclassName, specName, pic, classIcon string
 			raceName, updatedAt, status                                       string
 			level                                                             int
+			refs                                                              categoryRefs
+			age, height, weight                                               sql.NullFloat64
 		}
 		var raw []row
 		for rows.Next() {
@@ -78,6 +82,8 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 				&rr.characterID, &rr.versionID, &rr.name, &rr.nickname, &rr.level,
 				&rr.className, &rr.subclassName, &rr.specName, &rr.pic, &rr.classIcon,
 				&rr.raceName, &rr.updatedAt, &rr.status,
+				&rr.refs.ClassID, &rr.refs.SubclassID, &rr.refs.SpecializationID, &rr.refs.RaceID, &rr.refs.BodyTypeID,
+				&rr.age, &rr.height, &rr.weight,
 			); err != nil {
 				rows.Close()
 				http.Error(w, "failed to read characters", http.StatusInternalServerError)
@@ -131,11 +137,24 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 		}
 
 		var cardStats []statDef
-		if sys, err := loadStatSystem(db); err == nil {
+		sys, err := loadStatSystem(db)
+		if err == nil {
 			for _, d := range sys.Stats {
 				if d.Category == "base" && len(cardStats) < 2 {
 					cardStats = append(cardStats, d)
 				}
+			}
+		}
+
+		// The numbers behind every card's stats, read for all of them at
+		// once. Working each character out on its own (buildVersionDetail)
+		// took a dozen reads apiece: seconds on a long cast.
+		var build *cardBuild
+		if len(cardStats) > 0 {
+			if build, err = loadCardBuild(db); err != nil {
+				http.Error(w, "failed to read characters", http.StatusInternalServerError)
+				log.Printf("listCharacters stats: %v", err)
+				return
 			}
 		}
 
@@ -153,18 +172,114 @@ func listCharactersHandler(db *sql.DB) http.HandlerFunc {
 				c.PicturePath = "/uploads/" + rr.pic
 			}
 			c.Stats = []cardStat{}
-			if detail, err := buildVersionDetail(db, fmt.Sprintf("%d", rr.versionID)); err == nil {
+			if build != nil {
+				refs := rr.refs
+				refs.ItemIDs = build.items[rr.versionID]
+				sources := refs.sources()
+				computed := sys.calculate(statInputs{
+					Level:    float64(rr.level),
+					Age:      resolveOrDefault(rr.age, defaultAge),
+					HeightCM: resolveOrDefault(rr.height, defaultHeightCM),
+					WeightKG: resolveOrDefault(rr.weight, defaultWeightKG),
+					Values:   build.valuesOf(rr.versionID),
+				}, build.rowsFor(sources), sources)
 				for _, d := range cardStats {
-					c.Stats = append(c.Stats, cardStat{Name: d.Name, Value: detail.Computed[d.Key]})
+					c.Stats = append(c.Stats, cardStat{Name: d.Name, Value: computed[d.Key]})
 				}
-			} else {
-				log.Printf("listCharacters computeStats for version %d: %v", rr.versionID, err)
 			}
 			results = append(results, c)
 		}
 
 		writeJSON(w, results)
 	}
+}
+
+// cardBuild is what the stats of every current version are worked out from:
+// the numbers typed for it, what it wears, and every bonus by its source.
+// The same inputs buildVersionDetail reads one version at a time
+// (TestCharacterListStatsMatchTheSheet keeps the two equal).
+type cardBuild struct {
+	values map[int64]map[string]float64 // version -> stat key -> typed number
+	items  map[int64][]int64            // version -> gear worn
+	mods   map[modifierSource][]modifierRow
+}
+
+func loadCardBuild(db *sql.DB) (*cardBuild, error) {
+	b := &cardBuild{values: map[int64]map[string]float64{}, items: map[int64][]int64{}, mods: map[modifierSource][]modifierRow{}}
+	read := func(query string, each func(rows *sql.Rows) error) error {
+		rows, err := db.Query(query)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			if err := each(rows); err != nil {
+				return err
+			}
+		}
+		return rows.Err()
+	}
+	if err := read(`SELECT b.version_id, b.stat_key, b.value FROM character_special_bases b
+		JOIN character_versions v ON v.id = b.version_id AND v.is_current = 1`, func(rows *sql.Rows) error {
+		var id int64
+		var key string
+		var value float64
+		if err := rows.Scan(&id, &key, &value); err != nil {
+			return err
+		}
+		if b.values[id] == nil {
+			b.values[id] = map[string]float64{}
+		}
+		b.values[id][key] = value
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if err := read(`SELECT g.version_id, g.gear_id FROM character_gear g
+		JOIN character_versions v ON v.id = g.version_id AND v.is_current = 1`, func(rows *sql.Rows) error {
+		var id, gear int64
+		if err := rows.Scan(&id, &gear); err != nil {
+			return err
+		}
+		b.items[id] = append(b.items[id], gear)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if err := read(`SELECT source_type, source_id, target_stat, scaling, value FROM stat_modifiers ORDER BY id`, func(rows *sql.Rows) error {
+		var m modifierRow
+		if err := rows.Scan(&m.sourceType, &m.sourceID, &m.targetStat, &m.scaling, &m.value); err != nil {
+			return err
+		}
+		src := modifierSource{m.sourceType, sql.NullInt64{Int64: m.sourceID, Valid: true}}
+		b.mods[src] = append(b.mods[src], m)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
+func (b *cardBuild) valuesOf(versionID int64) map[string]float64 {
+	if v := b.values[versionID]; v != nil {
+		return v
+	}
+	return map[string]float64{}
+}
+
+// rowsFor gives the bonuses of one character's sources, each source's once,
+// as loadModifierRowsFor does.
+func (b *cardBuild) rowsFor(sources []modifierSource) []modifierRow {
+	var out []modifierRow
+	seen := map[modifierSource]bool{}
+	for _, s := range sources {
+		if !s.id.Valid || seen[s] {
+			continue
+		}
+		seen[s] = true
+		out = append(out, b.mods[s]...)
+	}
+	return out
 }
 
 // createCharacterHandler creates a character and its first version in one

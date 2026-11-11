@@ -15,7 +15,7 @@ import (
 // freshSchema; one that holds tables but has no migration path is refused
 // and left untouched (errUnknownSchema), so every schema change must ship
 // with a migration.
-const currentSchemaVersion = "46"
+const currentSchemaVersion = "47"
 
 const freshSchema = `
 CREATE TABLE classes (
@@ -582,6 +582,12 @@ var migrations = map[string]migration{
 		// Comments on the chapters' texts (comments.go).
 		statements: schema46Statements,
 	},
+	"46": {
+		to: "47",
+		// Indexes for the lookups that were slow on a large story
+		// (indexes.go). Nothing else changes.
+		statements: schema47Statements,
+	},
 }
 
 // schema20Statements create what schema 20 added. The fresh schema runs them
@@ -783,7 +789,7 @@ func ensureSchema(db *sql.DB) error {
 	if _, err := tx.Exec(freshSchema); err != nil {
 		return fmt.Errorf("create schema: %w", err)
 	}
-	later := [][]string{worldSchemaStatements, loreSchemaStatements, creatureSchemaStatements, wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements, schema24Statements, {gearDescriptionSQL}, schema26Statements, schema27Statements, schema28Statements, schema29Statements, schema30Statements, schema31Statements, schema32Statements, schema33Statements, schema34Statements, schema35Statements, schema36Statements, schema37Statements, schema38Statements, schema39Statements, schema40Statements, schema41Statements, schema44Statements, schema45Statements, schema46Statements}
+	later := [][]string{worldSchemaStatements, loreSchemaStatements, creatureSchemaStatements, wikiSchemaStatements, schema18Statements, schema19Statements, schema20Statements, schema21Statements, schema22Statements, schema23Statements, schema24Statements, {gearDescriptionSQL}, schema26Statements, schema27Statements, schema28Statements, schema29Statements, schema30Statements, schema31Statements, schema32Statements, schema33Statements, schema34Statements, schema35Statements, schema36Statements, schema37Statements, schema38Statements, schema39Statements, schema40Statements, schema41Statements, schema44Statements, schema45Statements, schema46Statements, schema47Statements}
 	for _, stmt := range slices.Concat(later...) {
 		if _, err := tx.Exec(stmt); err != nil {
 			return fmt.Errorf("create schema: %w", err)

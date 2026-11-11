@@ -96,6 +96,7 @@ func timelineHandler(db *sql.DB) http.HandlerFunc {
 		rows.Close()
 
 		// withDetails copies a details record's content onto a node.
+		tagsOf, peopleOf := eventExtras(db, len(free)+len(details) > 40)
 		withDetails := func(n *timelineNode, er eventRow) {
 			id := er.d.ID
 			n.EventID = &id
@@ -103,8 +104,8 @@ func timelineHandler(db *sql.DB) http.HandlerFunc {
 			n.LocationID = er.d.LocationID
 			n.LocationName = er.d.LocationName
 			n.PicturePath = er.d.PicturePath
-			n.Tags = loadEventTags(db, id)
-			n.People = loadEventPeople(db, id)
+			n.Tags = tagsOf(id)
+			n.People = peopleOf(id)
 		}
 		place := func(n *timelineNode, date string) bool {
 			d, ok := parseStoryDate(date)

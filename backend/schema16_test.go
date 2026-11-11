@@ -2,13 +2,81 @@ package main
 
 import (
 	"database/sql"
+	"strings"
 	"testing"
 )
+
+// rollBackSchema47 turns a fresh database back into schema 46: without the
+// indexes of indexes.go. First of all the steps, as SQLite won't drop a
+// column an index is on.
+func rollBackSchema47(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, q := range schema47Statements {
+		name := strings.Fields(q)[2]
+		if _, err := db.Exec(`DROP INDEX ` + name); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	if _, err := db.Exec(`UPDATE schema_meta SET value = '46' WHERE key = 'schema_version'`); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A story at schema 46 gets the indexes, keeps its rows, and the lookups
+// they are for use them.
+func TestMigrationAddsIndexes(t *testing.T) {
+	mgr, _ := newTestServer(t)
+	app, _ := mgr.open(createStoryDirect(t, mgr, "Old"))
+	for _, q := range []string{
+		`INSERT INTO chapters (id, title) VALUES (1, 'Ashes')`,
+		`INSERT INTO events (id, name, event_date, chapter_id) VALUES (1, 'Battle', '01-01-1000', 1)`,
+	} {
+		if _, err := app.db.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rollBackSchema47(t, app.db)
+	if err := ensureSchema(app.db); err != nil {
+		t.Fatal(err)
+	}
+	if v := storedSchema(app.db); v != currentSchemaVersion {
+		t.Fatalf("version %s", v)
+	}
+	var n int
+	if app.db.QueryRow(`SELECT COUNT(*) FROM events WHERE chapter_id = 1`).Scan(&n); n != 1 {
+		t.Fatal("migration must keep existing data")
+	}
+	for query, index := range map[string]string{
+		`SELECT COUNT(*) FROM events WHERE chapter_id = 1`:                              "idx_events_chapter",
+		`SELECT COUNT(*) FROM character_versions WHERE chapter_id = 1`:                  "idx_character_versions_chapter",
+		`SELECT value FROM stat_modifiers WHERE source_type = 'item' AND source_id = 1`: "idx_stat_modifiers_source",
+		`SELECT title FROM wiki_sections WHERE entry_id = 1 ORDER BY position`:          "idx_wiki_sections_entry",
+		`SELECT event_id FROM event_characters WHERE character_id = 1`:                  "idx_event_characters_character",
+		`SELECT version_id FROM character_gear WHERE gear_id = 1`:                       "idx_character_gear_gear",
+	} {
+		rows, err := app.db.Query(`EXPLAIN QUERY PLAN ` + query)
+		if err != nil {
+			t.Fatal(err)
+		}
+		plan := ""
+		for rows.Next() {
+			var a, b, c int
+			var detail string
+			rows.Scan(&a, &b, &c, &detail)
+			plan += detail + "; "
+		}
+		rows.Close()
+		if !strings.Contains(plan, index) {
+			t.Errorf("%s does not use %s: %s", query, index, plan)
+		}
+	}
+}
 
 // rollBackSchema46 turns a fresh database back into schema 45: no comments
 // on the chapters' texts.
 func rollBackSchema46(t *testing.T, db *sql.DB) {
 	t.Helper()
+	rollBackSchema47(t, db)
 	for _, q := range []string{
 		`DROP TABLE chapter_comments`,
 		`UPDATE schema_meta SET value = '45' WHERE key = 'schema_version'`,

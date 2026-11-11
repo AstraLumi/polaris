@@ -63,22 +63,38 @@ type modifierSource struct {
 	id   sql.NullInt64
 }
 
-func loadModifierRows(db *sql.DB) ([]modifierRow, error) {
-	rows, err := db.Query(`SELECT source_type, source_id, target_stat, scaling, value FROM stat_modifiers`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
+// loadModifierRowsFor reads the bonuses of one character's sources (its
+// class, race, each piece of gear…) and no others: a story's whole table
+// used to be read for every character on a list.
+func loadModifierRowsFor(db *sql.DB, sources []modifierSource) ([]modifierRow, error) {
 	var result []modifierRow
-	for rows.Next() {
-		var m modifierRow
-		if err := rows.Scan(&m.sourceType, &m.sourceID, &m.targetStat, &m.scaling, &m.value); err != nil {
+	seen := map[modifierSource]bool{}
+	for _, s := range sources {
+		// The same piece worn in two slots is two sources and one set of rows.
+		if !s.id.Valid || seen[s] {
+			continue
+		}
+		seen[s] = true
+		rows, err := db.Query(`SELECT source_type, source_id, target_stat, scaling, value FROM stat_modifiers
+			WHERE source_type = ? AND source_id = ? ORDER BY id`, s.kind, s.id.Int64)
+		if err != nil {
 			return nil, err
 		}
-		result = append(result, m)
+		for rows.Next() {
+			var m modifierRow
+			if err := rows.Scan(&m.sourceType, &m.sourceID, &m.targetStat, &m.scaling, &m.value); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			result = append(result, m)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		rows.Close()
 	}
-	return result, rows.Err()
+	return result, nil
 }
 
 // applyModifiers adds every matching modifier row into additive/multiplierDelta,
@@ -145,14 +161,15 @@ func resolveFinal(additive, multiplierDelta map[string]float64) map[string]float
 // computeStats works out every stat of one character by the story's stat
 // system, by stat key, with the bonuses of everything refs points at.
 func computeStats(db *sql.DB, sys *statSystem, in statInputs, refs categoryRefs) (map[string]float64, error) {
-	rows, err := loadModifierRows(db)
+	sources := refs.sources()
+	rows, err := loadModifierRowsFor(db, sources)
 	if err != nil {
 		return nil, err
 	}
 	if in.Values == nil {
 		in.Values = map[string]float64{}
 	}
-	return sys.calculate(in, rows, refs.sources()), nil
+	return sys.calculate(in, rows, sources), nil
 }
 
 func (refs categoryRefs) sources() []modifierSource {

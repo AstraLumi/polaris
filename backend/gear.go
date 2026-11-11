@@ -111,7 +111,18 @@ func queryGear(db *sql.DB, suffix string, args ...any) ([]gearDetail, error) {
 		byID[list[i].ID] = &list[i]
 	}
 
-	mods, err := db.Query(`SELECT source_id, target_stat, value FROM stat_modifiers WHERE source_type = 'item'`)
+	// A few pieces (what one character wears): their own bonuses, by the
+	// index. The whole list: every piece's, in one read.
+	modQuery, modArgs := `SELECT source_id, target_stat, value FROM stat_modifiers WHERE source_type = 'item'`, []any{}
+	if len(list) > 0 && len(list) <= 24 {
+		marks := make([]string, len(list))
+		for i := range list {
+			marks[i] = "?"
+			modArgs = append(modArgs, list[i].ID)
+		}
+		modQuery += ` AND source_id IN (` + strings.Join(marks, ",") + `)`
+	}
+	mods, err := db.Query(modQuery, modArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +176,7 @@ func loadVersionGear(db *sql.DB, versionID int64) (map[string]gearDetail, error)
 	if len(slots) == 0 {
 		return out, nil
 	}
-	all, err := queryGear(db, gearOrder)
+	all, err := queryGear(db, `WHERE g.id IN (SELECT gear_id FROM character_gear WHERE version_id = ?)`, versionID)
 	if err != nil {
 		return nil, err
 	}

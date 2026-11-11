@@ -155,6 +155,79 @@ func loadEventTags(db *sql.DB, eventID int64) []string {
 	return tags
 }
 
+// allEventTags and allEventPeople are loadEventTags and loadEventPeople for
+// every event in two reads, for the lists that show them all: asking event
+// by event took seconds on a long story.
+func allEventTags(db *sql.DB) map[int64][]string {
+	out := map[int64][]string{}
+	rows, err := db.Query(`SELECT event_id, tag FROM event_tags ORDER BY tag COLLATE NOCASE`)
+	if err != nil {
+		noteReadError("allEventTags", err)
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var t string
+		if rows.Scan(&id, &t) == nil {
+			out[id] = append(out[id], t)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		noteReadError("allEventTags", err)
+	}
+	return out
+}
+
+func allEventPeople(db *sql.DB) map[int64][]eventPerson {
+	out := map[int64][]eventPerson{}
+	rows, err := db.Query(`
+		SELECT ec.event_id, c.id, v.name, COALESCE(v.picture_path, '')
+		FROM event_characters ec
+		JOIN characters c ON c.id = ec.character_id
+		JOIN character_versions v ON v.character_id = c.id AND v.is_current = 1
+		ORDER BY v.name COLLATE NOCASE`)
+	if err != nil {
+		noteReadError("allEventPeople", err)
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var p eventPerson
+		if rows.Scan(&id, &p.ID, &p.Name, &p.PicturePath) == nil {
+			if p.PicturePath != "" {
+				p.PicturePath = "/uploads/" + p.PicturePath
+			}
+			out[id] = append(out[id], p)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		noteReadError("allEventPeople", err)
+	}
+	return out
+}
+
+// eventExtras answers an event's tags and people: from the two maps above
+// when the list is long, event by event when it is a handful.
+func eventExtras(db *sql.DB, many bool) (tags func(int64) []string, people func(int64) []eventPerson) {
+	if !many {
+		return func(id int64) []string { return loadEventTags(db, id) }, func(id int64) []eventPerson { return loadEventPeople(db, id) }
+	}
+	allTags, allPeople := allEventTags(db), allEventPeople(db)
+	return func(id int64) []string {
+			if t := allTags[id]; t != nil {
+				return t
+			}
+			return []string{}
+		}, func(id int64) []eventPerson {
+			if p := allPeople[id]; p != nil {
+				return p
+			}
+			return []eventPerson{}
+		}
+}
+
 func loadEventPeople(db *sql.DB, eventID int64) []eventPerson {
 	people := []eventPerson{}
 	rows, err := db.Query(`
@@ -365,12 +438,13 @@ func listEventsHandler(db *sql.DB) http.HandlerFunc {
 		})
 
 		out := make([]eventSummary, 0, len(kept))
+		tagsOf, peopleOf := eventExtras(db, len(kept) > 40)
 		for _, er := range kept {
-			people := loadEventPeople(db, er.d.ID)
+			people := peopleOf(er.d.ID)
 			out = append(out, eventSummary{
 				ID: er.d.ID, Name: er.d.Name, EventDate: er.d.EventDate,
 				LocationName: er.d.LocationName, ChapterID: er.d.ChapterID, PicturePath: er.d.PicturePath,
-				Tags: loadEventTags(db, er.d.ID), PeopleCount: len(people), SourceType: er.sourceType,
+				Tags: tagsOf(er.d.ID), PeopleCount: len(people), SourceType: er.sourceType,
 			})
 		}
 		writeJSON(w, out)

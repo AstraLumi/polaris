@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -201,5 +203,83 @@ func TestAStoryIsOpenedOnce(t *testing.T) {
 	}
 	if _, err := mgr.open("00000000000000ff"); err != errNoStory {
 		t.Errorf("no such story: %v", err)
+	}
+}
+
+// The character list works its cards' stats out for everyone at once
+// (loadCardBuild); a sheet works one character's out on its own
+// (buildVersionDetail). Both must give the same numbers, with bonuses from
+// a class, a race and gear, a piece worn twice, and typed numbers.
+func TestCharacterListStatsMatchTheSheet(t *testing.T) {
+	mgr, h := newTestServer(t)
+	id := createStoryDirect(t, mgr, "Cards")
+	app, _ := mgr.open(id)
+	sys, err := loadStatSystem(app.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var base, primary []string
+	for _, d := range sys.Stats {
+		switch d.Category {
+		case "base":
+			base = append(base, d.Key)
+		case "primary":
+			primary = append(primary, d.Key)
+		}
+	}
+	if len(base) < 2 || len(primary) == 0 {
+		t.Fatalf("the default stat system has base stats and points: %v %v", base, primary)
+	}
+	exec := func(q string, args ...any) {
+		t.Helper()
+		if _, err := app.db.Exec(q, args...); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	exec(`INSERT INTO classes (id, name) VALUES (1, 'Keeper')`)
+	exec(`INSERT INTO races (id, name) VALUES (1, 'Elf')`)
+	exec(`INSERT INTO gear (id, name, slot) VALUES (1, 'Ring', 'ring'), (2, 'Helm', 'head')`)
+	for _, m := range [][]any{
+		{"class", 1, base[0], "per_level", 3.0}, {"class", 1, base[1], "flat", 7.0},
+		{"race", 1, base[0], "multiplier", 0.25}, {"race", 1, primary[0], "flat", 2.0},
+		{"item", 1, base[0], "flat", 11.0}, {"item", 2, base[1], "flat", 5.0}, {"item", 2, primary[0], "flat", 1.0},
+	} {
+		exec(`INSERT INTO stat_modifiers (source_type, source_id, target_stat, scaling, value) VALUES (?, ?, ?, ?, ?)`, m...)
+	}
+	// 1: everything; 2: nothing at all; 3: an older version that must not count.
+	exec(`INSERT INTO characters (id) VALUES (1), (2)`)
+	exec(`INSERT INTO character_versions (id, character_id, is_current, name, level, class_id) VALUES (1, 1, 0, 'Aria', 2, NULL), (2, 1, 1, 'Aria', 9, 1), (3, 2, 1, 'Bram', 1, NULL)`)
+	exec(`INSERT INTO character_story (version_id, race_id, age, height, weight) VALUES (2, 1, 40, 181, 77)`)
+	exec(`INSERT INTO character_gear (version_id, slot, gear_id) VALUES (2, 'ring1', 1), (2, 'ring2', 1), (2, 'head', 2), (1, 'head', 2)`)
+	exec(`INSERT INTO character_special_bases (version_id, stat_key, value) VALUES (2, ?, 6), (2, ?, 13), (1, ?, 99)`, primary[0], base[0], base[0])
+
+	var list []struct {
+		VersionID int64 `json:"version_id"`
+		Stats     []struct {
+			Name  string  `json:"name"`
+			Value float64 `json:"value"`
+		} `json:"stats"`
+	}
+	rec := do(t, h, "GET", "/api/s/"+id+"/characters", nil, "")
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil || len(list) != 2 {
+		t.Fatalf("list: %v %s", err, rec.Body.String())
+	}
+	for _, c := range list {
+		detail, err := buildVersionDetail(app.db, strconv.FormatInt(c.VersionID, 10))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(c.Stats) != 2 {
+			t.Fatalf("version %d: two stats on a card: %+v", c.VersionID, c.Stats)
+		}
+		for i, s := range c.Stats {
+			if want := detail.Computed[base[i]]; s.Value != want {
+				t.Errorf("version %d, %s: the list says %v, the sheet %v", c.VersionID, s.Name, s.Value, want)
+			}
+		}
+	}
+	// And the bonuses did reach the numbers: the two characters differ.
+	if list[0].Stats[0].Value == list[1].Stats[0].Value {
+		t.Errorf("bonuses made no difference: %+v", list)
 	}
 }
