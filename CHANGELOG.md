@@ -4,6 +4,21 @@ What changed in each version of Polaris. The same notes are on the
 [Releases](https://github.com/AstraLumi/polaris/releases) page. Versions are
 Major.Minor.Bugfix: new features raise Minor, fixes raise Bugfix.
 
+## 3.2.0 (2026-11-11)
+
+**Upgrade:** stories are upgraded to database schema 47 the first time they are opened. This can't be undone, so export your stories first. Polaris also saves an export of each story in its `backups` folder before upgrading it.
+
+**Before you update, if you reach Polaris by a domain name** (`polaris.example.com`): add `ALLOWED_HOSTS=polaris.example.com` to the `.env` file beside `docker-compose.yml`. Without it Polaris answers that name with a page telling you to. Nothing is needed if you open it as `localhost`, by an address in numbers or by a name without a dot.
+
+**If you keep a `docker-compose.yml` of your own** with `cap_drop: ALL`: add `cap_add: [CHOWN, SETUID, SETGID]`. Without it Polaris keeps running as root, as before, and says so in its log.
+
+### Changed
+
+- **Polaris only answers to names that are surely yours.** A request addressed to a domain that isn't listed in `ALLOWED_HOSTS` is refused, with a page saying which line to write. This closes a way for another website to read and change your stories through your own browser, by pointing a name of its own at your machine. `localhost`, addresses in numbers (`192.168.1.20`), names without a dot (`nas`) and names ending in `.local`, `.home.arpa` or `.internal` always work. `ALLOWED_HOSTS=*` turns the check off. In 3.1 this check existed but was off unless you set it.
+- **Polaris no longer runs as root inside its container.** It runs as an ordinary user; the container starts as root only to hand your two data volumes to that user, the first time, by itself. Stories kept by earlier versions need nothing from you.
+- **Long stories are much faster.** On a test story far larger than anyone has written (3,000 characters, 10,000 events, 1,000 chapters), the character list went from 47 seconds to under 0.2, the events list and the timeline from 3 seconds to about 0.2, and the chapter list, a chapter's page, "Appears in" and a character's Lines from 1.4 seconds to 0.02. Stories of ordinary size were already quick and gain a little.
+- The server's log now starts by saying which names it answers to.
+
 ## 3.1.0 (2026-11-11)
 
 No database change: stories open as they are.
