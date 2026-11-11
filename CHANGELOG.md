@@ -4,6 +4,54 @@ What changed in each version of Polaris. The same notes are on the
 [Releases](https://github.com/AstraLumi/polaris/releases) page. Versions are
 Major.Minor.Bugfix: new features raise Minor, fixes raise Bugfix.
 
+## 3.1.0 (2026-11-11)
+
+No database change: stories open as they are.
+
+Polaris 3.1 puts writing first, protects your stories better, and loads much faster.
+
+### Added
+
+**Writing**
+
+- **"Write" in the sidebar** opens the chapter you wrote last, and Home has a "Continue writing" card, a count of the words written and a writing step in "Where to start".
+- **A copy button** in the writing toolbar on touch screens (the page on screen or the whole chapter). Plain-text copies keep Script Mode speaker names.
+- **Keep with next, Keep lines together and Page break before** as toolbar buttons and Styles panel settings, on script lines too, followed in the page view and in .docx and EPUB exports.
+- **"New character" in a script line's speaker box**: type a name and the character is created and gets the line.
+
+**Safety**
+
+- **Daily copies.** Polaris keeps a copy of each story on the days it changes: the last 7, then one a week for 4 weeks. "Earlier copies…" in a story's menu opens one as a new story beside the present one; nothing is overwritten. They hold the text and data, not the pictures, and live on the same disk, so exporting is still the backup to keep elsewhere. `AUTO_BACKUPS=off` turns them off.
+- **Undo for deletions.** Deleting a chapter, a character version, a relation, an asset or a gallery picture hides it at once and offers "Undo" for a few seconds, instead of asking "are you sure?". Deleting several events, characters or assets at once offers the same.
+- **Requests from other websites that would change anything are refused**, and an optional `ALLOWED_HOSTS` setting names the addresses Polaris answers to (see the README). Uploads have size limits (32 MB per picture form, 256 MB for a gallery), and pages are served with a Content-Security-Policy.
+
+**Interface**
+
+- **A light theme, Daylight**, and "Follow this device", which picks light or dark with your system.
+- **Keyboard access to the drawn views.** The wiki graph (arrow keys step from article to article, Enter opens one, + and − zoom, 0 shows everything), the map (arrows, + and −, 0) and the solar system editor (Tab to a body, Enter picks it, Shift+Enter shows its moons). Stat rows, zoomable pictures and tag chips work from the keyboard too.
+- **"Try again"** beside a page that failed to load, a thin progress line while a page is on its way, and placeholders in place of "Loading…".
+
+### Changed
+
+- **Much faster first load.** Pages and translations are fetched when first needed and sent compressed: the main script went from about 1,054 KB to 85 KB. A tab left open across an update reloads itself instead of breaking.
+- **The story picker no longer opens every story**, so each story is upgraded and backed up when you open it, not all at once. Stories nobody has used for half an hour are closed and give their memory back.
+- **The writing toolbar shows the everyday tools**, with the rest behind "More tools" (remembered). On phones it is one row that scrolls sideways, and the side panels open as a sheet from the bottom.
+- **The sidebar folds to icons by itself** on tablet-sized windows, and on the writing page when the window is too narrow for both.
+- All "are you sure?" questions use Polaris's own dialog instead of the browser's box. Buttons are larger on touch screens, and error messages are announced by screen readers.
+- With no connection, errors say "can't reach the server", and a page that gets no answer gives up after a minute instead of loading for ever.
+- `docker-compose.yml` now runs the container read-only and with no extra capabilities, and Polaris finishes what it is saving when it is stopped. If you keep your own compose file, you may want to copy those lines.
+
+### Fixed
+
+- Two saves at the same moment could fail with "database is locked"; they now wait for each other.
+- A story whose database Polaris could not upgrade was emptied and made anew. It is now refused and left untouched.
+- An upgrade no longer starts when its backup can't be saved.
+- An export that failed half way downloaded as a broken file; it now fails with a message.
+- A list the server could only read in part was shown as if it were whole; the page now fails and can be tried again.
+- Text typed while a save was on its way could be lost when the save met a conflict. A save the server refuses now reads "Couldn't save: kept in this browser" with the reason.
+- Escape did not close pop-up forms (since 2.0.0).
+- Temporary files of large uploads were never deleted.
+
 ## 3.0.1 (2026-11-01)
 
 ### Changed
