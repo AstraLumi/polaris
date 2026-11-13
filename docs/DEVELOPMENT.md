@@ -232,7 +232,8 @@ types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard
 ## Reading offline
 
 A story can be kept on a device ("Keep for reading offline" in a story's
-"…" menu on the story picker) and then read with no connection: every page,
+"…" menu on the story picker, or Settings → Reading offline for the open
+story, `OfflineCopyCard.vue`) and then read with no connection: every page,
 with its pictures. Nothing can be changed offline except the text of books
 kept for writing (docs/EDITOR.md, "Offline writing"); a save fails as it
 always did, and the banner (`OfflineBanner.vue`) says the story shown is the

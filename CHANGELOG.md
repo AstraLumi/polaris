@@ -4,6 +4,14 @@ What changed in each version of Polaris. The same notes are on the
 [Releases](https://github.com/AstraLumi/polaris/releases) page. Versions are
 Major.Minor.Bugfix: new features raise Minor, fixes raise Bugfix.
 
+## 3.3.1 (2026-11-13)
+
+No database change: stories open as they are.
+
+### Changed
+
+- **"Reading offline" is in Settings too.** The open story can be kept for reading offline, updated or removed from Settings → Reading offline, as well as from a story's "…" menu on the story picker.
+
 ## 3.3.0 (2026-11-13)
 
 **Upgrade:** stories are upgraded to database schema 48 the first time they are opened. This can't be undone, so export your stories first. Polaris also saves an export of each story in its `backups` folder before upgrading it.

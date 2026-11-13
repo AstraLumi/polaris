@@ -2831,4 +2831,7 @@ export default {
   "The copy for reading offline isn't finished. Update it with the connection on.": "A cópia para ler offline não foi concluída. Atualize-a quando houver conexão.",
   "\"{name}\" can now be read on this device with no connection.": "\"{name}\" já pode ser lida neste dispositivo sem conexão.",
   "No connection to the server. This is the copy of the story kept on this device ({when}): it can be read, but nothing can be saved until the connection is back.": "Sem conexão com o servidor. Esta é a cópia da história guardada neste dispositivo ({when}): ela pode ser lida, mas nada pode ser salvo até a conexão voltar.",
+  "Reading offline": "Leitura offline",
+  "Keep this story on this device to read all of it with no connection: every page, with its pictures. Nothing can be changed offline except the text of books kept for writing.": "Guarde esta história neste dispositivo para ler tudo sem conexão: todas as páginas, com as imagens. Nada pode ser alterado offline, exceto o texto dos livros guardados para escrever.",
+  "This needs HTTPS (or localhost) and a browser that can keep data.": "Isto precisa de HTTPS (ou localhost) e de um navegador que consiga guardar dados.",
 }

@@ -214,6 +214,14 @@ async function run() {
   check(`the copy holds ${kept.data.length} answers and pictures, and all ${kept.app.length} of the app's files`)
   await snap('read_offline_01_kept.png')
 
+  // The same in the story's Settings.
+  await page.goto(`${BASE}/settings#offline`)
+  await waitFor('the Settings card', async () => /Kept for reading offline, /.test(await page.locator('#offline').innerText()))
+  assert.ok(await page.locator('#offline').getByRole('button', { name: 'Update the offline copy' }).isEnabled())
+  await page.locator('#offline').scrollIntoViewIfNeeded()
+  await snap('read_offline_01b_settings.png')
+  check('Settings shows the copy and offers to update or remove it')
+
   // 3. No connection: the network cut and the server stopped.
   expectFailures = true
   await context.setOffline(true)

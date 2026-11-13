@@ -405,6 +405,11 @@
       <router-link to="/fonts" class="btn btn-ghost">{{ $t('Open the fonts library') }}</router-link>
     </section>
 
+    <section id="offline" class="glass-panel card" :class="{ 'is-flash': flash === 'offline' }">
+      <h2>{{ $t('Reading offline') }}</h2>
+      <OfflineCopyCard />
+    </section>
+
     <RestoreDefaultDialog
       v-if="restoring"
       :title="$t(RESTORES[restoring].title)"
@@ -465,6 +470,7 @@ import { useRoute, useRouter } from 'vue-router'
 import StatSystemEditor from '../components/StatSystemEditor.vue'
 import DateField from '../components/DateField.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import OfflineCopyCard from '../components/OfflineCopyCard.vue'
 import { PROJECTIONS, applyMapSettings, worldMap, DEFAULT_SKY, skyUrl } from '../worldMap'
 import { frequencyFor, hexKmOf } from '../planetGrid'
 import { newSeasonId } from '../seasons'
@@ -479,6 +485,7 @@ const SECTIONS = [
   { id: 'sky', label: tr('Sky'), ids: ['sky'] },
   { id: 'blood-types', label: tr('Blood types'), ids: ['blood-types'] },
   { id: 'fonts', label: tr('Fonts'), ids: ['fonts'] },
+  { id: 'offline', label: tr('Reading offline'), ids: ['offline'] },
   { id: 'stats', label: tr('Stats'), ids: ['stats'] },
   { id: 'about', label: tr('About Polaris'), ids: ['about'] },
 ]
