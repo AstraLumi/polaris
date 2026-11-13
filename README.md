@@ -31,13 +31,26 @@ classes, gear and spells, with formulas you define. If your story has none of
 that, leave those pages empty.
 
 Polaris is one Go program with the web interface built in, and every story is
-its own SQLite file. It runs happily on a Raspberry Pi or a small home server,
-and on your phone it installs like an app.
+its own SQLite file. It runs happily on a Raspberry Pi or a small home server.
+On a phone it installs like an app, and a story kept on the device can be read
+with no connection (see [On your phone and offline](#on-your-phone-and-offline)).
 
 > **Provided as is.** Polaris was built for personal use and is shared in case
 > it is useful to others. There is no support and no commitment to future
 > updates. It is licensed under the AGPL-3.0 with a few additional terms; see
 > [License](#license).
+
+<p align="center">
+  <a href="#what-it-does">What it does</a> ·
+  <a href="#screenshots">Screenshots</a> ·
+  <a href="#quick-start-docker">Quick start</a> ·
+  <a href="#security">Security</a> ·
+  <a href="#configuration">Configuration</a> ·
+  <a href="#data-and-backups">Backups</a> ·
+  <a href="#updating">Updating</a> ·
+  <a href="#on-your-phone-and-offline">Phone and offline</a> ·
+  <a href="#stats">Stats</a>
+</p>
 
 ## What it does
 
@@ -57,9 +70,10 @@ and on your phone it installs like an app.
 - **It knows your story.** The spellchecker accepts your characters' names.
   Tag a line of dialogue with who says it, and each character gets a list of
   their lines. Each wiki article lists the chapters that mention it.
+- **Hear it.** Have a chapter read aloud to catch what the eye skips.
 - **Never lose a word.** It saves as you type, keeps versions every 30
-  minutes, warns about edits from another tab, and works offline: changes
-  upload when you're back online.
+  minutes, warns about edits from another tab, and works offline: mark a book
+  "Available offline" and what you write uploads when you're back online.
 - **Fonts you can publish with.** 26 open-licensed fonts come built in,
   including book serifs, sci-fi "system window" faces, handwriting and
   Japanese. You can upload your own. Each book lists its fonts with their
@@ -80,11 +94,14 @@ and on your phone it installs like an app.
   temperature, rain, clouds and climate zones for any month. Mountains steer
   the winds and dry the air behind them.
 - **A solar system with real physics.** Real star classes, from brown dwarfs
-  and red giants to neutron stars and black holes. Planets and moons follow elliptical, tilted orbits, or live
-  n-body gravity if you dare. There are rings, eclipses, habitable zones, and
-  even Dyson spheres.
+  and red giants to neutron stars and black holes. Planets and moons follow
+  elliptical, tilted orbits, or live n-body gravity if you dare. There are
+  rings, eclipses, habitable zones, and even Dyson spheres.
 - **The true sky from any hex, on any date and hour**: the sun, the moons
   with their phases, the planets, and the stars, all to scale.
+- **Cultures** for your kingdoms: their clothing, food, architecture and
+  more, each with pictures and tags, linked to a **reference library** of the
+  real things they draw from. The library is shared by all your stories.
 - **A bestiary** of your creatures, with territories drawn on the map, and
   **Character Assets** (classes, races, gear, spells) that feed the stats.
 
@@ -112,7 +129,12 @@ and on your phone it installs like an app.
 
 ### 🏠 Yours
 
-- Self-hosted, with no account and no telemetry. Each story exports to a `.zip`.
+- Self-hosted, with no account and no telemetry. Each story exports to a
+  `.zip`, pictures included.
+- **Hard to lose work.** Polaris keeps a copy of each story on the days it
+  changes, and a deletion offers Undo for a few seconds.
+- **Works away from the server.** Keep a story on a device and read all of it
+  with no connection.
 - Any number of separate stories, Ctrl+K search everywhere, five colour
   themes, a layout that works on phones.
 - In English, Português (BR) and Español (ES and Latin America).
@@ -129,6 +151,25 @@ Made with demo stories of invented data.
 | ![The hex map](docs/screenshots/map.png) **Map**: kingdoms, regions, cities and capitals. | ![A character sheet](docs/screenshots/character.png) **Character sheet**: stats computed from class, race and gear. |
 | ![A creature's wiki article](docs/screenshots/bestiary.png) **Bestiary**: a creature's article, with its territory drawn on the map's hexes. | ![The stats settings](docs/screenshots/stats.png) **Stats**: every stat's formula, built from blocks. |
 | ![The writing editor](docs/screenshots/writing.png) **Writing**: an A6 page, a tagged line of dialogue and its speaker's card. | ![The sky from a hex](docs/screenshots/sky.png) **Sky**: midnight from a desert hex, stars found in the sky picture. |
+
+## Quick start (Docker)
+
+Requirements: Docker with the Compose plugin.
+
+```bash
+git clone https://github.com/AstraLumi/polaris.git
+cd polaris
+docker compose up -d
+```
+
+This runs the ready-made image of the latest release
+(`ghcr.io/astralumi/polaris`, for amd64 and arm64). To build it from the code
+in the folder instead, use `docker compose up -d --build`.
+
+Open <http://localhost:8091> and create your first story.
+
+Out of the box only this machine can open it. Before reaching it from another
+device, read [Security](#security): Polaris has no login of its own.
 
 ## Security
 
@@ -184,22 +225,6 @@ starts, by itself. If you keep a compose file of your own with
 `cap_drop: ALL`, add those three under `cap_add`: without them Polaris says
 so in its log and keeps running as root, as before.
 
-## Quick start (Docker)
-
-Requirements: Docker with the Compose plugin.
-
-```bash
-git clone https://github.com/AstraLumi/polaris.git
-cd polaris
-docker compose up -d
-```
-
-This runs the ready-made image of the latest release
-(`ghcr.io/astralumi/polaris`, for amd64 and arm64). To build it from the code
-in the folder instead, use `docker compose up -d --build`.
-
-Open <http://localhost:8091> and create your first story.
-
 ## Configuration
 
 Copy `.env.example` to `.env` and edit it. Docker Compose reads it
@@ -211,7 +236,7 @@ automatically, and git ignores it, so your settings are kept across updates.
 | `ALLOWED_HOSTS` | *(none)* | The domain names you reach Polaris by, separated by commas (`polaris.example.com`). `localhost`, addresses in numbers and names without a dot always work; any other name not listed here is refused. `*` answers to any name. See [The names Polaris answers to](#the-names-polaris-answers-to). |
 | `AUTO_BACKUPS` | on | Polaris keeps a copy of each story on the days it changes (the last 7, then one a week for 4 weeks; "Earlier copies…" in a story's menu). `off` turns that off. They are on the same disk as the story: keep exporting for a backup elsewhere. |
 | `HOST_PORT` | `8091`      | Port on the host.                                                 |
-| `POLARIS_VERSION` | `latest` | Release to run, such as `3.0.0`, to stay on it until you change it. |
+| `POLARIS_VERSION` | `latest` | Release to run, such as `3.3.0`, to stay on it until you change it. |
 
 The application itself reads the following variables. `docker-compose.yml`
 already sets them, so you only need them when
@@ -236,6 +261,12 @@ the container never touches:
 including its database and pictures, as a `.zip`. **Import** restores a zip as
 a new story, which also lets you move stories to another machine. Export
 regularly, and always before updating.
+
+**Earlier copies.** Polaris also keeps a copy of each story on the days it
+changes: the last 7, then one a week for 4 weeks. **Earlier copies…** in a
+story's "…" menu opens one as a new story beside the present one. They hold
+the text and data, not the pictures, and live on the same disk as the story,
+so they protect against a mistake, not against a lost disk. Keep exporting.
 
 **Raw volume backup.** To archive the volumes directly:
 
@@ -283,6 +314,33 @@ DATA_DIR=./data UPLOADS_DIR=./data/uploads ./polaris
 
 The server listens on port 8091 on **all interfaces**. If the machine is on a
 shared network, restrict access as described under [Security](#security).
+
+## On your phone and offline
+
+Polaris is laid out for phones, and over HTTPS (or on `localhost`) it can also
+work away from the server:
+
+- **Install it.** In the phone's browser, "Add to Home screen" gives Polaris
+  its own icon and window.
+- **Read a story offline.** On the story picker, open a story's "…" menu and
+  choose **Keep for reading offline**. The whole story is copied to the
+  device: every page, with its pictures. With no connection Polaris shows
+  that copy and says how old it is. The copy renews itself once a day, and
+  what you open while connected is refreshed as you go.
+- **Write offline.** In the writing editor, mark a book **Available
+  offline**. What you write with no connection is kept on the device and
+  uploaded when the server is back; if the same paragraph changed in both
+  places, you choose between them.
+- **An Android app**, if you'd rather not use the browser: [`android/`](android)
+  holds a small app you build yourself, which shows your server in a window of
+  its own, stays signed in, and saves exports to Downloads. It is new and
+  little tested.
+
+Apart from the text of books kept for writing, nothing can be changed
+offline. A list filtered in a way you never opened while connected is not in
+the copy. If Polaris sits behind a login (Cloudflare Access, a proxy), an
+expired sign-in looks like "no connection" until you reload the page and sign
+in again.
 
 ## Stats
 
@@ -337,7 +395,9 @@ only these cases:
   Fonts for that font's line spacing and license, and keeps the answers.
 
 The 26 built-in book fonts and the spelling dictionaries are served by Polaris
-itself.
+itself. Stories and books kept for offline use stay in that browser's own
+storage on the device; removing the copy, or clearing the site's data, deletes
+them from it.
 
 ## Development
 
