@@ -37,6 +37,21 @@ export function countByKind(elements) {
   return out
 }
 
+// The pictures on the clipboard (navigator.clipboard, passed in), as files
+// the forms can send: each item's first picture type. Throws when the
+// browser refuses to read it.
+export async function clipboardPictures(clipboard) {
+  const out = []
+  for (const item of await clipboard.read()) {
+    const type = (item.types || []).find((ty) => String(ty).startsWith('image/'))
+    if (!type) continue
+    const blob = await item.getType(type)
+    const ext = type.slice('image/'.length).replace('jpeg', 'jpg').replace(/[^a-z0-9]/g, '') || 'png'
+    out.push(new File([blob], `pasted-${out.length + 1}.${ext}`, { type }))
+  }
+  return out
+}
+
 // The pictures in a paste (Ctrl+V of a screenshot or a copied image), as
 // files the forms can send.
 export function pastedPictures(event) {

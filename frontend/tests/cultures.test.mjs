@@ -4,7 +4,7 @@
 // node frontend/tests/cultures.test.mjs
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { allTags, hasTags, filterItems, countByKind, pastedPictures } from '../src/cultureFilters.js'
+import { allTags, hasTags, filterItems, countByKind, pastedPictures, clipboardPictures } from '../src/cultureFilters.js'
 
 const items = [
   { id: 1, name: 'Marshal coat', kind: 'clothing', description: 'Blue and white, worn at court', tags: ['Military', 'formal'] },
@@ -43,6 +43,20 @@ const paste = {
 }
 assert.deepEqual(pastedPictures(paste), [file])
 assert.deepEqual(pastedPictures({}), [])
+
+// The Paste button reads the clipboard: each item's picture, named by its
+// type; items without one (copied text) are skipped.
+const clip = {
+  read: async () => [
+    { types: ['text/plain'], getType: async () => new Blob(['hi']) },
+    { types: ['text/html', 'image/png'], getType: async (ty) => new Blob(['png'], { type: ty }) },
+    { types: ['image/jpeg'], getType: async (ty) => new Blob(['jpg'], { type: ty }) },
+  ],
+}
+const got = await clipboardPictures(clip)
+assert.deepEqual(got.map((f) => [f.name, f.type]), [['pasted-1.png', 'image/png'], ['pasted-2.jpg', 'image/jpeg']])
+assert.deepEqual(await clipboardPictures({ read: async () => [] }), [])
+await assert.rejects(clipboardPictures({ read: async () => { throw new Error('NotAllowedError') } }))
 
 // The kinds are the server's (backend/cultures.go, backend/references.go).
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8')

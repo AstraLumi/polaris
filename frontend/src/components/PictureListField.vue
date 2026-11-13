@@ -16,7 +16,13 @@
         </div>
       </li>
     </ul>
-    <FilePick ref="pick" multiple :label="$t('Add pictures')" @change="onFiles" />
+    <div class="add-row">
+      <FilePick ref="pick" multiple :label="$t('Add pictures')" @change="onFiles" />
+      <button v-if="canReadClipboard" type="button" class="btn btn-ghost small" :disabled="reading" @click="pasteFromClipboard">
+        {{ $t('Paste picture') }}
+      </button>
+    </div>
+    <p v-if="clipError" class="clip-error" role="alert">{{ clipError }}</p>
     <p class="hint">{{ $t('You can also paste a picture here (Ctrl+V).') }}</p>
   </div>
 </template>
@@ -27,18 +33,42 @@
 // the server puts after them. The parent reads `kept`, `removed` and `added`
 // through v-model:state and sends them as order / remove_pictures / pictures.
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
-import { pastedPictures } from '../cultures'
+import { t } from '../i18n'
+import { pastedPictures, clipboardPictures } from '../cultures'
 import FilePick from './FilePick.vue'
 
 const props = defineProps({
   pictures: { type: Array, default: () => [] }, // [{ id, url }] it has
   label: { type: String, default: '' }, // already translated
+  initialFiles: { type: Array, default: () => [] }, // new pictures to start with (a paste on the page)
 })
 const emit = defineEmits(['update:state'])
 
 const kept = ref([...props.pictures])
 const added = ref([])
 const urls = ref([])
+
+// The button reads the clipboard itself; browsers allow it only on HTTPS
+// or localhost, and may ask first. Without it, Ctrl+V still works.
+const canReadClipboard = typeof navigator !== 'undefined' && !!navigator.clipboard?.read
+const reading = ref(false)
+const clipError = ref('')
+
+async function pasteFromClipboard() {
+  reading.value = true
+  clipError.value = ''
+  try {
+    const files = await clipboardPictures(navigator.clipboard)
+    if (files.length) addFiles(files)
+    else clipError.value = t('There is no picture on the clipboard. Copy one first (right-click it, Copy image).')
+  } catch (e) {
+    clipError.value = t("Polaris wasn't allowed to read the clipboard. Click in the form and press Ctrl+V instead.")
+  } finally {
+    reading.value = false
+  }
+}
+
+addFiles(props.initialFiles)
 const removed = computed(() => props.pictures.filter((p) => !kept.value.some((k) => k.id === p.id)).map((p) => p.id))
 
 watch(
@@ -48,8 +78,9 @@ watch(
 )
 
 function addFiles(files) {
-  const pics = [...files].filter((f) => String(f.type).startsWith('image/'))
+  const pics = [...(files || [])].filter((f) => String(f.type).startsWith('image/'))
   if (!pics.length) return
+  clipError.value = ''
   added.value = [...added.value, ...pics]
   urls.value = [...urls.value, ...pics.map((f) => URL.createObjectURL(f))]
 }
@@ -141,6 +172,23 @@ defineExpose({ onPaste })
   font-size: 0.8rem;
   line-height: 1;
   cursor: pointer;
+}
+
+.add-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.add-row > :first-child {
+  flex: 1 1 14rem;
+}
+
+.clip-error {
+  margin: 0.3rem 0 0;
+  font-size: 0.8rem;
+  color: var(--danger-text);
 }
 
 .hint {

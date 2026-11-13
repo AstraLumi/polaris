@@ -2817,4 +2817,8 @@ export default {
   "Couldn't load the references. Try refreshing.": "No se pudieron cargar las referencias. Prueba a recargar.",
   "Cultures here": "Culturas de aquí",
   "culture page": "página de la cultura",
+  "Paste picture": "Pegar imagen",
+  "There is no picture on the clipboard. Copy one first (right-click it, Copy image).": "No hay ninguna imagen en el portapapeles. Copia una primero (clic derecho sobre ella, Copiar imagen).",
+  "Polaris wasn't allowed to read the clipboard. Click in the form and press Ctrl+V instead.": "Polaris no tiene permiso para leer el portapapeles. Haz clic en el formulario y pulsa Ctrl+V.",
+  "Copy a picture and press Ctrl+V here to save it.": "Copia una imagen y pulsa Ctrl+V aquí para guardarla.",
 }

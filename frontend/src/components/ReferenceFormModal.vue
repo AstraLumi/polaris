@@ -19,7 +19,7 @@
           <span>{{ $t('Source link') }}</span>
           <input v-model="sourceUrl" type="url" maxlength="2000" placeholder="https://…" />
         </label>
-        <PictureListField ref="pictureField" :pictures="reference?.pictures || []" @update:state="pictures = $event" />
+        <PictureListField ref="pictureField" :pictures="reference?.pictures || []" :initial-files="initialPictures" @update:state="pictures = $event" />
         <TagInput v-model="tags" :suggestions="tagSuggestions" list-id="reference-tags" />
         <label class="field">
           <span>{{ $t('Description') }}</span>
@@ -51,6 +51,7 @@ import TagInput from './TagInput.vue'
 
 const props = defineProps({
   reference: { type: Object, default: null }, // as listed, when editing
+  initialPictures: { type: Array, default: () => [] }, // pasted on the page, for a new one
 })
 const emit = defineEmits(['close', 'saved', 'deleted'])
 

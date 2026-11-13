@@ -3,7 +3,7 @@
     <header class="page-header">
       <div>
         <h1>{{ $t('References') }}</h1>
-        <p class="page-sub">{{ $t('Real-world pictures for inspiration, shared by all your stories.') }}</p>
+        <p class="page-sub">{{ $t('Real-world pictures for inspiration, shared by all your stories.') }} {{ $t('Copy a picture and press Ctrl+V here to save it.') }}</p>
       </div>
       <button class="btn btn-primary" @click="openForm(null)">{{ $t('New reference') }}</button>
     </header>
@@ -54,19 +54,19 @@
       </div>
     </template>
 
-    <ReferenceFormModal v-if="formOpen" :reference="editing" @close="formOpen = false" @saved="formOpen = false" @deleted="formOpen = false" />
+    <ReferenceFormModal v-if="formOpen" :reference="editing" :initial-pictures="pastedFiles" @close="formOpen = false" @saved="formOpen = false" @deleted="formOpen = false" />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { t } from '../i18n'
 import { useQuickAdd } from '../quickAdd'
 import { viewGallery } from '../navigation'
 import { activeStoryId } from '../stories'
 import { REFERENCE_KINDS, referenceLibrary, loadReferences, referenceUses } from '../referenceLibrary'
-import { allTags, filterItems } from '../cultures'
+import { allTags, filterItems, pastedPictures } from '../cultures'
 import ReferenceFormModal from '../components/ReferenceFormModal.vue'
 import RefFilters from '../components/RefFilters.vue'
 import RowMenu from '../components/RowMenu.vue'
@@ -115,7 +115,8 @@ function openSource(r) {
   window.open(r.source_url, '_blank', 'noopener,noreferrer')
 }
 
-function openForm(r) {
+function openForm(r, files = []) {
+  pastedFiles.value = files
   editing.value = r
   formOpen.value = true
 }
@@ -139,6 +140,19 @@ onMounted(async () => {
 
 // /references?new=1 opens the form.
 useQuickAdd(() => openForm(null))
+
+// Ctrl+V of a picture anywhere on the page (not in a box being typed in)
+// starts a new reference with it.
+const pastedFiles = ref([])
+function onPagePaste(e) {
+  if (formOpen.value || e.target.closest?.('input, textarea, [contenteditable]')) return
+  const files = pastedPictures(e)
+  if (!files.length) return
+  e.preventDefault()
+  openForm(null, files)
+}
+onMounted(() => window.addEventListener('paste', onPagePaste))
+onBeforeUnmount(() => window.removeEventListener('paste', onPagePaste))
 </script>
 
 <style scoped>
