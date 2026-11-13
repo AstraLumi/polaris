@@ -102,6 +102,9 @@ var storyOnlyTables = []string{
 	"chapter_links", "chapter_lines",
 	// The comments on the chapters' texts (comments.go).
 	"chapter_comments",
+	// The cultures of the world and their elements (cultures.go).
+	"cultures", "culture_kingdoms", "culture_elements",
+	"culture_element_pictures", "culture_element_tags", "culture_element_refs",
 }
 
 func isNullCol(t assetTable, col string) bool {

@@ -176,4 +176,11 @@ export default {
   "Add a word": "Agregar una palabra",
   "Words you add with “Add to dictionary” show here.": "Las palabras que agregues con «Agregar al diccionario» aparecen aquí.",
   "Offline writing needs Polaris opened over HTTPS (or on this computer, as localhost).": "Escribir sin conexión necesita Polaris abierto por HTTPS (o en esta computadora, como localhost).",
+  "Add a reference": "Agregar una referencia",
+  "Add clothing": "Agregar vestimenta",
+  "Add an element": "Agregar un elemento",
+  "Add the clothing, food, festivals and customs of this culture, with pictures and tags.": "Agrega la vestimenta, la comida, las festividades y las costumbres de esta cultura, con imágenes y etiquetas.",
+  "Couldn't load the cultures. Try refreshing.": "No se pudieron cargar las culturas. Intenta recargar.",
+  "Couldn't load the culture. Try refreshing.": "No se pudo cargar la cultura. Intenta recargar.",
+  "Couldn't load the references. Try refreshing.": "No se pudieron cargar las referencias. Intenta recargar.",
 }

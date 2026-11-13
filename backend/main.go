@@ -289,6 +289,8 @@ func storyRoutes(db *sql.DB, uploadsDir string, graph *graphCache) *http.ServeMu
 	mux.HandleFunc("PUT /api/creatures/{id}", saveCreatureHandler(db, uploadsDir))
 	mux.HandleFunc("DELETE /api/creatures/{id}", deleteCreatureHandler(db, uploadsDir))
 
+	cultureRoutes(mux, db, uploadsDir) // cultures.go
+
 	mux.HandleFunc("GET /api/factions", listFactionsHandler(db))
 	mux.HandleFunc("GET /api/factions/{id}", getFactionHandler(db))
 	mux.HandleFunc("POST /api/factions", saveFactionHandler(db, uploadsDir))

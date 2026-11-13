@@ -24,6 +24,10 @@ const ICONS = {
     'M12 13c-3 0-5 3-5 5a2 2 0 0 0 2 2c1 0 2-.6 3-.6s2 .6 3 .6a2 2 0 0 0 2-2c0-2-2-5-5-5z',
     circle(5.5, 10.5, 1.6), circle(9.5, 6, 1.6), circle(14.5, 6, 1.6), circle(18.5, 10.5, 1.6),
   ],
+  // A coat on a hanger.
+  cultures: ['M12 5a1.6 1.6 0 1 1 1.6 1.6c-.9 0-1.6.6-1.6 1.4', 'M12 8L3 14.5V17h18v-2.5z'],
+  // Pictures pinned to a board.
+  references: ['M4 4h16v16H4z', 'M4 15l4.5-4.5 4 4 2.5-2.5L20 17', circle(15.5, 8.5, 1.5)],
   assets: ['M12 2l2.5 3.5V15h-5V5.5z', 'M6.5 15h11', 'M12 15v5', 'M10 21h4'],
   timeline: ['M3 12h18', circle(7, 12, 2), circle(17, 12, 2), 'M12 7v10'],
   calendar: ['M4 5h16v16H4z', 'M4 10h16', 'M8 3v4', 'M16 3v4'],

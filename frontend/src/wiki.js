@@ -28,6 +28,7 @@ export const TYPE_LABELS = {
   solar_system: tr('Solar system'),
   celestial_body: tr('Celestial body'),
   map_feature: tr('Map feature'),
+  culture: tr('Culture'),
   lore: tr('Lore'),
 }
 
@@ -47,6 +48,7 @@ export const TYPE_PLURALS = {
   solar_system: tr('Solar system'),
   celestial_body: tr('Stars, planets and moons'),
   map_feature: tr('Plates, ranges and depths'),
+  culture: tr('Cultures'),
   lore: tr('Lore'),
 }
 
@@ -73,6 +75,8 @@ export const FIELD_LABELS = {
   origin: tr('Origin'),
   behavior: tr('Behaviour'),
   habitat: tr('Habitat'),
+  beliefs: tr('Beliefs'),
+  customs: tr('Customs'),
 }
 
 // Infobox rows that come from the story itself.
@@ -212,6 +216,8 @@ export const GROUP_LABELS = {
   continents: tr('Continents'),
   lands_on: tr('Lands on it'),
   continents_on: tr('Continents on it'),
+  cultures_here: tr('Cultures here'),
+  kingdoms: tr('Kingdoms'),
 }
 
 // Text that already exists on the sheet or event and is shown read-only.
@@ -232,6 +238,7 @@ export function sourcePath(type, id) {
   if (type === 'creature') return '/bestiary'
   if (type === 'solar_system' || type === 'celestial_body') return '/solar-system'
   if (type === 'map_feature') return '/map'
+  if (type === 'culture') return `/cultures/${id}`
   return '/assets'
 }
 
@@ -243,6 +250,7 @@ export function sourceLabel(type) {
   if (type === 'creature') return t('Bestiary')
   if (type === 'solar_system' || type === 'celestial_body') return t('Solar system page')
   if (type === 'map_feature') return t('map')
+  if (type === 'culture') return t('culture page')
   return t('Character Assets page')
 }
 

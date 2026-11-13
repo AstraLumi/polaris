@@ -339,7 +339,7 @@ var itemLinkColumns = []linkColumn{
 // stored links. A new one goes in a new list here with a migration that
 // rewrites what is already written; its handler normalises it on save
 // (storeLinksByID) and its form shows the links by name.
-var wikiLinkColumns = slices.Concat(schema42LinkColumns, itemLinkColumns)
+var wikiLinkColumns = slices.Concat(schema42LinkColumns, itemLinkColumns, schema48LinkColumns)
 
 // rewriteStoredWikiLinks runs fn over every text in cols and saves the ones
 // it changes.

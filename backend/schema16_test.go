@@ -11,6 +11,7 @@ import (
 // column an index is on.
 func rollBackSchema47(t *testing.T, db *sql.DB) {
 	t.Helper()
+	rollBackSchema48(t, db)
 	for _, q := range schema47Statements {
 		name := strings.Fields(q)[2]
 		if _, err := db.Exec(`DROP INDEX ` + name); err != nil {
@@ -19,6 +20,70 @@ func rollBackSchema47(t *testing.T, db *sql.DB) {
 	}
 	if _, err := db.Exec(`UPDATE schema_meta SET value = '46' WHERE key = 'schema_version'`); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// rollBackSchema48 turns a fresh database back into schema 47: no cultures.
+func rollBackSchema48(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, q := range []string{
+		`DROP TRIGGER wiki_cleanup_cultures`,
+		`DROP TABLE culture_element_refs`,
+		`DROP TABLE culture_element_tags`,
+		`DROP TABLE culture_element_pictures`,
+		`DROP TABLE culture_elements`,
+		`DROP TABLE culture_kingdoms`,
+		`DROP TABLE cultures`,
+		`UPDATE schema_meta SET value = '47' WHERE key = 'schema_version'`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+}
+
+// A story at schema 47 gets the cultures' tables; deleting a kingdom
+// unlinks it, deleting a culture takes its elements and wiki entry.
+func TestMigrationAddsCultures(t *testing.T) {
+	mgr, _ := newTestServer(t)
+	id := createStoryDirect(t, mgr, "Old")
+	app, _ := mgr.open(id)
+	rollBackSchema48(t, app.db)
+	if err := ensureSchema(app.db); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`INSERT INTO locations (id, name, kind, color) VALUES (1, 'Aurel', 'major', '#aa3344')`,
+		`INSERT INTO cultures (id, name) VALUES (1, 'Aureli')`,
+		`INSERT INTO culture_kingdoms (culture_id, location_id) VALUES (1, 1)`,
+		`INSERT INTO culture_elements (id, culture_id, kind, name) VALUES (1, 1, 'clothing', 'Marshal coat')`,
+		`INSERT INTO culture_element_tags (element_id, tag) VALUES (1, 'military')`,
+		`INSERT INTO culture_element_refs (element_id, reference_id) VALUES (1, 7)`,
+		`INSERT INTO wiki_entries (entity_type, entity_id, summary) VALUES ('culture', 1, 'x')`,
+	} {
+		if _, err := app.db.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	if _, err := app.db.Exec(`INSERT INTO culture_elements (culture_id, kind, name) VALUES (1, 'shoes', 'x')`); err == nil {
+		t.Error("an unknown kind was stored")
+	}
+	app.db.Exec(`DELETE FROM locations WHERE id = 1`)
+	var n int
+	app.db.QueryRow(`SELECT COUNT(*) FROM culture_kingdoms`).Scan(&n)
+	if n != 0 {
+		t.Errorf("%d kingdom links left after the kingdom went", n)
+	}
+	app.db.Exec(`DELETE FROM cultures WHERE id = 1`)
+	for _, table := range []string{"culture_elements", "culture_element_tags", "culture_element_refs"} {
+		app.db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&n)
+		if n != 0 {
+			t.Errorf("%d rows left in %s after the culture went", n, table)
+		}
+	}
+	app.db.QueryRow(`SELECT COUNT(*) FROM wiki_entries WHERE entity_type = 'culture'`).Scan(&n)
+	if n != 0 {
+		t.Error("the culture's wiki entry was left behind")
 	}
 }
 

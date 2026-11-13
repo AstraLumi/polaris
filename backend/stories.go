@@ -56,7 +56,8 @@ type storyManager struct {
 	dataDir     string
 	uploadsRoot string
 	reg         *sql.DB
-	fonts       *fontLibrary // the fonts library, one for every story (fontlib.go)
+	fonts       *fontLibrary      // the fonts library, one for every story (fontlib.go)
+	refs        *referenceLibrary // the reference library, one for every story (references.go)
 
 	mu      sync.Mutex
 	apps    map[string]*storyApp
@@ -124,6 +125,10 @@ func newStoryManager(dataDir, uploadsRoot string) (*storyManager, error) {
 		opening:     map[string]*opening{},
 	}
 	if m.fonts, err = newFontLibrary(reg, uploadsRoot, m); err != nil {
+		reg.Close()
+		return nil, err
+	}
+	if m.refs, err = newReferenceLibrary(reg, uploadsRoot, m); err != nil {
 		reg.Close()
 		return nil, err
 	}
@@ -623,6 +628,7 @@ func (m *storyManager) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/s/{id}/{rest...}", m.storyHandler)
 	mux.HandleFunc("GET /uploads/s/{id}/{path...}", m.uploadsHandler)
 	m.fonts.registerRoutes(mux)
+	m.refs.registerRoutes(mux)
 }
 
 func (m *storyManager) fail(w http.ResponseWriter, err error) {

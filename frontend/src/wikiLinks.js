@@ -18,7 +18,7 @@
 // as wikiTypes in backend/wiki.go.
 export const TYPE_ORDER = [
   'character', 'location', 'faction', 'event', 'class', 'subclass', 'specialization', 'race', 'body_type', 'spell', 'gear', 'creature',
-  'map_feature', 'solar_system', 'celestial_body', 'lore',
+  'map_feature', 'solar_system', 'celestial_body', 'culture', 'lore',
 ]
 
 export const WIKI_LINK_RE = /\[\[([^\[\]|\n]+?)(?:\|([^\[\]\n]*))?\]\]/g

@@ -69,6 +69,8 @@ function itemOf(to) {
       return { type: 'event', id, own: false }
     case 'chapter':
       return { type: 'chapter', id, own: true }
+    case 'culture-view':
+      return { type: 'culture', id, own: true }
     case 'wiki-article':
       return to.params.type ? { type: to.params.type, id, own: true } : null
     default:

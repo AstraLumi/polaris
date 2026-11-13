@@ -14,6 +14,7 @@ export function recentPath(e) {
   if (e.type === 'character') return `/characters/${e.id}`
   if (e.type === 'event') return `/events/${e.id}`
   if (e.type === 'chapter') return `/chapters/${e.id}`
+  if (e.type === 'culture') return `/cultures/${e.id}`
   return `/wiki/${e.type}/${e.id}`
 }
 

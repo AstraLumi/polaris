@@ -101,6 +101,10 @@ var wikiTypes = []wikiTypeDef{
 	{Key: "map_feature", Table: "map_features", IDCol: "id", OwnTrigger: true,
 		Select: `SELECT id, name, '' FROM map_features`,
 		Fields: []string{"geography", "history", "lore", "trivia"}},
+	// The cultures of the world (cultures.go).
+	{Key: "culture", Table: "cultures", IDCol: "id", OwnTrigger: true,
+		Select: `SELECT id, name, COALESCE(picture_path, '') FROM cultures`,
+		Fields: []string{"history", "beliefs", "customs", "trivia"}},
 	// Free-form pages: everything beyond the introduction and trivia is the
 	// user's own sections. Last, so a lore page never takes over a [[link]]
 	// that already pointed at a character or place of the same name.
@@ -349,8 +353,26 @@ func listWikiItems(db wikiQuerier) ([]wikiListItem, error) {
 	}
 	rows.Close()
 
+	// Mid-upgrade (the link migrations of schemas 42 and 43), the tables
+	// of later kinds don't exist yet: they hold no articles.
+	tables := map[string]bool{}
+	rows, err = db.Query(`SELECT name FROM sqlite_master WHERE type = 'table'`)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var name string
+		if rows.Scan(&name) == nil {
+			tables[name] = true
+		}
+	}
+	rows.Close()
+
 	items := []wikiListItem{}
 	for _, t := range wikiTypes {
+		if !tables[t.Table] {
+			continue
+		}
 		rows, err := db.Query(t.listSQL() + ` ORDER BY 2 COLLATE NOCASE`)
 		if err != nil {
 			return nil, err
@@ -720,6 +742,8 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 			`SELECT id, name FROM creatures WHERE region_id = ? ORDER BY name COLLATE NOCASE`, id))
 		a.addGroup("factions_here", queryRefs(db, "faction",
 			`SELECT id, name FROM factions WHERE hq_location_id = ? ORDER BY name COLLATE NOCASE`, id))
+		a.addGroup("cultures_here", queryRefs(db, "culture", `SELECT c.id, c.name FROM cultures c
+			JOIN culture_kingdoms k ON k.culture_id = c.id WHERE k.location_id = ? ORDER BY c.name COLLATE NOCASE`, id))
 
 	case "faction":
 		f, err := loadFaction(db, id)
@@ -853,6 +877,14 @@ func loadSourceFacts(db *sql.DB, a *wikiArticle) {
 
 	case "map_feature":
 		featureFacts(db, a)
+
+	case "culture":
+		var desc string
+		if db.QueryRow(`SELECT description FROM cultures WHERE id = ?`, id).Scan(&desc) == nil {
+			a.addSheet("description", desc)
+		}
+		a.addGroup("kingdoms", queryRefs(db, "location", `SELECT l.id, l.name FROM culture_kingdoms k
+			JOIN locations l ON l.id = k.location_id WHERE k.culture_id = ? ORDER BY l.name COLLATE NOCASE`, id))
 
 	case "creature":
 		var kind, desc string

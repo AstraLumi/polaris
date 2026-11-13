@@ -696,6 +696,25 @@ export const creaturesApi = {
   remove: (id) => request(`/creatures/${id}`, { method: 'DELETE' }, 'failed to delete the creature'),
 }
 
+// Cultures (backend/cultures.go): a culture with its kingdoms, and its
+// elements (clothing, food…) with pictures, tags and references.
+export const culturesApi = {
+  list: () => request('/cultures', undefined, 'failed to load the cultures'),
+  get: (id) => request(`/cultures/${id}`, undefined, 'culture not found'),
+  // formData: name, description, kingdom_ids (JSON), and optionally
+  // picture / remove_picture.
+  save: (id, formData) =>
+    request(id ? `/cultures/${id}` : '/cultures', { method: id ? 'PUT' : 'POST', body: formData }, 'failed to save the culture'),
+  remove: (id) => request(`/cultures/${id}`, { method: 'DELETE' }, 'failed to delete the culture'),
+  // Every element of every culture, for browsing by tag.
+  elements: () => request('/culture-elements', undefined, 'failed to load the cultures'),
+  // formData: kind, name, description, tags, reference_ids (JSON),
+  // pictures (files), remove_pictures and order (JSON picture ids).
+  saveElement: (cultureId, id, formData) =>
+    request(id ? `/culture-elements/${id}` : `/cultures/${cultureId}/elements`, { method: id ? 'PUT' : 'POST', body: formData }, 'failed to save the element'),
+  removeElement: (id) => request(`/culture-elements/${id}`, { method: 'DELETE' }, 'failed to delete the element'),
+}
+
 export const chaptersApi = {
   list: () => request('/chapters', undefined, 'failed to load chapters'),
   get: (id) => request(`/chapters/${id}`, undefined, 'chapter not found'),

@@ -77,6 +77,8 @@ const PAGES = [
   { name: tr('Timeline'), path: '/timeline' },
   { name: tr('Calendar'), path: '/calendar' },
   { name: tr('Bestiary'), path: '/bestiary' },
+  { name: tr('Cultures'), path: '/cultures' },
+  { name: tr('References'), path: '/references' },
   { name: tr('Map'), path: '/map' },
   { name: tr('Solar system'), path: '/solar-system' },
   { name: tr('Events'), path: '/events' },
@@ -95,6 +97,8 @@ const ACTIONS = [
   { name: tr('New article'), path: '/wiki?new=1' },
   { name: tr('New faction'), path: '/factions?new=1' },
   { name: tr('New creature'), path: '/bestiary?new=1' },
+  { name: tr('New culture'), path: '/cultures?new=1' },
+  { name: tr('New reference'), path: '/references?new=1' },
 ]
 
 const inputEl = ref(null)

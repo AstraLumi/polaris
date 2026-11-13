@@ -277,6 +277,15 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   .docx export mirrors the import (`docx*.go`): change both, and keep
   `TestExportDocxRoundTrip` passing (a real file:
   `POLARIS_DOCX_SMOKE=… POLARIS_EXPORT_OUT=… go test -run TestExportSmoke`).
+- **Cultures and the reference library:** a culture (`backend/cultures.go`,
+  schema 48) has kingdoms and elements (clothing, food…) with pictures,
+  tags and references. The references live in one library for every story
+  (`backend/references.go`, tables in the registry like the fonts
+  library, pictures in `<UPLOADS_DIR>/_references/`), so an element links
+  to them by id with no foreign key (`culture_element_refs`), and a
+  deleted reference just stops showing. The element kinds and reference
+  kinds exist twice (`cultures.js`/`referenceLibrary.js` and the Go
+  lists; `cultures.test.mjs` compares them): change both.
 - Birth date, blood type and Born in belong to the character (`characters`
   columns, schema 23), not to a version; the version form edits them for
   all versions.

@@ -2,7 +2,7 @@
   "_about": "Wiki links, read the same way by backend/wikilinks.go and frontend/src/wikiLinks.js. Both test suites load this file: backend/wikilinks_test.go and frontend/tests/markdown.test.mjs. editing: [stored, what the editor shows]; the Go side checks the shown text saves back to the stored bytes. plain: [stored, the words a reader sees] (linksAsText in JS, wikiLinksAsText in Go; a deleted article shows nothing).",
   "types": [
     "character", "location", "faction", "event", "class", "subclass", "specialization", "race", "body_type", "spell", "gear", "creature",
-    "map_feature", "solar_system", "celestial_body", "lore"
+    "map_feature", "solar_system", "celestial_body", "culture", "lore"
   ],
   "items": [
     { "type": "character", "id": 12, "name": "Aria Vale", "aliases": ["Ash"] },
