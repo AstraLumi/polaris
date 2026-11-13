@@ -7,6 +7,8 @@ import { loadSavedLocale, i18nPlugin } from './i18n'
 import { trackRecent } from './recentTracker'
 import { retryPage } from './navigation'
 import { registerServiceWorker } from './offline/index.js'
+import { renewKeptLater } from './offline/kept.js'
+import { activeStoryId } from './stories'
 
 loadSavedTheme()
 
@@ -39,4 +41,8 @@ loadSavedLocale().finally(() => {
 })
 
 // Offline writing (docs/EDITOR.md): the app's files kept by a service worker.
-if (import.meta.env.PROD) registerServiceWorker()
+// A story kept for reading offline (offline/kept.js) has its copy renewed.
+if (import.meta.env.PROD) {
+  registerServiceWorker()
+  renewKeptLater(activeStoryId)
+}

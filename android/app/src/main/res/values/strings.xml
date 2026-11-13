@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name" translatable="false">Polaris</string>
+    <string name="offline_title">Can\'t reach Polaris</string>
+    <string name="offline_text">Check the connection and try again.</string>
+    <string name="retry">Try again</string>
+    <string name="change_server">Change the server address</string>
+    <string name="server_title">Where is your Polaris?</string>
+    <string name="server_hint" translatable="false">https://polaris.example.com</string>
+    <string name="server_bad">Type an address that starts with https://</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="signed_out">The sign-in has expired.</string>
+    <string name="sign_in">Sign in again</string>
+    <string name="downloading">Downloading %1$s</string>
+    <string name="no_app_for_link">No app can open this link</string>
+</resources>

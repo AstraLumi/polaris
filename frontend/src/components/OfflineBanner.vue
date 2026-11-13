@@ -1,6 +1,7 @@
 <template>
   <div v-if="show" class="offline-banner" role="status">
-    <span>{{ $t('No connection to the server. Only books kept for writing offline can be opened; the rest of Polaris needs the connection.') }}</span>
+    <span v-if="keptAt">{{ $t("No connection to the server. This is the copy of the story kept on this device ({when}): it can be read, but nothing can be saved until the connection is back.", { when: keptAt }) }}</span>
+    <span v-else>{{ $t('No connection to the server. Only books kept for writing offline can be opened; the rest of Polaris needs the connection.') }}</span>
     <span v-if="books.length" class="kept">
       <RouterLink v-for="b in books" :key="b.volume" :to="`/write/${b.volume}`" class="kept-link">{{ b.volume === '0' ? $t('Chapters without a volume') : b.title || $t('Book') }}</RouterLink>
     </span>
@@ -10,15 +11,22 @@
 <script setup>
 // The rest of the app with no connection (docs/EDITOR.md, "Offline
 // writing"): it says so, with links to the books kept for writing offline.
-// The writing page shows its own state instead.
+// The writing page shows its own state instead. A story kept for reading
+// offline (offline/kept.js) shows its kept copy, and the banner says so.
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { connected } from '../offline/connection.js'
 import { offlineStore } from '../offline/index.js'
 import { activeStoryId, stories, currentStory } from '../stories'
+import { keptStories } from '../offline/kept.js'
+import { timeAgo } from '../timeAgo'
 
 const route = useRoute()
 const books = ref([])
+const keptAt = computed(() => {
+  const at = keptStories.value[activeStoryId]?.at
+  return at ? timeAgo(new Date(at).toISOString().slice(0, 19).replace('T', ' ')) : ''
+})
 const show = computed(() => !connected.value && route.name !== 'write')
 
 // The story's name as a kept book remembers it, while the list of stories

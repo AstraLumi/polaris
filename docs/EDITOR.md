@@ -1479,7 +1479,10 @@ can be opened and written with no connection; the writing page shows
   plugin, `swBuild.js`): the app's files are kept in a versioned cache
   (`polaris-app-<BUILD>`, filled at install, older ones deleted on
   activate). Pages are network-first with the kept page as fallback. `/api/`
-  is never cached or touched: what offline books need is stored by the page.
+  is never cached or touched: what offline books need is stored by the page
+  (and a story kept for reading offline keeps its answers itself, see
+  docs/DEVELOPMENT.md, "Reading offline", which also has the worker keep
+  every built file).
   Uploads are network-first; copies the writing page kept for offline books
   are served from their own caches with their original headers. Spelling
   dictionaries and Google Fonts (CSS and files) are kept once fetched.

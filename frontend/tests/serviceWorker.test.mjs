@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
-import { precacheList, serviceWorkerSource, entryFile } from '../src/offline/swBuild.js'
+import { precacheList, serviceWorkerSource, entryFile, everyFile } from '../src/offline/swBuild.js'
 
 const ORIGIN = 'http://127.0.0.1:18092'
 
@@ -45,6 +45,20 @@ assert.ok(built.source.includes('"/assets/index-A.js"'))
 const other = serviceWorkerSource(template, { ...bundle, 'assets/Export-Z.js': chunk('assets/Export-Z.js') }, ['/', '/icon-192.png'])
 assert.notEqual(other.build, built.build)
 assert.throws(() => serviceWorkerSource('nothing here', bundle), /not found/)
+// Every other built file, for a story kept for reading offline.
+assert.deepEqual(everyFile(bundle, ['/logo.svg']), [
+  '/logo.svg',
+  '/assets/Export-E.js',
+  '/assets/MapPage-G.js',
+  '/assets/WritePage-D.js',
+  '/assets/climate.worker-I.js',
+  '/assets/index-A.js',
+  '/assets/spell.worker-H.js',
+  '/assets/vendor-B.js',
+])
+const everything = JSON.parse(/const EVERYTHING = (\[.*\])/.exec(built.source)[1])
+assert.ok(everything.includes('/assets/MapPage-G.js'))
+assert.ok(!everything.includes('/assets/index-A.js'), 'what install keeps anyway is not listed twice')
 
 // ---- Running it ----
 function world(sw) {
@@ -120,7 +134,15 @@ function world(sw) {
       return { handled: true, error: e.message }
     }
   }
-  return { serve, files, stores, log, lifecycle, request, setOnline: (v) => (online = v) }
+  // What the worker answers a page's message with (undefined: nothing).
+  const message = async (data) => {
+    let p = null
+    let answer
+    listeners.message({ data, ports: [{ postMessage: (x) => (answer = x) }], waitUntil: (x) => (p = x) })
+    await p
+    return answer
+  }
+  return { serve, files, stores, log, lifecycle, request, message, setOnline: (v) => (online = v) }
 }
 
 const page = (entry) => `<html><script type="module" src="/${entry}"></script></html>`
@@ -243,3 +265,39 @@ assert.deepEqual(await w.request('/x.png', { host: 'example.com' }), { handled: 
 }
 
 console.log('serviceWorker: ok')
+
+// ---- A story kept for reading offline: every built file ----
+{
+  const k = world(built.source)
+  k.serve('/', page('assets/index-A.js'), 'text/html')
+  k.serve('/icon-192.png', 'PNG', 'image/png')
+  for (const f of everyFile(bundle)) k.serve(f, `code of ${f}`, 'text/javascript')
+  await k.lifecycle('install')
+  const kApp = `polaris-app-${built.build}`
+  assert.ok(!k.stores.get(kApp).has(`${ORIGIN}/assets/MapPage-G.js`), 'nothing kept for reading: only the usual files')
+  // The page asks once a story's copy is made.
+  assert.equal((await k.message({ type: 'keep-app' })).missing, 0)
+  assert.ok(k.stores.get(kApp).has(`${ORIGIN}/assets/MapPage-G.js`))
+  assert.ok(k.stores.get(kApp).has(`${ORIGIN}/sky/default-sky.jpg`))
+  k.setOnline(false)
+  assert.equal((await k.request('/assets/MapPage-G.js')).text, 'code of /assets/MapPage-G.js')
+  assert.equal((await k.request('/sky/default-sky.jpg')).text, 'code of /sky/default-sky.jpg')
+  assert.equal(await k.message({ type: 'other' }), undefined)
+
+  // A later release installs with everything, by itself.
+  const next = world(other.source)
+  next.serve('/', page('assets/index-A.js'), 'text/html')
+  next.serve('/icon-192.png', 'PNG', 'image/png')
+  for (const f of everyFile({ ...bundle, 'assets/Export-Z.js': chunk('assets/Export-Z.js') })) next.serve(f, `code of ${f}`, 'text/javascript')
+  next.stores.set('polaris-data-0123456789abcdef', new Map())
+  await next.lifecycle('install')
+  assert.ok(next.stores.get(`polaris-app-${other.build}`).has(`${ORIGIN}/assets/MapPage-G.js`))
+
+  // A file that can't be fetched doesn't stop anything; it is counted.
+  const holed = world(built.source)
+  holed.serve('/', page('assets/index-A.js'), 'text/html')
+  holed.serve('/icon-192.png', 'PNG', 'image/png')
+  for (const f of everyFile(bundle)) holed.serve(f, `code of ${f}`, 'text/javascript', {}, f.includes('MapPage') ? 500 : 200)
+  await holed.lifecycle('install')
+  assert.equal((await holed.message({ type: 'keep-app' })).missing, 1)
+}

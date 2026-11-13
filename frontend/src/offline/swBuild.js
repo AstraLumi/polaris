@@ -30,6 +30,17 @@ export function precacheList(
   return [...out].sort().map((f) => '/' + f)
 }
 
+// Everything the build made, and the public files a page may ask for: what
+// the service worker keeps once a story is kept for reading offline, so a
+// page never opened before still opens with no connection.
+export const OFFLINE_PUBLIC = ['/logo.svg', '/sky/default-sky.jpg']
+export function everyFile(bundle, extra = OFFLINE_PUBLIC) {
+  const built = Object.values(bundle)
+    .map((f) => f.fileName)
+    .filter((f) => f.startsWith('assets/') && !f.endsWith('.map'))
+  return [...extra, ...built.sort().map((f) => '/' + f)]
+}
+
 export const entryFile = (bundle) => Object.values(bundle).find((f) => f.type === 'chunk' && f.isEntry)?.fileName || ''
 
 // The template with this build's values. BUILD changes whenever a built file
@@ -47,6 +58,7 @@ export function serviceWorkerSource(template, bundle, extra = PUBLIC_FILES) {
     ["const BUILD = 'dev'", `const BUILD = ${JSON.stringify(build)}`],
     ["const PRECACHE = ['/']", `const PRECACHE = ${JSON.stringify(precache)}`],
     ["const ENTRY = ''", `const ENTRY = ${JSON.stringify(entry)}`],
+    ['const EVERYTHING = []', `const EVERYTHING = ${JSON.stringify(everyFile(bundle).filter((f) => !precache.includes(f)))}`],
   ]
   let out = template
   for (const [from, to] of swaps) {

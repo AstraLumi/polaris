@@ -6,11 +6,15 @@
  *   (PRECACHE) are kept at install in `polaris-app-<BUILD>`; other built
  *   files (hashed names under /assets/) are kept the first time they load.
  *   A new release is a new BUILD: its cache is filled at install and the
- *   older ones are deleted when it takes over.
+ *   older ones are deleted when it takes over. Once a story is kept for
+ *   reading offline (a cache named `polaris-data-<story>`,
+ *   offline/kept.js), every built file is kept (EVERYTHING): when the page
+ *   asks ("keep-app"), and at each later install.
  * - Pages always come from the server while it answers (a new release is
  *   seen at once); the kept page only when it can't be reached.
  * - /api/ is never touched: the writing page keeps what offline books need
- *   in IndexedDB itself.
+ *   in IndexedDB itself, and the page keeps a kept story's answers
+ *   (offline/kept.js).
  * - Uploads (pictures, the fonts library's files) come from the server;
  *   the copies the writing page kept for offline books (caches named
  *   `polaris-offline-<story>`) only when it can't be reached. Kept as the
@@ -21,10 +25,12 @@
 const BUILD = 'dev'
 const PRECACHE = ['/']
 const ENTRY = ''
+const EVERYTHING = []
 
 const APP = 'polaris-app-' + BUILD
 const DICT = 'polaris-dict'
 const FONTS = 'polaris-fonts'
+const DATA = 'polaris-data-' // a story kept for reading offline (offline/kept.js)
 const PAGE_WAIT = 6000
 
 self.addEventListener('install', (event) => {
@@ -42,9 +48,35 @@ self.addEventListener('install', (event) => {
           throw new Error('the page is not from this build')
         }
       }
+      if ((await caches.keys()).some((name) => name.startsWith(DATA))) await keepEverything()
       await self.skipWaiting()
     })(),
   )
+})
+
+// The rest of the app's files, each on its own: one that fails is asked
+// again by the next "keep-app", or kept when it first loads. Answers how
+// many are missing.
+async function keepEverything() {
+  const cache = await caches.open(APP)
+  let missing = 0
+  for (const u of EVERYTHING) {
+    const url = new URL(u, self.location.href).href
+    try {
+      if (await cache.match(url)) continue
+      const res = await fetch(new Request(url, { cache: 'reload' }))
+      if (!res.ok) throw new Error(String(res.status))
+      await cache.put(url, res)
+    } catch (e) {
+      missing++
+    }
+  }
+  return missing
+}
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type !== 'keep-app') return
+  event.waitUntil(keepEverything().then((missing) => event.ports[0]?.postMessage({ missing })))
 })
 
 self.addEventListener('activate', (event) => {

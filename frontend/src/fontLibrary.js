@@ -4,6 +4,7 @@
 // file on the page, so a library family draws in the editor, the page view
 // and the library page itself (the browser only downloads a face when text
 // uses it). The rules are pure, in fontRules.js.
+import { fetchKept } from './offline/kept.js'
 import { ref } from 'vue'
 import { t, tr } from './i18n'
 import { STORY_API } from './stories'
@@ -48,7 +49,7 @@ function use(list) {
 async function call(url, options, fallback) {
   let res
   try {
-    res = await fetch(url, options)
+    res = await fetchKept(url, options) // the kept list when the server can't be reached
   } catch (e) {
     throw new Error(t("can't reach the server"))
   }

@@ -297,6 +297,21 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   It also keeps the chapter's comments in step with its text
   (`syncChapterComments`, `backend/comments.go`, schema 46: rows per
   chapter, a `comment` mark by id in the text, plain-text bodies).
+- **Reading offline** (docs/DEVELOPMENT.md, "Reading offline"): a story
+  kept on a device is read from kept answers when the server can't be
+  reached (`frontend/src/offline/kept.js`, through `send`). The copy asks
+  every read the pages make, listed in `offline/storyCopy.js`: a new `GET`
+  route goes in that list or in its `SKIPPED` (`storyCopy.test.mjs` fails
+  otherwise), and a page's read must go through `send` to work offline.
+  Nothing is saved offline outside the writing page. End to end:
+  `node frontend/tests/visual/readOfflineShots.mjs`.
+- **The Android app** (`android/`, see its `README.md`) is a web view on
+  the server's own pages, nothing of the frontend is bundled: it only adds
+  file picking, downloads (links with `download`, fetched by Android with
+  the page's cookies, so a download must stay a plain `GET` link, not a
+  blob), `window.print()`, Back and an offline screen. The server's
+  address comes from the git-ignored `android/secrets.properties`. Build:
+  `cd android && JAVA_HOME=<jdk17> ./gradlew assembleRelease`.
 
 ## Deployment
 

@@ -4,7 +4,9 @@
 // language instead of the browser's "Failed to fetch", and a read that gets
 // no answer gives up after a minute rather than leave a page loading for
 // ever. Saves and uploads are never timed: a large picture on a slow line
-// may rightly take longer.
+// may rightly take longer. A read of a story kept on this device is
+// answered from its kept copy when the server can't be reached
+// (offline/kept.js).
 //
 // Not through here: the writing editor's calls (editor/api.js, which keep
 // the text in the browser when the server can't be reached), the fonts
@@ -12,6 +14,7 @@
 // workers fetch.
 import { t, tr } from './i18n'
 import { leaving } from './undoDelete'
+import { fetchKept } from './offline/kept.js'
 
 const READ_TIMEOUT = 60000
 
@@ -20,7 +23,7 @@ export async function send(url, options = {}) {
   // The tab is closing (undoDelete.js): the request is to outlive the page.
   if (leaving.now && !read) options = { ...options, keepalive: true }
   try {
-    return await fetch(url, read && !options.signal ? { ...options, signal: AbortSignal.timeout(READ_TIMEOUT) } : options)
+    return await fetchKept(url, read && !options.signal ? { ...options, signal: AbortSignal.timeout(READ_TIMEOUT) } : options)
   } catch (e) {
     if (e?.name === 'AbortError') throw e // the caller's own signal
     const slow = e?.name === 'TimeoutError'

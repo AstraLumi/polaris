@@ -43,6 +43,16 @@
               <span class="card-export" :class="{ 'is-stale': exportStale(s) }">
                 {{ s.last_exported_at ? $t('Last exported {when}', { when: timeAgo(s.last_exported_at) }) : $t('Never exported') }}
               </span>
+              <span v-if="copying?.story === s.id" class="card-export" role="status">
+                {{ $t('Copying for reading offline… {done} of {total}', { done: copying.done, total: copying.total }) }}
+              </span>
+              <span v-else-if="keptStories[s.id]" class="card-export" :class="{ 'is-stale': !keptStories[s.id].at }">
+                <template v-if="keptStories[s.id].at">
+                  {{ $t('Kept for reading offline, {when}', { when: keptWhen(keptStories[s.id].at) }) }}
+                  <template v-if="keptStories[s.id].missing"> · {{ $tn('{n} item could not be copied', '{n} items could not be copied', keptStories[s.id].missing) }}</template>
+                </template>
+                <template v-else>{{ $t("The copy for reading offline isn't finished. Update it with the connection on.") }}</template>
+              </span>
             </button>
             <div class="card-actions">
               <button class="btn btn-ghost small" type="button" :title="$t('Rename it or change its icon')" @click="formStory = s">{{ $t('Edit') }}</button>
@@ -50,6 +60,7 @@
               <RowMenu
                 :label="$t('More actions')"
                 :items="[
+                  ...offlineItems(s),
                   { label: $t('Earlier copies…'), action: () => (copiesOf = s) },
                   { label: $t('Delete story'), danger: true, action: () => (toDelete = s) },
                 ]"
@@ -88,7 +99,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import PolarisLogo from '../components/PolarisLogo.vue'
 import IconImage from '../components/IconImage.vue'
 import StoryFormModal from '../components/StoryFormModal.vue'
@@ -102,7 +113,9 @@ import {
 import { t } from '../i18n'
 import { timeAgo } from '../timeAgo'
 import { offlineStore } from '../offline/index.js'
-import { storyCache } from '../offline/caches.js'
+import { storyCache, offlineSupported } from '../offline/caches.js'
+import { keptStories, forgetKept } from '../offline/kept.js'
+import { connected } from '../offline/connection.js'
 
 // An export older than a month (or none at all) is worth a nudge.
 const STALE_DAYS = 30
@@ -149,8 +162,39 @@ async function refresh() {
 }
 onMounted(refresh)
 
+// Reading a story with no connection (offline/kept.js): the whole story is
+// copied to this device, and renewed from here or by itself once a day.
+const copying = ref(null)
+const keptWhen = (at) => timeAgo(new Date(at).toISOString().slice(0, 19).replace('T', ' '))
+async function keepOffline(s) {
+  error.value = ''
+  notice.value = ''
+  try {
+    const maker = await import('../offline/keepStory.js')
+    const stop = watch(maker.copying, (c) => (copying.value = c), { immediate: true })
+    try {
+      await maker.keepStory(s.id, s.name)
+    } finally {
+      stop()
+      copying.value = null
+    }
+    notice.value = t('"{name}" can now be read on this device with no connection.', { name: s.name })
+  } catch (err) {
+    error.value = err.message || t("can't reach the server")
+  }
+}
+function offlineItems(s) {
+  if (!offlineSupported()) return []
+  if (!keptStories.value[s.id]) return connected.value ? [{ label: t('Keep for reading offline'), action: () => keepOffline(s) }] : []
+  return [
+    ...(connected.value ? [{ label: t('Update the offline copy'), action: () => keepOffline(s) }] : []),
+    { label: t('Remove the offline copy'), action: () => forgetKept(s.id) },
+  ]
+}
+
 // A deleted story's books kept offline go with it.
 async function forgetOffline(id) {
+  forgetKept(id)
   try {
     for (const b of await offlineStore.listBooks(id)) await offlineStore.removeBook(id, b.volume)
     if (typeof caches !== 'undefined') await caches.delete(storyCache(id))

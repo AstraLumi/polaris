@@ -1,0 +1,14 @@
+<resources>
+    <string name="offline_title">No se puede acceder a Polaris</string>
+    <string name="offline_text">Comprueba la conexión e inténtalo de nuevo.</string>
+    <string name="retry">Reintentar</string>
+    <string name="change_server">Cambiar la dirección del servidor</string>
+    <string name="server_title">¿Dónde está tu Polaris?</string>
+    <string name="server_bad">Escribe una dirección que empiece por https://</string>
+    <string name="save">Guardar</string>
+    <string name="cancel">Cancelar</string>
+    <string name="signed_out">La sesión ha caducado.</string>
+    <string name="sign_in">Iniciar sesión de nuevo</string>
+    <string name="downloading">Descargando %1$s</string>
+    <string name="no_app_for_link">Ninguna aplicación puede abrir este enlace</string>
+</resources>

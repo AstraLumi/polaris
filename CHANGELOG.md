@@ -4,6 +4,26 @@ What changed in each version of Polaris. The same notes are on the
 [Releases](https://github.com/AstraLumi/polaris/releases) page. Versions are
 Major.Minor.Bugfix: new features raise Minor, fixes raise Bugfix.
 
+## 3.3.0 (2026-11-13)
+
+**Upgrade:** stories are upgraded to database schema 48 the first time they are opened. This can't be undone, so export your stories first. Polaris also saves an export of each story in its `backups` folder before upgrading it.
+
+### Added
+
+- **Cultures** (World → Cultures). A culture belongs to one or more kingdoms and holds its elements by kind (clothing, food, architecture and more), each with pictures, tags and what it is based on.
+- **A reference library** shared by every story: pictures and notes of real things your cultures draw from, with where each one is used. An element links to its references, and a deleted reference simply stops showing.
+- **Paste pictures from the clipboard** in reference and culture element forms, and Ctrl+V on the References page starts a new reference with the picture. Needs HTTPS or localhost.
+- **Read a story with no connection.** "Keep for reading offline" in a story's "…" menu on the story picker copies the whole story to the device: every page, with its pictures. Without a connection Polaris shows that copy and says how old it is. Nothing can be changed offline except the text of books kept for writing, as before. The copy renews itself once a day, and "Update the offline copy" and "Remove the offline copy" are in the same menu. Needs HTTPS or localhost. A list filtered in a way never opened online is not in the copy, and behind a login proxy an expired sign-in looks like "no connection" until the page is reloaded.
+- **An Android app** you can build yourself (`android/`, see its README): Polaris in a window of its own that stays signed in, picks files for uploads, saves exports to Downloads and prints. It shows your server's pages, so it follows Polaris's updates without being rebuilt. New and little tested.
+
+### Changed
+
+- **The flat planet map on phones**: pinch to zoom, smooth dragging, and the tools stay in view.
+
+### Fixed
+
+- The writing toolbar was hard to read where it lay over the white of the page; it is now solid.
+
 ## 3.2.0 (2026-11-11)
 
 **Upgrade:** stories are upgraded to database schema 47 the first time they are opened. This can't be undone, so export your stories first. Polaris also saves an export of each story in its `backups` folder before upgrading it.

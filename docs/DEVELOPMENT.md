@@ -229,6 +229,45 @@ types, gear, spells), Map, Events, Timeline, Wiki, Settings and a Home dashboard
   afterwards through `after`); see `migrations` in `backend/db.go`. Character tags
   (`character_tags`) belong to the character, not a version.
 
+## Reading offline
+
+A story can be kept on a device ("Keep for reading offline" in a story's
+"…" menu on the story picker) and then read with no connection: every page,
+with its pictures. Nothing can be changed offline except the text of books
+kept for writing (docs/EDITOR.md, "Offline writing"); a save fails as it
+always did, and the banner (`OfflineBanner.vue`) says the story shown is the
+kept copy and how old it is.
+
+- **Kept answers** (`frontend/src/offline/kept.js`): `send` (`request.js`)
+  and the fonts and reference libraries fetch through `fetchKept`. For a
+  kept story, each good JSON answer to a read is stored in Cache Storage
+  (`polaris-data-<story>`; the list of stories and the two libraries in
+  `polaris-data`) and given back when the server can't be reached (or a
+  proxy answers 502/503/504 for it). Once the server is known to be out of
+  reach the copy is given at once; `/api/health` is asked until it is back
+  (`connection.js`). Which stories are kept is in localStorage
+  (`polaris-kept-stories`). The service worker still never touches `/api/`,
+  and the writing page's calls don't go through `send`: it keeps its books
+  itself.
+- **The copy** (`storyCopy.js`, run by `keepStory.js`): every read the
+  pages make is asked once (lists, then each item, each version, each wiki
+  article), then the pictures the answers name (`/uploads/…`, kept in the
+  same cache, which the service worker's uploads rule finds), then the
+  service worker is told to keep every built file (`keep-app`,
+  `EVERYTHING` in `sw.js`) so pages never opened before open too. The
+  reads are listed in `storyCopy.js`; **a new `GET` route must be added
+  there** (or to `SKIPPED`, with why), or `storyCopy.test.mjs` fails.
+- A copy older than a day is renewed by itself a little after the app opens
+  (`renewKeptLater`); visiting a page renews what that page reads.
+- A read with a query that was never asked online (a filtered events list)
+  is not in the copy.
+- Tests: `kept`, `storyCopy`, `serviceWorker`; end to end with the server
+  stopped: `node frontend/tests/visual/readOfflineShots.mjs`.
+- Known gaps: behind a login proxy (Cloudflare Access), an expired sign-in
+  looks like "no connection" until the page is reloaded; the browser may
+  clear the copy when the device runs out of space unless it granted
+  persistent storage; not tried on a real phone.
+
 ## README screenshots
 
 `scripts/screenshots/` retakes them from a demo story of invented data; its

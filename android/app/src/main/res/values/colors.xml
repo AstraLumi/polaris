@@ -1,0 +1,8 @@
+<resources>
+    <!-- The Polaris theme's night sky (site.webmanifest: background_color, theme_color) -->
+    <color name="background">#050e26</color>
+    <color name="icon_background">#001a43</color>
+    <color name="text">#f7f0bd</color>
+    <color name="text_soft">#b9c0d4</color>
+    <color name="accent">#dfc47e</color>
+</resources>

@@ -1,5 +1,5 @@
 <template>
-  <div class="write-toolbar glass-panel" :class="{ 'show-more': more }" role="toolbar" :aria-label="$t('Formatting')">
+  <div class="write-toolbar glass-panel panel-solid" :class="{ 'show-more': more }" role="toolbar" :aria-label="$t('Formatting')">
     <div class="tb-group">
       <button v-bind="btn(t('Undo') + ' (Ctrl+Z)')" :disabled="!canUndo" @click="exec(undo)"><TbIcon name="undo" /></button>
       <button v-bind="btn(t('Redo') + ' (Ctrl+Y)')" :disabled="!canRedo" @click="exec(redo)"><TbIcon name="redo" /></button>

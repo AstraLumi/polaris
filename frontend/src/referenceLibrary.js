@@ -2,6 +2,7 @@
 // for inspiration, one library for every story, so its calls are global
 // (/api/references), not under the story's prefix. Story designs (culture
 // elements) point at references by id.
+import { fetchKept } from './offline/kept.js'
 import { ref } from 'vue'
 import { t, tr } from './i18n'
 
@@ -32,7 +33,7 @@ let loading = null
 async function call(url, options, fallback) {
   let res
   try {
-    res = await fetch(url, options)
+    res = await fetchKept(url, options) // the kept list when the server can't be reached
   } catch (e) {
     throw new Error(t("can't reach the server"))
   }
