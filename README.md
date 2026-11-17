@@ -49,6 +49,7 @@ with no connection (see [On your phone and offline](#on-your-phone-and-offline))
   <a href="#data-and-backups">Backups</a> ·
   <a href="#updating">Updating</a> ·
   <a href="#on-your-phone-and-offline">Phone and offline</a> ·
+  <a href="#the-api">API</a> ·
   <a href="#stats">Stats</a>
 </p>
 
@@ -135,6 +136,10 @@ with no connection (see [On your phone and offline](#on-your-phone-and-offline))
   changes, and a deletion offers Undo for a few seconds.
 - **Works away from the server.** Keep a story on a device and read all of it
   with no connection.
+- **Work with an AI assistant.** Turn on the API, give a chat assistant
+  (Claude, Open WebUI and others) a key, and ask it to look things up, fill in
+  a character's wiki article or write a scene into a chapter. Every change it
+  makes is logged, and the story is copied first. See [The API](#the-api).
 - Any number of separate stories, Ctrl+K search everywhere, five colour
   themes, a layout that works on phones.
 - In English, Português (BR) and Español (ES and Latin America).
@@ -191,6 +196,10 @@ it, for example:
 Then set `BIND_ADDR` (see [Configuration](#configuration)) so it listens on
 your network. **Do not forward its port directly to the internet.**
 
+The optional [API](#the-api) is different: it has its own port, answers
+nothing without a key and serves no pages, so it is the one part of Polaris
+that can face the internet.
+
 ### The names Polaris answers to
 
 If you reach Polaris by a domain name (`polaris.example.com`), write that
@@ -227,54 +236,87 @@ so in its log and keeps running as root, as before.
 
 ## The API
 
-Polaris can open a second port for programs: an LLM chat that reads your
-notes and writes into your chapters, a script, an automation. It is off
-until you set `API_PORT`, and it is the one part of Polaris made to face
-the internet:
+The API lets a program work in your stories for you. Its main use is an AI
+chat assistant: connect one, and you can ask it things like
+
+- "Who in my story belongs to the Ember Guild?"
+- "Fill in Mira's appearance and personality from what I told you."
+- "Add an event: the siege of Varn, 03-04-1054, at Varn."
+- "Write the scene where Mira reaches the gate, at the end of chapter 3."
+
+and it looks things up, writes and saves in Polaris as you would. It reads
+the story first, links names to their wiki pages, and every change it makes
+is logged. The API is off until you turn it on, and works with any program
+that can send a key, not only AI assistants.
+
+### Turning it on
+
+1. Add a port for it to `.env`:
+
+   ```
+   API_PORT=8092
+   ```
+
+2. Publish that port in a `docker-compose.override.yml` beside
+   `docker-compose.yml` (git ignores it, so updates keep it), then
+   `docker compose up -d`:
+
+   ```yaml
+   services:
+     polaris:
+       ports:
+         - "127.0.0.1:8092:8092"
+   ```
+
+3. To use it from outside your network, put HTTPS in front of port 8092
+   only, with a tunnel or reverse proxy (Cloudflare Tunnel, Caddy, nginx…).
+   Keep the app's own port (`HOST_PORT`) private, as before: anyone who
+   reaches it can make keys. If you already run a gateway that checks keys
+   on a private Docker network, join that network instead of publishing a
+   port.
+
+### Making a key
+
+Open **Settings → API access** and make a key: give it a name, choose
+whether it may only read or may also change things, which stories it
+reaches and, if you like, a date it stops working. The key is shown once:
+copy it then. Its SHA-256 is shown too, for gateways that list keys that
+way. The same page lists your keys with when each was last used, revokes
+them, and shows every change made through the API.
+
+### Connecting an assistant
+
+Assistants connect through the [Model Context Protocol](https://modelcontextprotocol.io)
+at `/mcp` on the API's address, sending the key as
+`Authorization: Bearer <key>`. Polaris then tells the model how a story is
+organised and gives it tools to find items, read and update wiki articles,
+read and write chapters (as Markdown), and reach anything else the app can
+do. For Claude Code:
+
+```bash
+claude mcp add --transport http polaris https://api.example.com/mcp --header "Authorization: Bearer <key>"
+```
+
+Claude Desktop, Open WebUI and clients that read OpenAPI (`/openapi.json`)
+are in [docs/API.md](docs/API.md), with every route and tool.
+
+### How it is kept safe
+
+The API port is the one part of Polaris made to face the internet:
 
 - it answers nothing without a key, and serves no web pages;
-- keys are made and revoked only in the app (Settings → API access), never
-  through the API, so a leaked key can't make more keys;
-- each key is read-only or may change things, reaches every story or only
-  the ones you pick, and can expire on a date;
+- keys are made and revoked only in the app, never through the API, so a
+  leaked key can't make more keys or lock you out;
 - requests from a browser are refused, wrong keys are slowed down and an
-  address that keeps guessing is shut out for a while, each key is limited
-  to 600 requests a minute;
+  address that keeps guessing is shut out for a while, and each key is
+  limited to 600 requests a minute;
 - deleting, importing or restoring whole stories, the fonts and reference
-  libraries and the keys can't be reached;
-- every change is logged with the key that made it (Settings → API access),
-  and before a story's first change through the API each day Polaris keeps
-  a copy of it (Earlier copies in the story picker).
-
-LLM clients use its [Model Context Protocol](https://modelcontextprotocol.io)
-endpoint, `/mcp`, which explains Polaris to the model and offers it tools
-(find, read and update articles, read and write chapters as Markdown, and
-any other route). Clients that read OpenAPI use `/openapi.json`. See
-[docs/API.md](docs/API.md) for the routes, the tools and how to connect
-Claude, Open WebUI and others.
-
-To turn it on, add to `.env`:
-
-```
-API_PORT=8092
-```
-
-and publish that port in a `docker-compose.override.yml` beside
-`docker-compose.yml` (git ignores it, so updates keep it):
-
-```yaml
-services:
-  polaris:
-    ports:
-      - "127.0.0.1:8092:8092"
-```
-
-Then reach it from outside through a tunnel or reverse proxy that gives it
-HTTPS (Cloudflare Tunnel, Caddy, nginx…), pointing at port 8092 only. Keep
-the app's own port (`HOST_PORT`) private, as before: anyone who reaches it
-can make keys. If you already run a gateway that checks keys itself on a
-private Docker network, join that network instead of publishing a port; the
-key's SHA-256 is shown when it is made, for gateways that list keys that way.
+  libraries and the keys themselves can't be reached;
+- before a story's first change through the API each day, Polaris keeps a
+  copy of it (Earlier copies in the story picker), and a chapter keeps its
+  earlier versions as always. A chapter's text is never replaced over
+  dialogue, pictures or notes the assistant can't write back, unless it was
+  told to.
 
 ## Configuration
 

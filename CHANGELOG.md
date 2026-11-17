@@ -4,6 +4,19 @@ What changed in each version of Polaris. The same notes are on the
 [Releases](https://github.com/AstraLumi/polaris/releases) page. Versions are
 Major.Minor.Bugfix: new features raise Minor, fixes raise Bugfix.
 
+## 3.4.0 (2026-11-17)
+
+No database change: stories open as they are. Nothing changes until you turn the API on.
+
+### Added
+
+- **An API, so an AI assistant can work in your stories.** Connect a chat assistant (Claude, Open WebUI and others) and ask it to look things up, fill in wiki articles, add characters and events, or write a scene into a chapter: it reads the story first and saves as you would. It is off until you set `API_PORT` in `.env` and publish that port; see "The API" in the README and `docs/API.md`.
+- **Settings → API access**: make keys (read only, or read and change; every story or only some; optionally until a date), see when each was last used, revoke them, and see every change made through the API.
+- **For assistants**: a Model Context Protocol endpoint (`/mcp`) that explains Polaris to the model and gives it tools to find items, read and update wiki articles, read and write chapters as Markdown, and reach anything else the app can do; the same tools for OpenAPI clients at `/openapi.json`.
+- **Made to face the internet safely.** The API has its own port and is the one part of Polaris made to face the internet: it answers nothing without a key and serves no pages. Keep the app's own port private, as before.
+- Keys are made only in the app, never through the API, and only their SHA-256 is kept. Requests from browsers are refused, wrong keys are slowed and then shut out, and each key is limited to 600 requests a minute. Deleting, importing or restoring whole stories can't be done through it.
+- Before a story's first change through the API each day, Polaris keeps a copy of it (Earlier copies in the story picker). A chapter's text is never replaced over dialogue, pictures or notes the assistant can't write back, unless it was told to.
+
 ## 3.3.1 (2026-11-13)
 
 No database change: stories open as they are.
