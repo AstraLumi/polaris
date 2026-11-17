@@ -123,6 +123,17 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   safe by itself (`safeName`: localhost, an IP, a name without a dot) nor
   in `ALLOWED_HOSTS` is refused with a page saying what to write; the
   tests run with `example.com` listed (`TestMain`). Do not weaken these.
+- **The API** (`docs/API.md`; `backend/apiserver.go`, `apikeys.go`,
+  `apimcp.go`) is a second listener (`API_PORT`) meant to face the
+  internet: no request without a key, none from a browser, no web pages.
+  It reaches a story's routes through `apiServer.forward` (key's stories,
+  read-only keys, the log, the copy before the first change of the day);
+  a tool must call through `call`/`callJSON`, never a handler or the
+  database directly. Keys are made only on the app's port
+  (`/api/api-access`): never register that, story management or the
+  libraries on the API's mux. A new story route is reachable there by
+  itself and listed by `api_guide` (`registerStoryRoutes`); give it a
+  note in `apiRouteNotes` when an LLM would need its fields.
 - **The container runs Polaris as the `polaris` user** (10001), never
   root: `docker/entrypoint.sh` starts as root only to hand the volumes
   over, which is why `docker-compose.yml` adds back `CHOWN`, `SETUID`

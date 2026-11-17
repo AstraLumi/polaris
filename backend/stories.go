@@ -58,6 +58,8 @@ type storyManager struct {
 	reg         *sql.DB
 	fonts       *fontLibrary      // the fonts library, one for every story (fontlib.go)
 	refs        *referenceLibrary // the reference library, one for every story (references.go)
+	keys        *apiKeyStore      // the API's keys (apikeys.go)
+	apiPort     string            // API_PORT when the API listener is on, else ""
 
 	mu      sync.Mutex
 	apps    map[string]*storyApp
@@ -131,6 +133,10 @@ func newStoryManager(dataDir, uploadsRoot string) (*storyManager, error) {
 	if m.refs, err = newReferenceLibrary(reg, uploadsRoot, m); err != nil {
 		reg.Close()
 		return nil, err
+	}
+	if m.keys, err = newAPIKeyStore(reg); err != nil {
+		reg.Close()
+		return nil, fmt.Errorf("create the API keys: %w", err)
 	}
 	return m, nil
 }
@@ -629,6 +635,7 @@ func (m *storyManager) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /uploads/s/{id}/{path...}", m.uploadsHandler)
 	m.fonts.registerRoutes(mux)
 	m.refs.registerRoutes(mux)
+	m.registerAPIKeyRoutes(mux)
 }
 
 func (m *storyManager) fail(w http.ResponseWriter, err error) {

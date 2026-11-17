@@ -185,4 +185,5 @@ export default {
   "Couldn't load the references. Try refreshing.": "No se pudieron cargar las referencias. Intenta recargar.",
   "Polaris wasn't allowed to read the clipboard. Click in the form and press Ctrl+V instead.": "Polaris no tiene permiso para leer el portapapeles. Haz clic en el formulario y presiona Ctrl+V.",
   "Copy a picture and press Ctrl+V here to save it.": "Copia una imagen y presiona Ctrl+V aquí para guardarla.",
+  "e.g. Claude on my laptop": "p. ej., Claude en mi laptop",
 }

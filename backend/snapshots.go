@@ -84,6 +84,17 @@ func (m *storyManager) snapshots(id string) []storySnapshot {
 // snapshotStory makes today's copy when one is due. made is false when the
 // last is recent enough or the story hasn't changed since.
 func (m *storyManager) snapshotStory(id string) (made bool, err error) {
+	return m.snapshotStoryIf(id, false)
+}
+
+// snapshotStoryNow makes a copy even when the last is recent, as long as
+// the story changed since: the API's copy before its first change of the
+// day (apiserver.go).
+func (m *storyManager) snapshotStoryNow(id string) (made bool, err error) {
+	return m.snapshotStoryIf(id, true)
+}
+
+func (m *storyManager) snapshotStoryIf(id string, anyAge bool) (made bool, err error) {
 	if !storyIDPattern.MatchString(id) {
 		return false, errNoStory
 	}
@@ -100,7 +111,7 @@ func (m *storyManager) snapshotStory(id string) (made bool, err error) {
 		last := have[0].at
 		// A commit touches the file, so one untouched since the last copy
 		// holds nothing new.
-		if now.Sub(last) < snapshotEvery || !info.ModTime().UTC().After(last) {
+		if (!anyAge && now.Sub(last) < snapshotEvery) || !info.ModTime().UTC().After(last) {
 			return false, nil
 		}
 	}
@@ -191,12 +202,19 @@ func (m *storyManager) snapshotAll() {
 	}
 }
 
+func autoBackupsOn() bool {
+	switch os.Getenv("AUTO_BACKUPS") {
+	case "off", "0", "false", "no":
+		return false
+	}
+	return true
+}
+
 // snapshotLoop looks every hour until ctx ends: a server that is only on in
 // the evenings still gets its copy that evening. AUTO_BACKUPS=off turns the
 // copies off.
 func (m *storyManager) snapshotLoop(ctx context.Context) {
-	switch os.Getenv("AUTO_BACKUPS") {
-	case "off", "0", "false", "no":
+	if !autoBackupsOn() {
 		log.Print("daily copies are off (AUTO_BACKUPS)")
 		return
 	}

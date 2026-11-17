@@ -38,6 +38,10 @@ services:
       - UPLOADS_DIR=/app/uploads
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-}
       - AUTO_BACKUPS=${AUTO_BACKUPS:-}
+      # The API for programs (an LLM's tools), off unless set; see the
+      # README, "The API". Its port is not published here: add it in a
+      # docker-compose.override.yml, or join a gateway's network.
+      - API_PORT=${API_PORT:-}
     volumes:
       - polaris_data:/data
       - polaris_uploads:/app/uploads

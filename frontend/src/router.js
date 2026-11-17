@@ -73,6 +73,8 @@ const routes = [
   { path: '/write/:volume/pages', name: 'write-pages', component: () => import('./views/BookPagesPage.vue'), meta: { title: tr('Page view') }, props: true },
   // The fonts library: one for every story (fontLibrary.js), loaded on its own.
   { path: '/fonts', name: 'fonts', component: () => import('./views/FontsLibrary.vue'), meta: { title: tr('Fonts') } },
+  // The API's keys (backend/apikeys.go): global, like the fonts library.
+  { path: '/api-access', name: 'api-access', component: () => import('./views/ApiAccess.vue'), meta: { title: tr('API access') } },
   { path: '/wiki', name: 'wiki', component: () => import('./views/WikiHome.vue'), meta: { title: tr('Wiki') } },
   { path: '/wiki/graph', name: 'wiki-graph', component: () => import('./views/GraphView.vue'), meta: { title: tr('Graph') } },
   { path: '/wiki/:type/:id', name: 'wiki-article', component: () => import('./views/WikiArticle.vue'), meta: { title: tr('Wiki') }, props: true },

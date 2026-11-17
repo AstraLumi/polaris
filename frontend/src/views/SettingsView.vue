@@ -405,6 +405,14 @@
       <router-link to="/fonts" class="btn btn-ghost">{{ $t('Open the fonts library') }}</router-link>
     </section>
 
+    <section id="api" class="glass-panel card" :class="{ 'is-flash': flash === 'api' }">
+      <h2>{{ $t('API access') }}</h2>
+      <p class="lede">
+        {{ $t('Keys that let a program, such as an LLM chat, read and change your stories through the API. One list for every story.') }}
+      </p>
+      <router-link to="/api-access" class="btn btn-ghost">{{ $t('Manage API keys') }}</router-link>
+    </section>
+
     <section id="offline" class="glass-panel card" :class="{ 'is-flash': flash === 'offline' }">
       <h2>{{ $t('Reading offline') }}</h2>
       <OfflineCopyCard />
@@ -485,6 +493,7 @@ const SECTIONS = [
   { id: 'sky', label: tr('Sky'), ids: ['sky'] },
   { id: 'blood-types', label: tr('Blood types'), ids: ['blood-types'] },
   { id: 'fonts', label: tr('Fonts'), ids: ['fonts'] },
+  { id: 'api', label: tr('API access'), ids: ['api'] },
   { id: 'offline', label: tr('Reading offline'), ids: ['offline'] },
   { id: 'stats', label: tr('Stats'), ids: ['stats'] },
   { id: 'about', label: tr('About Polaris'), ids: ['about'] },

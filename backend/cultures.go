@@ -737,7 +737,7 @@ func deleteCultureElementHandler(db *sql.DB, uploadsDir string) http.HandlerFunc
 }
 
 // cultureRoutes adds the cultures' API to a story's routes.
-func cultureRoutes(mux *http.ServeMux, db *sql.DB, uploadsDir string) {
+func cultureRoutes(mux routeMux, db *sql.DB, uploadsDir string) {
 	mux.HandleFunc("GET /api/cultures", listCulturesHandler(db))
 	mux.HandleFunc("POST /api/cultures", saveCultureHandler(db, uploadsDir))
 	mux.HandleFunc("GET /api/cultures/{id}", getCultureHandler(db))

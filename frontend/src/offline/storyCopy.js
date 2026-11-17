@@ -44,6 +44,7 @@ export const SKIPPED = {
   'fonts/used': "the fonts library's page, kept by every visit",
   'references/used': "the reference library's page, kept by every visit",
   'fonts/line-metrics': 'measures a font on the server',
+  'api-access': "the API's keys, managed with the connection on",
   'fonts/{id}/license-file': 'a download',
   'stories/{id}/export': 'a download',
   'stories/{id}/snapshots': "the server's own copies, to restore one",

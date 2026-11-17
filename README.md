@@ -225,6 +225,57 @@ starts, by itself. If you keep a compose file of your own with
 `cap_drop: ALL`, add those three under `cap_add`: without them Polaris says
 so in its log and keeps running as root, as before.
 
+## The API
+
+Polaris can open a second port for programs: an LLM chat that reads your
+notes and writes into your chapters, a script, an automation. It is off
+until you set `API_PORT`, and it is the one part of Polaris made to face
+the internet:
+
+- it answers nothing without a key, and serves no web pages;
+- keys are made and revoked only in the app (Settings → API access), never
+  through the API, so a leaked key can't make more keys;
+- each key is read-only or may change things, reaches every story or only
+  the ones you pick, and can expire on a date;
+- requests from a browser are refused, wrong keys are slowed down and an
+  address that keeps guessing is shut out for a while, each key is limited
+  to 600 requests a minute;
+- deleting, importing or restoring whole stories, the fonts and reference
+  libraries and the keys can't be reached;
+- every change is logged with the key that made it (Settings → API access),
+  and before a story's first change through the API each day Polaris keeps
+  a copy of it (Earlier copies in the story picker).
+
+LLM clients use its [Model Context Protocol](https://modelcontextprotocol.io)
+endpoint, `/mcp`, which explains Polaris to the model and offers it tools
+(find, read and update articles, read and write chapters as Markdown, and
+any other route). Clients that read OpenAPI use `/openapi.json`. See
+[docs/API.md](docs/API.md) for the routes, the tools and how to connect
+Claude, Open WebUI and others.
+
+To turn it on, add to `.env`:
+
+```
+API_PORT=8092
+```
+
+and publish that port in a `docker-compose.override.yml` beside
+`docker-compose.yml` (git ignores it, so updates keep it):
+
+```yaml
+services:
+  polaris:
+    ports:
+      - "127.0.0.1:8092:8092"
+```
+
+Then reach it from outside through a tunnel or reverse proxy that gives it
+HTTPS (Cloudflare Tunnel, Caddy, nginx…), pointing at port 8092 only. Keep
+the app's own port (`HOST_PORT`) private, as before: anyone who reaches it
+can make keys. If you already run a gateway that checks keys itself on a
+private Docker network, join that network instead of publishing a port; the
+key's SHA-256 is shown when it is made, for gateways that list keys that way.
+
 ## Configuration
 
 Copy `.env.example` to `.env` and edit it. Docker Compose reads it
@@ -236,6 +287,7 @@ automatically, and git ignores it, so your settings are kept across updates.
 | `ALLOWED_HOSTS` | *(none)* | The domain names you reach Polaris by, separated by commas (`polaris.example.com`). `localhost`, addresses in numbers and names without a dot always work; any other name not listed here is refused. `*` answers to any name. See [The names Polaris answers to](#the-names-polaris-answers-to). |
 | `AUTO_BACKUPS` | on | Polaris keeps a copy of each story on the days it changes (the last 7, then one a week for 4 weeks; "Earlier copies…" in a story's menu). `off` turns that off. They are on the same disk as the story: keep exporting for a backup elsewhere. |
 | `HOST_PORT` | `8091`      | Port on the host.                                                 |
+| `API_PORT`  | *(off)*     | Turns on [the API](#the-api) on this port, inside the container. Publish it yourself. |
 | `POLARIS_VERSION` | `latest` | Release to run, such as `3.3.0`, to stay on it until you change it. |
 
 The application itself reads the following variables. `docker-compose.yml`
@@ -246,6 +298,8 @@ already sets them, so you only need them when
 |---------------|----------------|--------------------------------------------|
 | `PORT`        | `8091`         | Port the server listens on.                |
 | `LISTEN_HOST` | (all)          | Address to listen on, e.g. `127.0.0.1` to accept connections from this machine only. |
+| `API_PORT`    | *(off)*        | Port of [the API](#the-api); must differ from `PORT`. |
+| `API_LISTEN_HOST` | `LISTEN_HOST` | Address the API listens on, when it should differ from the app's. |
 | `DATA_DIR`    | `/data`        | Folder for the story databases.            |
 | `UPLOADS_DIR` | `/app/uploads` | Folder for uploaded pictures and icons.    |
 

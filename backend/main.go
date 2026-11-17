@@ -69,10 +69,33 @@ func main() {
 		ReadHeaderTimeout: 15 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 	}
-	failed := make(chan error, 1)
+	failed := make(chan error, 2)
 	go func() { failed <- srv.ListenAndServe() }()
 	log.Printf("Polaris listening on %s (data: %s, uploads: %s)", addr, dataDir, uploadsRoot)
 	log.Print(describeAllowedHosts(allowedHostsFromEnv()))
+
+	// The API for programs (apiserver.go), on a port of its own so that it
+	// can face the internet while the app stays private. Off unless
+	// API_PORT is set.
+	var apiSrv *http.Server
+	if port := strings.TrimSpace(os.Getenv("API_PORT")); port != "" {
+		if port == getEnv("PORT", "8091") {
+			log.Fatalf("API_PORT must differ from PORT (%s)", port)
+		}
+		mgr.apiPort = port
+		apiAddr := getEnv("API_LISTEN_HOST", os.Getenv("LISTEN_HOST")) + ":" + port
+		apiSrv = &http.Server{
+			Addr:              apiAddr,
+			Handler:           compress(newAPIServer(mgr)),
+			ReadHeaderTimeout: 15 * time.Second,
+			ReadTimeout:       5 * time.Minute,
+			WriteTimeout:      5 * time.Minute,
+			IdleTimeout:       2 * time.Minute,
+			MaxHeaderBytes:    64 << 10,
+		}
+		go func() { failed <- apiSrv.ListenAndServe() }()
+		log.Printf("Polaris API listening on %s (keys: Settings → API access)", apiAddr)
+	}
 
 	// Asked to stop (Ctrl+C, `docker stop`): take no new requests, let the
 	// ones under way finish, then close every database. Docker waits ten
@@ -93,6 +116,9 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Printf("some requests were cut short: %v", err)
 	}
+	if apiSrv != nil {
+		apiSrv.Shutdown(ctx)
+	}
 	mgr.Close()
 }
 
@@ -111,6 +137,18 @@ func newRouter(mgr *storyManager, staticFS fs.FS) http.Handler {
 // dispatching (see stories.go).
 func storyRoutes(db *sql.DB, uploadsDir string, graph *graphCache) *http.ServeMux {
 	mux := http.NewServeMux()
+	registerStoryRoutes(mux, db, uploadsDir, graph)
+	return mux
+}
+
+// routeMux is what the story's routes are registered on: a ServeMux, or
+// the API's list of them (patternRecorder, apimcp.go).
+type routeMux interface {
+	HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request))
+	Handle(pattern string, handler http.Handler)
+}
+
+func registerStoryRoutes(mux routeMux, db *sql.DB, uploadsDir string, graph *graphCache) {
 
 	mux.HandleFunc("GET /api/health", healthHandler(db))
 
@@ -340,7 +378,6 @@ func storyRoutes(db *sql.DB, uploadsDir string, graph *graphCache) *http.ServeMu
 	mux.HandleFunc("GET /api/spelling/words", getSpellingWordsHandler(db))
 	mux.HandleFunc("POST /api/spelling/words", updateSpellingWordsHandler(db))
 
-	return mux
 }
 
 // spaHandler serves embedded static files normally, but falls back to
