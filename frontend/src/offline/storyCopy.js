@@ -11,7 +11,7 @@
 export const SINGLES = [
   'home', 'settings', 'stat-system', 'stat-system/defaults', 'character-options', 'location-options',
   'assets/summary', 'characters/heights', 'event-tags', 'timeline', 'map', 'planet', 'planet/layers',
-  'solar', 'locations', 'culture-elements', 'wiki', 'wiki/graph', 'spelling/words',
+  'solar', 'locations', 'culture-elements', 'wiki', 'wiki/graph', 'spelling/words', 'drafts',
 ]
 
 // A list, then each of its items by id (and what else an item's page asks).
@@ -32,8 +32,9 @@ export const LISTS = {
 }
 
 // Found in other answers: each version of a character, each wiki article
-// and where it appears, each other planet's or moon's map.
-export const FOLLOWED = ['versions/{id}', 'wiki/{type}/{id}', 'appears/{type}/{id}', 'solar/bodies/{id}/map']
+// and where it appears, each other planet's or moon's map, each draft's
+// note or board.
+export const FOLLOWED = ['versions/{id}', 'wiki/{type}/{id}', 'appears/{type}/{id}', 'solar/bodies/{id}/map', 'drafts/{id}/note', 'drafts/{id}/board']
 
 // Not part of the copy, and why.
 export const SKIPPED = {
@@ -97,6 +98,7 @@ export async function copyStory({ get, onProgress = () => {}, parallel = 6 }) {
         }
       }
       if (path === 'solar') for (const id of idsOf(json?.bodies)) add(`solar/bodies/${id}/map`)
+      if (path === 'drafts') for (const p of itemsOf(json?.pages)) if (p?.id != null) add(`drafts/${p.id}/${p.kind === 'board' ? 'board' : 'note'}`)
     })
   }
   for (const [list, each] of Object.entries(LISTS)) {

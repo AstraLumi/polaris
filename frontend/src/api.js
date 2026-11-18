@@ -715,6 +715,40 @@ export const culturesApi = {
   removeElement: (id) => request(`/culture-elements/${id}`, { method: 'DELETE' }, 'failed to delete the element'),
 }
 
+// Drafts (backend/drafts.go): notes and boards of cards, kept apart from
+// the story. A note's text goes through draftNoteApi (editor/api.js).
+void [
+  tr('failed to load the drafts'), tr('failed to add the draft'), tr('failed to rename the draft'),
+  tr('failed to delete the draft'), tr('draft not found'), tr('a draft is a note or a board'),
+  tr('failed to load the board'), tr('board not found'), tr('failed to add the card'), tr('failed to save the card'),
+  tr('failed to delete the card'), tr('card not found'), tr('this board is full'), tr('that title is too long'),
+  tr("that category doesn't exist"), tr("a card's place and size must be numbers"), tr('failed to join the cards'),
+  tr("a card can't be joined to itself"), tr('both cards must be on this board'), tr('that label is too long'),
+  tr('failed to save the line'), tr('failed to delete the line'), tr('line not found'), tr('failed to add the category'),
+  tr('failed to save the category'), tr('failed to delete the category'), tr('category not found'),
+  tr('a category needs a short name'), tr('a category needs a colour like #aa3344'),
+]
+export const draftsApi = {
+  // { pages: [{ id, kind, title, cards, words, updated_at }], categories: [{ id, name, color }] }
+  list: () => request('/drafts', undefined, 'failed to load the drafts'),
+  create: (kind, title) => request('/drafts', jsonBody('POST', { kind, title }), 'failed to add the draft'),
+  rename: (id, title) => request(`/drafts/${id}`, jsonBody('PUT', { title }), 'failed to rename the draft'),
+  remove: (id) => request(`/drafts/${id}`, { method: 'DELETE' }, 'failed to delete the draft'),
+  reorder: (ids) => request('/drafts/order', jsonBody('PUT', { ids }), 'failed to save the order'),
+  // { cards: [{ id, title, category_id, body, x, y, w, h }], links: [{ id, a, b, label }] }
+  board: (id) => request(`/drafts/${id}/board`, undefined, 'failed to load the board'),
+  addCard: (pageId, card) => request(`/drafts/${pageId}/cards`, jsonBody('POST', card), 'failed to add the card'),
+  // Only the fields sent change; { no_category: true } clears the category.
+  saveCard: (id, patch) => request(`/draft-cards/${id}`, jsonBody('PUT', patch), 'failed to save the card'),
+  removeCard: (id) => request(`/draft-cards/${id}`, { method: 'DELETE' }, 'failed to delete the card'),
+  addLink: (pageId, a, b, label = '') => request(`/drafts/${pageId}/links`, jsonBody('POST', { a, b, label }), 'failed to join the cards'),
+  saveLink: (id, label) => request(`/draft-links/${id}`, jsonBody('PUT', { label }), 'failed to save the line'),
+  removeLink: (id) => request(`/draft-links/${id}`, { method: 'DELETE' }, 'failed to delete the line'),
+  addCategory: (name, color) => request('/draft-categories', jsonBody('POST', { name, color }), 'failed to add the category'),
+  saveCategory: (id, name, color) => request(`/draft-categories/${id}`, jsonBody('PUT', { name, color }), 'failed to save the category'),
+  removeCategory: (id) => request(`/draft-categories/${id}`, { method: 'DELETE' }, 'failed to delete the category'),
+}
+
 export const chaptersApi = {
   list: () => request('/chapters', undefined, 'failed to load chapters'),
   get: (id) => request(`/chapters/${id}`, undefined, 'chapter not found'),

@@ -183,6 +183,7 @@ const navGroups = [
       { label: tr('Characters'), to: '/characters', icon: 'characters', tip: tr('Everyone in the story, with their sheets and versions') },
       { label: tr('Factions'), to: '/factions', icon: 'factions', tip: tr('Guilds, orders, houses and who belongs to them') },
       { label: tr('Chapters'), to: '/chapters', icon: 'chapters', tip: tr('Volumes and chapters, with your notes and what happens in each') },
+      { label: tr('Drafts'), to: '/drafts', icon: 'drafts', tip: tr('Loose notes and idea boards, kept apart from the story') },
     ],
   },
   {

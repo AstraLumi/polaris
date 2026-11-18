@@ -992,6 +992,62 @@ input[type='radio'] {
   background: rgba(var(--wash), 0.05);
 }
 
+.md h1,
+.md h2 {
+  margin: 1.1rem 0 0.5rem;
+  line-height: 1.25;
+}
+
+.md h1 {
+  font-size: 1.5rem;
+}
+
+.md h2 {
+  font-size: 1.25rem;
+}
+
+.md > :first-child {
+  margin-top: 0;
+}
+
+.md .subtext {
+  margin: -0.4rem 0 0.85rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* ||spoiler||: a dark bar until clicked (revealSpoiler in markdown.js). */
+.md .spoiler {
+  padding: 0 0.15rem;
+  border-radius: 4px;
+  background: var(--text-muted);
+  color: transparent;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.md .spoiler * {
+  visibility: hidden;
+}
+
+.md .spoiler:hover {
+  background: var(--text-primary);
+}
+
+.md .spoiler:focus-visible {
+  outline: 2px solid var(--accent);
+}
+
+.md .spoiler.is-shown {
+  background: rgba(var(--wash), 0.1);
+  color: inherit;
+  cursor: auto;
+}
+
+.md .spoiler.is-shown * {
+  visibility: visible;
+}
+
 .md .wikilink.is-missing {
   color: var(--danger-text);
   border-bottom: 1px dashed var(--danger-text);

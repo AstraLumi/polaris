@@ -186,4 +186,8 @@ export default {
   "Polaris wasn't allowed to read the clipboard. Click in the form and press Ctrl+V instead.": "Polaris no tiene permiso para leer el portapapeles. Haz clic en el formulario y presiona Ctrl+V.",
   "Copy a picture and press Ctrl+V here to save it.": "Copia una imagen y presiona Ctrl+V aquí para guardarla.",
   "e.g. Claude on my laptop": "p. ej., Claude en mi laptop",
+  "An empty board. Add a card, then drag from the dot on its edge to another card to join them.": "Un tablero vacío. Agrega una tarjeta y arrastra desde el punto de su borde hasta otra tarjeta para unirlas.",
+  "failed to add the card": "no se pudo agregar la tarjeta",
+  "failed to add the category": "no se pudo agregar la categoría",
+  "failed to add the draft": "no se pudo agregar el borrador",
 }

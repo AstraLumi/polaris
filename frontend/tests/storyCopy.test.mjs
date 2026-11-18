@@ -42,6 +42,7 @@ const server = {
     { type: 'location', id: 7 },
   ],
   solar: { bodies: [{ id: 3 }, { id: 4 }] },
+  drafts: { pages: [{ id: 8, kind: 'board' }, { id: 9, kind: 'note' }], categories: [] },
   events: [{ id: 5 }],
   'events/5': { id: 5, description: 'See ![](/uploads/s/ab12/battle.jpg)' },
 }
@@ -69,7 +70,7 @@ for (const path of [
   'characters/1/current', 'characters/1/family', 'characters/1/connections', 'characters/1/lines', 'characters/2/versions',
   'versions/11', 'versions/12', 'versions/21',
   'wiki/character/1', 'appears/character/1', 'wiki/location/7', 'appears/location/7',
-  'solar/bodies/3/map', 'solar/bodies/4/map', 'events/5',
+  'solar/bodies/3/map', 'solar/bodies/4/map', 'events/5', 'drafts/8/board', 'drafts/9/note',
 ]) {
   assert.ok(asked.includes(path), path)
 }

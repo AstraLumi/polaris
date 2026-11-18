@@ -67,7 +67,7 @@
           </div>
         </div>
       </div>
-      <button v-bind="btn(t('Format Painter'), painter)" class="foldable" @click="onPainter" @dblclick="$emit('painter', 'lock')"><TbIcon name="brush" /></button>
+      <button v-if="!lite" v-bind="btn(t('Format Painter'), painter)" class="foldable" @click="onPainter" @dblclick="$emit('painter', 'lock')"><TbIcon name="brush" /></button>
       <button v-bind="btn(t('Clear formatting'))" class="foldable" @click="exec(clearFormatting)"><TbIcon name="clear" /></button>
     </div>
 
@@ -99,9 +99,9 @@
           <option v-for="l in LINE_HEIGHTS" :key="l" :value="String(l)">{{ l }}</option>
         </select>
       </label>
-      <button v-bind="btn(t('Keep with next'), !!fmt.keepNext)" :disabled="online" @click="exec(setParaAttrs({ keepNext: !fmt.keepNext }))"><TbIcon name="keep-next" /></button>
-      <button v-bind="btn(t('Keep lines together'), !!fmt.keepLines)" :disabled="online" @click="exec(setParaAttrs({ keepLines: !fmt.keepLines }))"><TbIcon name="keep-lines" /></button>
-      <button v-bind="btn(t('Page break before'), !!fmt.pageBreakBefore)" :disabled="online" @click="exec(setParaAttrs({ pageBreakBefore: !fmt.pageBreakBefore }))"><TbIcon name="break-before" /></button>
+      <button v-if="!lite" v-bind="btn(t('Keep with next'), !!fmt.keepNext)" :disabled="online" @click="exec(setParaAttrs({ keepNext: !fmt.keepNext }))"><TbIcon name="keep-next" /></button>
+      <button v-if="!lite" v-bind="btn(t('Keep lines together'), !!fmt.keepLines)" :disabled="online" @click="exec(setParaAttrs({ keepLines: !fmt.keepLines }))"><TbIcon name="keep-lines" /></button>
+      <button v-if="!lite" v-bind="btn(t('Page break before'), !!fmt.pageBreakBefore)" :disabled="online" @click="exec(setParaAttrs({ pageBreakBefore: !fmt.pageBreakBefore }))"><TbIcon name="break-before" /></button>
       <div class="tb-pop">
         <button v-bind="btn(t('Box, shading and drop cap'), !!(fmt.boxWidth || fmt.shade || fmt.dropCap))" @click="toggle('box')"><span class="glyph">▢</span></button>
         <div v-if="open === 'box'" class="pop glass-panel panel-solid box-pop" @mousedown.stop>
@@ -129,10 +129,10 @@
       <button v-bind="btn(t('Bulleted list'), fmt.list === 'bullet_list')" class="foldable" @click="exec(toggleList('bullet_list'))"><TbIcon name="list-bullet" /></button>
       <button v-bind="btn(t('Numbered list'), fmt.list === 'ordered_list')" class="foldable" @click="exec(toggleList('ordered_list'))"><TbIcon name="list-number" /></button>
       <button v-bind="btn(t('Scene break'))" @click="exec(insertBlock('scene_break'))"><span class="glyph">⁂</span></button>
-      <button v-bind="btn(t('Symbols'), panel === 'symbols')" @click="$emit('panel', 'symbols')"><span class="glyph">Ω</span></button>
-      <button v-bind="btn(t('Page break') + ' (Ctrl+Enter)')" :disabled="online" @click="exec(insertBlock('page_break'))"><TbIcon name="page-break" /></button>
-      <button v-bind="btn(t('Table of contents'))" class="foldable" :disabled="online" @click="exec(insertBlock('toc', { title: t('Contents') }))"><TbIcon name="toc" /></button>
-      <button v-bind="btn(t('Insert picture'), fmt.atom === 'image')" :disabled="uploading" @click="$emit('picture')"><TbIcon name="picture" /></button>
+      <button v-if="!lite" v-bind="btn(t('Symbols'), panel === 'symbols')" @click="$emit('panel', 'symbols')"><span class="glyph">Ω</span></button>
+      <button v-if="!lite" v-bind="btn(t('Page break') + ' (Ctrl+Enter)')" :disabled="online" @click="exec(insertBlock('page_break'))"><TbIcon name="page-break" /></button>
+      <button v-if="!lite" v-bind="btn(t('Table of contents'))" class="foldable" :disabled="online" @click="exec(insertBlock('toc', { title: t('Contents') }))"><TbIcon name="toc" /></button>
+      <button v-if="!lite" v-bind="btn(t('Insert picture'), fmt.atom === 'image')" :disabled="uploading" @click="$emit('picture')"><TbIcon name="picture" /></button>
       <div class="tb-pop foldable">
         <button v-bind="btn(t('Insert table'))" :disabled="!canTable" @click="toggle('table')"><TbIcon name="table" /></button>
         <div v-if="open === 'table'" class="pop glass-panel panel-solid table-pop" @mousedown.stop @mouseleave="grid = { r: 0, c: 0 }">
@@ -155,8 +155,8 @@
           <p class="grid-size">{{ grid.r ? $t('{rows} × {cols} table', { rows: grid.r, cols: grid.c }) : $t('Insert table') }}</p>
         </div>
       </div>
-      <button v-bind="btn(t('Insert footnote') + ' (Ctrl+Alt+F)')" class="foldable" :disabled="!canNote" @click="exec(insertNote('footnote'))"><TbIcon name="footnote" /></button>
-      <button v-bind="btn(t('Insert endnote') + ' (Ctrl+Alt+D)')" class="foldable" :disabled="!canNote" @click="exec(insertNote('endnote'))"><TbIcon name="endnote" /></button>
+      <button v-if="!lite" v-bind="btn(t('Insert footnote') + ' (Ctrl+Alt+F)')" class="foldable" :disabled="!canNote" @click="exec(insertNote('footnote'))"><TbIcon name="footnote" /></button>
+      <button v-if="!lite" v-bind="btn(t('Insert endnote') + ' (Ctrl+Alt+D)')" class="foldable" :disabled="!canNote" @click="exec(insertNote('endnote'))"><TbIcon name="endnote" /></button>
       <div class="tb-pop">
         <button v-bind="btn(t('Web link'), !!fmt.link)" @click="openLink"><TbIcon name="link" /></button>
         <form v-if="open === 'link'" class="pop glass-panel panel-solid link-pop" @mousedown.stop @submit.prevent="applyLink">
@@ -169,7 +169,7 @@
       </div>
     </div>
 
-    <div class="tb-group tools">
+    <div v-if="!lite" class="tb-group tools">
       <button v-bind="btn(t('Find and replace') + ' (Ctrl+F)')" @click="$emit('find')"><TbIcon name="find" /></button>
       <div class="tb-pop copy-btn">
         <button v-bind="btn(copied ? t('Copied') : hasPages ? t('Copy text') : t('Copy the whole chapter'), copied)" @mousedown.stop @click="onCopy"><TbIcon :name="copied ? 'check' : 'copy'" /></button>
@@ -241,6 +241,9 @@ const props = defineProps({
   spellOn: { type: Boolean, default: false }, // the spellchecker (useSpellcheck)
   showTags: { type: Boolean, default: true }, // the underlines of tagged characters and spells
   painter: { type: Boolean, default: false }, // the Format Painter is armed
+  // Only the tools that work outside a book (a draft note): no pages,
+  // notes, pictures, comments, panels or chapter tools.
+  lite: { type: Boolean, default: false },
   fonts: { type: Array, default: () => [] }, // the font picker's list
   copied: { type: Boolean, default: false }, // the chapter was just copied
 })

@@ -297,6 +297,17 @@ on a rough Earth (`frontend/tests/earthLike.mjs`):
   deleted reference just stops showing. The element kinds and reference
   kinds exist twice (`cultures.js`/`referenceLibrary.js` and the Go
   lists; `cultures.test.mjs` compares them): change both.
+- **Drafts** (`backend/drafts.go`, schema 49, `/drafts`): notes (the
+  writing editor's document, `DraftNote.vue` with `WriteToolbar`'s
+  `lite`) and boards of cards (`DraftBoard.vue`, geometry in
+  `src/drafts/board.js`). A card's body is in `wikiLinkColumns` so its
+  links are stored by id, but links go one way: nothing of the wiki
+  (backlinks, graph, search) may read the drafts. A kept story copies
+  them for reading offline (each page's note or board, `storyCopy.js`);
+  boards pinch to zoom with two fingers.
+- **Markdown is Discord's syntax** everywhere outside the writing editor
+  (`markdown.js`: `__underline__`, `||spoiler||`, `-# subtext`, `>>>`;
+  `{ headings: 'full' }` for h1-h3, the wiki shifts them under its h2).
 - Birth date, blood type and Born in belong to the character (`characters`
   columns, schema 23), not to a version; the version form edits them for
   all versions.

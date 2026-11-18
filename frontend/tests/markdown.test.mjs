@@ -35,6 +35,17 @@ assert.equal(md('1. a\n2. b'), '<ol><li>a</li><li>b</li></ol>')
 assert.equal(md('- a\n  - b\n- c'), '<ul><li>a<ul><li>b</li></ul></li><li>c</li></ul>')
 assert.equal(md('> quoted'), '<blockquote><p>quoted</p></blockquote>')
 assert.equal(md('---'), '<hr />')
+
+// Discord's syntax: underline, spoilers, subtext, >>> and full-size headings.
+assert.equal(md('__under__ and ***both***'), '<p><u>under</u> and <em><strong>both</strong></em></p>')
+assert.ok(/^<p>a <span class="spoiler" role="button" tabindex="0" title="[^"]+">hidden<\/span><\/p>$/.test(md('a ||hidden||')))
+assert.equal(md('-# small print'), '<p class="subtext">small print</p>')
+assert.equal(md('line\n-# small'), '<p>line</p>\n<p class="subtext">small</p>')
+assert.equal(md('> one\n>>> all\nof it'), '<blockquote><p>one</p></blockquote>\n<blockquote><p>all<br />of it</p></blockquote>')
+const full = (s) => renderMarkdown(s, resolve, { headings: 'full' })
+assert.equal(full('# T\n## S\n### SS'), '<h1>T</h1>\n<h2>S</h2>\n<h3>SS</h3>')
+assert.equal(full('* a\n   * b'), '<ul><li>a<ul><li>b</li></ul></li></ul>')
+assert.ok(!md('||<b>x</b>||').includes('<b>'))
 assert.equal(md('```\n<b>\n```'), '<pre><code>&lt;b&gt;</code></pre>')
 assert.ok(md('| a | b |\n|---|--:|\n| 1 | 2 |').includes('<th style="text-align:right">b</th>'))
 

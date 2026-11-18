@@ -105,6 +105,8 @@ var storyOnlyTables = []string{
 	// The cultures of the world and their elements (cultures.go).
 	"cultures", "culture_kingdoms", "culture_elements",
 	"culture_element_pictures", "culture_element_tags", "culture_element_refs",
+	// The drafts: notes and boards kept apart from the story (drafts.go).
+	"draft_pages", "draft_categories", "draft_cards", "draft_links",
 }
 
 func isNullCol(t assetTable, col string) bool {

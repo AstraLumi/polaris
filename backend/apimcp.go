@@ -68,6 +68,11 @@ var apiRouteNotes = map[string]string{
 	"GET /api/factions":                  "every faction",
 	"GET /api/settings":                  "the story's settings: calendar, map",
 	"GET /api/stat-system":               "the story's stats and formulas",
+	"GET /api/drafts":                    "the writer's drafts (kept apart from the story): notes and boards, and the card categories",
+	"GET /api/drafts/{id}/board":         "a board's cards (title, category_id, Markdown body, x, y, w, h) and the lines between them (a, b, label)",
+	"POST /api/drafts/{id}/cards":        "json: {title, category_id, body, x, y, w, h}",
+	"PUT /api/draft-cards/{id}":          "json: only the fields to change; {no_category: true} clears the category",
+	"POST /api/drafts/{id}/links":        "json: {a, b, label}: join two cards of this board",
 }
 
 type apiTool struct {

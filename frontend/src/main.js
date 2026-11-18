@@ -1,9 +1,10 @@
-import { createApp } from 'vue'
+import { createApp, watch } from 'vue'
 import App from './App.vue'
 import router from './router'
 import './style.css'
 import { loadSavedTheme } from './theme'
-import { loadSavedLocale, i18nPlugin } from './i18n'
+import { loadSavedLocale, i18nPlugin, locale, t } from './i18n'
+import { revealSpoiler, setSpoilerTitle } from './markdown'
 import { trackRecent } from './recentTracker'
 import { retryPage } from './navigation'
 import { registerServiceWorker } from './offline/index.js'
@@ -28,12 +29,18 @@ document.addEventListener(
   true,
 )
 
+// A ||spoiler|| in any rendered Markdown (markdown.js) shows on a click,
+// which goes no further: a link inside it isn't followed by that click.
+document.addEventListener('click', revealSpoiler, true)
+document.addEventListener('keydown', revealSpoiler, true)
+
 // Remember the items the writer opens (the search and the home page offer them).
 trackRecent(router)
 
 // The page shows once its language is loaded (i18n.js), so it never
 // appears in English first.
 loadSavedLocale().finally(() => {
+  watch(locale, () => setSpoilerTitle(t('Spoiler: click to show')), { immediate: true })
   const app = createApp(App).use(router).use(i18nPlugin)
   // "Try again" beside any page's load error (navigation.js).
   app.config.globalProperties.$retryPage = retryPage

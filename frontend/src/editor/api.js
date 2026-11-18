@@ -3,6 +3,7 @@
 import { t, tr } from '../i18n'
 import { STORY_API } from '../stories'
 import { reportReach } from '../offline/connection.js'
+import { send } from '../request.js'
 
 // Messages these calls can give (backend editor.go, chaptertext.go,
 // editorimport.go, docx.go); listed so they get translated.
@@ -96,6 +97,25 @@ export const booksApi = {
     fd.append('file', file)
     return call(`/books/${volume}/pictures`, { method: 'POST', body: fd }, 'failed to save the picture')
   },
+}
+
+// A draft note's text (backend/drafts.go): the same document as a
+// chapter's, saved on its version (409 with the stored note otherwise).
+void [tr('failed to load the note'), tr('failed to save the note'), tr('note not found'), tr('the note is too long to save in one piece'),
+  tr("the note's text is missing"), tr("the note's text is not valid"), tr('the note is too long to save in one piece; split it into two notes')]
+export const draftNoteApi = {
+  // { doc, version, words, updated_at }
+  // Read through `send`, so a story kept on this device is read offline
+  // (offline/kept.js); saves need the connection.
+  get: async (id) => {
+    const res = await send(`${STORY_API}/drafts/${id}/note`)
+    if (!res.ok) {
+      const text = (await res.text().catch(() => '')).trim()
+      throw new ApiError(t(text.length < 200 && text ? text : 'failed to load the note'), res.status)
+    }
+    return res.json()
+  },
+  save: (id, doc, baseVersion) => call(`/drafts/${id}/note`, json('PUT', { doc, base_version: baseVersion }), 'failed to save the note'),
 }
 
 export const textApi = {

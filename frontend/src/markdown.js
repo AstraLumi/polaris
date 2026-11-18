@@ -2,10 +2,13 @@
 // HTML-escaped first, so the output can go straight into v-html: no script,
 // no raw HTML, and only http(s), mailto, relative and #anchor links.
 //
-// Supported: # headings (shown as h3-h6, the article's own sections are h2),
-// paragraphs (a single line break stays a line break), **bold**, *italic*,
-// ~~strike~~, `code`, fenced code, > quotes, - / 1. lists (nested by two
-// spaces), --- rules, pipe tables and [text](url) links. [[type#id]],
+// The syntax is Discord's, as people already know it: # headings (in the
+// wiki shown as h3-h6, the article's own sections being h2; at full size
+// with { headings: 'full' }), -# subtext, paragraphs (a single line break
+// stays a line break), **bold**, *italic*, __underline__, ~~strike~~,
+// ||spoiler|| (hidden until clicked: revealSpoiler), `code`, fenced code,
+// > quotes and >>> (quotes everything after it), - / 1. lists (nested by
+// two spaces), --- rules, pipe tables and [text](url) links. [[type#id]],
 // [[type#id|text]], and the typed [[Article]], [[Article|text]] and
 // [[type:Article]] link to other wiki articles (wikiLinks.js); the `resolve`
 // callback (makeLinkResolver) turns the text inside into { type, id, name }
@@ -62,11 +65,34 @@ function inline(raw, resolve) {
 
   s = s
     .replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/__([^_\n]+?)__/g, '<u>$1</u>')
     .replace(/(^|[^*\w])\*([^*\n]+?)\*(?!\w)/g, '$1<em>$2</em>')
     .replace(/(^|[^\w])_([^_\n]+?)_(?!\w)/g, '$1<em>$2</em>')
     .replace(/~~([^~\n]+?)~~/g, '<del>$1</del>')
+    .replace(/\|\|([^|\n]+?)\|\|/g, `<span class="spoiler" role="button" tabindex="0" title="${SPOILER_TITLE}">$1</span>`)
 
   return s.replace(/\u0000(\d+)\u0000/g, (m, i) => stash[Number(i)])
+}
+
+// The spoiler's hint is English: markdown.js stays free of the catalogs
+// (node tests import it); setSpoilerTitle gives it the reader's language.
+let SPOILER_TITLE = 'Spoiler: click to show'
+export function setSpoilerTitle(text) {
+  SPOILER_TITLE = escapeHtml(String(text || SPOILER_TITLE))
+}
+
+// revealSpoiler shows the spoiler a click (or Enter / Space) landed on;
+// true when it did, so the page can stop the click there.
+export function revealSpoiler(e) {
+  const s = e.target && e.target.closest && e.target.closest('.spoiler:not(.is-shown)')
+  if (!s) return false
+  if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return false
+  s.classList.add('is-shown')
+  s.removeAttribute('role')
+  s.removeAttribute('title')
+  e.preventDefault()
+  e.stopPropagation()
+  return true
 }
 
 const LIST_RE = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/
@@ -109,7 +135,10 @@ function renderList(lines, i, resolve) {
   return { html, next: i }
 }
 
-export function renderMarkdown(text, resolve) {
+// opts.headings: 'wiki' (the default) shows # as h3, under the article's
+// own h2 sections; 'full' shows # / ## / ### as h1-h3, as Discord does.
+export function renderMarkdown(text, resolve, opts = {}) {
+  const shift = opts.headings === 'full' ? 0 : 2
   const lines = String(text || '').replace(/\r\n?/g, '\n').split('\n')
   const out = []
   let i = 0
@@ -130,9 +159,16 @@ export function renderMarkdown(text, resolve) {
       continue
     }
 
+    const sub = /^\s*-#\s+(.*)$/.exec(line)
+    if (sub) {
+      out.push(`<p class="subtext">${inline(sub[1], resolve)}</p>`)
+      i++
+      continue
+    }
+
     const h = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line)
     if (h) {
-      const level = Math.min(h[1].length + 2, 6)
+      const level = Math.min(h[1].length + shift, 6)
       out.push(`<h${level}>${inline(h[2], resolve)}</h${level}>`)
       i++
       continue
@@ -144,10 +180,16 @@ export function renderMarkdown(text, resolve) {
       continue
     }
 
+    if (/^\s*>>>/.test(line)) {
+      const rest = [line.replace(/^\s*>>>\s?/, ''), ...lines.slice(i + 1)]
+      out.push(`<blockquote>${renderMarkdown(rest.join('\n'), resolve, opts)}</blockquote>`)
+      break
+    }
+
     if (/^\s*>/.test(line)) {
       const quote = []
-      while (i < lines.length && /^\s*>/.test(lines[i])) quote.push(lines[i++].replace(/^\s*>\s?/, ''))
-      out.push(`<blockquote>${renderMarkdown(quote.join('\n'), resolve)}</blockquote>`)
+      while (i < lines.length && /^\s*>/.test(lines[i]) && !/^\s*>>>/.test(lines[i])) quote.push(lines[i++].replace(/^\s*>\s?/, ''))
+      out.push(`<blockquote>${renderMarkdown(quote.join('\n'), resolve, opts)}</blockquote>`)
       continue
     }
 
@@ -178,7 +220,7 @@ export function renderMarkdown(text, resolve) {
     while (
       i < lines.length &&
       lines[i].trim() !== '' &&
-      !/^\s*(```|#{1,6}\s|>)/.test(lines[i]) &&
+      !/^\s*(```|#{1,6}\s|>|-#\s)/.test(lines[i]) &&
       !LIST_RE.test(lines[i]) &&
       !/^\s*([-*_])(\s*\1){2,}\s*$/.test(lines[i])
     ) {

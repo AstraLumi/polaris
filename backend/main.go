@@ -328,6 +328,7 @@ func registerStoryRoutes(mux routeMux, db *sql.DB, uploadsDir string, graph *gra
 	mux.HandleFunc("DELETE /api/creatures/{id}", deleteCreatureHandler(db, uploadsDir))
 
 	cultureRoutes(mux, db, uploadsDir) // cultures.go
+	draftRoutes(mux, db)               // drafts.go
 
 	mux.HandleFunc("GET /api/factions", listFactionsHandler(db))
 	mux.HandleFunc("GET /api/factions/{id}", getFactionHandler(db))

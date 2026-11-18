@@ -24,6 +24,8 @@ const ICONS = {
     'M12 13c-3 0-5 3-5 5a2 2 0 0 0 2 2c1 0 2-.6 3-.6s2 .6 3 .6a2 2 0 0 0 2-2c0-2-2-5-5-5z',
     circle(5.5, 10.5, 1.6), circle(9.5, 6, 1.6), circle(14.5, 6, 1.6), circle(18.5, 10.5, 1.6),
   ],
+  // Two notes, one pinned over the other.
+  drafts: ['M4 7h11v13H4z', 'M9 4h11v13h-2', 'M7 11h5', 'M7 14h5', 'M7 17h3'],
   // A coat on a hanger.
   cultures: ['M12 5a1.6 1.6 0 1 1 1.6 1.6c-.9 0-1.6.6-1.6 1.4', 'M12 8L3 14.5V17h18v-2.5z'],
   // Pictures pinned to a board.

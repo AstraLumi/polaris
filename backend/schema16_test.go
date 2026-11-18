@@ -23,9 +23,26 @@ func rollBackSchema47(t *testing.T, db *sql.DB) {
 	}
 }
 
+// rollBackSchema49 turns a fresh database back into schema 48: no drafts.
+func rollBackSchema49(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, q := range []string{
+		`DROP TABLE draft_links`,
+		`DROP TABLE draft_cards`,
+		`DROP TABLE draft_categories`,
+		`DROP TABLE draft_pages`,
+		`UPDATE schema_meta SET value = '48' WHERE key = 'schema_version'`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+}
+
 // rollBackSchema48 turns a fresh database back into schema 47: no cultures.
 func rollBackSchema48(t *testing.T, db *sql.DB) {
 	t.Helper()
+	rollBackSchema49(t, db)
 	for _, q := range []string{
 		`DROP TRIGGER wiki_cleanup_cultures`,
 		`DROP TABLE culture_element_refs`,

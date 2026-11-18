@@ -31,7 +31,7 @@
       @keydown="onKey"
     ></textarea>
     <!-- eslint-disable-next-line vue/no-v-html -->
-    <div v-if="preview && modelValue.trim()" class="md md-preview" :style="{ minHeight: previewHeight }" @click="onPreviewClick" v-html="renderMarkdown(modelValue, resolve)"></div>
+    <div v-if="preview && modelValue.trim()" class="md md-preview" :style="{ minHeight: previewHeight }" @click="onPreviewClick" v-html="renderMarkdown(modelValue, resolve, { headings })"></div>
     <p v-else-if="preview" class="md-preview empty" :style="{ minHeight: previewHeight }">{{ $t('Nothing to preview yet.') }}</p>
 
     <WikiLinkPanel v-if="linkOpen" :items="items" :resolve="resolve" :text="linkStart" @pick="pick" @close="closeLinkPanel" />
@@ -59,6 +59,8 @@ const props = defineProps({
   // The wiki's article list (wikiApi.list()) and makeLinkResolver() over it.
   items: { type: Array, default: () => [] },
   resolve: { type: Function, default: null },
+  // How # headings show in the preview (renderMarkdown's opts.headings).
+  headings: { type: String, default: 'wiki' },
 })
 const emit = defineEmits(['update:modelValue'])
 const router = useRouter()
@@ -91,7 +93,9 @@ const run = (fn, ...args) => () => apply(fn(...sel(), ...args))
 const buttons = computed(() => [
   { key: 'b', text: 'B', cls: 'is-bold', title: t('Bold (Ctrl+B)'), run: run(wrapInline, '**', t('bold text')) },
   { key: 'i', text: 'I', cls: 'is-italic', title: t('Italic (Ctrl+I)'), run: run(wrapInline, '*', t('italic text')) },
+  { key: 'u', text: 'U', cls: 'is-under', title: t('Underline (Ctrl+U)'), run: run(wrapInline, '__', t('underlined text')) },
   { key: 's', text: 'S', cls: 'is-strike', title: t('Strikethrough'), run: run(wrapInline, '~~', t('struck text')) },
+  { key: 'sp', text: '||', cls: 'is-spoiler', title: t('Spoiler'), run: run(wrapInline, '||', t('hidden text')) },
   { key: 'h', text: 'H', cls: 'is-bold', title: t('Heading'), run: run(toggleLines, 'heading') },
   { key: 'ul', title: t('Bulleted list'), d: ['M9 6h11', 'M9 12h11', 'M9 18h11', 'M4.5 6h.01', 'M4.5 12h.01', 'M4.5 18h.01'], run: run(toggleLines, 'bullet') },
   { key: 'ol', title: t('Numbered list'), d: ['M10 6h10', 'M10 12h10', 'M10 18h10', 'M4 4h1v4', 'M4 8h2', 'M4 14h2l-2 4h2'], run: run(toggleLines, 'numbered') },
@@ -117,6 +121,9 @@ function onKey(e) {
   } else if (k === 'i') {
     e.preventDefault()
     buttons.value[1].run()
+  } else if (k === 'u') {
+    e.preventDefault()
+    buttons.value[2].run()
   }
 }
 
@@ -243,6 +250,15 @@ async function pick(insert) {
 
 .tool.is-strike span {
   text-decoration: line-through;
+}
+
+.tool.is-under span {
+  text-decoration: underline;
+}
+
+.tool.is-spoiler span {
+  font-weight: 800;
+  letter-spacing: -0.05em;
 }
 
 .tool-wiki {
