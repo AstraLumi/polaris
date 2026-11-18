@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"mime/multipart"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -30,7 +31,7 @@ var mcpProtocols = map[string]bool{"2025-06-18": true, "2025-03-26": true, "2024
 
 // The guide every MCP client hands its model (initialize's instructions),
 // and the api_guide tool's text.
-const apiGuide = `Polaris is a writer's organizer for a novel: characters (each with versions over the story's time), locations, factions, events on a timeline, cultures, spells, gear, creatures, lore articles, a wiki made of all of them, and the book's chapters in volumes with their text.
+const apiGuide = `Polaris is a writer's organizer for a novel: characters (each with versions over the story's time), locations, factions, events on a timeline, cultures, spells, gear, creatures, lore articles, a wiki made of all of them, and the book's chapters in volumes with their text. Apart from the story, the writer keeps drafts: loose notes and idea boards.
 
 How to work:
 - Start with list_stories, then story_overview for the story you are asked about: it gives its calendar, stats, article counts and chapters.
@@ -39,6 +40,7 @@ How to work:
 - In any text, link to a story item as [[Name]], [[type:Name]] or [[Name|shown text]]; Polaris stores the link by id. Types: character, location, faction, event, class, subclass, specialization, race, body_type, spell, gear, creature, lore, culture, kingdom.
 - Descriptions belong in the item's wiki article (update_article): a summary and fixed fields (for a character: appearance, personality, background, relationships, abilities, trivia), plus free sections.
 - Prose goes in a chapter with write_chapter, as Markdown: every line is a paragraph, # headings, * * * for a scene break, **bold**, *italic*. Prefer mode "append". "replace" needs the base_version read_chapter gave and replaces the whole chapter.
+- Drafts are the writer's scratch space, kept apart from the story: notes (free text) and boards of cards joined by lines. They are ideas, not canon: never take a fact from a draft into the story's articles or chapters unless the writer asks. list_drafts, read_draft, write_note and add_card work on them; a card's other changes go through send (PUT draft-cards/{id} changes only the fields sent). Card bodies are Markdown in Discord's syntax (__underline__, ||spoiler||, -# subtext, # headings, nested - lists) and may link to story items with [[Name]]; the wiki never shows links from drafts.
 - Every change is logged, and the story is copied before the first change of each day, so mistakes can be undone by the writer. Still: never delete anything unless the writer asked for exactly that.
 
 Everything else: get and send reach every route of the story's API (call api_guide for the list). Paths are relative, e.g. "characters", "events/12", "wiki/character/3". Many writes are forms (send's form argument), the rest JSON (send's json argument), as listed. A PUT replaces the whole item: get it first and send back every field, changing only what you mean to.`
@@ -68,11 +70,23 @@ var apiRouteNotes = map[string]string{
 	"GET /api/factions":                  "every faction",
 	"GET /api/settings":                  "the story's settings: calendar, map",
 	"GET /api/stat-system":               "the story's stats and formulas",
-	"GET /api/drafts":                    "the writer's drafts (kept apart from the story): notes and boards, and the card categories",
-	"GET /api/drafts/{id}/board":         "a board's cards (title, category_id, Markdown body, x, y, w, h) and the lines between them (a, b, label)",
-	"POST /api/drafts/{id}/cards":        "json: {title, category_id, body, x, y, w, h}",
-	"PUT /api/draft-cards/{id}":          "json: only the fields to change; {no_category: true} clears the category",
-	"POST /api/drafts/{id}/links":        "json: {a, b, label}: join two cards of this board",
+	"GET /api/drafts":                    "the writer's drafts, kept apart from the story (list_drafts): pages [{id, kind note|board, title, words, cards}] and the card categories [{id, name, color}]",
+	"POST /api/drafts":                   "json: {kind: \"note\" or \"board\", title}: a new draft",
+	"PUT /api/drafts/order":              "json: {ids}: every draft id in the order the list shows them",
+	"PUT /api/drafts/{id}":               "json: {title}: rename a draft",
+	"DELETE /api/drafts/{id}":            "a draft, with a board's cards and lines (only when the writer asks)",
+	"GET /api/drafts/{id}/note":          "a note's document (ProseMirror JSON); read_draft gives Markdown, write_note writes it",
+	"PUT /api/drafts/{id}/note":          "json: {doc, base_version}; prefer write_note",
+	"GET /api/drafts/{id}/board":         "a board's cards (id, title, category_id, Markdown body, x, y, w, h) and lines (id, a, b, label); read_draft shows links by name",
+	"POST /api/drafts/{id}/cards":        "json: {title, category_id, body, x, y, w, h} (board units; w 160-1600, h 80-1600); add_card places it for you",
+	"PUT /api/draft-cards/{id}":          "json: only the fields to change (title, category_id, body, x, y, w, h); {no_category: true} clears the category",
+	"DELETE /api/draft-cards/{id}":       "a card and its lines",
+	"POST /api/drafts/{id}/links":        "json: {a, b, label}: join two cards of this board with a line (the same pair again gives the line there is)",
+	"PUT /api/draft-links/{id}":          "json: {label}",
+	"DELETE /api/draft-links/{id}":       "a line between two cards",
+	"POST /api/draft-categories":         "json: {name, color \"#rrggbb\"}: a category for cards, shared by every board",
+	"PUT /api/draft-categories/{id}":     "json: {name, color}",
+	"DELETE /api/draft-categories/{id}":  "a category; its cards keep no category",
 }
 
 type apiTool struct {
@@ -167,6 +181,8 @@ func init() {
 			}, "story", "method", "path"),
 			Run: toolSend},
 	}
+	// The drafts' tools (apidrafts.go) go before get and send.
+	apiTools = slices.Insert(apiTools, len(apiTools)-2, draftTools()...)
 }
 
 func argStr(args map[string]any, k string) string {
@@ -465,6 +481,13 @@ func toolWriteChapter(a *apiServer, r *http.Request, k *apiKey, args map[string]
 	if err != nil {
 		return nil, err
 	}
+	return writeMarkdownText(a, r, k, args, path, "chapter", "read_chapter", "write_chapter")
+}
+
+// writeMarkdownText adds Markdown after a document (a chapter's text, a
+// draft note) or replaces it, through its GET/PUT route at path; noun and
+// readTool word the errors.
+func writeMarkdownText(a *apiServer, r *http.Request, k *apiKey, args map[string]any, path, noun, readTool, tool string) (any, error) {
 	story := argStr(args, "story")
 	md, _ := args["markdown"].(string)
 	mode := argStr(args, "mode")
@@ -480,39 +503,39 @@ func toolWriteChapter(a *apiServer, r *http.Request, k *apiKey, args map[string]
 	}
 	for attempt := 0; ; attempt++ {
 		var t chapterText
-		if _, err := a.callJSON(r, k, story, http.MethodGet, path, nil, &t, "write_chapter"); err != nil {
+		if _, err := a.callJSON(r, k, story, http.MethodGet, path, nil, &t, tool); err != nil {
 			return nil, err
 		}
 		doc, err := parsePMDoc(t.Doc)
 		if err != nil {
-			return nil, errors.New("the chapter's text could not be read")
+			return nil, fmt.Errorf("the %s's text could not be read", noun)
 		}
 		if mode == "replace" {
 			base, ok := args["base_version"].(float64)
 			if !ok || int64(base) != t.Version {
-				return nil, fmt.Errorf("the chapter is at version %d: read_chapter it again and pass that base_version (it may have changed since you read it)", t.Version)
+				return nil, fmt.Errorf("the %s is at version %d: %s it again and pass that base_version (it may have changed since you read it)", noun, t.Version, readTool)
 			}
 			if fine, why := markdownCanReplace(doc); !fine && args["allow_loss"] != true {
-				return nil, fmt.Errorf("replacing would lose part of the chapter: %s. Use append, or replace with allow_loss true if the writer agreed", why)
+				return nil, fmt.Errorf("replacing would lose part of the %s: %s. Use append, or replace with allow_loss true if the writer agreed", noun, why)
 			}
 			doc = &pmNode{Type: "doc", Attrs: doc.Attrs, Content: blocks}
 			if len(doc.Content) == 0 {
 				doc.Content = emptyPMDoc().Content
 			}
 		} else {
-			// An empty chapter's one blank paragraph gives way to the text.
+			// An empty text's one blank paragraph gives way to the new text.
 			if len(doc.Content) == 1 && doc.Content[0].Type == "paragraph" && len(doc.Content[0].Content) == 0 {
 				doc.Content = nil
 			}
 			doc.Content = append(doc.Content, blocks...)
 		}
 		var saved chapterText
-		status, err := a.callJSON(r, k, story, http.MethodPut, path, map[string]any{"doc": doc, "base_version": t.Version}, &saved, "write_chapter")
+		status, err := a.callJSON(r, k, story, http.MethodPut, path, map[string]any{"doc": doc, "base_version": t.Version}, &saved, tool)
 		if status == http.StatusConflict && mode == "append" && attempt < 2 {
 			continue // written meanwhile: add to the newer text
 		}
 		if status == http.StatusConflict {
-			return nil, errors.New("the chapter changed while writing: read it again")
+			return nil, fmt.Errorf("the %s changed while writing: read it again", noun)
 		}
 		if err != nil {
 			return nil, err

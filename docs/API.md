@@ -77,6 +77,10 @@ A read-only key is never shown the tools that write.
 | `update_article` | ✓ | change an article's summary, fields, sections or infobox; what isn't sent stays |
 | `read_chapter` | | a chapter's text as Markdown, its version and words |
 | `write_chapter` | ✓ | add Markdown after a chapter's text, or replace it (with the version it was read at) |
+| `list_drafts` | | the writer's drafts (notes and boards) and the card categories |
+| `read_draft` | | a note as Markdown with its version, or a board's cards and lines, links shown by name |
+| `write_note` | ✓ | add Markdown after a note's text, or replace it, as `write_chapter` does |
+| `add_card` | ✓ | a card on a board, placed on a free spot, its category made by name if needed, joined to other cards |
 | `get` | | any `GET` route of the story |
 | `send` | ✓ | any `POST`, `PUT` or `DELETE` route, with a JSON body or form fields |
 
@@ -97,6 +101,30 @@ A replace refuses when the chapter holds what Markdown can't keep
 (dialogues, pictures, notes, comments, styles, paragraph formatting) unless
 `allow_loss` is true, and when the chapter changed since it was read. The
 editor's own version history keeps the text before each save.
+
+### Drafts
+
+Drafts are the writer's scratch space, kept apart from the story (the
+Drafts page): **notes**, free documents like a chapter's text, and
+**boards** of cards placed by hand. They are ideas, not canon, and the
+guide tells a model so.
+
+A card has a title (what the closed card shows), a category (a name and a
+colour, shared by every board of the story), a Markdown body and a place
+and size on the board (`x`, `y`, `w`, `h` in board units). Lines join two
+cards of a board, with an optional label. Card bodies use Discord's
+Markdown, as every Markdown text in Polaris does outside the writing
+editor: `**bold**`, `*italic*`, `__underline__`, `~~strike~~`,
+`||spoiler||`, `#`/`##`/`###` headings, `-# subtext`, `- ` lists nested by
+two spaces, `>` and `>>>` quotes, `` `code` ``, `[text](url)` and
+`[[Name]]` links to story items (stored by id; the wiki never shows links
+from drafts).
+
+`add_card` places a card under the others, or beside `near`, on a spot no
+card covers. Other changes go through `send`: `PUT draft-cards/{id}`
+changes only the fields sent (`{"no_category": true}` clears the
+category), `POST drafts/{id}/links` joins two cards, `DELETE` routes
+remove a card, a line, a category or a whole draft.
 
 ## Connecting a client
 
